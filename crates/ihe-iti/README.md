@@ -11,7 +11,7 @@ framework, with a feature per profile.
 | `pixm` | Patient Identifier Cross-reference for Mobile | ITI-83 |
 | `pdqm` | Patient Demographics Query for Mobile | ITI-78 |
 | `mcsd` | Mobile Care Services Discovery | ITI-90 |
-| `pmir` | Patient Master Identity Registry | ITI-93, ITI-104 |
+| `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
 
 The crate depends on no application, so a federation gateway, a master patient

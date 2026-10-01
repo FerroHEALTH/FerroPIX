@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ihe-iti"
-description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-104) and XCPD (ITI-55), one feature per profile"
+description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io
 # (docs/VERSIONS.md).
-version = "0.0.3"
+version = "0.0.4"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -44,7 +44,7 @@ pixm = [
 pdqm = []
 # mCSD, the care services directory (ITI-90, #86).
 mcsd = []
-# PMIR, the patient master identity registry (ITI-93, ITI-104, #48).
+# PMIR, the patient master identity registry (ITI-93, ITI-94, #48).
 pmir = []
 # XCPD, cross-community patient discovery (ITI-55, #85).
 xcpd = []

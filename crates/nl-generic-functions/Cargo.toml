@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Vernum Projecten B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "nl-generic-functions"
+description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
+# The crate line starts above the 0.0.0 name reservation on crates.io
+# (docs/VERSIONS.md).
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+documentation = "https://docs.rs/nl-generic-functions"
+readme = "README.md"
+keywords = ["health", "netherlands", "nuts", "fhir", "localization"]
+categories = ["api-bindings", "science"]
+# The workspace switch decides whether this crate is publishable
+# (docs/architecture.md section 11); include is the packaged content.
+publish.workspace = true
+include = ["src/**", "README.md", "LICENSE"]
+
+# One crate for the Netherlands Generic Functions IG, one feature per function
+# (docs/architecture.md section 11, decision A34). The crate depends on nothing
+# in FerroFED.
+[features]
+# GF-Localization through the national index (NVI).
+nvi = []
+# GF-Consent through Mitz, the optional Step-1 pre-filter.
+mitz = []
+# GF-Addressing through the national address book (LRZa).
+lrza = []
+# GF-Authentication on the Nuts profile.
+nuts-auth = []
+
+[dependencies]
+
+[dev-dependencies]
+
+[lints]
+workspace = true

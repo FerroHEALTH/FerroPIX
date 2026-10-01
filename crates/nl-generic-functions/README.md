@@ -18,7 +18,7 @@ The crate depends on no application. The implementation guide is published at
 <https://build.fhir.org/ig/nuts-foundation/nl-generic-functions-ig/>.
 
 The function modules hold their place and land with their FerroFED issues
-(<https://github.com/rubentalstra/FerroFED>).
+(<https://github.com/FerroHEALTH/FerroFED>).
 
 ## Licence
 

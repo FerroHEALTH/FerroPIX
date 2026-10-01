@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: Vernum Projecten B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ihe-iti"
+description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-104) and XCPD (ITI-55), one feature per profile"
+# The crate line starts above the 0.0.0 name reservation on crates.io
+# (docs/VERSIONS.md).
+version = "0.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+documentation = "https://docs.rs/ihe-iti"
+readme = "README.md"
+keywords = ["ihe", "fhir", "pixm", "mcsd", "health"]
+categories = ["api-bindings", "science"]
+# The workspace switch decides whether this crate is publishable
+# (docs/architecture.md section 11); include is the packaged content.
+publish.workspace = true
+include = ["src/**", "README.md", "LICENSE"]
+
+# One crate for the IHE ITI Technical Framework, one feature per profile
+# (docs/architecture.md section 11, decision A34). The crate depends on nothing
+# in FerroFED, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
+# XUA stack.
+[features]
+# PIXm, the patient identifier cross-reference (ITI-83, #42).
+pixm = []
+# PDQm, the patient demographics query (ITI-78).
+pdqm = []
+# mCSD, the care services directory (ITI-90, #86).
+mcsd = []
+# PMIR, the patient master identity registry (ITI-93, ITI-104, #48).
+pmir = []
+# XCPD, cross-community patient discovery (ITI-55, #85).
+xcpd = []
+
+[dependencies]
+
+[dev-dependencies]
+
+[lints]
+workspace = true

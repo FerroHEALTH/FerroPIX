@@ -5,7 +5,7 @@ name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-104) and XCPD (ITI-55), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io
 # (docs/VERSIONS.md).
-version = "0.0.2"
+version = "0.0.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -26,8 +26,20 @@ include = ["src/**", "README.md", "LICENSE"]
 # in FerroFED, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
 # XUA stack.
 [features]
-# PIXm, the patient identifier cross-reference (ITI-83, #42).
-pixm = []
+# PIXm, the patient identifier cross-reference (ITI-83, #42): the HTTP client,
+# the FHIR R4 `terminology` root set for Parameters and OperationOutcome, and
+# the redacting secret type the identifiers travel in.
+pixm = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/terminology",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
 # PDQm, the patient demographics query (ITI-78).
 pdqm = []
 # mCSD, the care services directory (ITI-90, #86).
@@ -38,8 +50,19 @@ pmir = []
 xcpd = []
 
 [dependencies]
+fhir-types = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["rustls"] }
+secrecy = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
 
 [dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
+wiremock = { workspace = true }
 
 [lints]
 workspace = true

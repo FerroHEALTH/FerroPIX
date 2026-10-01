@@ -20,7 +20,7 @@ the SOAP 1.2, HL7 v3 and SAML XUA stack; a build without it compiles none of it.
 The profiles are published at <https://profiles.ihe.net/ITI/>.
 
 The profile modules hold their place and land with their FerroFED issues
-(<https://github.com/rubentalstra/FerroFED>).
+(<https://github.com/FerroHEALTH/FerroFED>).
 
 ## Licence
 

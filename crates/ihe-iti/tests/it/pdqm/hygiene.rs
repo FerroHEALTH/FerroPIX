@@ -73,8 +73,17 @@ async fn the_criteria_reach_the_supplier_in_the_body_only() {
         !shows_a_value(request.url.as_str()),
         "the request URL carries a criterion"
     );
-    let headers = format!("{:?}", request.headers);
-    assert!(!shows_a_value(&headers), "a header carries a criterion");
+    for (name, value) in &request.headers {
+        let raw = value.as_bytes();
+        let carries = [SENTINEL, BIRTH_DATE].iter().any(|shown| {
+            raw.windows(shown.len())
+                .any(|window| window == shown.as_bytes())
+        });
+        assert!(
+            !shows_a_value(name.as_str()) && !carries,
+            "the {name} header carries a criterion"
+        );
+    }
 }
 
 #[test]

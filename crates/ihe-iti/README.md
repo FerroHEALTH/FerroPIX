@@ -56,6 +56,20 @@ matched Patient and every page link redact their content in `Debug`, with no
 `Display`, and no error carries a value, a URL or the Supplier's free text.
 Build the `reqwest::Client` you pass in with `redirect::Policy::none()`.
 
+## mCSD (`mcsd`)
+
+`ihe_iti::mcsd::directory::Directory` reads the `Organization` and `Endpoint`
+resources a care services directory publishes (mCSD 4.0.0) from one FHIR R4
+JSON `Bundle` of type `collection` or `searchset`. It resolves the references
+between them inside the Bundle as FHIR R4 §2.36.4.1 does: a relative
+`[type]/[id]` against the root of the referring entry's REST `fullUrl`, an
+absolute reference against an entry's `fullUrl`. A reference it cannot
+resolve is reported as outside the Bundle, never guessed. It refuses an entry
+of another resource type, a resource with a `modifierExtension`, and a
+repeated `fullUrl` or logical id. Each resource stays as `fhir-types` decodes
+it, with accessors for what addressing reads; what a caller accepts as a
+connection type, a status or an identifier is the caller's policy.
+
 The other profile modules hold their place and land with their FerroFED issues
 (<https://github.com/FerroHEALTH/FerroFED>).
 

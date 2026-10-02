@@ -5,7 +5,7 @@ name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.7"
+version = "0.0.8"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -55,8 +55,16 @@ pdqm = [
   "dep:thiserror",
   "dep:url",
 ]
-# mCSD, the care services directory (ITI-90, #86).
-mcsd = []
+# mCSD, the care services directory (ITI-90): the FHIR R4 `resources` root set
+# for the Organization and Endpoint resources a directory publishes (#74); the
+# ITI-90 client follows with #86.
+mcsd = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:serde_json",
+  "dep:thiserror",
+]
 # PMIR, the patient master identity registry (ITI-93, ITI-94, #48).
 pmir = []
 # XCPD, cross-community patient discovery (ITI-55, #85).

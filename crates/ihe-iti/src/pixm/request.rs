@@ -7,6 +7,8 @@
 use secrecy::ExposeSecret;
 use url::Url;
 
+use crate::search::{self, escape};
+
 use super::error::InvalidInput;
 use super::identifier::{SourceIdentifier, TargetSystem};
 
@@ -15,20 +17,8 @@ use super::identifier::{SourceIdentifier, TargetSystem};
 const OPERATION: &str = "Patient/$ihe-pix";
 
 /// The `[base]/Patient/$ihe-pix` URL for the FHIR base `base`.
-pub(super) fn endpoint(mut base: Url) -> Result<Url, InvalidInput> {
-    if !matches!(base.scheme(), "http" | "https")
-        || base.cannot_be_a_base()
-        || base.query().is_some()
-        || base.fragment().is_some()
-    {
-        return Err(InvalidInput::Base);
-    }
-    if !base.path().ends_with('/') {
-        let path = format!("{}/", base.path());
-        base.set_path(&path);
-    }
-    base.join(OPERATION)
-        .map_err(|_unjoinable| InvalidInput::Base)
+pub(super) fn endpoint(base: Url) -> Result<Url, InvalidInput> {
+    search::under_base(base, OPERATION).ok_or(InvalidInput::Base)
 }
 
 /// The request URL: one `sourceIdentifier` and one `targetSystem` per domain
@@ -55,26 +45,12 @@ pub(super) fn query(endpoint: &Url, source: &SourceIdentifier, targets: &[Target
     url
 }
 
-/// `part` with the characters FHIR search gives a meaning to escaped by a
-/// backslash: `\`, `|`, `,` and `$` (FHIR R4 search, Escaping Search
-/// Parameters, <http://hl7.org/fhir/R4/search.html#escaping>).
-fn escape(part: &str) -> String {
-    let mut escaped = String::with_capacity(part.len());
-    for character in part.chars() {
-        if matches!(character, '\\' | '|' | ',' | '$') {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
-}
-
 #[cfg(test)]
 mod tests {
     use secrecy::SecretString;
     use url::Url;
 
-    use super::{endpoint, escape, query};
+    use super::{endpoint, query};
     use crate::pixm::error::InvalidInput;
     use crate::pixm::identifier::{SourceIdentifier, TargetSystem};
 
@@ -107,16 +83,6 @@ mod tests {
                 "{base} is no FHIR base"
             );
         }
-    }
-
-    #[test]
-    fn the_separators_fhir_search_defines_are_escaped() {
-        assert_eq!(escape(r"a|b,c$d\e"), r"a\|b\,c\$d\\e", "every separator");
-        assert_eq!(
-            escape("IHERED-994"),
-            "IHERED-994",
-            "plain text is unchanged"
-        );
     }
 
     #[test]

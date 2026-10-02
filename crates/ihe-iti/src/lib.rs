@@ -19,11 +19,15 @@
 
 #[cfg(feature = "mcsd")]
 pub mod mcsd;
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
+pub mod outcome;
 #[cfg(feature = "pdqm")]
 pub mod pdqm;
 #[cfg(feature = "pixm")]
 pub mod pixm;
 #[cfg(feature = "pmir")]
 pub mod pmir;
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
+mod search;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

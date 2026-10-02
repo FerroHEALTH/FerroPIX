@@ -36,6 +36,26 @@ no `Display`, and no error carries a value, the request URL or the Manager's
 free text. Build the `reqwest::Client` you pass in with
 `redirect::Policy::none()`: the request URL holds the source identifier.
 
+## PDQm (`pdqm`)
+
+`ihe_iti::pdqm::PdqmClient` is the Patient Demographics Consumer of ITI-78
+(PDQm 3.2.0): a `POST [base]/Patient/_search` with the criteria of a
+`PatientQuery` (every Patient search parameter ITI-78 names, with `:exact` on
+the string ones), read into a page of matching Patients with the `total`, each
+match's `fullUrl`, `search.score` and `match-grade`, the warnings of any
+`OperationOutcome` entry, and the `next` link that `next_page` follows on the
+Supplier's own origin. No match is a `total` of `0`; a `404` is "identifier
+domain not recognised" only when the query names a domain and the
+`OperationOutcome` carries a `not-found` issue. Every answer is held to the
+Query Patient Resource Response Message profile: a `searchset` with a
+`total`, and a `fullUrl` on every entry. The Patients are decoded as FHIR R4,
+not held to the PDQm Patient profile, as the profile asks of a Consumer.
+
+The criteria travel in the request body, so no URL carries them. They, every
+matched Patient and every page link redact their content in `Debug`, with no
+`Display`, and no error carries a value, a URL or the Supplier's free text.
+Build the `reqwest::Client` you pass in with `redirect::Policy::none()`.
+
 The other profile modules hold their place and land with their FerroFED issues
 (<https://github.com/FerroHEALTH/FerroFED>).
 

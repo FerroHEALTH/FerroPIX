@@ -6,12 +6,13 @@
 
 use fhir_types::codec::{DecodeError, Json, Object, Path, Value};
 use fhir_types::r4::bundle::Bundle;
-use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::parameters::{Parameters, ParametersParameter, ParametersParameterValue};
 use http::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
 
-use super::error::{self, IssueType, Malformation, PixmError};
+use crate::outcome::{self, IssueType};
+
+use super::error::{self, Malformation, PixmError};
 use super::identifier::{
     CrossReference, CrossReferences, PatientReference, SourceIdentifier, TargetIdentifier,
     TargetSystem,
@@ -43,7 +44,7 @@ pub(super) fn read(
     targets: &[TargetSystem],
 ) -> Result<CrossReference, PixmError> {
     if status == StatusCode::OK {
-        if !fhir_json(media) {
+        if !outcome::fhir_json(media) {
             return Err(Malformation::NotFhirJson.into());
         }
         let value = json(body)?;
@@ -54,7 +55,7 @@ pub(super) fn read(
             _ => Err(Malformation::UnexpectedResource.into()),
         };
     }
-    let issues = issues(media, body);
+    let issues = outcome::issues(media, body);
     if status == StatusCode::NOT_FOUND && issues.contains(&IssueType::NotFound) {
         return Ok(CrossReference::SourceNotFound);
     }
@@ -65,18 +66,6 @@ pub(super) fn read(
         return Err(PixmError::TargetDomainNotRecognized);
     }
     Err(PixmError::Rejected { status, issues })
-}
-
-/// Whether `media` is FHIR JSON (ITI TF-2 Appendix Z.6), or plain JSON, which
-/// FHIR R4 accepts for the same content (<http://hl7.org/fhir/R4/http.html#mime-type>).
-fn fhir_json(media: Option<&str>) -> bool {
-    media
-        .and_then(|value| value.split(';').next())
-        .map(str::trim)
-        .is_some_and(|essence| {
-            essence.eq_ignore_ascii_case("application/fhir+json")
-                || essence.eq_ignore_ascii_case("application/json")
-        })
 }
 
 fn json(body: &[u8]) -> Result<Value, Malformation> {
@@ -185,38 +174,4 @@ fn post_merge(object: &Object) -> Result<CrossReference, PixmError> {
     } else {
         Err(Malformation::BundleWithEntries.into())
     }
-}
-
-/// The issue types of a failure answer's `OperationOutcome`, or none when the
-/// body is not one (§2:3.83.4.2.2).
-fn issues(media: Option<&str>, body: &[u8]) -> Vec<IssueType> {
-    if !fhir_json(media) {
-        return Vec::new();
-    }
-    let Ok(value) = json(body) else {
-        return Vec::new();
-    };
-    let Some(object) = value.as_object() else {
-        return Vec::new();
-    };
-    if resource_type(object) != Ok("OperationOutcome") {
-        return Vec::new();
-    }
-    // NOTE: §2:3.83.4.2.2, a failure body that is no `OperationOutcome` is a
-    // status alone; the status decides, and an undecodable outcome adds nothing.
-    let Ok(outcome) = OperationOutcome::from_json(object, &mut Path::root("OperationOutcome"))
-    else {
-        return Vec::new();
-    };
-    outcome
-        .issue
-        .iter()
-        .map(|issue| {
-            issue
-                .code
-                .value
-                .as_deref()
-                .map_or(IssueType::Unrecognized, IssueType::from_code)
-        })
-        .collect()
 }

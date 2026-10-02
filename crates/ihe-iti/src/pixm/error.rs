@@ -8,9 +8,9 @@
 //! parse snippet, a parameter name): the request URL holds the source
 //! identifier, and the Manager's text may quote it.
 
-use std::fmt;
-
 use http::StatusCode;
+
+use crate::outcome::IssueType;
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -154,160 +154,6 @@ pub enum Malformation {
     },
 }
 
-/// The FHIR R4 `issue-type` of an `OperationOutcome` issue
-/// (<http://hl7.org/fhir/R4/valueset-issue-type.html>).
-///
-/// A code outside the value set is [`IssueType::Unrecognized`] and its text is
-/// dropped, so an answer cannot carry free text through this field.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum IssueType {
-    /// `invalid`
-    Invalid,
-    /// `structure`
-    Structure,
-    /// `required`
-    Required,
-    /// `value`
-    Value,
-    /// `invariant`
-    Invariant,
-    /// `security`
-    Security,
-    /// `login`
-    Login,
-    /// `unknown`
-    Unknown,
-    /// `expired`
-    Expired,
-    /// `forbidden`
-    Forbidden,
-    /// `suppressed`
-    Suppressed,
-    /// `processing`
-    Processing,
-    /// `not-supported`
-    NotSupported,
-    /// `duplicate`
-    Duplicate,
-    /// `multiple-matches`
-    MultipleMatches,
-    /// `not-found`
-    NotFound,
-    /// `deleted`
-    Deleted,
-    /// `too-long`
-    TooLong,
-    /// `code-invalid`
-    CodeInvalid,
-    /// `extension`
-    Extension,
-    /// `too-costly`
-    TooCostly,
-    /// `business-rule`
-    BusinessRule,
-    /// `conflict`
-    Conflict,
-    /// `transient`
-    Transient,
-    /// `lock-error`
-    LockError,
-    /// `no-store`
-    NoStore,
-    /// `exception`
-    Exception,
-    /// `timeout`
-    Timeout,
-    /// `incomplete`
-    Incomplete,
-    /// `throttled`
-    Throttled,
-    /// `informational`
-    Informational,
-    /// A code outside the R4 value set, or none.
-    Unrecognized,
-}
-
-impl IssueType {
-    /// Returns the issue type `code` names.
-    #[must_use]
-    pub fn from_code(code: &str) -> Self {
-        match code {
-            "invalid" => Self::Invalid,
-            "structure" => Self::Structure,
-            "required" => Self::Required,
-            "value" => Self::Value,
-            "invariant" => Self::Invariant,
-            "security" => Self::Security,
-            "login" => Self::Login,
-            "unknown" => Self::Unknown,
-            "expired" => Self::Expired,
-            "forbidden" => Self::Forbidden,
-            "suppressed" => Self::Suppressed,
-            "processing" => Self::Processing,
-            "not-supported" => Self::NotSupported,
-            "duplicate" => Self::Duplicate,
-            "multiple-matches" => Self::MultipleMatches,
-            "not-found" => Self::NotFound,
-            "deleted" => Self::Deleted,
-            "too-long" => Self::TooLong,
-            "code-invalid" => Self::CodeInvalid,
-            "extension" => Self::Extension,
-            "too-costly" => Self::TooCostly,
-            "business-rule" => Self::BusinessRule,
-            "conflict" => Self::Conflict,
-            "transient" => Self::Transient,
-            "lock-error" => Self::LockError,
-            "no-store" => Self::NoStore,
-            "exception" => Self::Exception,
-            "timeout" => Self::Timeout,
-            "incomplete" => Self::Incomplete,
-            "throttled" => Self::Throttled,
-            "informational" => Self::Informational,
-            _ => Self::Unrecognized,
-        }
-    }
-}
-
-impl fmt::Display for IssueType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Invalid => "invalid",
-            Self::Structure => "structure",
-            Self::Required => "required",
-            Self::Value => "value",
-            Self::Invariant => "invariant",
-            Self::Security => "security",
-            Self::Login => "login",
-            Self::Unknown => "unknown",
-            Self::Expired => "expired",
-            Self::Forbidden => "forbidden",
-            Self::Suppressed => "suppressed",
-            Self::Processing => "processing",
-            Self::NotSupported => "not-supported",
-            Self::Duplicate => "duplicate",
-            Self::MultipleMatches => "multiple-matches",
-            Self::NotFound => "not-found",
-            Self::Deleted => "deleted",
-            Self::TooLong => "too-long",
-            Self::CodeInvalid => "code-invalid",
-            Self::Extension => "extension",
-            Self::TooCostly => "too-costly",
-            Self::BusinessRule => "business-rule",
-            Self::Conflict => "conflict",
-            Self::Transient => "transient",
-            Self::LockError => "lock-error",
-            Self::NoStore => "no-store",
-            Self::Exception => "exception",
-            Self::Timeout => "timeout",
-            Self::Incomplete => "incomplete",
-            Self::Throttled => "throttled",
-            Self::Informational => "informational",
-            Self::Unrecognized => "unrecognized",
-        })
-    }
-}
-
 /// A transport failure, with the request URL removed: it holds the source
 /// identifier (§2:3.83.4.1.2.1).
 pub(super) fn transport(error: reqwest::Error) -> PixmError {
@@ -316,32 +162,5 @@ pub(super) fn transport(error: reqwest::Error) -> PixmError {
         PixmError::Timeout
     } else {
         PixmError::Transport(error)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::IssueType;
-
-    #[test]
-    fn every_code_round_trips_and_free_text_is_unrecognized() {
-        for code in [
-            "invalid",
-            "not-found",
-            "code-invalid",
-            "multiple-matches",
-            "informational",
-        ] {
-            assert_eq!(
-                IssueType::from_code(code).to_string(),
-                code,
-                "{code} is in the R4 issue-type value set"
-            );
-        }
-        assert_eq!(
-            IssueType::from_code("SENTINEL-4711"),
-            IssueType::Unrecognized,
-            "free text in a code field is dropped"
-        );
     }
 }

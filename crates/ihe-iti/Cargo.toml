@@ -5,7 +5,7 @@ name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io
 # (docs/VERSIONS.md).
-version = "0.0.5"
+version = "0.0.6"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,12 +17,13 @@ readme = "README.md"
 keywords = ["ihe", "fhir", "pixm", "mcsd", "health"]
 categories = ["api-bindings", "science"]
 # The workspace switch decides whether this crate is publishable
-# (docs/architecture.md section 11); include is the packaged content.
+# (no specification governs this: our own design); include is the packaged
+# content.
 publish.workspace = true
 include = ["src/**", "README.md", "LICENSE"]
 
 # One crate for the IHE ITI Technical Framework, one feature per profile
-# (docs/architecture.md section 11, decision A34). The crate depends on nothing
+# (no specification governs this: our own design). The crate depends on nothing
 # in FerroFED, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
 # XUA stack.
 [features]

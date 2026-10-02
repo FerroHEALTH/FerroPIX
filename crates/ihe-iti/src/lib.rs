@@ -13,8 +13,7 @@
 //!
 //! The profiles are published at <https://profiles.ihe.net/ITI/>. The crate
 //! depends on no application: it is the profiles' transactions as Rust, for
-//! any caller. The profile modules land with their FerroFED issues, following
-//! `docs/architecture.md` section 6.
+//! any caller. The profile modules land with their FerroFED issues (Annex A).
 #![doc(test(attr(deny(warnings))))]
 
 #[cfg(feature = "mcsd")]

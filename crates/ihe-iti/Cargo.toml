@@ -3,9 +3,9 @@
 [package]
 name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile"
-# The crate line starts above the 0.0.0 name reservation on crates.io
-# (docs/VERSIONS.md).
-version = "0.0.6"
+# The crate line starts above the 0.0.0 name reservation on crates.io (no
+# specification governs this: our own design).
+version = "0.0.7"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

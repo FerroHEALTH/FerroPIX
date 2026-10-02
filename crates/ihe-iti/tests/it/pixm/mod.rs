@@ -62,19 +62,19 @@ pub(crate) fn client(server: &MockServer) -> PixmClient {
     PixmClient::new(base, http).expect("a client")
 }
 
-/// A client for a FHIR base nothing listens on: a port bound and released.
+/// A client for a FHIR base nothing can listen on: port 0 on the loopback
+/// interface.
 ///
-/// A dropped `MockServer` goes back to wiremock's pool and keeps answering, so
-/// it cannot stand for an unreachable Manager.
+/// A dropped `MockServer` goes back to wiremock's pool and keeps answering,
+/// and a port bound and released can go to another test process, so neither
+/// can stand for an unreachable Manager. Binding port 0 picks another port,
+/// so no listener ever holds it, and a connection to it fails at once.
 pub(crate) fn unreachable_client() -> PixmClient {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
-    let address = listener.local_addr().expect("its address");
-    drop(listener);
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("an HTTP client");
-    let base = Url::parse(&format!("http://{address}{BASE}")).expect("a base");
+    let base = Url::parse(&format!("http://127.0.0.1:0{BASE}")).expect("a base");
     PixmClient::new(base, http).expect("a client")
 }
 

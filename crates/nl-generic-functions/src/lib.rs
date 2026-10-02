@@ -12,7 +12,7 @@
 //! The implementation guide is published at
 //! <https://build.fhir.org/ig/nuts-foundation/nl-generic-functions-ig/>. The
 //! crate depends on no application. The function modules land with their
-//! FerroFED issues, following `docs/architecture.md` section 6.
+//! FerroFED issues (Annex B).
 #![doc(test(attr(deny(warnings))))]
 
 #[cfg(feature = "lrza")]

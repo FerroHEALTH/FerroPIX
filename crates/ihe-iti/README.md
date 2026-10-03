@@ -34,7 +34,9 @@ from the domains asked about, and never the source identifier itself.
 Identifier values travel in `secrecy::SecretString`, with redacted `Debug` and
 no `Display`, and no error carries a value, the request URL or the Manager's
 free text. Build the `reqwest::Client` you pass in with
-`redirect::Policy::none()`: the request URL holds the source identifier.
+`redirect::Policy::none()`: the request URL holds the source identifier. The
+client's `Debug` shows its URL with the userinfo replaced by `***` and leaves
+out the `reqwest::Client`, whose default headers may hold a credential.
 
 ## PDQm (`pdqm`)
 
@@ -54,7 +56,8 @@ not held to the PDQm Patient profile, as the profile asks of a Consumer.
 The criteria travel in the request body, so no URL carries them. They, every
 matched Patient and every page link redact their content in `Debug`, with no
 `Display`, and no error carries a value, a URL or the Supplier's free text.
-Build the `reqwest::Client` you pass in with `redirect::Policy::none()`.
+Build the `reqwest::Client` you pass in with `redirect::Policy::none()`. The
+client's `Debug` shows its URLs as the PIXm client's does.
 
 ## mCSD (`mcsd`)
 
@@ -68,7 +71,10 @@ resolve is reported as outside the Bundle, never guessed. It refuses an entry
 of another resource type, a resource with a `modifierExtension`, and a
 repeated `fullUrl` or logical id. Each resource stays as `fhir-types` decodes
 it, with accessors for what addressing reads; what a caller accepts as a
-connection type, a status or an identifier is the caller's policy.
+connection type, a status or an identifier is the caller's policy. The
+`Debug` of an entry shows its `fullUrl`, and an endpoint's `address`, with the
+userinfo and the query replaced by `***`, and leaves out an endpoint's
+`header` list.
 
 The other profile modules hold their place and land with their FerroFED issues
 (<https://github.com/FerroHEALTH/FerroFED>).

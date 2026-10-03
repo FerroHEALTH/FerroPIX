@@ -10,9 +10,12 @@ use std::error::Error;
 use std::fmt::Write;
 use std::time::Duration;
 
+use ihe_iti::pdqm::PdqmClient;
 use ihe_iti::pdqm::error::PdqmError;
 use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
+use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -26,6 +29,12 @@ const SENTINEL: &str = "SENTINEL-4711";
 
 /// A birth date that must appear nowhere but in the request to the Supplier.
 const BIRTH_DATE: &str = "1947-11-03";
+
+/// The user name, the password and the bearer token a client is built with,
+/// which no rendering of the client shows.
+const USER: &str = "Qz7user";
+const PASSWORD: &str = "Qz7password";
+const TOKEN: &str = "Qz7token";
 
 fn query() -> PatientQuery {
     let sentinel = SecretString::from(SENTINEL);
@@ -201,6 +210,7 @@ async fn a_page_link_and_its_failure_carry_no_value() {
         !shows_a_value(&format!("{first:?} {page:?}")),
         "the Debug of a result or a page link"
     );
+    assert_eq!("Page(***)", format!("{page:?}"), "the family's placeholder");
     let error = client
         .next_page(page, Duration::from_millis(200))
         .await
@@ -236,4 +246,34 @@ async fn a_match_shows_no_demographics() {
         !shows_a_value(&shown),
         "the Debug of a result shows a demographic: {shown}"
     );
+    assert!(
+        shown.contains(r#"full_url: "***", patient: "***""#),
+        "the family's placeholder: {shown}"
+    );
+}
+
+#[test]
+fn a_client_shows_no_credential() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {TOKEN}")).expect("a header value"),
+    );
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .default_headers(headers)
+        .build()
+        .expect("an HTTP client");
+    let base = Url::parse(&format!("https://{USER}:{PASSWORD}@pdq.example.org/fhir/"))
+        .expect("a base with userinfo");
+    let client = PdqmClient::new(base, http).expect("a client");
+    for shown in [format!("{client:?}"), format!("{client:#?}")] {
+        for credential in [USER, PASSWORD, TOKEN] {
+            assert!(!shown.contains(credential), "{shown}");
+        }
+        assert!(
+            shown.contains("https://***@pdq.example.org/fhir/Patient/_search"),
+            "{shown}"
+        );
+    }
 }

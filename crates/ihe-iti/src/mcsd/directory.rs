@@ -5,6 +5,7 @@
 //! Bundle, with the references between them resolved inside it.
 
 use std::collections::BTreeSet;
+use std::fmt;
 
 use fhir_types::codec::{Json, Path, Value};
 use fhir_types::r4::bundle::Bundle;
@@ -15,6 +16,7 @@ use fhir_types::r4::reference::Reference;
 use fhir_types::r4::resource::Resource;
 
 use super::error::DirectoryError;
+use crate::redact::RedactedUrl;
 
 /// The `Organization` and `Endpoint` resources of one Bundle, in entry order.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,7 +26,10 @@ pub struct Directory {
 }
 
 /// One `Organization` of the directory.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` shows the `fullUrl` with its userinfo and query replaced by `***`,
+/// and the resource by its logical id, name and `active` flag.
+#[derive(Clone, PartialEq, Eq)]
 pub struct DirectoryOrganization {
     entry: usize,
     full_url: Option<String>,
@@ -32,7 +37,11 @@ pub struct DirectoryOrganization {
 }
 
 /// One `Endpoint` of the directory.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` shows the `fullUrl` and the `address` with their userinfo and
+/// query replaced by `***`, and leaves out the rest of the resource, whose
+/// `header` list may hold a credential.
+#[derive(Clone, PartialEq, Eq)]
 pub struct DirectoryEndpoint {
     entry: usize,
     full_url: Option<String>,
@@ -288,6 +297,32 @@ impl DirectoryEndpoint {
     #[must_use]
     pub fn resource(&self) -> &Endpoint {
         &self.resource
+    }
+}
+
+impl fmt::Debug for DirectoryOrganization {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DirectoryOrganization")
+            .field("entry", &self.entry)
+            .field("full_url", &self.full_url.as_deref().map(RedactedUrl))
+            .field("logical_id", &self.logical_id())
+            .field("name", &self.name())
+            .field("active", &self.active())
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for DirectoryEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DirectoryEndpoint")
+            .field("entry", &self.entry)
+            .field("full_url", &self.full_url.as_deref().map(RedactedUrl))
+            .field("logical_id", &self.logical_id())
+            .field("status", &self.status())
+            .field("connection_type_system", &self.connection_type_system())
+            .field("connection_type_code", &self.connection_type_code())
+            .field("address", &self.address().map(RedactedUrl))
+            .finish_non_exhaustive()
     }
 }
 

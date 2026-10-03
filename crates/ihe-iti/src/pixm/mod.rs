@@ -64,11 +64,13 @@ pub mod identifier;
 mod request;
 mod response;
 
+use std::fmt;
 use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
+use crate::redact::RedactedUrl;
 use error::{InvalidInput, PixmError};
 use identifier::{CrossReference, SourceIdentifier, TargetSystem};
 
@@ -76,7 +78,10 @@ use identifier::{CrossReference, SourceIdentifier, TargetSystem};
 const FHIR_JSON: &str = "application/fhir+json";
 
 /// A Patient Identifier Cross-reference Consumer bound to one PIX Manager.
-#[derive(Debug, Clone)]
+///
+/// `Debug` shows the endpoint with its userinfo replaced by `***`, and leaves
+/// out the HTTP client, whose default headers may hold a credential.
+#[derive(Clone)]
 pub struct PixmClient {
     endpoint: Url,
     http: reqwest::Client,
@@ -142,5 +147,13 @@ impl PixmClient {
             .map(str::to_owned);
         let body = response::body(response).await?;
         response::read(status, media.as_deref(), &body, source, targets)
+    }
+}
+
+impl fmt::Debug for PixmClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PixmClient")
+            .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
+            .finish_non_exhaustive()
     }
 }

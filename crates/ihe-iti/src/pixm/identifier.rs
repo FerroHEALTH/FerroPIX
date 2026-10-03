@@ -15,6 +15,7 @@ use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
 use super::error::InvalidInput;
+use crate::redact::REDACTED;
 
 /// The patient identifier the Consumer asks about: the Patient Identifier
 /// Domain (assigning authority) and the identifier value of the
@@ -57,7 +58,7 @@ impl fmt::Debug for SourceIdentifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SourceIdentifier")
             .field("system", &self.system)
-            .field("value", &"[REDACTED]")
+            .field("value", &REDACTED)
             .finish()
     }
 }
@@ -115,7 +116,7 @@ impl fmt::Debug for TargetIdentifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TargetIdentifier")
             .field("system", &self.system)
-            .field("value", &"[REDACTED]")
+            .field("value", &REDACTED)
             .finish()
     }
 }
@@ -142,7 +143,7 @@ impl PatientReference {
 
 impl fmt::Debug for PatientReference {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("PatientReference([REDACTED])")
+        write!(f, "PatientReference({REDACTED})")
     }
 }
 
@@ -213,6 +214,7 @@ mod tests {
         CrossReferences, InvalidInput, PatientReference, SourceIdentifier, TargetIdentifier,
         TargetSystem,
     };
+    use crate::redact::REDACTED;
 
     const SENTINEL: &str = "SENTINEL-4711";
 
@@ -234,7 +236,12 @@ mod tests {
                 !shown.contains(SENTINEL),
                 "Debug showed an identifier value"
             );
+            assert!(shown.contains(REDACTED), "the placeholder shows: {shown}");
         }
+        assert!(
+            format!("{found:?}").contains("PatientReference(***)"),
+            "a reference shows the family's placeholder"
+        );
         assert!(
             format!("{source:?}").contains("urn:oid:2.999.1"),
             "the assigning authority is no patient data and prints"

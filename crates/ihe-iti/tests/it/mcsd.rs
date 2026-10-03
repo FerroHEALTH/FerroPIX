@@ -327,3 +327,33 @@ fn an_organisation_and_an_endpoint_may_share_a_logical_id() {
     assert_eq!(directory.organizations().len(), 1);
     assert_eq!(directory.endpoints().len(), 1);
 }
+
+#[test]
+fn a_directory_shows_no_credential() {
+    const USER: &str = "Qz7user";
+    const PASSWORD: &str = "Qz7password";
+    const TOKEN: &str = "Qz7token";
+    let mut org = organization("org-a", &[]);
+    org["fullUrl"] =
+        format!("https://{USER}:{PASSWORD}@directory.example.org/fhir/Organization/org-a").into();
+    let mut ep = endpoint("ep-a", "Organization/org-a");
+    ep["fullUrl"] =
+        format!("https://{USER}:{PASSWORD}@directory.example.org/fhir/Endpoint/ep-a").into();
+    ep["resource"]["address"] =
+        format!("https://{USER}:{PASSWORD}@cdr-a.example.org/openehr?access_token={TOKEN}").into();
+    ep["resource"]["header"] = json!([format!("Authorization: Bearer {TOKEN}")]);
+    let directory =
+        Directory::from_json(&bundle("collection", vec![org, ep])).expect("the Bundle reads");
+    for shown in [format!("{directory:?}"), format!("{directory:#?}")] {
+        for credential in [USER, PASSWORD, TOKEN] {
+            assert!(!shown.contains(credential), "{shown}");
+        }
+        for redacted in [
+            "https://***@directory.example.org/fhir/Organization/org-a",
+            "https://***@directory.example.org/fhir/Endpoint/ep-a",
+            "https://***@cdr-a.example.org/openehr?***",
+        ] {
+            assert!(shown.contains(redacted), "{shown}");
+        }
+    }
+}

@@ -9,9 +9,12 @@ use std::error::Error;
 use std::fmt::Write;
 use std::time::Duration;
 
+use ihe_iti::pixm::PixmClient;
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
+use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -21,6 +24,12 @@ use super::{
 
 /// A value that must appear nowhere but in the request to the Manager.
 const SENTINEL: &str = "SENTINEL-4711";
+
+/// The user name, the password and the bearer token a client is built with,
+/// which no rendering of the client shows.
+const USER: &str = "Qz7user";
+const PASSWORD: &str = "Qz7password";
+const TOKEN: &str = "Qz7token";
 
 fn source() -> SourceIdentifier {
     SourceIdentifier::new(RED, SecretString::from(SENTINEL)).expect("a source identifier")
@@ -143,4 +152,30 @@ async fn an_answer_shows_no_identifier_value() {
         !format!("{answer:?}").contains(SENTINEL),
         "the Debug of an answer shows an identifier value"
     );
+}
+
+#[test]
+fn a_client_shows_no_credential() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {TOKEN}")).expect("a header value"),
+    );
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .default_headers(headers)
+        .build()
+        .expect("an HTTP client");
+    let base = Url::parse(&format!("https://{USER}:{PASSWORD}@pix.example.org/fhir/"))
+        .expect("a base with userinfo");
+    let client = PixmClient::new(base, http).expect("a client");
+    for shown in [format!("{client:?}"), format!("{client:#?}")] {
+        for credential in [USER, PASSWORD, TOKEN] {
+            assert!(!shown.contains(credential), "{shown}");
+        }
+        assert!(
+            shown.contains("https://***@pix.example.org/fhir/Patient/$ihe-pix"),
+            "{shown}"
+        );
+    }
 }

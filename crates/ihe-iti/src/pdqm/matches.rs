@@ -14,6 +14,7 @@ use secrecy::SecretString;
 use url::Url;
 
 use crate::outcome::IssueType;
+use crate::redact::REDACTED;
 
 /// One page of an ITI-78 result set.
 #[derive(Debug, Clone)]
@@ -137,8 +138,8 @@ impl MatchedPatient {
 impl fmt::Debug for MatchedPatient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MatchedPatient")
-            .field("full_url", &"[REDACTED]")
-            .field("patient", &"[REDACTED]")
+            .field("full_url", &REDACTED)
+            .field("patient", &REDACTED)
             .field("score", &self.score)
             .field("grade", &self.grade)
             .finish()
@@ -196,6 +197,6 @@ impl Page {
 
 impl fmt::Debug for Page {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Page([REDACTED])")
+        write!(f, "Page({REDACTED})")
     }
 }

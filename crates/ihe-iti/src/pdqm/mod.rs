@@ -64,11 +64,13 @@ pub mod query;
 mod request;
 mod response;
 
+use std::fmt;
 use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
+use crate::redact::RedactedUrl;
 use error::{InvalidInput, PdqmError};
 use matches::{Page, SearchResult};
 use query::PatientQuery;
@@ -77,7 +79,11 @@ use query::PatientQuery;
 const FHIR_JSON: &str = "application/fhir+json";
 
 /// A Patient Demographics Consumer bound to one Patient Demographics Supplier.
-#[derive(Debug, Clone)]
+///
+/// `Debug` shows the base and the endpoint with their userinfo replaced by
+/// `***`, and leaves out the HTTP client, whose default headers may hold a
+/// credential.
+#[derive(Clone)]
 pub struct PdqmClient {
     base: Url,
     endpoint: Url,
@@ -178,5 +184,14 @@ impl PdqmClient {
             .map(str::to_owned);
         let body = response::body(response).await?;
         response::read(status, media.as_deref(), &body, &self.base, names_domain)
+    }
+}
+
+impl fmt::Debug for PdqmClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PdqmClient")
+            .field("base", &RedactedUrl(self.base.as_str()))
+            .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
+            .finish_non_exhaustive()
     }
 }

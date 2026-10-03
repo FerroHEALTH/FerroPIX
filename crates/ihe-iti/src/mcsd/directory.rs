@@ -10,6 +10,7 @@ use std::fmt;
 use fhir_types::codec::{Json, Path, Value};
 use fhir_types::r4::bundle::Bundle;
 use fhir_types::r4::endpoint::Endpoint;
+use fhir_types::r4::extension::ExtensionValue;
 use fhir_types::r4::identifier::Identifier;
 use fhir_types::r4::organization::Organization;
 use fhir_types::r4::reference::Reference;
@@ -285,6 +286,20 @@ impl DirectoryEndpoint {
             .as_ref()?
             .value
             .as_deref()
+    }
+
+    /// The `valueCode` of each extension of the endpoint whose `url` is
+    /// `url`, in resource order; `None` for one that carries another value
+    /// type or no value.
+    pub fn extension_codes<'a>(&'a self, url: &'a str) -> impl Iterator<Item = Option<&'a str>> {
+        self.resource
+            .extension
+            .iter()
+            .filter(move |extension| extension.url == url)
+            .map(|extension| match &extension.value {
+                Some(ExtensionValue::Code(code)) => code.value.as_deref(),
+                _ => None,
+            })
     }
 
     /// The endpoint's `address`, its technical base address.

@@ -26,7 +26,7 @@ pub mod pdqm;
 pub mod pixm;
 #[cfg(feature = "pmir")]
 pub mod pmir;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd"))]
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd"))]
 mod redact;
 #[cfg(any(feature = "pixm", feature = "pdqm"))]
 mod search;

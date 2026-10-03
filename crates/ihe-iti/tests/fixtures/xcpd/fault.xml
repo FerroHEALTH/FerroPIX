@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: Vernum Projecten B.V. -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- A SOAP 1.2 fault, the transmission error an initiating gateway shall
+     accept (ITI TF-2 3.55.4.2.3); its reason quotes the synthetic patient
+     identifier, which no error may carry on. -->
+<env:Envelope xmlns:env="http://www.w3.org/2003/05/soap-envelope" xmlns:wsa="http://www.w3.org/2005/08/addressing">
+  <env:Header>
+    <wsa:Action>http://www.w3.org/2005/08/addressing/soap/fault</wsa:Action>
+    <wsa:RelatesTo>{relates_to}</wsa:RelatesTo>
+  </env:Header>
+  <env:Body>
+    <env:Fault>
+      <env:Code>
+        <env:Value>env:Receiver</env:Value>
+      </env:Code>
+      <env:Reason>
+        <env:Text xml:lang="en">lookup of SYNTH-PATIENT-55 failed</env:Text>
+      </env:Reason>
+    </env:Fault>
+  </env:Body>
+</env:Envelope>

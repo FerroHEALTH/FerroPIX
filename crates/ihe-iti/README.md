@@ -76,6 +76,38 @@ connection type, a status or an identifier is the caller's policy. The
 userinfo and the query replaced by `***`, and leaves out an endpoint's
 `header` list.
 
+## XCPD (`xcpd`)
+
+`ihe_iti::xcpd::XcpdClient` is the Initiating Gateway of ITI-55, Cross
+Gateway Patient Discovery (ITI TF-2 §3.55, Revision 20.1): a
+`PRPA_IN201305UV02` in a SOAP 1.2 envelope with the WS-Addressing headers of
+Appendix V, posted to one Responding Gateway, which asks by the shared
+patient identifier alone (the identifier mode of §3.55.1, no demographics).
+The answer reads into a `Discovery` for Cases 1 to 4 of §3.55.4.2.3, each
+match with the `homeCommunityId` that holds it, or a typed error for Case 5,
+a SOAP fault, a status with no answer, a timeout, and any answer that does not
+hold to the transaction: a `RelatesTo` naming another request, a match with no
+community, a `NF` with matches, a document type declaration. Only the
+synchronous exchange with an immediate response is offered.
+
+A `RespondingGateway` is `https` only, since the request carries the
+patient identifier and any XUA assertion; `unencrypted_for_development`
+admits `http` for development and tests. The `reqwest::Client` you pass in
+carries the mutual TLS of the ATNA Secure Node the actor is grouped with;
+build it with `redirect::Policy::none()`.
+
+The crate signs nothing. `XuaAssertion` holds a SAML 2.0 assertion your
+identity provider signed, checked to be exactly one `saml2:Assertion`
+element that declares every prefix it uses, and the client sends its bytes
+unchanged in a WS-Security header. The patient identifier, every identifier
+an answer returns, and the assertion redact their content in `Debug`, and no
+error carries a value or the gateway's free text.
+
+The XML is read and written with `quick-xml`, which the FHIR features
+compile already through `fhir-types`; `xcpd` adds only `uuid` for the
+message ids and `jiff` for the creation time, and no other feature compiles
+either.
+
 The other profile modules hold their place and land with their FerroFED issues
 (<https://github.com/FerroHEALTH/FerroFED>).
 

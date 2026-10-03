@@ -103,6 +103,12 @@ unchanged in a WS-Security header. The patient identifier, every identifier
 an answer returns, and the assertion redact their content in `Debug`, and no
 error carries a value or the gateway's free text.
 
+`XcpdClient::audited` hands the ITI-55 Initiating Gateway audit message of
+every exchange (§3.55.5.1.1) to an `AuditRecorder` you route to your ATNA
+audit repository. The message carries the query parameters, which name the
+patient, as a `SecretString`. A message the recorder refuses fails the
+discovery with `XcpdError::Audit`, so no answer is used without its audit.
+
 The XML is read and written with `quick-xml`, which the FHIR features
 compile already through `fhir-types`; `xcpd` adds only `uuid` for the
 message ids and `jiff` for the creation time, and no other feature compiles

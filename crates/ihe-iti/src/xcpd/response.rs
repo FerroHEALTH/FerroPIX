@@ -67,22 +67,30 @@ pub(super) fn read(
     body: &[u8],
     message: &str,
 ) -> Result<Discovery, XcpdError> {
+    // NOTE: no specification governs this: our own design; an answer that is no
+    // ITI-55 response is malformed only on a 200, and any other status says enough.
+    let rejected = |malformed: XcpdError| {
+        if status == StatusCode::OK {
+            malformed
+        } else {
+            XcpdError::Rejected { status }
+        }
+    };
     let soap = match media.map(media_type) {
         Some(kind) if kind == "application/soap+xml" => true,
-        Some(kind) if kind == "multipart/related" => return Err(Malformation::Multipart.into()),
+        Some(kind) if kind == "multipart/related" => {
+            return Err(rejected(Malformation::Multipart.into()));
+        }
         _ => false,
     };
     if !soap {
-        return Err(if status == StatusCode::OK {
-            Malformation::NotSoap.into()
-        } else {
-            XcpdError::Rejected { status }
-        });
+        return Err(rejected(Malformation::NotSoap.into()));
     }
-    let read = parse(body)?;
+    let read = parse(body).map_err(rejected)?;
     if let Some(code) = read.fault {
         return Err(XcpdError::Fault {
             code: FaultCode::of(&code),
+            status,
         });
     }
     if status != StatusCode::OK {

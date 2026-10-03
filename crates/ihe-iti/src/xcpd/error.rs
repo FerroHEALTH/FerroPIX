@@ -42,6 +42,8 @@ pub enum XcpdError {
     Fault {
         /// The fault's code.
         code: FaultCode,
+        /// The HTTP status the fault came with.
+        status: StatusCode,
     },
     /// The responding gateway could not satisfy the request, Case 5 of
     /// §3.55.4.2.3: an `AE` or `AR` acknowledgement or query response, with
@@ -74,6 +76,29 @@ pub enum XcpdError {
     /// The answer does not hold to ITI-55.
     #[error("the responding gateway's answer does not hold to ITI-55")]
     Malformed(#[from] Malformation),
+    /// The audit recorder could not accept the exchange's audit message, so
+    /// the answer is not used (ITI TF-2 §3.55.5.1).
+    #[error("the ITI-55 audit message could not be recorded")]
+    Audit(#[source] super::audit::AuditError),
+}
+
+impl XcpdError {
+    /// The HTTP status the responding gateway answered with, or `None` when
+    /// no answer arrived or nothing was sent.
+    ///
+    /// A malformed answer, an application error and a refused query are read
+    /// only from a `200`; any other status is [`XcpdError::Rejected`] unless it
+    /// carries a SOAP fault.
+    #[must_use]
+    pub fn status(&self) -> Option<StatusCode> {
+        match self {
+            Self::Fault { status, .. } | Self::Rejected { status } => Some(*status),
+            Self::ApplicationError { .. } | Self::QueryRefused | Self::Malformed(_) => {
+                Some(StatusCode::OK)
+            }
+            Self::Timeout | Self::Transport(_) | Self::Encode(_) | Self::Audit(_) => None,
+        }
+    }
 }
 
 /// The code of a SOAP 1.2 fault (SOAP 1.2 Part 1 §5.4.6).

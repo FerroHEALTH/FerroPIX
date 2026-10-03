@@ -10,6 +10,7 @@
 //! example arc. The stub fills in `RelatesTo` from the request's `MessageID`.
 
 mod answers;
+mod audit;
 mod contract;
 mod hygiene;
 

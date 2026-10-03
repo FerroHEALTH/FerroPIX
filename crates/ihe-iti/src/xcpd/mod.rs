@@ -24,7 +24,9 @@
 //! returns, redacts it in `Debug`, and no error carries a value, the request
 //! or the gateway's free text. A SAML 2.0 XUA assertion
 //! ([`security::XuaAssertion`]) the deployment supplies rides in a
-//! WS-Security header; the crate signs nothing.
+//! WS-Security header; the crate signs nothing. Each exchange can record
+//! its ITI-55 audit message through an [`audit::AuditRecorder`] the
+//! deployment routes to its audit repository (§3.55.5.1.1).
 //!
 //! The asynchronous and deferred exchanges (§3.55.6.2, Appendix V.5) are not
 //! offered: the initiating gateway claims neither option (ITI TF-1 §27.2),
@@ -69,6 +71,7 @@
 //! # }
 //! ```
 
+pub mod audit;
 pub mod discovery;
 pub mod error;
 pub mod identifier;
@@ -77,10 +80,12 @@ mod response;
 pub mod security;
 
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 
+use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
 use error::{Malformation, XcpdError};
 use request::{DiscoveryQuery, Ids, RespondingGateway};
@@ -119,6 +124,7 @@ const SOAP_REQUEST: &str = "application/soap+xml; charset=UTF-8; action=\"urn:hl
 #[derive(Clone)]
 pub struct XcpdClient {
     http: reqwest::Client,
+    audit: Option<Arc<dyn AuditRecorder>>,
 }
 
 impl XcpdClient {
@@ -132,7 +138,15 @@ impl XcpdClient {
     /// gateway points.
     #[must_use]
     pub fn new(http: reqwest::Client) -> Self {
-        Self { http }
+        Self { http, audit: None }
+    }
+
+    /// This client, recording the audit message of every exchange through
+    /// `recorder` (§3.55.5.1.1).
+    #[must_use]
+    pub fn audited(mut self, recorder: Arc<dyn AuditRecorder>) -> Self {
+        self.audit = Some(recorder);
+        self
     }
 
     /// Asks `gateway` whether its community knows the patient `query` names
@@ -153,7 +167,37 @@ impl XcpdClient {
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
         let ids = Ids::fresh();
-        let body = request::envelope(query, gateway, &ids, assertion)?;
+        let written = request::envelope(query, gateway, &ids, assertion)?;
+        let answer = self.exchange(gateway, written.body, &ids, timeout).await;
+        if let Some(recorder) = &self.audit {
+            let event = AuditEvent {
+                date_time: jiff::Timestamp::now(),
+                outcome: match &answer {
+                    Ok(_) => EventOutcome::Success,
+                    Err(error) if error.status().is_some() => EventOutcome::MinorFailure,
+                    Err(_) => EventOutcome::SeriousFailure,
+                },
+                process_id: std::process::id(),
+                destination: audit::destination(gateway.endpoint()),
+                destination_access_point: NetworkAccessPoint::of(gateway.endpoint()),
+                query: written.query,
+                home_community: query.community().cloned(),
+            };
+            // NOTE: ITI TF-2 §3.55.5.1, ITI TF-1 Table 27.1.3-1: the actor shall record the
+            // exchange, so an answer whose audit message was not accepted is not used.
+            recorder.record(event).map_err(XcpdError::Audit)?;
+        }
+        answer
+    }
+
+    /// Posts `body` to `gateway` and reads the answer.
+    async fn exchange(
+        &self,
+        gateway: &RespondingGateway,
+        body: Vec<u8>,
+        ids: &Ids,
+        timeout: Duration,
+    ) -> Result<Discovery, XcpdError> {
         let response = self
             .http
             .post(gateway.endpoint().clone())
@@ -183,9 +227,13 @@ impl fmt::Debug for XcpdClient {
 
 /// The answer's body, up to [`response::LIMIT`] bytes.
 async fn body_of(mut response: reqwest::Response) -> Result<Vec<u8>, XcpdError> {
+    let status = response.status();
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(transport)? {
         if body.len().saturating_add(chunk.len()) > response::LIMIT {
+            if status != http::StatusCode::OK {
+                return Err(XcpdError::Rejected { status });
+            }
             return Err(Malformation::TooLarge {
                 limit: response::LIMIT,
             }

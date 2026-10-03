@@ -101,9 +101,62 @@ async fn case_5_an_application_error_is_an_error_with_its_issue() {
 async fn a_soap_fault_is_an_error_with_its_code_only() {
     let answer = answer_of(500, SOAP_XML, fixture("fault.xml")).await;
     match answer {
-        Err(XcpdError::Fault { code }) => assert_eq!(FaultCode::Receiver, code),
+        Err(XcpdError::Fault { code, status }) => {
+            assert_eq!(FaultCode::Receiver, code);
+            assert_eq!(http::StatusCode::INTERNAL_SERVER_ERROR, status);
+        }
         other => panic!("a fault is a transmission error: {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn an_unreadable_answer_with_an_error_status_is_rejected_with_it() {
+    let answer = answer_of(502, SOAP_XML, "<not-closed".to_owned()).await;
+    assert!(
+        matches!(answer, Err(XcpdError::Rejected { status }) if status == http::StatusCode::BAD_GATEWAY),
+        "{answer:?}"
+    );
+}
+
+#[tokio::test]
+async fn every_error_names_the_status_the_gateway_answered_with() {
+    let cases = [
+        (
+            answer_of(500, SOAP_XML, fixture("fault.xml")).await,
+            Some(500),
+        ),
+        (answer_of(503, "text/plain", String::new()).await, Some(503)),
+        (
+            ask(&answering("application-error.xml").await).await,
+            Some(200),
+        ),
+        (answer_of(200, "text/xml", String::new()).await, Some(200)),
+    ];
+    for (answer, expected) in cases {
+        let status = answer.err().and_then(|error| error.status());
+        assert_eq!(
+            expected,
+            status.map(|status| status.as_u16()),
+            "the status the gateway answered with"
+        );
+    }
+    let unreachable = client()
+        .discover(
+            &ihe_iti::xcpd::request::RespondingGateway::unencrypted_for_development(
+                url::Url::parse("http://127.0.0.1:0/rg").expect("a URL"),
+                super::oid(super::RECEIVER),
+            )
+            .expect("a gateway"),
+            &query(),
+            None,
+            PROMPT,
+        )
+        .await;
+    assert_eq!(
+        None,
+        unreachable.err().and_then(|error| error.status()),
+        "no answer"
+    );
 }
 
 #[tokio::test]

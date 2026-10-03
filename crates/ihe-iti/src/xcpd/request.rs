@@ -10,7 +10,7 @@ use std::fmt;
 use jiff::Timestamp;
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesText, Event};
-use secrecy::ExposeSecret as _;
+use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 use uuid::Uuid;
 
@@ -187,6 +187,12 @@ impl DiscoveryQuery {
     pub fn patient(&self) -> &PatientIdentifier {
         &self.patient
     }
+
+    /// The initiating community the query names, if any.
+    #[must_use]
+    pub fn community(&self) -> Option<&HomeCommunityId> {
+        self.community.as_ref()
+    }
 }
 
 /// The identifiers one request carries: the WS-Addressing `MessageID` and
@@ -222,7 +228,8 @@ pub(super) fn envelope(
     gateway: &RespondingGateway,
     ids: &Ids,
     assertion: Option<&XuaAssertion>,
-) -> Result<Vec<u8>, XcpdError> {
+) -> Result<Written, XcpdError> {
+    let segment = query_by_parameter(query, ids).map_err(XcpdError::Encode)?;
     let mut writer = Writer::new(Vec::new());
     writer
         .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
@@ -236,11 +243,23 @@ pub(super) fn envelope(
                 .write_inner_content(|writer| header(writer, gateway, ids, assertion))?;
             writer
                 .create_element("soap:Body")
-                .write_inner_content(|writer| message(writer, query, gateway, ids))?;
+                .write_inner_content(|writer| message(writer, query, gateway, ids, &segment))?;
             Ok(())
         })
         .map_err(XcpdError::Encode)?;
-    Ok(writer.into_inner())
+    Ok(Written {
+        body: writer.into_inner(),
+        query: SecretString::from(segment),
+    })
+}
+
+/// A request as written: the envelope, and the `queryByParameter` segment
+/// it carries, which the audit message records (§3.55.5.1.1).
+pub(super) struct Written {
+    /// The SOAP envelope.
+    pub(super) body: Vec<u8>,
+    /// The `queryByParameter` segment, which names the patient identifier.
+    pub(super) query: SecretString,
 }
 
 type Out = Writer<Vec<u8>>;
@@ -293,6 +312,7 @@ fn message(
     query: &DiscoveryQuery,
     gateway: &RespondingGateway,
     ids: &Ids,
+    segment: &str,
 ) -> std::io::Result<()> {
     let message_id = ids.message.to_string();
     let created = ids.created.strftime("%Y%m%d%H%M%S+0000").to_string();
@@ -330,17 +350,15 @@ fn message(
                 &query.sender,
                 query.community.as_ref(),
             )?;
-            control_act(writer, query, ids)?;
+            control_act(writer, segment)?;
             Ok(())
         })?;
     Ok(())
 }
 
 /// The Query Control Act: `controlActProcess` in mood `EVN` with the trigger
-/// event `PRPA_TE201305UV02`, around the query by parameter.
-fn control_act(writer: &mut Out, query: &DiscoveryQuery, ids: &Ids) -> std::io::Result<()> {
-    let query_id = ids.query.to_string();
-    let patient = &query.patient;
+/// event `PRPA_TE201305UV02`, around the query by parameter `segment`.
+fn control_act(writer: &mut Out, segment: &str) -> std::io::Result<()> {
     writer
         .create_element("controlActProcess")
         .with_attributes([("classCode", "CACT"), ("moodCode", "EVN")])
@@ -352,43 +370,58 @@ fn control_act(writer: &mut Out, query: &DiscoveryQuery, ids: &Ids) -> std::io::
                     ("codeSystem", HL7_INTERACTION),
                 ])
                 .write_empty()?;
-            writer
-                .create_element("queryByParameter")
-                .write_inner_content(|writer| {
-                    writer
-                        .create_element("queryId")
-                        .with_attribute(("root", query_id.as_str()))
-                        .write_empty()?;
-                    code(writer, "statusCode", "new")?;
-                    code(writer, "responseModalityCode", "R")?;
-                    code(writer, "responsePriorityCode", "I")?;
-                    writer
-                        .create_element("parameterList")
-                        .write_inner_content(|writer| {
-                            // NOTE: HL7 v3 XML ITS: the element is lowerCamel, as every other
-                            // parameter of the §3.55.4.1.2.4 example is.
-                            writer
-                                .create_element("livingSubjectId")
-                                .write_inner_content(|writer| {
-                                    writer
-                                        .create_element("value")
-                                        .with_attributes([
-                                            ("root", patient.authority().as_str()),
-                                            ("extension", patient.value().expose_secret()),
-                                        ])
-                                        .write_empty()?;
-                                    writer
-                                        .create_element("semanticsText")
-                                        .write_text_content(BytesText::new("LivingSubject.id"))?;
-                                    Ok(())
-                                })?;
-                            Ok(())
-                        })?;
-                    Ok(())
-                })?;
+            // NOTE: the segment is this module's own writer output, well formed and
+            // escaped, so it is spliced as written and the audit records the same bytes.
+            writer.write_event(Event::Text(BytesText::from_escaped(segment)))?;
             Ok(())
         })?;
     Ok(())
+}
+
+/// The `queryByParameter` of `query` (§3.55.4.1.2.2): the query parameters
+/// the request sends and its audit message records (§3.55.5.1.1).
+fn query_by_parameter(query: &DiscoveryQuery, ids: &Ids) -> std::io::Result<String> {
+    let query_id = ids.query.to_string();
+    let patient = &query.patient;
+    let mut out = Writer::new(Vec::new());
+    {
+        let writer = &mut out;
+        writer
+            .create_element("queryByParameter")
+            .write_inner_content(|writer| {
+                writer
+                    .create_element("queryId")
+                    .with_attribute(("root", query_id.as_str()))
+                    .write_empty()?;
+                code(writer, "statusCode", "new")?;
+                code(writer, "responseModalityCode", "R")?;
+                code(writer, "responsePriorityCode", "I")?;
+                writer
+                    .create_element("parameterList")
+                    .write_inner_content(|writer| {
+                        // NOTE: HL7 v3 XML ITS: the element is lowerCamel, as every other
+                        // parameter of the §3.55.4.1.2.4 example is.
+                        writer
+                            .create_element("livingSubjectId")
+                            .write_inner_content(|writer| {
+                                writer
+                                    .create_element("value")
+                                    .with_attributes([
+                                        ("root", patient.authority().as_str()),
+                                        ("extension", patient.value().expose_secret()),
+                                    ])
+                                    .write_empty()?;
+                                writer
+                                    .create_element("semanticsText")
+                                    .write_text_content(BytesText::new("LivingSubject.id"))?;
+                                Ok(())
+                            })?;
+                        Ok(())
+                    })?;
+                Ok(())
+            })?;
+    }
+    String::from_utf8(out.into_inner()).map_err(std::io::Error::other)
 }
 
 /// An element with one `code` attribute.

@@ -102,6 +102,32 @@ fn a_relative_reference_resolves_on_the_root_of_a_rest_full_url() {
 }
 
 #[test]
+fn every_identifier_of_an_organisation_is_read_in_resource_order() {
+    let mut org = organization("org-a", &[]);
+    org["resource"]["identifier"] = json!([
+        {"system": "https://example.org/org", "value": "org-a-value"},
+        {"system": "urn:oid:2.999.7", "value": "ura-test-0001"},
+        {"value": "no-system"},
+        {"system": "urn:oid:2.999.8"}
+    ]);
+    let body = bundle("collection", vec![org]);
+    let directory = Directory::from_json(&body).expect("the Bundle reads");
+    let [org] = directory.organizations() else {
+        panic!("one organisation");
+    };
+    assert_eq!(
+        org.identifiers().collect::<Vec<_>>(),
+        vec![
+            (Some("https://example.org/org"), Some("org-a-value")),
+            (Some("urn:oid:2.999.7"), Some("ura-test-0001")),
+            (None, Some("no-system")),
+            (Some("urn:oid:2.999.8"), None),
+        ],
+        "each half as written, absent halves as None"
+    );
+}
+
+#[test]
 fn an_absolute_reference_matches_a_full_url() {
     let body = bundle(
         "searchset",

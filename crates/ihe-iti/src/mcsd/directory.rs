@@ -275,6 +275,23 @@ impl DirectoryOrganization {
         values(&self.resource.identifier, system)
     }
 
+    /// The `system` and the `value` of every identifier, in resource order;
+    /// `None` for a half the identifier does not carry.
+    pub fn identifiers(&self) -> impl Iterator<Item = (Option<&str>, Option<&str>)> {
+        self.resource.identifier.iter().map(|identifier| {
+            (
+                identifier
+                    .system
+                    .as_ref()
+                    .and_then(|uri| uri.value.as_deref()),
+                identifier
+                    .value
+                    .as_ref()
+                    .and_then(|value| value.value.as_deref()),
+            )
+        })
+    }
+
     /// The organisation's `name`.
     #[must_use]
     pub fn name(&self) -> Option<&str> {

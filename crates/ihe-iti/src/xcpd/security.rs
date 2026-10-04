@@ -16,8 +16,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use quick_xml::NsReader;
-use quick_xml::events::Event;
-use quick_xml::name::ResolveResult;
+use quick_xml::events::{BytesRef, BytesStart, Event};
+use quick_xml::name::{NamespaceResolver, ResolveResult};
 
 use super::error::InvalidInput;
 use crate::redact::REDACTED;
@@ -85,24 +85,12 @@ fn element_span(xml: &str) -> Option<(usize, usize)> {
             return None;
         }
         let saml = matches!(namespace, ResolveResult::Bound(ns) if ns.0 == SAML2);
-        let element = match &event {
-            Event::Start(element) | Event::Empty(element) => Some(element.clone()),
-            _ => None,
-        };
-        if let Some(element) = &element {
-            for attribute in element.attributes() {
-                let attribute = attribute.ok()?;
-                let (bound, _) = reader.resolver().resolve_attribute(attribute.key);
-                if matches!(bound, ResolveResult::Unknown(_)) {
-                    return None;
-                }
+        if let Event::Start(element) | Event::Empty(element) = &event {
+            if !attributes_declared(reader.resolver(), element) {
+                return None;
             }
             if depth == 0 {
-                let root = end.is_none() && saml && element.local_name().as_ref() == "Assertion";
-                if !root {
-                    return None;
-                }
-                start = Some(before);
+                start = Some(assertion_start(before, end.is_some(), saml, element)?);
             }
         }
         match event {
@@ -122,11 +110,7 @@ fn element_span(xml: &str) -> Option<(usize, usize)> {
                 }
             }
             Event::GeneralRef(reference) => {
-                let predefined =
-                    quick_xml::escape::resolve_predefined_entity(&reference.xml10_content())
-                        .is_some();
-                let character = matches!(reference.resolve_char_ref(), Ok(Some(_)));
-                if depth == 0 || !(predefined || character) {
+                if depth == 0 || !reference_resolves(&reference) {
                     return None;
                 }
             }
@@ -138,6 +122,37 @@ fn element_span(xml: &str) -> Option<(usize, usize)> {
         }
     }
     Some((start?, end?))
+}
+
+/// Whether every attribute of `element` is well formed and binds only a
+/// namespace prefix that `resolver` has in scope.
+fn attributes_declared(resolver: &NamespaceResolver, element: &BytesStart<'_>) -> bool {
+    element.attributes().all(|attribute| {
+        attribute.is_ok_and(|attribute| {
+            let (bound, _) = resolver.resolve_attribute(attribute.key);
+            !matches!(bound, ResolveResult::Unknown(_))
+        })
+    })
+}
+
+/// The offset `before` of a top-level `element` when it opens the span: no
+/// earlier top-level element has `closed`, and it is a SAML 2.0 `Assertion`.
+fn assertion_start(
+    before: usize,
+    closed: bool,
+    saml: bool,
+    element: &BytesStart<'_>,
+) -> Option<usize> {
+    let root = !closed && saml && element.local_name().as_ref() == "Assertion";
+    root.then_some(before)
+}
+
+/// Whether `reference` is one XML predefines or a character reference.
+fn reference_resolves(reference: &BytesRef<'_>) -> bool {
+    let predefined =
+        quick_xml::escape::resolve_predefined_entity(&reference.xml10_content()).is_some();
+    let character = matches!(reference.resolve_char_ref(), Ok(Some(_)));
+    predefined || character
 }
 
 #[cfg(test)]

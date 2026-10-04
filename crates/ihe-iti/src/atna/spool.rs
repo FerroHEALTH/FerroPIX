@@ -31,6 +31,7 @@
 //! governs them.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -445,12 +446,12 @@ fn scan(directory: &Path, skip: Option<&Path>) -> Result<BTreeMap<u64, u64>, Spo
         if Some(path.as_path()) == skip {
             continue;
         }
-        let extension = path.extension().and_then(|it| it.to_str());
+        let extension = path.extension().and_then(OsStr::to_str);
         // NOTE: no specification governs this: our own design; a name that
         // is no sequence number is a file this spool did not write.
         let sequence = path
             .file_stem()
-            .and_then(|it| it.to_str())
+            .and_then(OsStr::to_str)
             .and_then(|it| it.parse::<u64>().ok());
         match (extension, sequence) {
             (Some(STORED), Some(sequence)) => {

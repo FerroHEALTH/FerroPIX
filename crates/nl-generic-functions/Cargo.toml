@@ -5,7 +5,7 @@ name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.4"
+version = "0.0.5"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -26,18 +26,50 @@ include = ["src/**", "README.md", "LICENSE"]
 # (no specification governs this: our own design). The crate depends on nothing
 # in FerroFED.
 [features]
-# GF-Localization through the national index (NVI).
-nvi = []
+# GF-Localization through the national index (NVI): the HTTP client of the
+# Localization Service search, the FHIR R4 `resources` root set for the
+# Bundle of DocumentReference records it answers with, and the redacting
+# secret type the pseudonymised patient identifier travels in.
+nvi = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
 # GF-Consent through Mitz, the optional Step-1 pre-filter.
 mitz = []
-# GF-Addressing through the national address book (LRZa).
-lrza = []
+# GF-Addressing through the national address book (LRZa): the URA of an
+# NL-GF Organization, over the FHIR R4 `resources` root set.
+lrza = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:thiserror",
+]
 # GF-Authentication on the Nuts profile.
 nuts-auth = []
 
 [dependencies]
+fhir-types = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["rustls"] }
+secrecy = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
 
 [dev-dependencies]
+fhir-types = { workspace = true, features = ["r4", "resources"] }
+secrecy = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }
+url = { workspace = true }
+wiremock = { workspace = true }
 
 [lints]
 workspace = true

@@ -143,18 +143,28 @@ impl PdqmClient {
     }
 
     /// Records the request `request`, when the client is audited, and
-    /// returns `result` unless the record was refused.
+    /// returns `result` unless the record was refused, or was not accepted
+    /// by `deadline` for an answer that would be used
+    /// ([`crate::recording`]).
     #[cfg(feature = "balp")]
     async fn audit(
         &self,
         request: impl FnOnce() -> secrecy::SecretString,
         result: Result<SearchResult, PdqmError>,
+        deadline: Option<tokio::time::Instant>,
     ) -> Result<SearchResult, PdqmError> {
+        use crate::recording::{Late, Recorded, within};
         if let Some(recorder) = &self.audit {
             let exchange = audit::exchange(&self.base, request(), &result);
             // NOTE: PDQm §2:3.78.5.1 makes the audit record part of the query, so
             // an answer whose record was refused is not used.
-            recorder.record(exchange).await.map_err(PdqmError::Audit)?;
+            match within(deadline, recorder.record(exchange)).await {
+                Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
+                Recorded::Late if result.is_ok() => {
+                    return Err(PdqmError::Audit(crate::balp::AuditError(Box::new(Late))));
+                }
+                Recorded::Accepted | Recorded::Late => {}
+            }
         }
         result
     }
@@ -176,7 +186,7 @@ impl PdqmClient {
     /// Asks the Supplier for the Patients that match `input` (ITI-119).
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer is
-    /// read.
+    /// read, and an audited client's record of it.
     ///
     /// # Errors
     /// [`PdqmError::Unwritable`] before anything is sent when the input
@@ -187,24 +197,30 @@ impl PdqmClient {
         input: &MatchInput,
         timeout: Duration,
     ) -> Result<MatchResult, PdqmError> {
+        #[cfg(feature = "balp")]
+        let deadline = crate::recording::deadline(timeout);
         let body = secrecy::SecretString::from(
             serde_json::to_string(&input.parameters()).map_err(PdqmError::Unwritable)?,
         );
         let result = self.post_match(&body, timeout).await;
         #[cfg(feature = "balp")]
-        let result = self.audit_match(input, &body, result).await;
+        let result = self.audit_match(input, &body, result, deadline).await;
         result
     }
 
     /// Records the match of `input`, sent as `body`, when the client is
-    /// audited, and returns `result` unless the record was refused.
+    /// audited, and returns `result` unless the record was refused, or was
+    /// not accepted by `deadline` for an answer that would be used
+    /// ([`crate::recording`]).
     #[cfg(feature = "balp")]
     async fn audit_match(
         &self,
         input: &MatchInput,
         body: &secrecy::SecretString,
         result: Result<MatchResult, PdqmError>,
+        deadline: Option<tokio::time::Instant>,
     ) -> Result<MatchResult, PdqmError> {
+        use crate::recording::{Late, Recorded, within};
         use secrecy::ExposeSecret as _;
         if let Some(recorder) = &self.audit {
             // NOTE: BALP Query records the raw request; a POST operation is its
@@ -218,7 +234,13 @@ impl PdqmClient {
                 audit::match_exchange(&self.base, request, input.sole_identifier(), &result);
             // NOTE: PDQm §2:3.119.5.1.1 makes the audit record part of the match, so
             // an answer whose record was refused is not used.
-            recorder.record(exchange).await.map_err(PdqmError::Audit)?;
+            match within(deadline, recorder.record(exchange)).await {
+                Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
+                Recorded::Late if result.is_ok() => {
+                    return Err(PdqmError::Audit(crate::balp::AuditError(Box::new(Late))));
+                }
+                Recorded::Accepted | Recorded::Late => {}
+            }
         }
         result
     }
@@ -253,7 +275,7 @@ impl PdqmClient {
     /// Asks the Supplier for the first page of Patients that match `query`.
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer is
-    /// read.
+    /// read, and an audited client's record of it.
     ///
     /// # Errors
     /// A [`PdqmError`] for every answer that is not a `searchset` Bundle, and
@@ -263,6 +285,8 @@ impl PdqmClient {
         query: &PatientQuery,
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
+        #[cfg(feature = "balp")]
+        let deadline = crate::recording::deadline(timeout);
         let result = self.post(query, timeout).await;
         #[cfg(feature = "balp")]
         let result = self
@@ -280,6 +304,7 @@ impl PdqmClient {
                     ))
                 },
                 result,
+                deadline,
             )
             .await;
         result
@@ -319,10 +344,12 @@ impl PdqmClient {
         if page.url().origin() != self.endpoint.origin() {
             return Err(PdqmError::ForeignPage);
         }
+        #[cfg(feature = "balp")]
+        let deadline = crate::recording::deadline(timeout);
         let result = self.get(page, timeout).await;
         #[cfg(feature = "balp")]
         let result = self
-            .audit(|| crate::balp::request_text(page.url()), result)
+            .audit(|| crate::balp::request_text(page.url()), result, deadline)
             .await;
         result
     }

@@ -7,7 +7,12 @@
 //!
 //! A [`Spool`] is bounded by a number of messages and a number of bytes; a
 //! message past either bound is refused, never dropped silently, so its
-//! caller can fail the exchange it audits. Messages leave in the order they
+//! caller can fail the exchange it audits. Storing one message is bounded in
+//! time too: one not stored within [`Bounds::write_timeout`], the wait for a
+//! write before it included, is refused with [`SpoolError::Late`] and is not
+//! counted. That write goes on, and once it ends the message is stored and
+//! delivered like any other, or its failure is logged, so a slow disk
+//! neither loses nor repeats a message. Messages leave in the order they
 //! were stored.
 //!
 //! On disk ([`Spool::open`]), each message is one file named by its sequence
@@ -33,14 +38,21 @@
 //! The bounds and the file layout are our own design: no specification
 //! governs them.
 
+mod disk;
+pub(super) mod in_flight;
+
 use std::collections::{BTreeMap, VecDeque};
-use std::ffi::OsStr;
-use std::fs::{self, File, OpenOptions};
-use std::io::Write as _;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use secrecy::{ExposeSecret, SecretSlice};
+use tokio::sync::Notify;
+use tokio::task::JoinError;
+
+use disk::{check_private, create_private, file, io, probe, scan, sync_directory, write_durably};
+use in_flight::InFlight;
 
 /// The extension of a stored message.
 const STORED: &str = "msg";
@@ -94,6 +106,9 @@ pub struct Bounds {
     pub max_messages: usize,
     /// The most bytes held at once, over every message.
     pub max_bytes: u64,
+    /// The longest storing one message may take, the wait for a write
+    /// before it included.
+    pub write_timeout: Duration,
 }
 
 /// Why a spool could not be opened or could not store a message.
@@ -134,9 +149,16 @@ pub enum SpoolError {
         #[source]
         source: std::io::Error,
     },
+    /// The message was not stored within [`Bounds::write_timeout`]. Its write
+    /// goes on, and a message it stores is delivered like any other.
+    #[error("the audit spool did not store the message within {bound:?}")]
+    Late {
+        /// The bound it missed.
+        bound: Duration,
+    },
     /// The task that touched the disk did not finish.
     #[error("the audit spool task did not finish")]
-    Task(#[source] tokio::task::JoinError),
+    Task(#[source] JoinError),
 }
 
 /// What a spool holds right now.
@@ -175,19 +197,26 @@ impl std::fmt::Debug for Stored {
 }
 
 /// A bounded store of messages awaiting delivery.
+///
+/// Reading its state never waits on the disk, so a write that stalls holds
+/// up no reader of [`Spool::depth`].
 #[derive(Clone)]
 pub struct Spool {
     inner: Arc<Mutex<Inner>>,
+    shown: Arc<Mutex<Depth>>,
+    turn: Arc<tokio::sync::Mutex<()>>,
+    arrived: Arc<Notify>,
+    bounds: Bounds,
+    durable: bool,
 }
 
 impl std::fmt::Debug for Spool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         f.debug_struct("Spool")
-            .field("on_disk", &matches!(inner.store, Store::Disk { .. }))
-            .field("depth", &inner.depth)
-            .field("bounds", &inner.bounds)
-            .finish()
+            .field("on_disk", &self.durable)
+            .field("depth", &self.depth())
+            .field("bounds", &self.bounds)
+            .finish_non_exhaustive()
     }
 }
 
@@ -195,7 +224,13 @@ struct Inner {
     store: Store,
     bounds: Bounds,
     depth: Depth,
+    shown: Arc<Mutex<Depth>>,
     next: u64,
+}
+
+/// Locks `mutex`, taking over the state a holder that panicked left.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 enum Store {
@@ -286,46 +321,101 @@ impl Spool {
     }
 
     fn with(store: Store, bounds: Bounds, depth: Depth, next: u64) -> Self {
+        let durable = matches!(store, Store::Disk { .. });
+        let shown = Arc::new(Mutex::new(depth));
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 store,
                 bounds,
                 depth,
+                shown: Arc::clone(&shown),
                 next,
             })),
+            shown,
+            turn: Arc::new(tokio::sync::Mutex::new(())),
+            arrived: Arc::new(Notify::new()),
+            bounds,
+            durable,
         }
     }
 
     /// Whether the messages are stored on disk.
     #[must_use]
     pub fn is_durable(&self) -> bool {
-        let inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
-        matches!(inner.store, Store::Disk { .. })
+        self.durable
     }
 
-    /// What the spool holds.
+    /// What the spool holds: a message counts once it is stored.
     #[must_use]
     pub fn depth(&self) -> Depth {
-        self.inner
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .depth
+        *lock(&self.shown)
     }
 
     /// Stores `message` after every message stored before it. On disk, it
     /// returns once the message is on the device.
     ///
+    /// It waits at most [`Bounds::write_timeout`], the wait for a write before
+    /// it included. A message not stored by then is refused with
+    /// [`SpoolError::Late`] and is not counted. Its write goes on: once it
+    /// ends, the message is stored and delivered like any other, or the
+    /// failure is logged with no part of the message.
+    ///
     /// # Errors
     ///
-    /// [`SpoolError::Full`] past a bound, and [`SpoolError::Io`] when the
-    /// message cannot be written.
+    /// [`SpoolError::Full`] past a bound, [`SpoolError::Late`] past
+    /// [`Bounds::write_timeout`], and [`SpoolError::Io`] when the message cannot
+    /// be written.
     pub async fn push(&self, message: SecretSlice<u8>) -> Result<(), SpoolError> {
+        let bound = self.bounds.write_timeout;
+        let store = self.store(message);
+        match tokio::time::Instant::now().checked_add(bound) {
+            Some(deadline) => tokio::time::timeout_at(deadline, store)
+                .await
+                .map_err(|_elapsed| SpoolError::Late { bound })?,
+            None => store.await,
+        }
+    }
+
+    /// Waits until a message is stored, returning at once when one was
+    /// stored since the last wait ended.
+    pub async fn stored(&self) {
+        self.arrived.notified().await;
+    }
+
+    /// Stores `message` once every write before it has ended, so a stalled
+    /// write holds one blocking thread however many messages wait behind it.
+    async fn store(&self, message: SecretSlice<u8>) -> Result<(), SpoolError> {
+        let turn = Arc::clone(&self.turn).lock_owned().await;
+        let inner = Arc::clone(&self.inner);
+        let arrived = Arc::clone(&self.arrived);
+        let write = InFlight::new(tokio::task::spawn_blocking(move || {
+            let stored = {
+                let mut inner = lock(&inner);
+                let stored = inner.push(message);
+                inner.publish();
+                stored
+            };
+            drop(turn);
+            if stored.is_ok() {
+                arrived.notify_one();
+            }
+            stored
+        }));
+        write.await.map_err(SpoolError::Task)?.map(|_sequence| ())
+    }
+
+    /// Runs `step` on the spool on a blocking thread, and shows the depth it
+    /// leaves.
+    async fn blocking<T: Send + 'static>(
+        &self,
+        step: impl FnOnce(&mut Inner) -> Result<T, SpoolError> + Send + 'static,
+    ) -> Result<T, SpoolError> {
         let inner = Arc::clone(&self.inner);
         tokio::task::spawn_blocking(move || {
-            inner
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(message)
+            let mut inner = lock(&inner);
+            let done = step(&mut inner);
+            inner.publish();
+            done
         })
         .await
         .map_err(SpoolError::Task)?
@@ -341,15 +431,7 @@ impl Spool {
     /// [`SpoolError::Io`] when a message can neither be read nor moved to
     /// the quarantine.
     pub async fn oldest(&self) -> Result<Option<Stored>, SpoolError> {
-        let inner = Arc::clone(&self.inner);
-        tokio::task::spawn_blocking(move || {
-            inner
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .oldest()
-        })
-        .await
-        .map_err(SpoolError::Task)?
+        self.blocking(Inner::oldest).await
     }
 
     /// Moves the message `sequence`, which the repository refused, to the
@@ -359,15 +441,7 @@ impl Spool {
     ///
     /// [`SpoolError::Io`] when it cannot be moved.
     pub async fn reject(&self, sequence: u64) -> Result<(), SpoolError> {
-        let inner = Arc::clone(&self.inner);
-        tokio::task::spawn_blocking(move || {
-            inner
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .reject(sequence)
-        })
-        .await
-        .map_err(SpoolError::Task)?
+        self.blocking(move |inner| inner.reject(sequence)).await
     }
 
     /// Removes the message `sequence`, once it is delivered.
@@ -376,20 +450,17 @@ impl Spool {
     ///
     /// [`SpoolError::Io`] when it cannot be removed.
     pub async fn remove(&self, sequence: u64) -> Result<(), SpoolError> {
-        let inner = Arc::clone(&self.inner);
-        tokio::task::spawn_blocking(move || {
-            inner
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .remove(sequence)
-        })
-        .await
-        .map_err(SpoolError::Task)?
+        self.blocking(move |inner| inner.remove(sequence)).await
     }
 }
 
 impl Inner {
-    fn push(&mut self, message: SecretSlice<u8>) -> Result<(), SpoolError> {
+    /// Shows the depth to readers that do not take the spool's lock.
+    fn publish(&self) {
+        *lock(&self.shown) = self.depth;
+    }
+
+    fn push(&mut self, message: SecretSlice<u8>) -> Result<u64, SpoolError> {
         let size = u64::try_from(message.expose_secret().len()).unwrap_or(u64::MAX);
         let bytes = self.depth.bytes.saturating_add(size);
         if self.depth.messages >= self.bounds.max_messages || bytes > self.bounds.max_bytes {
@@ -411,7 +482,7 @@ impl Inner {
         self.next = sequence.saturating_add(1);
         self.depth.messages = self.depth.messages.saturating_add(1);
         self.depth.bytes = bytes;
-        Ok(())
+        Ok(sequence)
     }
 
     fn oldest(&mut self) -> Result<Option<Stored>, SpoolError> {
@@ -546,160 +617,5 @@ impl Inner {
         self.depth.messages = self.depth.messages.saturating_sub(1);
         self.depth.bytes = self.depth.bytes.saturating_sub(size);
         Ok(())
-    }
-}
-
-/// The messages in `directory`, by sequence number, with their sizes; a
-/// partial write a crash left is removed, and `skip`, the quarantine, is
-/// passed over.
-fn scan(directory: &Path, skip: Option<&Path>) -> Result<BTreeMap<u64, u64>, SpoolError> {
-    let mut sizes = BTreeMap::new();
-    for entry in fs::read_dir(directory).map_err(io("read", directory))? {
-        let entry = entry.map_err(io("read", directory))?;
-        let path = entry.path();
-        if Some(path.as_path()) == skip {
-            continue;
-        }
-        let extension = path.extension().and_then(OsStr::to_str);
-        // NOTE: no specification governs this: our own design; a name that
-        // is no sequence number is a file this spool did not write.
-        let sequence = path
-            .file_stem()
-            .and_then(OsStr::to_str)
-            .and_then(|it| it.parse::<u64>().ok());
-        match (extension, sequence) {
-            (Some(STORED), Some(sequence)) => {
-                let size = entry.metadata().map_err(io("read", &path))?.len();
-                sizes.insert(sequence, size);
-            }
-            // NOTE: a partial file is a write a crash interrupted, which
-            // never counted as stored, so it is removed.
-            (Some(PARTIAL), Some(_)) => {
-                fs::remove_file(&path).map_err(io("removed", &path))?;
-            }
-            _ => {
-                return Err(SpoolError::Foreign {
-                    directory: directory.to_owned(),
-                    path,
-                });
-            }
-        }
-    }
-    Ok(sizes)
-}
-
-/// Writes and removes a partial file, so a directory that cannot take a
-/// message is refused when it is opened, not when the first message
-/// arrives; one a crash leaves behind is removed by the next open.
-fn probe(directory: &Path) -> Result<(), SpoolError> {
-    let path = file(directory, u64::MAX, PARTIAL);
-    let handle = private_file(&path)?;
-    drop(handle);
-    fs::remove_file(&path).map_err(io("removed", &path))
-}
-
-/// The path of message `sequence` with `extension`, named so that the file
-/// names sort in sequence order.
-fn file(directory: &Path, sequence: u64, extension: &str) -> PathBuf {
-    directory.join(format!("{sequence:020}.{extension}"))
-}
-
-/// Writes `message` as message `sequence`: to a partial file flushed to the
-/// device, renamed, with the directory flushed after it.
-fn write_durably(
-    directory: &Path,
-    sequence: u64,
-    message: &SecretSlice<u8>,
-) -> Result<(), SpoolError> {
-    let partial = file(directory, sequence, PARTIAL);
-    let stored = file(directory, sequence, STORED);
-    let mut handle = private_file(&partial)?;
-    handle
-        .write_all(message.expose_secret())
-        .map_err(io("written", &partial))?;
-    handle.sync_all().map_err(io("written", &partial))?;
-    drop(handle);
-    fs::rename(&partial, &stored).map_err(io("written", &stored))?;
-    sync_directory(directory)
-}
-
-#[cfg(unix)]
-fn private_file(path: &Path) -> Result<File, SpoolError> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(io("created", path))
-}
-
-#[cfg(not(unix))]
-fn private_file(path: &Path) -> Result<File, SpoolError> {
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(io("created", path))
-}
-
-#[cfg(unix)]
-fn sync_directory(directory: &Path) -> Result<(), SpoolError> {
-    File::open(directory)
-        .and_then(|handle| handle.sync_all())
-        .map_err(io("written", directory))
-}
-
-// NOTE: no specification governs this: our own design; outside Unix a
-// directory cannot be opened to flush it, and the rename is what is relied on.
-#[cfg(not(unix))]
-fn sync_directory(_directory: &Path) -> Result<(), SpoolError> {
-    Ok(())
-}
-
-#[cfg(unix)]
-fn create_private(directory: &Path) -> Result<(), SpoolError> {
-    use std::os::unix::fs::DirBuilderExt as _;
-    if directory.is_dir() {
-        return Ok(());
-    }
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(directory)
-        .map_err(io("created", directory))
-}
-
-#[cfg(not(unix))]
-fn create_private(directory: &Path) -> Result<(), SpoolError> {
-    fs::create_dir_all(directory).map_err(io("created", directory))
-}
-
-#[cfg(unix)]
-fn check_private(directory: &Path) -> Result<(), SpoolError> {
-    use std::os::unix::fs::PermissionsExt as _;
-    let mode = fs::metadata(directory)
-        .map_err(io("read", directory))?
-        .permissions()
-        .mode();
-    let shared = mode & 0o077;
-    if shared == 0 {
-        Ok(())
-    } else {
-        Err(SpoolError::Exposed(directory.to_owned()))
-    }
-}
-
-#[cfg(not(unix))]
-fn check_private(_directory: &Path) -> Result<(), SpoolError> {
-    Ok(())
-}
-
-/// The [`SpoolError::Io`] of `action` on `path`.
-fn io<'a>(action: &'static str, path: &'a Path) -> impl FnOnce(std::io::Error) -> SpoolError + 'a {
-    move |source| SpoolError::Io {
-        action,
-        path: path.to_owned(),
-        source,
     }
 }

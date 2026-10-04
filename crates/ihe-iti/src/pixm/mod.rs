@@ -136,31 +136,42 @@ impl PixmClient {
     /// (§2:3.83.4.1.2.2).
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer is
-    /// read.
+    /// read, and an audited client's record of it.
     ///
     /// An audited client records the exchange before it returns, whatever
     /// its outcome; an exchange whose record the recorder does not accept
-    /// fails, and its answer is not used (§2:3.83.5.1.1).
+    /// fails, and its answer is not used (§2:3.83.5.1.1). So does an
+    /// exchange that succeeded and whose record is not accepted within
+    /// `timeout` ([`crate::recording`]).
     ///
     /// # Errors
     /// A [`PixmError`] for every answer that is neither a cross-reference nor
     /// one of the profile's two not-found answers, for a failure to get an
     /// answer at all, and, when audited, [`PixmError::Audit`] for a record
-    /// the recorder refused.
+    /// the recorder refused or did not accept in time.
     pub async fn cross_reference(
         &self,
         source: &SourceIdentifier,
         targets: &[TargetSystem],
         timeout: Duration,
     ) -> Result<CrossReference, PixmError> {
+        #[cfg(feature = "balp")]
+        let deadline = crate::recording::deadline(timeout);
         let url = request::query(&self.endpoint, source, targets);
         let result = self.ask(&url, source, targets, timeout).await;
         #[cfg(feature = "balp")]
         if let Some(recorder) = &self.audit {
+            use crate::recording::{Late, Recorded, within};
             let exchange = audit::exchange(&self.endpoint, &url, source, &result);
             // NOTE: PIXm §2:3.83.5.1.1 makes the audit record part of the exchange,
             // so an answer whose record was not accepted is not used.
-            recorder.record(exchange).await.map_err(PixmError::Audit)?;
+            match within(deadline, recorder.record(exchange)).await {
+                Recorded::Refused(error) => return Err(PixmError::Audit(error)),
+                Recorded::Late if result.is_ok() => {
+                    return Err(PixmError::Audit(crate::balp::AuditError(Box::new(Late))));
+                }
+                Recorded::Accepted | Recorded::Late => {}
+            }
         }
         result
     }

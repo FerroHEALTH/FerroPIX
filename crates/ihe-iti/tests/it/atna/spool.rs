@@ -4,14 +4,20 @@
 //! The spool: bounded, ordered, durable on disk, private to its owner, and
 //! never wedged by one message it cannot send.
 
+use std::time::Duration;
+
 use ihe_iti::atna::spool::{Bounds, Depth, QUARANTINE, Spool, SpoolError};
 use secrecy::ExposeSecret;
 
 use super::message;
 
+/// A write bound no healthy disk comes near, however busy the host.
+const WRITE: Duration = Duration::from_secs(10);
+
 const ROOMY: Bounds = Bounds {
     max_messages: 16,
     max_bytes: 4096,
+    write_timeout: WRITE,
 };
 
 /// The RFC 5425 frame of `text`.
@@ -82,6 +88,7 @@ async fn a_message_past_either_bound_is_refused_and_nothing_is_dropped() {
         Bounds {
             max_messages: 2,
             max_bytes: 4096,
+            write_timeout: WRITE,
         },
     )
     .expect("the spool opens");
@@ -96,6 +103,7 @@ async fn a_message_past_either_bound_is_refused_and_nothing_is_dropped() {
     let by_size = Spool::in_memory(Bounds {
         max_messages: 16,
         max_bytes: 8,
+        write_timeout: WRITE,
     });
     by_size.push(framed("12345")).await.expect("stored");
     assert!(matches!(
@@ -165,6 +173,7 @@ async fn the_bounds_count_the_quarantine() {
     let bounds = Bounds {
         max_messages: 2,
         max_bytes: 4096,
+        write_timeout: WRITE,
     };
     {
         let spool = Spool::open(&path, bounds).expect("the spool opens");

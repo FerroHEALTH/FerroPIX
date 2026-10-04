@@ -7,7 +7,10 @@
 //! oldest first, so a message counts as recorded once it is stored, and a
 //! repository that cannot be reached delays its delivery without losing it.
 //! [`Forwarder::submit`] only ever writes to the spool: it never waits on
-//! the network, so a slow repository never holds an exchange.
+//! the network, so a slow repository never holds an exchange, and it waits
+//! on the disk at most the spool's [`Bounds::write_timeout`](super::spool::Bounds::write_timeout).
+//! A message stored after its exchange stopped waiting for it is delivered
+//! like any other.
 //!
 //! [`Forwarder::run`] is the delivery loop. To a syslog repository it keeps
 //! one connection open, writes each stored message to it within the
@@ -25,8 +28,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use secrecy::SecretSlice;
-use tokio::sync::Notify;
 
+use super::chain;
 #[cfg(feature = "balp")]
 use super::feed::{FeedError, FeedRepository};
 use super::repository::{Connection, Repository};
@@ -68,7 +71,6 @@ pub struct Forwarder {
     spool: Spool,
     destination: Destination,
     retry_max: Duration,
-    wake: Notify,
     delivered: AtomicU64,
     retries: AtomicU64,
     reachable: AtomicBool,
@@ -95,7 +97,6 @@ impl Forwarder {
             spool,
             destination,
             retry_max: retry_max.max(FIRST_RETRY),
-            wake: Notify::new(),
             delivered: AtomicU64::new(0),
             retries: AtomicU64::new(0),
             reachable: AtomicBool::new(true),
@@ -107,11 +108,12 @@ impl Forwarder {
     /// # Errors
     ///
     /// The [`SpoolError`] of a spool that is full or cannot be written: the
-    /// message is then neither stored nor delivered.
+    /// message is then neither stored nor delivered. Past the spool's
+    /// [`Bounds::write_timeout`](super::spool::Bounds::write_timeout),
+    /// [`SpoolError::Late`]: the message is not stored yet, and is delivered
+    /// once its write stores it.
     pub async fn submit(&self, frame: SecretSlice<u8>) -> Result<(), SpoolError> {
-        self.spool.push(frame).await?;
-        self.wake.notify_one();
-        Ok(())
+        self.spool.push(frame).await
     }
 
     /// What the forwarder holds and how its deliveries went.
@@ -145,7 +147,7 @@ impl Forwarder {
         match self.spool.oldest().await {
             Ok(Some(stored)) => Some(stored),
             Ok(None) => {
-                self.wake.notified().await;
+                self.spool.stored().await;
                 None
             }
             Err(error) => {
@@ -271,14 +273,88 @@ fn jittered(retry: Duration) -> Duration {
     half.saturating_add(Duration::from_nanos(random % spread.saturating_add(1)))
 }
 
-/// `error` with its causes, joined.
-fn chain(error: &dyn std::error::Error) -> String {
-    let mut line = error.to_string();
-    let mut cause = error.source();
-    while let Some(source) = cause {
-        line.push_str(": ");
-        line.push_str(&source.to_string());
-        cause = source.source();
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use secrecy::ExposeSecret as _;
+    use tokio::io::AsyncReadExt as _;
+    use tokio::net::TcpListener;
+    use url::Url;
+
+    use super::super::repository::{Repository, Timeouts};
+    use super::super::spool::in_flight::tests::{
+        BOUND, Logs, PATIENT, SLACK, Stall, naming_the_patient,
+    };
+    use super::super::spool::{Bounds, Spool, SpoolError};
+    use super::Forwarder;
+
+    /// ITI TF-2 §3.20.4.1.1: a message its exchange gave up on, stored once
+    /// the stalled write ends, reaches the repository like any other.
+    #[tokio::test]
+    async fn a_message_stored_after_its_exchange_gave_up_is_delivered_once() {
+        let logs = Logs::default();
+        let _logging = tracing::subscriber::set_default(logs.subscriber());
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("a listener");
+        let url = Url::parse(&format!(
+            "tcp://{}",
+            listener.local_addr().expect("an address")
+        ))
+        .expect("a URL");
+        let timeouts = Timeouts {
+            connect: SLACK,
+            send: SLACK,
+        };
+        let repository =
+            Repository::unencrypted_for_development(&url, timeouts).expect("a repository");
+        let directory = tempfile::tempdir().expect("a directory");
+        let bounds = Bounds {
+            max_messages: 16,
+            max_bytes: 1 << 20,
+            write_timeout: BOUND,
+        };
+        let spool = Spool::open(&directory.path().join("spool"), bounds).expect("it opens");
+        let forwarder = Forwarder::new(spool.clone(), repository, Duration::from_millis(400));
+        let running = tokio::spawn(Arc::clone(&forwarder).run());
+        // The forwarder finds the spool empty and waits for a stored message.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let stall = Stall::of(&spool);
+
+        let asked = Instant::now();
+        let refused = forwarder.submit(naming_the_patient()).await;
+        assert!(asked.elapsed() < BOUND + SLACK, "{:?}", asked.elapsed());
+        assert!(
+            matches!(refused, Err(SpoolError::Late { .. })),
+            "{refused:?}"
+        );
+        assert_eq!(
+            0,
+            forwarder.status().depth.messages,
+            "not counted as stored"
+        );
+
+        stall.release();
+        let (mut stream, _) = tokio::time::timeout(SLACK, listener.accept())
+            .await
+            .expect("the forwarder connects once the message is stored")
+            .expect("a connection");
+        let sent = naming_the_patient();
+        let mut received = vec![0_u8; sent.expose_secret().len()];
+        tokio::time::timeout(SLACK, stream.read_exact(&mut received))
+            .await
+            .expect("the message arrives")
+            .expect("it reads");
+        assert_eq!(sent.expose_secret(), received.as_slice());
+
+        let until = Instant::now() + SLACK;
+        while forwarder.status().delivered == 0 && Instant::now() < until {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let status = forwarder.status();
+        assert_eq!(1, status.delivered, "delivered once");
+        assert_eq!(0, status.depth.messages);
+        running.abort();
+        assert!(!logs.text().contains(PATIENT), "{}", logs.text());
     }
-    line
 }

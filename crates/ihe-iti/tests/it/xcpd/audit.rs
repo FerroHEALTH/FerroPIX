@@ -51,6 +51,35 @@ impl AuditRecorder for Refusing {
     }
 }
 
+/// A recorder that never accepts, as a spool whose disk stalled does not.
+struct Stalled;
+
+#[async_trait::async_trait]
+impl AuditRecorder for Stalled {
+    async fn record(&self, _event: AuditEvent) -> Result<(), AuditError> {
+        std::future::pending().await
+    }
+}
+
+#[tokio::test]
+async fn a_match_whose_event_is_not_stored_within_the_exchange_s_time_is_not_used() {
+    let budget = std::time::Duration::from_millis(300);
+    let slack = std::time::Duration::from_secs(3);
+    let audited = client().audited(Arc::new(Stalled));
+    let matched = answering("match.xml").await;
+    let asked = std::time::Instant::now();
+    let answer = audited
+        .discover(&responding(&matched), &query(), None, budget)
+        .await;
+    assert!(asked.elapsed() < budget + slack, "{:?}", asked.elapsed());
+    match answer {
+        Err(XcpdError::Audit(AuditError(source))) => {
+            assert!(source.is::<ihe_iti::recording::Late>(), "{source:?}");
+        }
+        other => panic!("a match not audited in time is not used (§3.55.5.1): {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn an_event_the_recorder_refuses_fails_the_discovery() {
     let audited = client().audited(Arc::new(Refusing));

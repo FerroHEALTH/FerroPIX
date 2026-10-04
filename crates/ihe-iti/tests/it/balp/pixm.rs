@@ -7,12 +7,14 @@
 //! outcome, and failing the exchange when the recorder refuses it.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use ihe_iti::balp::Outcome;
 use ihe_iti::pixm::error::PixmError;
+use ihe_iti::recording::Late;
 use secrecy::ExposeSecret as _;
 
-use super::profile::{Kept, Refusing, base64_decoded, holds_to, like, vendored, written};
+use super::profile::{Kept, Refusing, Stalled, base64_decoded, holds_to, like, vendored, written};
 use crate::pixm::{
     BLUE, FHIR_JSON, PROMPT, RED, RED_VALUE, client, manager, red_source, target,
     unreachable_client,
@@ -147,6 +149,41 @@ async fn an_answer_whose_record_is_refused_is_not_used() {
         !format!("{error:?} {error}").contains(RED_VALUE),
         "the error names no identifier"
     );
+}
+
+/// The time the exchanges below are given.
+const BUDGET: Duration = Duration::from_millis(300);
+
+/// The time a loaded host may add to any wait a test makes.
+const SLACK: Duration = Duration::from_secs(3);
+
+#[tokio::test]
+async fn an_answer_whose_record_is_not_stored_within_the_exchange_s_time_is_not_used() {
+    let server = manager(200, FHIR_JSON, answer()).await;
+    let client = client(&server).audited(Arc::new(Stalled));
+    let asked = Instant::now();
+    let error = client
+        .cross_reference(&red_source(), &[target(BLUE)], BUDGET)
+        .await
+        .expect_err("the exchange fails closed");
+    assert!(asked.elapsed() < BUDGET + SLACK, "{:?}", asked.elapsed());
+    let PixmError::Audit(audit) = &error else {
+        panic!("an audit failure: {error:?}");
+    };
+    assert!(audit.0.is::<Late>(), "{audit:?}");
+    assert!(!format!("{error:?} {error}").contains(RED_VALUE));
+}
+
+#[tokio::test]
+async fn a_failed_exchange_whose_record_is_not_stored_in_time_keeps_its_own_failure() {
+    let client = unreachable_client().audited(Arc::new(Stalled));
+    let asked = Instant::now();
+    let error = client
+        .cross_reference(&red_source(), &[target(BLUE)], BUDGET)
+        .await
+        .expect_err("no Manager answers");
+    assert!(asked.elapsed() < BUDGET + SLACK, "{:?}", asked.elapsed());
+    assert!(matches!(error, PixmError::Transport(_)), "{error:?}");
 }
 
 #[test]

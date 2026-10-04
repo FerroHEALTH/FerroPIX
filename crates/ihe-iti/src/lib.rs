@@ -37,6 +37,11 @@ pub mod pixm;
 #[cfg(feature = "pmir")]
 pub mod pmir;
 #[cfg(any(
+    all(feature = "balp", any(feature = "pixm", feature = "pdqm")),
+    feature = "xcpd"
+))]
+pub mod recording;
+#[cfg(any(
     feature = "atna",
     feature = "pixm",
     feature = "pdqm",

@@ -171,7 +171,13 @@ message ids and `jiff` for the creation time, and no other feature but
   repository keeps the records in (§3.20.4.1.1), one fsynced file per
   message in a directory private to its owner, or a queue in memory. A
   message that cannot be read or is no whole frame moves to its
-  `quarantine` subdirectory, so the drain never stalls on it.
+  `quarantine` subdirectory, so the drain never stalls on it. Storing one
+  message is bounded in time (`Bounds::write_timeout`): a write that misses
+  the bound is refused as `SpoolError::Late` and runs on, and a message it
+  stores is delivered like any other.
+- `recording::Late`: an audited client's `timeout` bounds its record too,
+  so an exchange that succeeded and whose record is not accepted in time
+  fails as an audit failure.
 - `repository::Timeouts`: the connect timeout, and the send timeout that
   bounds the TLS handshake and each write and flush.
 - `forwarder::Forwarder`: stores every message first, then delivers it from

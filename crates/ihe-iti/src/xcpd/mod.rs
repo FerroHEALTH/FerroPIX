@@ -85,6 +85,7 @@ use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 
+use crate::recording::{Late, Recorded, within};
 use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
 use error::{Malformation, XcpdError};
@@ -153,12 +154,14 @@ impl XcpdClient {
     /// (§3.55.4.1), with `assertion` in the WS-Security header when given.
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer
-    /// is read.
+    /// is read, and an audited client's record of it ([`crate::recording`]).
     ///
     /// # Errors
     /// An [`XcpdError`] for Case 5 of §3.55.4.2.3, a SOAP fault, an HTTP
     /// status with no ITI-55 answer, a timeout, a transport failure, and an
-    /// answer that does not hold to ITI-55.
+    /// answer that does not hold to ITI-55; when audited,
+    /// [`XcpdError::Audit`] for an audit message the recorder refused, or
+    /// did not accept within `timeout` for an exchange that succeeded.
     pub async fn discover(
         &self,
         gateway: &RespondingGateway,
@@ -166,6 +169,7 @@ impl XcpdClient {
         assertion: Option<&XuaAssertion>,
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
+        let deadline = crate::recording::deadline(timeout);
         let ids = Ids::fresh();
         let written = request::envelope(query, gateway, &ids, assertion)?;
         let answer = self.exchange(gateway, written.body, &ids, timeout).await;
@@ -185,7 +189,13 @@ impl XcpdClient {
             };
             // NOTE: ITI TF-2 §3.55.5.1, ITI TF-1 Table 27.1.3-1: the actor shall record the
             // exchange, so an answer whose audit message was not accepted is not used.
-            recorder.record(event).await.map_err(XcpdError::Audit)?;
+            match within(deadline, recorder.record(event)).await {
+                Recorded::Refused(error) => return Err(XcpdError::Audit(error)),
+                Recorded::Late if answer.is_ok() => {
+                    return Err(XcpdError::Audit(audit::AuditError(Box::new(Late))));
+                }
+                Recorded::Accepted | Recorded::Late => {}
+            }
         }
         answer
     }

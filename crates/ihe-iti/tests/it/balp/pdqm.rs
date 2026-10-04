@@ -11,9 +11,10 @@ use std::sync::Arc;
 use ihe_iti::balp::Outcome;
 use ihe_iti::pdqm::error::PdqmError;
 use ihe_iti::pdqm::input::MatchInput;
+use ihe_iti::recording::Late;
 use secrecy::SecretString;
 
-use super::profile::{Kept, Refusing, base64_decoded, holds_to, like, vendored, written};
+use super::profile::{Kept, Refusing, Stalled, base64_decoded, holds_to, like, vendored, written};
 use crate::pdqm::{
     EXAMPLE_BUNDLE, FHIR_JSON, PROMPT, client, schmidt, supplier, unreachable_client,
 };
@@ -151,6 +152,45 @@ async fn a_match_whose_record_is_refused_fails() {
         .await
         .expect_err("the match fails closed");
     assert!(matches!(error, PdqmError::Audit(_)), "{error:?}");
+    assert!(!format!("{error:?} {error}").contains("12345"));
+}
+
+/// The time the exchanges below are given.
+const BUDGET: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// The time a loaded host may add to any wait a test makes.
+const SLACK: std::time::Duration = std::time::Duration::from_secs(3);
+
+#[tokio::test]
+async fn a_search_whose_record_is_not_stored_within_the_exchange_s_time_fails() {
+    let server = supplier(200, FHIR_JSON, crate::pdqm::vendored(EXAMPLE_BUNDLE)).await;
+    let client = client(&server).audited(Arc::new(Stalled));
+    let asked = std::time::Instant::now();
+    let error = client
+        .search(&schmidt(), BUDGET)
+        .await
+        .expect_err("the search fails closed");
+    assert!(asked.elapsed() < BUDGET + SLACK, "{:?}", asked.elapsed());
+    let PdqmError::Audit(audit) = &error else {
+        panic!("an audit failure: {error:?}");
+    };
+    assert!(audit.0.is::<Late>(), "{audit:?}");
+}
+
+#[tokio::test]
+async fn a_match_whose_record_is_not_stored_within_the_exchange_s_time_fails() {
+    let server = matcher().await;
+    let client = client(&server).audited(Arc::new(Stalled));
+    let asked = std::time::Instant::now();
+    let error = client
+        .match_patient(&match_input(), BUDGET)
+        .await
+        .expect_err("the match fails closed");
+    assert!(asked.elapsed() < BUDGET + SLACK, "{:?}", asked.elapsed());
+    let PdqmError::Audit(audit) = &error else {
+        panic!("an audit failure: {error:?}");
+    };
+    assert!(audit.0.is::<Late>(), "{audit:?}");
     assert!(!format!("{error:?} {error}").contains("12345"));
 }
 

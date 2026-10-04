@@ -5,7 +5,7 @@ name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.19"
+version = "0.0.20"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -88,8 +88,9 @@ pmir = [
 ]
 # XCPD, cross-community patient discovery (ITI-55, #85): the HTTP client the
 # SOAP 1.2 envelope travels on, the XML reader and writer of the envelope and
-# the HL7 v3 messages, the message and query ids, the creation time, and the
-# redacting secret type the identifiers travel in. The SAML XUA assertion is
+# the HL7 v3 messages, the message and query ids, the creation time, the
+# redacting secret type the identifiers travel in, and the timer that bounds
+# an exchange's audit record by the exchange's timeout. The SAML XUA assertion is
 # supplied by the caller and embedded as written, so no signing crate is
 # compiled.
 xcpd = [
@@ -100,6 +101,7 @@ xcpd = [
   "dep:reqwest",
   "dep:secrecy",
   "dep:thiserror",
+  "dep:tokio",
   "dep:url",
   "dep:uuid",
 ]
@@ -163,6 +165,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util"] }
+tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }
 
 [lints]

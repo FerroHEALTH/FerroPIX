@@ -30,3 +30,15 @@ pub mod message;
 pub mod repository;
 pub mod spool;
 pub mod syslog;
+
+/// `error` with its causes, joined, for a log line.
+fn chain(error: &dyn std::error::Error) -> String {
+    let mut line = error.to_string();
+    let mut cause = error.source();
+    while let Some(source) = cause {
+        line.push_str(": ");
+        line.push_str(&source.to_string());
+        cause = source.source();
+    }
+    line
+}

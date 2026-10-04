@@ -53,6 +53,16 @@ impl AuditRecorder for Refusing {
     }
 }
 
+/// A recorder that never accepts, as a spool whose disk stalled does not.
+pub(crate) struct Stalled;
+
+#[async_trait::async_trait]
+impl AuditRecorder for Stalled {
+    async fn record(&self, _exchange: Exchange) -> Result<(), AuditError> {
+        std::future::pending().await
+    }
+}
+
 /// The `AuditEvent` `exchange` is written as, read back as JSON.
 pub(crate) fn written(exchange: &Exchange) -> Value {
     let record = exchange

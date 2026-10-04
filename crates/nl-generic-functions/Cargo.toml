@@ -5,7 +5,7 @@ name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.9"
+version = "0.0.10"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -63,11 +63,22 @@ lrza = [
   "fhir-types/resources",
   "dep:thiserror",
 ]
+# Authorization server metadata (RFC 8414) as both Annex B authentication
+# tracks read it: the issuer identifier, the well-known metadata URL, the
+# identical-issuer and same-origin endpoint checks, and the refusal of an
+# answer that repeats a name.
+oauth-metadata = [
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
 # GF-Authentication on the Nuts profile: the client side of the access token
 # request with a Verifiable Presentation as the grant (Nuts RFC021) and a
 # DPoP-bound token, the presentation signed with the holder's key and the
 # Presentation Submission written to Presentation Exchange 2.0.0.
 nuts-auth = [
+  "oauth-metadata",
   "dep:base64",
   "dep:http",
   "dep:jiff",

@@ -3,6 +3,10 @@
 
 //! The authorization server metadata the grant reads (RFC 8414; Nuts RFC021
 //! §3.1 and §5; RFC 9449 §5.1).
+//!
+//! The issuer and endpoint checks both Annex B tracks share are
+//! [`crate::oauth_metadata`]'s; the members only the Nuts profile reads are
+//! checked here.
 
 use std::collections::BTreeMap;
 
@@ -11,10 +15,7 @@ use url::Url;
 
 use crate::nuts_auth::error::MetadataError;
 use crate::nuts_auth::presentation::JWT_VP;
-
-/// The well-known URI suffix of authorization server metadata (RFC 8414
-/// §3, §7.3).
-pub(super) const WELL_KNOWN: &str = "/.well-known/oauth-authorization-server";
+use crate::oauth_metadata::{EndpointError, Issuer};
 
 /// The metadata members the grant reads.
 #[derive(Deserialize)]
@@ -42,38 +43,25 @@ pub(super) struct Metadata {
     pub(super) definition_endpoint: Url,
 }
 
-/// The metadata URL of the issuer `issuer`: the well-known suffix inserted
-/// between its host and its path, with a terminating `/` of the path removed
-/// (RFC 8414 §3.1).
-pub(super) fn url(issuer: &Url) -> Url {
-    let mut url = issuer.clone();
-    let path = issuer.path().trim_end_matches('/');
-    url.set_path(&format!("{WELL_KNOWN}{path}"));
-    url
-}
-
-/// Reads `raw`, the metadata of the issuer written `text` and parsed as
-/// `url`, for a holder signing with `holder_algorithm` and a prover signing
-/// with `proof_algorithm`.
+/// Reads `raw`, the metadata of `issuer`, for a holder signing with
+/// `holder_algorithm` and a prover signing with `proof_algorithm`.
 ///
-/// The metadata's `issuer` must be the same text and parse to the same URL
-/// (RFC 8414 §3.3), and every endpoint the grant sends to must be on the
-/// issuer's origin, without userinfo or a fragment.
+/// The metadata's `issuer` must be identical to `issuer` (RFC 8414 §3.3),
+/// and every endpoint the grant sends to must be on the issuer's origin,
+/// without userinfo or a fragment.
 pub(super) fn read(
     raw: &Raw,
-    (text, url): (&str, &Url),
+    issuer: &Issuer,
     holder_algorithm: &str,
     proof_algorithm: &str,
 ) -> Result<Metadata, MetadataError> {
     let named = raw.issuer.as_deref().ok_or(MetadataError::Issuer)?;
-    // NOTE: RFC 8414 §3.3, the issuer is identical to the one asked of: the same
-    // text and, read by the parser every request URL goes through, the same URL.
-    if named != text || Url::parse(named).ok().as_ref() != Some(url) {
+    if !issuer.is_identical_to(named) {
         return Err(MetadataError::Issuer);
     }
-    let token_endpoint = endpoint(raw.token_endpoint.as_deref(), url)
+    let token_endpoint = endpoint(raw.token_endpoint.as_deref(), issuer)
         .map_err(|refused| refused.unwrap_or(MetadataError::TokenEndpoint))?;
-    let definition_endpoint = endpoint(raw.presentation_definition_endpoint.as_deref(), url)
+    let definition_endpoint = endpoint(raw.presentation_definition_endpoint.as_deref(), issuer)
         .map_err(|refused| refused.unwrap_or(MetadataError::DefinitionEndpoint))?;
     let admits = raw
         .vp_formats
@@ -106,20 +94,15 @@ pub(super) fn read(
 }
 
 /// The endpoint `text` names, or `Err(None)` when it is absent or no URL and
-/// `Err(Some(_))` when it is a URL the grant does not send to: off the origin
-/// of `issuer`, which also holds it to the issuer's scheme, or with userinfo
-/// or a fragment.
-fn endpoint(text: Option<&str>, issuer: &Url) -> Result<Url, Option<MetadataError>> {
-    let url = text.and_then(|text| Url::parse(text).ok()).ok_or(None)?;
-    // NOTE: no specification governs this: our own design; RFC 8414 and RFC021 place
-    // no endpoint, and the holder's credentials go to the issuer's origin alone.
-    if url.origin() != issuer.origin() {
-        return Err(Some(MetadataError::OtherOrigin));
-    }
-    if !url.username().is_empty() || url.password().is_some() || url.fragment().is_some() {
-        return Err(Some(MetadataError::InsecureEndpoint));
-    }
-    Ok(url)
+/// `Err(Some(_))` when it is a URL the grant does not send to.
+fn endpoint(text: Option<&str>, issuer: &Issuer) -> Result<Url, Option<MetadataError>> {
+    issuer
+        .endpoint(text.ok_or(None)?)
+        .map_err(|refused| match refused {
+            EndpointError::OtherOrigin => Some(MetadataError::OtherOrigin),
+            EndpointError::Insecure => Some(MetadataError::InsecureEndpoint),
+            _ => None,
+        })
 }
 
 #[cfg(test)]
@@ -138,27 +121,8 @@ mod tests {
     }
 
     fn read_as_issuer(raw: &Raw) -> Result<Metadata, MetadataError> {
-        let url = Url::parse(ISSUER).expect("url");
-        read(raw, (ISSUER, &url), "ES256", "ES256")
-    }
-
-    #[test]
-    fn the_well_known_suffix_goes_between_host_and_path() {
-        let issuer = Url::parse(ISSUER).expect("url");
-        assert_eq!(
-            url(&issuer).as_str(),
-            "https://as.example.org/.well-known/oauth-authorization-server/oauth2/hospital"
-        );
-        let bare = Url::parse("https://as.example.org").expect("url");
-        assert_eq!(
-            url(&bare).as_str(),
-            "https://as.example.org/.well-known/oauth-authorization-server"
-        );
-        let slash = Url::parse("https://as.example.org/tenant/").expect("url");
-        assert_eq!(
-            url(&slash).as_str(),
-            "https://as.example.org/.well-known/oauth-authorization-server/tenant"
-        );
+        let issuer = Issuer::parse(ISSUER).expect("issuer");
+        read(raw, &issuer, "ES256", "ES256")
     }
 
     #[test]
@@ -221,6 +185,15 @@ mod tests {
                 "{other}"
             );
         }
+    }
+
+    #[test]
+    fn a_token_endpoint_that_is_no_url_is_missing() {
+        let refused = read_as_issuer(&raw(ISSUER, "token"));
+        assert!(
+            matches!(refused, Err(MetadataError::TokenEndpoint)),
+            "{refused:?}"
+        );
     }
 
     #[test]

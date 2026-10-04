@@ -92,7 +92,6 @@ pub mod error;
 pub mod holder;
 mod metadata;
 pub mod presentation;
-mod strict;
 
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -108,6 +107,8 @@ use url::{Url, form_urlencoded};
 use error::{InvalidInput, Malformation, NutsAuthError, Step, bounded};
 use holder::Holder;
 use presentation::PresentationDefinition;
+
+use crate::oauth_metadata::{self, Issuer};
 
 /// The `grant_type` of the VP Token Grant Type (Nuts RFC021 §3).
 pub const GRANT_TYPE: &str = "vp_token-bearer";
@@ -169,8 +170,7 @@ pub trait DpopProver: Send + Sync {
 /// One authorization server and the scope the token is asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Grant {
-    issuer: String,
-    issuer_url: Url,
+    issuer: Issuer,
     scope: String,
     client_id: Option<String>,
 }
@@ -192,17 +192,8 @@ impl Grant {
     /// [`InvalidInput::Scope`] for a scope that is empty or holds a character
     /// outside RFC 6749 §3.3.
     pub fn new(authorization_server: &str, scope: &str) -> Result<Self, InvalidInput> {
-        let issuer_url = Url::parse(authorization_server)
-            .map_err(|_unparsable| InvalidInput::AuthorizationServer)?;
-        if !matches!(issuer_url.scheme(), "http" | "https")
-            || !issuer_url.username().is_empty()
-            || issuer_url.password().is_some()
-            || issuer_url.query().is_some()
-            || issuer_url.fragment().is_some()
-            || !canonical(authorization_server, &issuer_url)
-        {
-            return Err(InvalidInput::AuthorizationServer);
-        }
+        let issuer = Issuer::parse(authorization_server)
+            .map_err(|_invalid| InvalidInput::AuthorizationServer)?;
         // NOTE: RFC 6749 §3.3, a scope token is %x21 / %x23-5B / %x5D-7E, and
         // tokens are separated by single spaces.
         let token = |token: &str| {
@@ -215,8 +206,7 @@ impl Grant {
             return Err(InvalidInput::Scope);
         }
         Ok(Self {
-            issuer: authorization_server.to_owned(),
-            issuer_url,
+            issuer,
             scope: scope.to_owned(),
             client_id: None,
         })
@@ -241,7 +231,7 @@ impl Grant {
     /// The issuer identifier, as written: the `aud` of every presentation.
     #[must_use]
     pub fn authorization_server(&self) -> &str {
-        &self.issuer
+        self.issuer.as_str()
     }
 
     /// The scope the token is asked for.
@@ -255,16 +245,6 @@ impl Grant {
     pub fn client_id(&self) -> Option<&str> {
         self.client_id.as_deref()
     }
-}
-
-/// Whether `text` is the serialization of `url`, the form the URL parser
-/// writes, or that form less the `/` it gives an empty path.
-///
-/// An issuer is compared as text (RFC 8414 §3.3) and fetched as a URL, so
-/// only a text the parser leaves unchanged has one meaning for both (no
-/// specification governs this: our own design).
-fn canonical(text: &str, url: &Url) -> bool {
-    text == url.as_str() || (url.path() == "/" && url.as_str().strip_suffix('/') == Some(text))
 }
 
 /// A `DPoP`-bound access token the authorization server issued.
@@ -410,14 +390,9 @@ impl NutsClient {
         let deadline = Instant::now().checked_add(timeout);
         let algorithm = holder.key().algorithm_name();
         let raw: metadata::Raw = self
-            .get(metadata::url(&grant.issuer_url), Step::Metadata, deadline)
+            .get(grant.issuer.metadata_url(), Step::Metadata, deadline)
             .await?;
-        let metadata = metadata::read(
-            &raw,
-            (&grant.issuer, &grant.issuer_url),
-            algorithm,
-            prover.algorithm(),
-        )?;
+        let metadata = metadata::read(&raw, &grant.issuer, algorithm, prover.algorithm())?;
         let mut definition_url = metadata.definition_endpoint.clone();
         definition_url
             .query_pairs_mut()
@@ -538,7 +513,7 @@ fn json<T: DeserializeOwned>(answer: &Answer, step: Step) -> Result<T, NutsAuthE
     if !answer.json {
         return Err(malformed(Malformation::MediaType));
     }
-    serde_json::from_slice::<strict::Unique>(&answer.body).map_err(|error| {
+    oauth_metadata::repeats_no_name(&answer.body).map_err(|error| {
         malformed(if error.is_data() {
             Malformation::RepeatedName {
                 line: error.line(),
@@ -560,7 +535,7 @@ fn sign(holder: &Holder, grant: &Grant) -> Result<SecretString, NutsAuthError> {
     let claims = PresentationClaims {
         iss: did,
         sub: did,
-        aud: &grant.issuer,
+        aud: grant.issuer.as_str(),
         nbf,
         exp: nbf.saturating_add(lifetime),
         jti: format!("urn:uuid:{}", uuid::Uuid::new_v4()),

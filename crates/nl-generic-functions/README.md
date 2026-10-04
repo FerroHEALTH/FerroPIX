@@ -13,6 +13,7 @@ the implementation guide, with a feature per function.
 | `mitz` | GF-Consent | Mitz | the closed authorization question ("gesloten autorisatievraag"): may a data holder make a patient's data of each category available to a data user, asked on the BSN and answered `Permit` or `Deny` |
 | `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization`, so a directory reader can join a localization custodian to its organisation |
 | `nuts-auth` | GF-Authentication | the Nuts profile | the access token request of Nuts RFC021: the authorization server metadata, the Presentation Definition for a scope, a JWT Verifiable Presentation of the holder's credentials signed with its `did:web` key, and a `DPoP`-bound token, proven through a prover the caller supplies |
+| `oauth-metadata` | GF-Authentication | any RFC 8414 authorization server | the issuer identifier, the well-known metadata URL, and the checks both Annex B authentication tracks (§B.4 and §B.4a) hold a metadata document to: an identical `issuer` and endpoints on the issuer's origin, with no repeated name in the answer |
 
 The identifier systems the functions share (the pseudonymised BSN and the
 URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.

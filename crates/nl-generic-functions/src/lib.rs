@@ -15,6 +15,9 @@
 //! - `nuts-auth`: GF-Authentication on the Nuts profile: a `DPoP`-bound
 //!   access token for a Verifiable Presentation of the holder's credentials
 //!   (Nuts RFC021).
+//! - `oauth-metadata`: authorization server metadata (RFC 8414) as both
+//!   authentication tracks of Annex B read it, the Nuts profile of §B.4 and
+//!   the BgZ/eOverdracht track of §B.4a; `nuts-auth` builds on it.
 //!
 //! The identifier systems the functions share, GF-Identification, are in
 //! the `identification` module, built whenever `nvi`, `lrza` or `mitz` is on.
@@ -34,3 +37,5 @@ pub mod mitz;
 pub mod nuts_auth;
 #[cfg(feature = "nvi")]
 pub mod nvi;
+#[cfg(feature = "oauth-metadata")]
+pub mod oauth_metadata;

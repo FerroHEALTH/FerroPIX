@@ -9,7 +9,7 @@ framework, with a feature per profile.
 | Feature | Profile | Transactions |
 |---|---|---|
 | `pixm` | Patient Identifier Cross-reference for Mobile | ITI-83 |
-| `pdqm` | Patient Demographics Query for Mobile | ITI-78 |
+| `pdqm` | Patient Demographics Query for Mobile | ITI-78, ITI-119 |
 | `mcsd` | Mobile Care Services Discovery | ITI-90, ITI-91 |
 | `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
@@ -53,6 +53,16 @@ domain not recognised" only when the query names a domain and the
 Query Patient Resource Response Message profile: a `searchset` with a
 `total`, and a `fullUrl` on every entry. The Patients are decoded as FHIR R4,
 not held to the PDQm Patient profile, as the profile asks of a Consumer.
+
+The same client is the Consumer of ITI-119, Patient Demographics Match:
+`match_patient` posts a `MatchInput` (the input Patient's identifiers, with
+`onlyCertainMatches` and `count` when set) in a `Parameters` resource to
+`[base]/Patient/$match`, and reads the Match Output Bundle into the matched
+Patients, most likely first, each with its `fullUrl`, its score between 0
+and 1 and its `match-grade`. No match is an answer with no Patient. An
+answer is refused when a Patient entry lacks its search mode `match`, its
+score or its grade, or when a `200` carries an `OperationOutcome` of
+`error` or `fatal` severity.
 
 The criteria travel in the request body, so no URL carries them. They, every
 matched Patient and every page link redact their content in `Debug`, with no

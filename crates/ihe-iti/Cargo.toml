@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ihe-iti"
-description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
+description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.18"
+version = "0.0.19"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -41,9 +41,10 @@ pixm = [
   "dep:thiserror",
   "dep:url",
 ]
-# PDQm, the patient demographics query (ITI-78, #119): the HTTP client, the
-# FHIR R4 `resources` root set for the Patient resources a search answers with,
-# and the redacting secret type the demographics travel in.
+# PDQm, the patient demographics query and match (ITI-78, #119; ITI-119, #487):
+# the HTTP client, the FHIR R4 `resources` root set for the Patient resources
+# a search or a match answers with and the Parameters a match posts, and the
+# redacting secret type the demographics travel in.
 pdqm = [
   "dep:fhir-types",
   "fhir-types/r4",

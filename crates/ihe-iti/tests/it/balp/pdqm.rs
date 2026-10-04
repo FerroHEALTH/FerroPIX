@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: Vernum Projecten B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The ITI-78 audit record of an audited PDQm client (PDQm 3.2.0
-//! §2:3.78.5.1): held to the Query Consumer audit profile and its example,
-//! the search as sent in the query entity, and a search whose record is
-//! refused fails.
+//! The ITI-78 and ITI-119 audit records of an audited PDQm client (PDQm 3.2.0
+//! §2:3.78.5.1, §2:3.119.5.1.1): held to the Query and Match Consumer audit
+//! profiles and their examples, the request as sent in the query entity, and
+//! an exchange whose record is refused fails.
 
 use std::sync::Arc;
 
 use ihe_iti::balp::Outcome;
 use ihe_iti::pdqm::error::PdqmError;
+use ihe_iti::pdqm::input::MatchInput;
+use secrecy::SecretString;
 
 use super::profile::{Kept, Refusing, base64_decoded, holds_to, like, vendored, written};
 use crate::pdqm::{
@@ -76,4 +78,90 @@ async fn a_search_whose_record_is_refused_fails() {
         !format!("{error:?} {error}").contains("Schmidt"),
         "the error names no demographic"
     );
+}
+
+/// A stub Supplier that answers every match with the IG's one-match example.
+async fn matcher() -> wiremock::MockServer {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/fhir/Patient/$match"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_raw(
+            crate::pdqm::vendored("example/Bundle-ex-match-output.json").into_bytes(),
+            FHIR_JSON,
+        ))
+        .mount(&server)
+        .await;
+    server
+}
+
+fn match_input() -> MatchInput {
+    MatchInput::new(crate::pdqm::DOMAIN, &SecretString::from("12345"))
+        .expect("an input")
+        .only_certain_matches(true)
+}
+
+#[tokio::test]
+async fn a_match_is_recorded_as_the_match_consumer_audit_profile_fixes_it() {
+    let server = matcher().await;
+    let kept = Arc::new(Kept::default());
+    let client = client(&server).audited(kept.clone());
+    client
+        .match_patient(&match_input(), PROMPT)
+        .await
+        .expect("a match");
+    let [exchange] = kept.taken().try_into().expect("one record");
+    assert_eq!(exchange.outcome, Outcome::Success);
+    let record = written(&exchange);
+    holds_to(
+        &record,
+        &vendored(
+            "ihe-pdqm",
+            "package/StructureDefinition-IHE.PDQm.Match.Audit.Consumer.json",
+        ),
+    );
+    like(
+        &record,
+        &vendored(
+            "ihe-pdqm",
+            "package/example/AuditEvent-ex-auditPdqmMatch-consumer.json",
+        ),
+        false,
+    );
+    let query = base64_decoded(record["entity"][0]["query"].as_str().expect("a query"));
+    let sent = format!(
+        "POST {}/fhir/Patient/$match\nContent-Type: application/fhir+json\n\n",
+        server.uri()
+    );
+    assert!(
+        query.starts_with(&sent) && query.contains(r#""resourceType":"Parameters""#),
+        "the raw request, as for the ITI-78 POST search: {query}"
+    );
+    assert_eq!(
+        record["entity"][1]["what"]["identifier"]["value"], "12345",
+        "the patient the input identifies (entity:patient)"
+    );
+}
+
+#[tokio::test]
+async fn a_match_whose_record_is_refused_fails() {
+    let server = matcher().await;
+    let client = client(&server).audited(Arc::new(Refusing));
+    let error = client
+        .match_patient(&match_input(), PROMPT)
+        .await
+        .expect_err("the match fails closed");
+    assert!(matches!(error, PdqmError::Audit(_)), "{error:?}");
+    assert!(!format!("{error:?} {error}").contains("12345"));
+}
+
+#[tokio::test]
+async fn an_unreachable_supplier_of_a_match_is_recorded_as_a_serious_failure() {
+    let kept = Arc::new(Kept::default());
+    let client = unreachable_client().audited(kept.clone());
+    client
+        .match_patient(&match_input(), PROMPT)
+        .await
+        .expect_err("no Supplier answers");
+    let [exchange] = kept.taken().try_into().expect("one record");
+    assert_eq!(exchange.outcome, Outcome::SeriousFailure);
 }

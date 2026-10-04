@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: Vernum Projecten B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-78 against a stub Patient Demographics Supplier: the answers the
-//! profile defines, the contract of the vendored capability statements and
-//! response profile, and the hygiene of the demographic criteria.
+//! ITI-78 and ITI-119 against a stub Patient Demographics Supplier: the
+//! answers the profile defines, the contract of the vendored capability
+//! statements and response profiles, and the hygiene of the demographic
+//! criteria.
 
 mod answers;
 mod contract;
 mod hygiene;
+mod matching;
 mod paging;
 
 use std::fmt::Write;

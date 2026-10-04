@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The result set of an ITI-78 search: one page of matching Patients, the
-//! total the Supplier counts, and the link to the next page (§2:3.78.4.2.2).
+//! total the Supplier counts, and the link to the next page (§2:3.78.4.2.2);
+//! and the answer to an ITI-119 match (§2:3.119.4.2.2).
 //!
 //! Every Patient here is demographic data. The types redact it in `Debug` and
 //! none of them has `Display`.
@@ -198,5 +199,42 @@ impl Page {
 impl fmt::Debug for Page {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Page({REDACTED})")
+    }
+}
+
+/// The answer to an ITI-119 match: the Patients the Supplier matched, most
+/// likely first, each with its score and grade (§2:3.119.4.1.3, Cases 1 to 6;
+/// §2:3.119.4.2.2.4).
+///
+/// No match is an answer with no Patient (§2:3.119.4.1.3, Cases 4, 5 and 7).
+#[derive(Debug, Clone)]
+pub struct MatchResult {
+    patients: Vec<MatchedPatient>,
+    warnings: Vec<IssueType>,
+}
+
+impl MatchResult {
+    pub(super) fn new(patients: Vec<MatchedPatient>, warnings: Vec<IssueType>) -> Self {
+        Self { patients, warnings }
+    }
+
+    /// Returns the matched Patients in the Supplier's order, most likely
+    /// first (§2:3.119.4.1.3, Case 2); each carries a score and a grade.
+    #[must_use]
+    pub fn patients(&self) -> &[MatchedPatient] {
+        &self.patients
+    }
+
+    /// Returns the matched Patients, by value.
+    #[must_use]
+    pub fn into_patients(self) -> Vec<MatchedPatient> {
+        self.patients
+    }
+
+    /// Returns the issue types of the warning `OperationOutcome` entries the
+    /// answer carries (§2:3.119.4.1.3, Case 10).
+    #[must_use]
+    pub fn warnings(&self) -> &[IssueType] {
+        &self.warnings
     }
 }

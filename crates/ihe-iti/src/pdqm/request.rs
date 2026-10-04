@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The ITI-78 request: `POST [base]/Patient/_search` with the criteria in an
-//! `application/x-www-form-urlencoded` body (§2:3.78.4.1.2).
+//! `application/x-www-form-urlencoded` body (§2:3.78.4.1.2); and the ITI-119
+//! request: `POST [base]/Patient/$match` with a `Parameters` body
+//! (§2:3.119.4.1.2).
 
 use url::Url;
 
@@ -13,6 +15,10 @@ use super::error::InvalidInput;
 /// The search on the Supplier's `Patient` type, relative to the FHIR base
 /// (FHIR R4 search, <http://hl7.org/fhir/R4/http.html#search>).
 const SEARCH: &str = "Patient/_search";
+
+/// The `$match` operation on the Supplier's `Patient` type, relative to the
+/// FHIR base (§2:3.119.4.1.2).
+const MATCH: &str = "Patient/$match";
 
 /// The media type of the search body.
 pub(super) const FORM: &str = "application/x-www-form-urlencoded";
@@ -25,6 +31,11 @@ pub(super) fn base(base: Url) -> Result<Url, InvalidInput> {
 /// The `[base]/Patient/_search` URL for the FHIR base `base`.
 pub(super) fn endpoint(base: Url) -> Result<Url, InvalidInput> {
     search::under_base(base, SEARCH).ok_or(InvalidInput::Base)
+}
+
+/// The `[base]/Patient/$match` URL for the FHIR base `base`.
+pub(super) fn match_endpoint(base: Url) -> Result<Url, InvalidInput> {
+    search::under_base(base, MATCH).ok_or(InvalidInput::Base)
 }
 
 #[cfg(test)]

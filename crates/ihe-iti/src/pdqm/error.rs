@@ -64,13 +64,16 @@ pub enum PdqmError {
     /// The request could not be sent or the answer could not be read.
     #[error("the Supplier could not be reached")]
     Transport(#[source] reqwest::Error),
-    /// The answer does not hold to ITI-78.
-    #[error("the Supplier's answer does not hold to ITI-78")]
+    /// The answer does not hold to ITI-78, or to ITI-119 for a match.
+    #[error("the Supplier's answer does not hold to the transaction")]
     Malformed(#[from] Malformation),
+    /// The request body could not be written, so nothing was sent.
+    #[error("the request to the Supplier could not be written")]
+    Unwritable(#[source] serde_json::Error),
     /// The audit recorder could not accept the request's audit record, so
-    /// its answer is not used (feature `balp`, §2:3.78.5.1).
+    /// its answer is not used (feature `balp`, §2:3.78.5.1, §2:3.119.5.1.1).
     #[cfg(feature = "balp")]
-    #[error("the ITI-78 audit record could not be recorded")]
+    #[error("the PDQm audit record could not be recorded")]
     Audit(#[source] crate::balp::AuditError),
 }
 
@@ -154,6 +157,34 @@ pub enum Malformation {
     /// The `next` link is not a URL.
     #[error("the next link is not a URL")]
     NextLink,
+    /// A `$match` entry's `search.mode` is not `match` (the PDQm Match Output
+    /// Bundle profile, `Bundle.entry:patient.search.mode`).
+    #[error("entry {index} is not in search mode match")]
+    NotMatchMode {
+        /// The entry's position.
+        index: usize,
+    },
+    /// A `$match` entry has no `search.score` between 0 and 1
+    /// (§2:3.119.4.1.3, Case 1; §2:3.119.4.2.2.4).
+    #[error("entry {index} has no score between 0 and 1")]
+    NoScore {
+        /// The entry's position.
+        index: usize,
+    },
+    /// A `$match` entry has no `match-grade` extension (§2:3.119.4.2.2.4).
+    #[error("entry {index} has no match-grade")]
+    NoMatchGrade {
+        /// The entry's position.
+        index: usize,
+    },
+    /// A `$match` answer of `200` carries an `OperationOutcome` of `error` or
+    /// `fatal` severity, which only a failure status carries (§2:3.119.4.1.3,
+    /// Cases 7, 9 and 10).
+    #[error("entry {index} is an error outcome in a successful answer")]
+    ErrorOutcome {
+        /// The entry's position.
+        index: usize,
+    },
 }
 
 /// A transport failure, with the request URL removed: a page link may hold

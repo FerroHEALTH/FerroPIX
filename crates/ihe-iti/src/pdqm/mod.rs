@@ -16,6 +16,13 @@
 //! profile's unrecognised-domain answer (Case 4), is an error, so an outage or
 //! a misrouted request never reads as no match.
 //!
+//! The same client is the Consumer side of ITI-119, Patient Demographics Match
+//! (ITI TF-2 §2:3.119): [`PdqmClient::match_patient`] posts the
+//! [`input::MatchInput`] to `[base]/Patient/$match` and reads the answer into a
+//! [`matches::MatchResult`], every matched Patient with its score and
+//! `match-grade` (§2:3.119.4.2.2.4). No match is a result with no Patient
+//! (§2:3.119.4.1.3, Cases 4, 5 and 7).
+//!
 //! The criteria are directly identifying. They travel only to the Supplier,
 //! which is the transaction's purpose, and in the body of a `POST` search
 //! rather than in a URL, which the profile admits ("the Patient Demographics
@@ -61,6 +68,7 @@
 #[cfg(feature = "balp")]
 pub mod audit;
 pub mod error;
+pub mod input;
 pub mod matches;
 pub mod query;
 mod request;
@@ -74,7 +82,8 @@ use url::Url;
 
 use crate::redact::RedactedUrl;
 use error::{InvalidInput, PdqmError};
-use matches::{Page, SearchResult};
+use input::MatchInput;
+use matches::{MatchResult, Page, SearchResult};
 use query::PatientQuery;
 
 /// The media type ITI-78 asks for and reads (ITI TF-2 Appendix Z.6).
@@ -89,6 +98,7 @@ const FHIR_JSON: &str = "application/fhir+json";
 pub struct PdqmClient {
     base: Url,
     endpoint: Url,
+    match_endpoint: Url,
     http: reqwest::Client,
     #[cfg(feature = "balp")]
     audit: Option<std::sync::Arc<dyn crate::balp::AuditRecorder>>,
@@ -110,6 +120,7 @@ impl PdqmClient {
         let base = request::base(base)?;
         Ok(Self {
             endpoint: request::endpoint(base.clone())?,
+            match_endpoint: request::match_endpoint(base.clone())?,
             base,
             http,
             #[cfg(feature = "balp")]
@@ -117,8 +128,9 @@ impl PdqmClient {
         })
     }
 
-    /// This client, recording the audit record of every search and every
-    /// page through `recorder` (§2:3.78.5.1, feature `balp`).
+    /// This client, recording the audit record of every search, every page
+    /// and every match through `recorder` (§2:3.78.5.1, §2:3.119.5.1.1,
+    /// feature `balp`).
     ///
     /// An audited client records each request before it returns, whatever
     /// its outcome; one whose record the recorder does not accept fails with
@@ -152,6 +164,90 @@ impl PdqmClient {
     #[must_use]
     pub fn endpoint(&self) -> &Url {
         &self.endpoint
+    }
+
+    /// Returns the `[base]/Patient/$match` URL the client posts a match to
+    /// (§2:3.119.4.1.2).
+    #[must_use]
+    pub fn match_endpoint(&self) -> &Url {
+        &self.match_endpoint
+    }
+
+    /// Asks the Supplier for the Patients that match `input` (ITI-119).
+    ///
+    /// `timeout` bounds the whole exchange, from connecting until the answer is
+    /// read.
+    ///
+    /// # Errors
+    /// [`PdqmError::Unwritable`] before anything is sent when the input
+    /// cannot be written as JSON, and a [`PdqmError`] for every answer that is
+    /// not a Match Output Bundle and for a failure to get an answer at all.
+    pub async fn match_patient(
+        &self,
+        input: &MatchInput,
+        timeout: Duration,
+    ) -> Result<MatchResult, PdqmError> {
+        let body = secrecy::SecretString::from(
+            serde_json::to_string(&input.parameters()).map_err(PdqmError::Unwritable)?,
+        );
+        let result = self.post_match(&body, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self.audit_match(input, &body, result).await;
+        result
+    }
+
+    /// Records the match of `input`, sent as `body`, when the client is
+    /// audited, and returns `result` unless the record was refused.
+    #[cfg(feature = "balp")]
+    async fn audit_match(
+        &self,
+        input: &MatchInput,
+        body: &secrecy::SecretString,
+        result: Result<MatchResult, PdqmError>,
+    ) -> Result<MatchResult, PdqmError> {
+        use secrecy::ExposeSecret as _;
+        if let Some(recorder) = &self.audit {
+            // NOTE: BALP Query records the raw request; a POST operation is its
+            // request line, media type and body, as for the ITI-78 POST search.
+            let request = secrecy::SecretString::from(format!(
+                "POST {}\nContent-Type: {FHIR_JSON}\n\n{}",
+                crate::balp::request_text(&self.match_endpoint).expose_secret(),
+                body.expose_secret()
+            ));
+            let exchange =
+                audit::match_exchange(&self.base, request, input.sole_identifier(), &result);
+            // NOTE: PDQm §2:3.119.5.1.1 makes the audit record part of the match, so
+            // an answer whose record was refused is not used.
+            recorder.record(exchange).await.map_err(PdqmError::Audit)?;
+        }
+        result
+    }
+
+    async fn post_match(
+        &self,
+        body: &secrecy::SecretString,
+        timeout: Duration,
+    ) -> Result<MatchResult, PdqmError> {
+        use secrecy::ExposeSecret as _;
+        let body = body.expose_secret().as_bytes().to_vec();
+        let response = self
+            .http
+            .post(self.match_endpoint.clone())
+            .header(ACCEPT, FHIR_JSON)
+            .header(CONTENT_TYPE, FHIR_JSON)
+            .body(body)
+            .timeout(timeout)
+            .send()
+            .await
+            .map_err(error::transport)?;
+        let status = response.status();
+        let media = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let body = response::body(response).await?;
+        response::read_match(status, media.as_deref(), &body)
     }
 
     /// Asks the Supplier for the first page of Patients that match `query`.

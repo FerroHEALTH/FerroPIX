@@ -22,7 +22,7 @@
 pub mod atna;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd"))]
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 pub mod outcome;
 #[cfg(feature = "pdqm")]
 pub mod pdqm;
@@ -35,10 +35,11 @@ pub mod pmir;
     feature = "pixm",
     feature = "pdqm",
     feature = "mcsd",
+    feature = "pmir",
     feature = "xcpd"
 ))]
 mod redact;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd"))]
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 mod search;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

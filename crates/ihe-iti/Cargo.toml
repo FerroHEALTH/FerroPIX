@@ -5,7 +5,7 @@ name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.16"
+version = "0.0.17"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -69,8 +69,22 @@ mcsd = [
   "dep:thiserror",
   "dep:url",
 ]
-# PMIR, the patient master identity registry (ITI-93, ITI-94, #48).
-pmir = []
+# PMIR, the patient master identity registry (ITI-93, ITI-94, #147): the HTTP
+# client of the ITI-94 subscription, the FHIR R4 `resources` root set for the
+# Subscription, the message Bundle, its MessageHeader and the Patient resources
+# an ITI-93 feed carries, and the redacting secret type the identifiers travel
+# in.
+pmir = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
 # XCPD, cross-community patient discovery (ITI-55, #85): the HTTP client the
 # SOAP 1.2 envelope travels on, the XML reader and writer of the envelope and
 # the HL7 v3 messages, the message and query ids, the creation time, and the

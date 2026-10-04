@@ -21,5 +21,8 @@ mod pdqm;
 #[cfg(feature = "pixm")]
 mod pixm;
 #[cfg(test)]
+#[cfg(feature = "pmir")]
+mod pmir;
+#[cfg(test)]
 #[cfg(feature = "xcpd")]
 mod xcpd;

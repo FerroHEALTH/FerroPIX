@@ -8,17 +8,35 @@
 //! holds one shows it through [`RedactedUrl`] with both replaced by [`REDACTED`]. No
 //! specification governs this: our own design.
 
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd"))]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "xcpd"
+))]
 use std::fmt;
 
 /// The fixed text a rendering shows in place of a credential.
 pub(crate) const REDACTED: &str = "***";
 
 /// A URL whose `Debug` shows it with its userinfo and its query redacted.
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd"))]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "xcpd"
+))]
 pub(crate) struct RedactedUrl<'a>(pub(crate) &'a str);
 
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd"))]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "xcpd"
+))]
 impl fmt::Debug for RedactedUrl<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&redact(self.0), f)
@@ -38,7 +56,13 @@ impl fmt::Debug for RedactedUrl<'_> {
 /// `://` has no authority to find a credential in, so it shows as
 /// [`REDACTED`] whole. The text is never decoded, so it is redacted as
 /// written.
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd"))]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "xcpd"
+))]
 fn redact(url: &str) -> String {
     if url.is_empty() {
         return String::new();
@@ -76,7 +100,13 @@ fn redact(url: &str) -> String {
 
 #[cfg(all(
     test,
-    any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd")
+    any(
+        feature = "pixm",
+        feature = "pdqm",
+        feature = "mcsd",
+        feature = "pmir",
+        feature = "xcpd"
+    )
 ))]
 mod tests {
     use super::{REDACTED, RedactedUrl, redact};

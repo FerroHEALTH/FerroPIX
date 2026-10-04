@@ -25,7 +25,11 @@ The profiles are published at <https://profiles.ihe.net/ITI/>.
 `ihe_iti::pixm::PixmClient` is the Patient Identifier Cross-reference
 Consumer of ITI-83 (PIXm 3.1.0): `GET [base]/Patient/$ihe-pix` with one
 `sourceIdentifier` and any number of `targetSystem` domains, read into a
-cross-reference, the profile's not-found answer, or a typed error. A `404` is
+cross-reference, the profile's not-found answer, or a typed error. A client
+built with `.invoked_by(Invocation::Post)` posts the same parameters in a
+`Parameters` body to `[base]/Patient/$ihe-pix` instead (FHIR R4 Operations
+§3.2.0.1), so the source identifier is in no request URL; ITI-83 prescribes
+the `GET`, the default, so post only to a Manager that accepts it. A `404` is
 "patient unknown" only when its `OperationOutcome` carries a `not-found` issue,
 so an outage or a misrouted request is never mistaken for a patient with no
 identifiers. Every answer is held to the `$ihe-pix` `OperationDefinition`: the
@@ -33,9 +37,9 @@ two out parameters, an assigning authority on each identifier, identifiers only
 from the domains asked about, and never the source identifier itself.
 
 Identifier values travel in `secrecy::SecretString`, with redacted `Debug` and
-no `Display`, and no error carries a value, the request URL or the Manager's
-free text. Build the `reqwest::Client` you pass in with
-`redirect::Policy::none()`: the request URL holds the source identifier. The
+no `Display`, and no error carries a value, the request URL or body, or the
+Manager's free text. Build the `reqwest::Client` you pass in with
+`redirect::Policy::none()`: the request holds the source identifier. The
 client's `Debug` shows its URL with the userinfo replaced by `***` and leaves
 out the `reqwest::Client`, whose default headers may hold a credential.
 

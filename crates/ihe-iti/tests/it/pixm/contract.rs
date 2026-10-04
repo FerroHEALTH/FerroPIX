@@ -2,14 +2,19 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The client held to the vendored `$ihe-pix` `OperationDefinition` and to the
-//! IG's own ITI-83 request example (PIXm 3.1.0, §2:3.83.4.1.2).
+//! IG's own ITI-83 request example (PIXm 3.1.0, §2:3.83.4.1.2), asked by
+//! `GET` and, for a posting client, by `POST` (FHIR R4 Operations §3.2.0.1).
 
 use std::collections::BTreeSet;
 
+use ihe_iti::pixm::{Invocation, PixmClient};
 use serde::Deserialize;
+use url::Url;
+use wiremock::{MockServer, Request};
 
 use super::{
-    BLUE, FHIR_JSON, GREEN, OPERATION, PROMPT, client, manager, red_source, target, vendored,
+    BLUE, FHIR_JSON, GREEN, OPERATION, PROMPT, client, manager, posting_client, posting_manager,
+    red_source, target, vendored,
 };
 
 /// The members of the `OperationDefinition` the client's shape answers to.
@@ -203,5 +208,145 @@ async fn the_request_is_the_igs_own_example_query() {
     assert_eq!(
         pairs, expected,
         "the query parameters of the IG's example, without the _format the Accept header replaces"
+    );
+}
+
+/// A posted `Parameters` body, read strictly: a member the Query Parameters
+/// In profile does not give a request is refused.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PostedParameters {
+    #[serde(rename = "resourceType")]
+    resource_type: String,
+    parameter: Vec<PostedParameter>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PostedParameter {
+    name: String,
+    #[serde(rename = "valueString")]
+    value: String,
+}
+
+/// The one request a posting client made to `server`, with its body read.
+async fn posted(server: &MockServer) -> (Request, PostedParameters) {
+    let requests = server.received_requests().await.expect("recorded requests");
+    let [request] = requests.as_slice() else {
+        panic!("one request, got {}", requests.len());
+    };
+    let body = serde_json::from_slice(&request.body).expect("a Parameters body");
+    (request.clone(), body)
+}
+
+#[test]
+fn a_client_asks_with_the_get_iti_83_prescribes_unless_told_otherwise() {
+    let base = Url::parse("https://pix.example.org/fhir/").expect("a base");
+    let client = PixmClient::new(base, reqwest::Client::new()).expect("a client");
+    assert_eq!(
+        client.invocation(),
+        Invocation::Get,
+        "§2:3.83.4.1.2: the HTTP GET operation shall be used"
+    );
+    assert_eq!(
+        client.invoked_by(Invocation::Post).invocation(),
+        Invocation::Post
+    );
+}
+
+#[tokio::test]
+async fn a_posted_request_carries_the_in_parameters_in_its_body_and_none_in_its_url() {
+    let definition = definition();
+    let inputs = names(&definition, "in");
+    let server = posting_manager(
+        200,
+        FHIR_JSON,
+        vendored("example/Parameters-pixm-response-mohralice-red-all.json"),
+    )
+    .await;
+    posting_client(&server)
+        .cross_reference(&red_source(), &[target(BLUE), target(GREEN)], PROMPT)
+        .await
+        .expect("an answer");
+    let (request, body) = posted(&server).await;
+    assert_eq!(
+        request.method.as_str(),
+        "POST",
+        "an operation invoked by POST (FHIR R4 Operations §3.2.0.1)"
+    );
+    assert_eq!(request.url.path(), OPERATION, "the operation's endpoint");
+    assert_eq!(request.url.query(), None, "the URL holds no parameter");
+    for (header, expected) in [("content-type", FHIR_JSON), ("accept", FHIR_JSON)] {
+        assert_eq!(
+            request
+                .headers
+                .get(header)
+                .and_then(|value| value.to_str().ok()),
+            Some(expected),
+            "{header} (ITI TF-2 Appendix Z.6)"
+        );
+    }
+    assert_eq!(body.resource_type, "Parameters");
+    for parameter in &body.parameter {
+        assert!(
+            inputs.contains(&parameter.name),
+            "{} is an in parameter of $ihe-pix",
+            parameter.name
+        );
+    }
+    for parameter in definition
+        .parameter
+        .iter()
+        .filter(|parameter| parameter.direction == "in")
+    {
+        let count = body
+            .parameter
+            .iter()
+            .filter(|posted| posted.name == parameter.name)
+            .count();
+        let max = parameter.max.parse::<usize>().unwrap_or(usize::MAX);
+        assert!(
+            count <= max,
+            "{} appears {count} times, max {}",
+            parameter.name,
+            parameter.max
+        );
+        if parameter.name == "sourceIdentifier" {
+            assert_eq!(count, 1, "sourceIdentifier is 1..1");
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_posted_body_is_the_igs_own_example_request() {
+    let example: RequestExample = serde_json::from_str(&vendored(
+        "example/Parameters-pixm-request-mohralice-red-to-blue.json",
+    ))
+    .expect("the vendored ITI-83 request example");
+    let expected: Vec<(String, String)> = example
+        .parameter
+        .into_iter()
+        .filter(|parameter| parameter.name != "_format")
+        .map(|parameter| (parameter.name, parameter.value))
+        .collect();
+    let server = posting_manager(
+        200,
+        FHIR_JSON,
+        vendored("example/Parameters-pixm-response-mohralice-red-all.json"),
+    )
+    .await;
+    posting_client(&server)
+        .cross_reference(&red_source(), &[target(BLUE), target(GREEN)], PROMPT)
+        .await
+        .expect("an answer");
+    let (_, body) = posted(&server).await;
+    let sent: Vec<(String, String)> = body
+        .parameter
+        .into_iter()
+        .map(|parameter| (parameter.name, parameter.value))
+        .collect();
+    assert_eq!(
+        sent, expected,
+        "the parameters of the IG's example, without the _format the Accept header replaces"
     );
 }

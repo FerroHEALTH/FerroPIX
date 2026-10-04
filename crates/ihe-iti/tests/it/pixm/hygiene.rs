@@ -3,15 +3,16 @@
 
 //! The source identifier reaches the PIX Manager, which is the transaction's
 //! purpose, and nothing else the client produces: no error's `Display`,
-//! `Debug` or source chain, and no answer's `Debug`.
+//! `Debug` or source chain, and no answer's `Debug`. A posting client sends it
+//! in the request body only, never in the URL or a header.
 
 use std::error::Error;
 use std::fmt::Write;
 use std::time::Duration;
 
-use ihe_iti::pixm::PixmClient;
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier};
+use ihe_iti::pixm::{Invocation, PixmClient};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
 use url::Url;
@@ -19,7 +20,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::{
-    BLUE, FHIR_JSON, OPERATION, PROMPT, RED, client, manager, outcome, target, unreachable_client,
+    BLUE, FHIR_JSON, OPERATION, PROMPT, RED, client, manager, outcome, posting_client,
+    posting_manager, target, unreachable_client,
 };
 use crate::timing;
 
@@ -153,6 +155,67 @@ async fn an_answer_shows_no_identifier_value() {
     assert!(
         !format!("{answer:?}").contains(SENTINEL),
         "the Debug of an answer shows an identifier value"
+    );
+}
+
+#[tokio::test]
+async fn a_posted_query_carries_the_identifier_in_its_body_and_in_no_url_or_header() {
+    let server = posting_manager(200, FHIR_JSON, r#"{"resourceType":"Parameters"}"#).await;
+    posting_client(&server)
+        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .await
+        .expect("an answer");
+    let requests = server.received_requests().await.expect("recorded requests");
+    let [request] = requests.as_slice() else {
+        panic!("one request, got {}", requests.len());
+    };
+    assert!(
+        !request.url.as_str().contains(SENTINEL),
+        "the request URL carries the identifier: {}",
+        request.url
+    );
+    for (name, value) in &request.headers {
+        assert!(
+            !value
+                .as_bytes()
+                .windows(SENTINEL.len())
+                .any(|w| w == SENTINEL.as_bytes()),
+            "header {name} carries the identifier"
+        );
+    }
+    assert!(
+        String::from_utf8_lossy(&request.body).contains(&format!("{RED}|{SENTINEL}")),
+        "the body carries the source identifier, the transaction's input"
+    );
+}
+
+#[tokio::test]
+async fn no_failure_of_a_posted_query_carries_the_identifier() {
+    for (status, body) in [
+        (400, outcome("code-invalid", SENTINEL)),
+        (404, outcome("processing", SENTINEL)),
+        (500, outcome(SENTINEL, SENTINEL)),
+        (200, format!("{{\"{SENTINEL}\"")),
+    ] {
+        let server = posting_manager(status, FHIR_JSON, body).await;
+        let error = posting_client(&server)
+            .cross_reference(&source(), &[target(BLUE)], PROMPT)
+            .await
+            .expect_err("a failure");
+        assert!(
+            !rendered(&error).contains(SENTINEL),
+            "a {status} answer's error carries the identifier"
+        );
+    }
+    let error = unreachable_client()
+        .invoked_by(Invocation::Post)
+        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .await
+        .expect_err("no Manager");
+    let shown = rendered(&error);
+    assert!(
+        !shown.contains(SENTINEL) && !shown.contains("ihe-pix"),
+        "the transport error carries the request"
     );
 }
 

@@ -3,10 +3,10 @@
 
 //! Why an ITI-83 exchange has no cross-reference to give.
 //!
-//! No error here carries a request URL, an identifier value, or text the PIX
-//! Manager wrote (an `OperationOutcome`'s `diagnostics` or `details`, a JSON
-//! parse snippet, a parameter name): the request URL holds the source
-//! identifier, and the Manager's text may quote it.
+//! No error here carries a request URL or body, an identifier value, or text
+//! the PIX Manager wrote (an `OperationOutcome`'s `diagnostics` or `details`, a
+//! JSON parse snippet, a parameter name): the URL of a `GET` and the body of a
+//! `POST` hold the source identifier, and the Manager's text may quote it.
 
 use http::StatusCode;
 
@@ -59,6 +59,10 @@ pub enum PixmError {
     /// The answer does not hold to ITI-83.
     #[error("the PIX Manager's answer does not hold to ITI-83")]
     Malformed(#[from] Malformation),
+    /// The `Parameters` body of a `POST` could not be written, so nothing was
+    /// sent.
+    #[error("the request to the PIX Manager could not be written")]
+    Unwritable(#[source] serde_json::Error),
     /// The audit recorder could not accept the exchange's audit record, so
     /// its answer is not used (feature `balp`, §2:3.83.5.1.1).
     #[cfg(feature = "balp")]

@@ -3,8 +3,9 @@
 
 //! The ITI-83 audit record of an audited PIXm client (PIXm 3.1.0
 //! §2:3.83.5.1.1): held to the Query Consumer audit profile and its example,
-//! naming the patient by the source identifier, recorded whatever the
-//! outcome, and failing the exchange when the recorder refuses it.
+//! naming the patient by the source identifier, recording the request as sent
+//! whether it is a `GET` or a `POST`, recorded whatever the outcome, and
+//! failing the exchange when the recorder refuses it.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,14 +17,87 @@ use secrecy::ExposeSecret as _;
 
 use super::profile::{Kept, Refusing, Stalled, base64_decoded, holds_to, like, vendored, written};
 use crate::pixm::{
-    BLUE, FHIR_JSON, PROMPT, RED, RED_VALUE, client, manager, red_source, target,
-    unreachable_client,
+    BLUE, FHIR_JSON, OPERATION, PROMPT, RED, RED_VALUE, client, manager, posting_client,
+    posting_manager, red_source, target, unreachable_client,
 };
 
 /// The vendored example answer of ITI-83 for the red patient and the blue
 /// domain.
 fn answer() -> String {
     crate::pixm::vendored("example/Parameters-pixm-response-mohralice-red-to-blue.json")
+}
+
+#[tokio::test]
+async fn a_posted_query_is_recorded_as_the_consumer_audit_profile_fixes_it() {
+    let server = posting_manager(200, FHIR_JSON, answer()).await;
+    let kept = Arc::new(Kept::default());
+    let client = posting_client(&server).audited(kept.clone());
+    client
+        .cross_reference(&red_source(), &[target(BLUE)], PROMPT)
+        .await
+        .expect("a cross-reference");
+    let [exchange] = kept.taken().try_into().expect("one record");
+    assert_eq!(exchange.outcome, Outcome::Success);
+    let record = written(&exchange);
+    holds_to(
+        &record,
+        &vendored(
+            "ihe-pixm",
+            "package/StructureDefinition-IHE.PIXm.Query.Audit.Consumer.json",
+        ),
+    );
+    like(
+        &record,
+        &vendored(
+            "ihe-pixm",
+            "package/example/AuditEvent-ex-auditPixmQuery-consumer.json",
+        ),
+        true,
+    );
+    let patient = record["entity"]
+        .as_array()
+        .expect("entities")
+        .iter()
+        .find(|entity| entity["role"]["code"] == "1")
+        .expect("a patient entity");
+    assert_eq!(patient["what"]["identifier"]["system"], RED);
+    assert_eq!(patient["what"]["identifier"]["value"], RED_VALUE);
+}
+
+#[tokio::test]
+async fn the_record_of_a_posted_query_is_the_raw_request_as_sent() {
+    let server = posting_manager(200, FHIR_JSON, answer()).await;
+    let kept = Arc::new(Kept::default());
+    let client = posting_client(&server).audited(kept.clone());
+    client
+        .cross_reference(&red_source(), &[target(BLUE)], PROMPT)
+        .await
+        .expect("a cross-reference");
+    let [exchange] = kept.taken().try_into().expect("one record");
+    let record = written(&exchange);
+    let query = record["entity"]
+        .as_array()
+        .expect("entities")
+        .iter()
+        .find(|entity| entity["role"]["code"] == "24")
+        .expect("a query entity");
+    let requests = server.received_requests().await.expect("requests");
+    let [asked] = requests.as_slice() else {
+        panic!("one request, got {}", requests.len());
+    };
+    assert_eq!(
+        base64_decoded(query["query"].as_str().expect("a query")),
+        format!(
+            "POST {}{OPERATION}\nContent-Type: {FHIR_JSON}\n\n{}",
+            server.uri(),
+            String::from_utf8_lossy(&asked.body)
+        ),
+        "BALP Query: the raw request, its request line, media type and body"
+    );
+    assert!(
+        !format!("{exchange:?}").contains(RED_VALUE),
+        "Debug shows no identifier"
+    );
 }
 
 #[tokio::test]

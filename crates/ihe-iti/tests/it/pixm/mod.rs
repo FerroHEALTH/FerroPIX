@@ -12,8 +12,8 @@ mod hygiene;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use ihe_iti::pixm::PixmClient;
 use ihe_iti::pixm::identifier::{SourceIdentifier, TargetSystem};
+use ihe_iti::pixm::{Invocation, PixmClient};
 use secrecy::SecretString;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -60,6 +60,27 @@ pub(crate) fn client(server: &MockServer) -> PixmClient {
         .expect("an HTTP client");
     let base = Url::parse(&format!("{}{BASE}", server.uri())).expect("the stub base");
     PixmClient::new(base, http).expect("a client")
+}
+
+/// A client for `server` that posts its query ([`Invocation::Post`]).
+pub(crate) fn posting_client(server: &MockServer) -> PixmClient {
+    client(server).invoked_by(Invocation::Post)
+}
+
+/// A stub Manager that answers every `$ihe-pix` `POST` with `status`, the
+/// media type `media` and `body`, and nothing else.
+pub(crate) async fn posting_manager(
+    status: u16,
+    media: &str,
+    body: impl Into<String>,
+) -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(OPERATION))
+        .respond_with(ResponseTemplate::new(status).set_body_raw(body.into().into_bytes(), media))
+        .mount(&server)
+        .await;
+    server
 }
 
 /// A client for a FHIR base nothing can listen on: port 0 on the loopback

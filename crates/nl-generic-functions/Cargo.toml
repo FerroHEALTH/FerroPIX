@@ -5,7 +5,7 @@ name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.8"
+version = "0.0.9"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -63,26 +63,55 @@ lrza = [
   "fhir-types/resources",
   "dep:thiserror",
 ]
-# GF-Authentication on the Nuts profile.
-nuts-auth = []
+# GF-Authentication on the Nuts profile: the client side of the access token
+# request with a Verifiable Presentation as the grant (Nuts RFC021) and a
+# DPoP-bound token, the presentation signed with the holder's key and the
+# Presentation Submission written to Presentation Exchange 2.0.0.
+nuts-auth = [
+  "dep:base64",
+  "dep:http",
+  "dep:jiff",
+  "dep:jsonwebtoken",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+  "dep:uuid",
+]
 
 [dependencies]
+base64 = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true }
+jsonwebtoken = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 url = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+base64 = { workspace = true }
+ferrofed-testkit = { workspace = true }
 fhir-types = { workspace = true, features = ["r4", "resources"] }
+http = { workspace = true }
+jiff = { workspace = true }
+jsonschema = { workspace = true }
+jsonwebtoken = { workspace = true }
+reqwest = { workspace = true }
 secrecy = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["rt", "macros", "time"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
 url = { workspace = true }
+uuid = { workspace = true }
 wiremock = { workspace = true }
 
 [lints]

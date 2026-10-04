@@ -17,5 +17,8 @@ mod lrza;
 #[cfg(feature = "mitz")]
 mod mitz;
 #[cfg(test)]
+#[cfg(feature = "nuts-auth")]
+mod nuts_auth;
+#[cfg(test)]
 #[cfg(feature = "nvi")]
 mod nvi;

@@ -12,7 +12,7 @@ the implementation guide, with a feature per function.
 | `nvi` | GF-Localization | the national index (NVI) | the Localization Service search: which care providers (by URA) hold data for a patient (by pseudonymised BSN) |
 | `mitz` | GF-Consent | Mitz | the closed authorization question ("gesloten autorisatievraag"): may a data holder make a patient's data of each category available to a data user, asked on the BSN and answered `Permit` or `Deny` |
 | `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization`, so a directory reader can join a localization custodian to its organisation |
-| `nuts-auth` | GF-Authentication | the Nuts profile | nothing yet |
+| `nuts-auth` | GF-Authentication | the Nuts profile | the access token request of Nuts RFC021: the authorization server metadata, the Presentation Definition for a scope, a JWT Verifiable Presentation of the holder's credentials signed with its `did:web` key, and a `DPoP`-bound token, proven through a prover the caller supplies |
 
 The identifier systems the functions share (the pseudonymised BSN and the
 URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.
@@ -20,6 +20,10 @@ URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.
 The NVI client never puts the pseudonym in an error, a `Debug` rendering or
 anything but the request to the service, and it follows a `next` link only on
 its own search endpoint.
+
+The Nuts client never puts a credential, the presentation, a key, a proof or
+the token in an error or a `Debug` rendering, and sends no credential before
+the authorization server's Presentation Definition says they answer it.
 
 The Mitz client follows the VZVZ *Implementatiehandleiding Open en gesloten
 autorisatievraag* 3.8.2: a SOAP 1.2 request carrying one XACML 3.0

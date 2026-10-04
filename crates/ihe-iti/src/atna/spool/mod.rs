@@ -5,15 +5,17 @@
 //! §3.20.4.1.1 has a sender that cannot reach its Audit Record Repository
 //! store the record locally and send it when it is able.
 //!
-//! A [`Spool`] is bounded by a number of messages and a number of bytes; a
-//! message past either bound is refused, never dropped silently, so its
-//! caller can fail the exchange it audits. Storing one message is bounded in
+//! A [`Spool`] is bounded by a number of messages and a number of bytes,
+//! the messages queued for a write counted with those stored, so a stalled
+//! disk holds no more in memory than the bounds admit; a message past either
+//! bound is refused at once, never dropped silently, so its caller can fail
+//! the exchange it audits. Storing one message is bounded in
 //! time too: one not stored within [`Bounds::write_timeout`], the wait for a
 //! write before it included, is refused with [`SpoolError::Late`] and is not
-//! counted. That write goes on, and once it ends the message is stored and
-//! delivered like any other, or its failure is logged, so a slow disk
-//! neither loses nor repeats a message. Messages leave in the order they
-//! were stored.
+//! counted. That write goes on, or still waits its turn, and once it ends
+//! the message is stored and delivered like any other, or its failure is
+//! logged, so a slow disk neither loses nor repeats a message. Messages
+//! leave in the order they were stored.
 //!
 //! On disk ([`Spool::open`]), each message is one file named by its sequence
 //! number. It is written to a temporary file, flushed to the device, renamed,
@@ -115,12 +117,13 @@ pub struct Bounds {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum SpoolError {
-    /// The spool already holds its most messages or bytes.
+    /// The spool already holds its most messages or bytes, the messages
+    /// queued for a write counted with those stored.
     #[error("the audit spool is full: {messages} messages, {bytes} bytes")]
     Full {
-        /// The messages it holds.
+        /// The messages it holds or has queued.
         messages: usize,
-        /// The bytes it holds.
+        /// The bytes it holds or has queued.
         bytes: u64,
     },
     /// The directory gives a group or other users access to it.
@@ -203,7 +206,7 @@ impl std::fmt::Debug for Stored {
 #[derive(Clone)]
 pub struct Spool {
     inner: Arc<Mutex<Inner>>,
-    shown: Arc<Mutex<Depth>>,
+    shown: Arc<Mutex<Ledger>>,
     turn: Arc<tokio::sync::Mutex<()>>,
     arrived: Arc<Notify>,
     bounds: Bounds,
@@ -224,8 +227,41 @@ struct Inner {
     store: Store,
     bounds: Bounds,
     depth: Depth,
-    shown: Arc<Mutex<Depth>>,
+    shown: Arc<Mutex<Ledger>>,
     next: u64,
+}
+
+/// What readers of the spool see without taking its lock: the depth it
+/// holds, the messages queued for a write, and the refusals.
+#[derive(Debug, Default)]
+struct Ledger {
+    depth: Depth,
+    queued: usize,
+    queued_bytes: u64,
+    refused: u64,
+}
+
+impl Ledger {
+    /// Counts a message refused for want of room.
+    fn refuse(&mut self) -> u64 {
+        self.refused = self.refused.saturating_add(1);
+        self.refused
+    }
+}
+
+/// The place a message holds under the bounds while it waits for its
+/// write, given back once the write has ended and the depth shows it.
+struct Place {
+    ledger: Arc<Mutex<Ledger>>,
+    size: u64,
+}
+
+impl Drop for Place {
+    fn drop(&mut self) {
+        let mut ledger = lock(&self.ledger);
+        ledger.queued = ledger.queued.saturating_sub(1);
+        ledger.queued_bytes = ledger.queued_bytes.saturating_sub(self.size);
+    }
 }
 
 /// Locks `mutex`, taking over the state a holder that panicked left.
@@ -322,7 +358,10 @@ impl Spool {
 
     fn with(store: Store, bounds: Bounds, depth: Depth, next: u64) -> Self {
         let durable = matches!(store, Store::Disk { .. });
-        let shown = Arc::new(Mutex::new(depth));
+        let shown = Arc::new(Mutex::new(Ledger {
+            depth,
+            ..Ledger::default()
+        }));
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 store,
@@ -348,17 +387,34 @@ impl Spool {
     /// What the spool holds: a message counts once it is stored.
     #[must_use]
     pub fn depth(&self) -> Depth {
-        *lock(&self.shown)
+        lock(&self.shown).depth
+    }
+
+    /// The messages waiting for their write, which hold their place under
+    /// the bounds until it ends.
+    #[must_use]
+    pub fn queued(&self) -> usize {
+        lock(&self.shown).queued
+    }
+
+    /// The messages refused with [`SpoolError::Full`] since the spool was
+    /// opened.
+    #[must_use]
+    pub fn refused(&self) -> u64 {
+        lock(&self.shown).refused
     }
 
     /// Stores `message` after every message stored before it. On disk, it
     /// returns once the message is on the device.
     ///
-    /// It waits at most [`Bounds::write_timeout`], the wait for a write before
-    /// it included. A message not stored by then is refused with
-    /// [`SpoolError::Late`] and is not counted. Its write goes on: once it
-    /// ends, the message is stored and delivered like any other, or the
-    /// failure is logged with no part of the message.
+    /// The bounds count the messages queued for a write with those stored,
+    /// so a message they have no room for is refused at once, and a stalled
+    /// disk holds at most the bounds in memory too. It waits at most
+    /// [`Bounds::write_timeout`], the wait for a write before it included. A
+    /// message not stored by then is refused with [`SpoolError::Late`] and
+    /// is not counted as stored. Its write goes on, or waits on for its
+    /// turn: once it ends, the message is stored and delivered like any
+    /// other, or the failure is logged with no part of the message.
     ///
     /// # Errors
     ///
@@ -366,8 +422,10 @@ impl Spool {
     /// [`Bounds::write_timeout`], and [`SpoolError::Io`] when the message cannot
     /// be written.
     pub async fn push(&self, message: SecretSlice<u8>) -> Result<(), SpoolError> {
+        let size = u64::try_from(message.expose_secret().len()).unwrap_or(u64::MAX);
+        let place = self.admit(size)?;
         let bound = self.bounds.write_timeout;
-        let store = self.store(message);
+        let store = self.store(message, place);
         match tokio::time::Instant::now().checked_add(bound) {
             Some(deadline) => tokio::time::timeout_at(deadline, store)
                 .await
@@ -384,24 +442,63 @@ impl Spool {
 
     /// Stores `message` once every write before it has ended, so a stalled
     /// write holds one blocking thread however many messages wait behind it.
-    async fn store(&self, message: SecretSlice<u8>) -> Result<(), SpoolError> {
-        let turn = Arc::clone(&self.turn).lock_owned().await;
+    ///
+    /// The write is its own task from the start, waiting for its turn there:
+    /// a caller that stops waiting while the message is still queued leaves
+    /// it queued, and it is written once the writes before it end.
+    // NOTE: ITI TF-2 §3.20.4.1.1 has a record stored locally and sent when the sender
+    // is able, so a queued record its exchange gave up on is still written, never dropped.
+    async fn store(&self, message: SecretSlice<u8>, place: Place) -> Result<(), SpoolError> {
+        let turn = Arc::clone(&self.turn);
         let inner = Arc::clone(&self.inner);
         let arrived = Arc::clone(&self.arrived);
-        let write = InFlight::new(tokio::task::spawn_blocking(move || {
-            let stored = {
-                let mut inner = lock(&inner);
-                let stored = inner.push(message);
-                inner.publish();
+        let write = InFlight::new(tokio::spawn(async move {
+            let turn = turn.lock_owned().await;
+            tokio::task::spawn_blocking(move || {
+                let stored = {
+                    let mut inner = lock(&inner);
+                    let stored = inner.push(message);
+                    inner.publish();
+                    stored
+                };
+                drop(place);
+                drop(turn);
+                if stored.is_ok() {
+                    arrived.notify_one();
+                }
                 stored
-            };
-            drop(turn);
-            if stored.is_ok() {
-                arrived.notify_one();
-            }
-            stored
+            })
+            .await
+            .map_err(SpoolError::Task)?
         }));
         write.await.map_err(SpoolError::Task)?.map(|_sequence| ())
+    }
+
+    /// Gives a message of `size` bytes its place under the bounds, counting
+    /// the messages queued for a write with those stored, or refuses it.
+    fn admit(&self, size: u64) -> Result<Place, SpoolError> {
+        let mut ledger = lock(&self.shown);
+        let messages = ledger.depth.messages.saturating_add(ledger.queued);
+        let bytes = ledger.depth.bytes.saturating_add(ledger.queued_bytes);
+        if messages >= self.bounds.max_messages
+            || bytes.saturating_add(size) > self.bounds.max_bytes
+        {
+            let refused = ledger.refuse();
+            drop(ledger);
+            tracing::warn!(
+                refused,
+                messages,
+                bytes,
+                "an audit message was refused: the spool and the writes queued for it are at their bounds"
+            );
+            return Err(SpoolError::Full { messages, bytes });
+        }
+        ledger.queued = ledger.queued.saturating_add(1);
+        ledger.queued_bytes = ledger.queued_bytes.saturating_add(size);
+        Ok(Place {
+            ledger: Arc::clone(&self.shown),
+            size,
+        })
     }
 
     /// Runs `step` on the spool on a blocking thread, and shows the depth it
@@ -457,13 +554,20 @@ impl Spool {
 impl Inner {
     /// Shows the depth to readers that do not take the spool's lock.
     fn publish(&self) {
-        *lock(&self.shown) = self.depth;
+        lock(&self.shown).depth = self.depth;
     }
 
     fn push(&mut self, message: SecretSlice<u8>) -> Result<u64, SpoolError> {
         let size = u64::try_from(message.expose_secret().len()).unwrap_or(u64::MAX);
         let bytes = self.depth.bytes.saturating_add(size);
         if self.depth.messages >= self.bounds.max_messages || bytes > self.bounds.max_bytes {
+            let refused = lock(&self.shown).refuse();
+            tracing::warn!(
+                refused,
+                messages = self.depth.messages,
+                bytes = self.depth.bytes,
+                "an audit message was refused: the spool is at its bounds"
+            );
             return Err(SpoolError::Full {
                 messages: self.depth.messages,
                 bytes: self.depth.bytes,

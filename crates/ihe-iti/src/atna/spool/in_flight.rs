@@ -3,10 +3,11 @@
 
 //! A write to the spool its caller may stop waiting for.
 //!
-//! The write runs on a blocking thread and cannot be stopped there, so a
-//! caller that gives up on it leaves it running: once it ends, the message
-//! it stored is delivered like any other, and a write that failed is logged
-//! by its error, never by its message.
+//! The write is a task of its own that waits for its turn and then runs on a
+//! blocking thread, so a caller that gives up on it, queued or writing,
+//! leaves it running: once it ends, the message it stored is delivered like
+//! any other, and a write that failed is logged by its error, never by its
+//! message.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -216,16 +217,23 @@ pub(in crate::atna) mod tests {
         assert_eq!(Depth::default(), spool.depth());
 
         stall.release();
-        tokio::time::timeout(SLACK, spool.stored())
-            .await
-            .expect("the stalled write stores its message once it ends");
-        assert_eq!(1, spool.depth().messages, "stored once, never twice");
-        let stored = spool.oldest().await.expect("it reads").expect("one");
-        assert!(
-            String::from_utf8_lossy(stored.message.expose_secret()).contains(PATIENT),
-            "the message the exchange gave up on"
+        let until = Instant::now() + SLACK;
+        while spool.depth().messages < 2 && Instant::now() < until {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            2,
+            spool.depth().messages,
+            "the stalled message and the one queued behind it, each stored once"
         );
-        spool.remove(stored.sequence).await.expect("it removes");
+        for _ in 0..2 {
+            let stored = spool.oldest().await.expect("it reads").expect("one");
+            assert!(
+                String::from_utf8_lossy(stored.message.expose_secret()).contains(PATIENT),
+                "a message an exchange gave up on"
+            );
+            spool.remove(stored.sequence).await.expect("it removes");
+        }
         assert!(spool.oldest().await.expect("it reads").is_none());
 
         let log = logs
@@ -264,5 +272,65 @@ pub(in crate::atna) mod tests {
         assert!(!log.contains(PATIENT), "no log names the patient: {log}");
         assert_eq!(Depth::default(), spool.depth());
         assert!(spool.oldest().await.expect("it reads").is_none());
+    }
+
+    #[tokio::test]
+    async fn the_queue_behind_a_stalled_write_is_held_to_the_bounds() {
+        const CAP: usize = 3;
+        let logs = Logs::default();
+        let _logging = tracing::subscriber::set_default(logs.subscriber());
+        let directory = tempfile::tempdir().expect("a directory");
+        let bounds = Bounds {
+            max_messages: CAP,
+            max_bytes: 1 << 20,
+            write_timeout: SLACK + SLACK,
+        };
+        let spool = Spool::open(&directory.path().join("spool"), bounds).expect("it opens");
+        let stall = Stall::of(&spool);
+
+        for _ in 0..CAP {
+            let gave_up =
+                tokio::time::timeout(Duration::from_millis(20), spool.push(naming_the_patient()))
+                    .await;
+            assert!(
+                gave_up.is_err(),
+                "its exchange stopped waiting: {gave_up:?}"
+            );
+        }
+        assert_eq!(CAP, spool.queued(), "every record waits for its turn");
+        assert_eq!(Depth::default(), spool.depth());
+
+        let asked = Instant::now();
+        let refused = spool.push(naming_the_patient()).await;
+        assert!(
+            asked.elapsed() < bounds.write_timeout,
+            "refused at once, never waiting on the stall: {:?}",
+            asked.elapsed()
+        );
+        assert!(
+            matches!(refused, Err(SpoolError::Full { messages: CAP, .. })),
+            "{refused:?}"
+        );
+        assert_eq!(CAP, spool.queued(), "nothing is queued past the bounds");
+        assert_eq!(1, spool.refused(), "the refusal is counted");
+
+        stall.release();
+        let until = Instant::now() + SLACK;
+        while spool.depth().messages < CAP && Instant::now() < until {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(CAP, spool.depth().messages, "every queued record stored");
+        assert_eq!(0, spool.queued());
+        for _ in 0..CAP {
+            let stored = spool.oldest().await.expect("it reads").expect("one");
+            spool.remove(stored.sequence).await.expect("it removes");
+        }
+        assert!(
+            spool.oldest().await.expect("it reads").is_none(),
+            "each stored once"
+        );
+        let log = logs.text();
+        assert!(log.contains("refused=1"), "the refusal is logged: {log}");
+        assert!(!log.contains(PATIENT), "no log names the patient: {log}");
     }
 }

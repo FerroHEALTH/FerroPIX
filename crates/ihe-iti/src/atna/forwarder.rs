@@ -53,6 +53,8 @@ pub struct Status {
     pub reachable: bool,
     /// Whether the spool is on disk.
     pub durable: bool,
+    /// The messages the spool refused for want of room since it opened.
+    pub refused: u64,
 }
 
 /// Where a forwarder delivers to.
@@ -125,6 +127,7 @@ impl Forwarder {
             retries: self.retries.load(Ordering::Relaxed),
             reachable: self.reachable.load(Ordering::Relaxed),
             durable: self.spool.is_durable(),
+            refused: self.spool.refused(),
         }
     }
 
@@ -278,7 +281,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    use secrecy::ExposeSecret as _;
+    use secrecy::{ExposeSecret as _, SecretSlice};
     use tokio::io::AsyncReadExt as _;
     use tokio::net::TcpListener;
     use url::Url;
@@ -356,5 +359,92 @@ mod tests {
         assert_eq!(0, status.depth.messages);
         running.abort();
         assert!(!logs.text().contains(PATIENT), "{}", logs.text());
+    }
+
+    /// The RFC 5425 frame of `text`.
+    fn framed(text: &str) -> SecretSlice<u8> {
+        SecretSlice::from(format!("{} {text}", text.len()).into_bytes())
+    }
+
+    /// ITI TF-2 §3.20.4.1.1: the record of a failed exchange whose caller
+    /// stopped waiting while it was still queued behind another write is
+    /// written once that write ends, and delivered once.
+    #[tokio::test]
+    async fn a_record_given_up_while_queued_is_stored_and_delivered_once() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("a listener");
+        let url = Url::parse(&format!(
+            "tcp://{}",
+            listener.local_addr().expect("an address")
+        ))
+        .expect("a URL");
+        let timeouts = Timeouts {
+            connect: SLACK,
+            send: SLACK,
+        };
+        let repository =
+            Repository::unencrypted_for_development(&url, timeouts).expect("a repository");
+        let directory = tempfile::tempdir().expect("a directory");
+        let bounds = Bounds {
+            max_messages: 16,
+            max_bytes: 1 << 20,
+            write_timeout: BOUND,
+        };
+        let spool = Spool::open(&directory.path().join("spool"), bounds).expect("it opens");
+        let forwarder = Forwarder::new(spool.clone(), repository, Duration::from_millis(400));
+        let running = tokio::spawn(Arc::clone(&forwarder).run());
+        // The forwarder finds the spool empty and waits for a stored message.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let stall = Stall::of(&spool);
+
+        let holding = forwarder
+            .submit(framed("the write that holds the lock"))
+            .await;
+        assert!(
+            matches!(holding, Err(SpoolError::Late { .. })),
+            "{holding:?}"
+        );
+        let gave_up = tokio::time::timeout(
+            BOUND / 4,
+            forwarder.submit(framed("the failed exchange's record")),
+        )
+        .await;
+        assert!(
+            gave_up.is_err(),
+            "the exchange's time ran out while its record was queued"
+        );
+        assert_eq!(0, forwarder.status().depth.messages, "nothing stored yet");
+
+        stall.release();
+        let (mut stream, _) = tokio::time::timeout(SLACK, listener.accept())
+            .await
+            .expect("the forwarder connects once a message is stored")
+            .expect("a connection");
+        for text in [
+            "the write that holds the lock",
+            "the failed exchange's record",
+        ] {
+            let sent = framed(text);
+            let mut received = vec![0_u8; sent.expose_secret().len()];
+            tokio::time::timeout(SLACK, stream.read_exact(&mut received))
+                .await
+                .expect("the message arrives")
+                .expect("it reads");
+            assert_eq!(
+                sent.expose_secret(),
+                received.as_slice(),
+                "in the order they were queued"
+            );
+        }
+        let until = Instant::now() + SLACK;
+        while forwarder.status().delivered < 2 && Instant::now() < until {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let mut more = [0_u8; 1];
+        let extra = tokio::time::timeout(BOUND, stream.read(&mut more)).await;
+        assert!(extra.is_err(), "nothing is delivered twice: {extra:?}");
+        let status = forwarder.status();
+        assert_eq!(2, status.delivered, "each delivered once");
+        assert_eq!(0, status.depth.messages);
+        running.abort();
     }
 }

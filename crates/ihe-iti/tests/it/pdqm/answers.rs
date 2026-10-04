@@ -19,6 +19,7 @@ use super::{
     DOMAIN, EXAMPLE_BUNDLE, EXAMPLE_MAIDEN_NAME, EXAMPLE_PATIENT, FHIR_JSON, PROMPT, SEARCH,
     client, entry, outcome, schmidt, searchset, supplier, unreachable_client, vendored,
 };
+use crate::timing;
 
 async fn ask(server: &MockServer, query: &PatientQuery) -> Result<SearchResult, PdqmError> {
     client(server).search(query, PROMPT).await
@@ -254,12 +255,12 @@ async fn a_slow_supplier_times_out() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(SEARCH))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let answer = client(&server)
-        .search(&schmidt(), Duration::from_millis(200))
-        .await;
+    let client = client(&server);
+    let limit = Duration::from_millis(200);
+    let answer = timing::bounded(limit, client.search(&schmidt(), limit)).await;
     assert!(
         matches!(answer, Err(PdqmError::Timeout)),
         "a timeout, got {answer:?}"

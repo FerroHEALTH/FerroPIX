@@ -17,6 +17,7 @@ use super::{
     BLUE, FHIR_JSON, GREEN, OPERATION, PROMPT, client, manager, outcome, red_source, target,
     unreachable_client, vendored,
 };
+use crate::timing;
 
 const ALL: &str = "example/Parameters-pixm-response-mohralice-red-all.json";
 const TO_BLUE: &str = "example/Parameters-pixm-response-mohralice-red-to-blue.json";
@@ -241,12 +242,16 @@ async fn a_manager_that_does_not_answer_in_time_is_a_timeout() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path(OPERATION))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let answer = client(&server)
-        .cross_reference(&red_source(), &[target(BLUE)], Duration::from_millis(200))
-        .await;
+    let client = client(&server);
+    let limit = Duration::from_millis(200);
+    let answer = timing::bounded(
+        limit,
+        client.cross_reference(&red_source(), &[target(BLUE)], limit),
+    )
+    .await;
     assert!(matches!(answer, Err(PixmError::Timeout)), "got {answer:?}");
 }
 

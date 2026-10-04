@@ -21,6 +21,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::{
     BLUE, FHIR_JSON, OPERATION, PROMPT, RED, client, manager, outcome, target, unreachable_client,
 };
+use crate::timing;
 
 /// A value that must appear nowhere but in the request to the Manager.
 const SENTINEL: &str = "SENTINEL-4711";
@@ -115,10 +116,11 @@ async fn a_timeout_or_transport_failure_carries_no_request_url() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path(OPERATION))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let shown = rendered(&failure(&server, Duration::from_millis(200)).await);
+    let limit = Duration::from_millis(200);
+    let shown = rendered(&timing::bounded(limit, failure(&server, limit)).await);
     assert!(
         !shown.contains(SENTINEL),
         "the timeout carries the identifier"

@@ -17,6 +17,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::{BASE, FHIR_JSON, bundle, client, endpoint, full_url, matched, organization};
+use crate::timing;
 
 /// A budget of five seconds with `limits`.
 fn within(limits: Limits) -> Budget {
@@ -156,23 +157,23 @@ async fn the_entries_of_every_page_count_against_one_cap() {
 /// at the one deadline that bounds it whole.
 #[tokio::test]
 async fn one_deadline_bounds_the_whole_walk() {
+    const DEADLINE: Duration = Duration::from_millis(700);
     let server = cycling("Organization", 0, Duration::from_millis(150)).await;
+    let client = client(&server);
     let started = Instant::now();
-    let error = client(&server)
+    let ended_by = timing::deadline(DEADLINE);
+    let error = client
         .find(
             CareService::Organization,
             &[],
-            &mut Budget::new(
-                Instant::now() + Duration::from_millis(700),
-                Limits::default(),
-            ),
+            &mut Budget::new(started + DEADLINE, Limits::default()),
         )
         .await
         .expect_err("the walk outlasts its deadline");
     assert!(matches!(error, McsdError::Timeout), "{error:?}");
     assert!(error.exceeded() && !error.answered());
     assert!(
-        started.elapsed() < Duration::from_secs(2),
+        Instant::now() < ended_by,
         "the walk ended at its deadline, after {:?}",
         started.elapsed()
     );

@@ -16,6 +16,7 @@ use wiremock::{Mock, MockServer};
 use super::{
     PATH, PROMPT, SOAP_XML, Templated, answering, client, fixture, gateway, query, responding,
 };
+use crate::timing;
 
 async fn ask(server: &MockServer) -> Result<Discovery, XcpdError> {
     client()
@@ -261,16 +262,13 @@ async fn a_gateway_silent_past_the_timeout_is_a_timeout() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(PATH))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let answer = client()
-        .discover(
-            &responding(&server),
-            &query(),
-            None,
-            Duration::from_millis(200),
-        )
-        .await;
+    let client = client();
+    let gateway = responding(&server);
+    let query = query();
+    let limit = Duration::from_millis(200);
+    let answer = timing::bounded(limit, client.discover(&gateway, &query, None, limit)).await;
     assert!(matches!(answer, Err(XcpdError::Timeout)), "{answer:?}");
 }

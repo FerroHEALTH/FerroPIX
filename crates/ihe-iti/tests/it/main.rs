@@ -27,7 +27,13 @@ mod pixm;
 #[cfg(feature = "pmir")]
 mod pmir;
 #[cfg(test)]
-#[cfg(feature = "atna")]
+#[cfg(any(
+    feature = "atna",
+    feature = "mcsd",
+    feature = "pdqm",
+    feature = "pixm",
+    feature = "xcpd"
+))]
 mod timing;
 #[cfg(test)]
 #[cfg(feature = "xcpd")]

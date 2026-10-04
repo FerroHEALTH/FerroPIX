@@ -23,6 +23,7 @@ use super::{
     DOMAIN, FHIR_JSON, PROMPT, SEARCH, client, entry, outcome, searchset, supplier,
     unreachable_client,
 };
+use crate::timing;
 
 /// A value that must appear nowhere but in the request to the Supplier.
 const SENTINEL: &str = "SENTINEL-4711";
@@ -161,11 +162,12 @@ async fn a_timeout_or_transport_failure_carries_no_url() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(SEARCH))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let error = client(&server)
-        .search(&query(), Duration::from_millis(200))
+    let client = client(&server);
+    let limit = Duration::from_millis(200);
+    let error = timing::bounded(limit, client.search(&query(), limit))
         .await
         .expect_err("a timeout");
     assert!(
@@ -200,7 +202,7 @@ async fn a_page_link_and_its_failure_carry_no_value() {
         .await;
     Mock::given(method("GET"))
         .and(path("/fhir/Patient"))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
     let client = client(&server);
@@ -211,8 +213,8 @@ async fn a_page_link_and_its_failure_carry_no_value() {
         "the Debug of a result or a page link"
     );
     assert_eq!("Page(***)", format!("{page:?}"), "the family's placeholder");
-    let error = client
-        .next_page(page, Duration::from_millis(200))
+    let limit = Duration::from_millis(200);
+    let error = timing::bounded(limit, client.next_page(page, limit))
         .await
         .expect_err("a timeout");
     assert!(

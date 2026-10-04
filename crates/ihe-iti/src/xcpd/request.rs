@@ -26,7 +26,7 @@ const HL7_INTERACTION: &str = "2.16.840.1.113883.1.6";
 
 /// The WS-Addressing anonymous address: the answer comes back on the
 /// request's own connection, the synchronous exchange (Appendix V.5).
-const ANONYMOUS: &str = "http://www.w3.org/2005/08/addressing/anonymous";
+pub(super) const ANONYMOUS: &str = "http://www.w3.org/2005/08/addressing/anonymous";
 
 /// Whether a message belongs to production, training or debugging
 /// (`processingCode`, Appendix O Table O.1.1-1).

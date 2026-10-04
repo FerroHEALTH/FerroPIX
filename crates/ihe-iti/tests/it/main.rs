@@ -7,6 +7,9 @@
 //! the test-scoped relaxations of `clippy.toml` reach their helpers too.
 
 #[cfg(test)]
+#[cfg(feature = "atna")]
+mod atna;
+#[cfg(test)]
 mod features;
 #[cfg(test)]
 #[cfg(feature = "mcsd")]

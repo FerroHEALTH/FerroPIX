@@ -10,12 +10,16 @@
 //! - `pmir`: Patient Master Identity Registry, ITI-93 and ITI-94.
 //! - `xcpd`: Cross-Community Patient Discovery, ITI-55, the one profile on
 //!   SOAP 1.2 with HL7 v3 and SAML XUA.
+//! - `atna`: Audit Trail and Node Authentication, ITI-20, the DICOM audit
+//!   message over syslog with TLS.
 //!
 //! The profiles are published at <https://profiles.ihe.net/ITI/>. The crate
 //! depends on no application: it is the profiles' transactions as Rust, for
 //! any caller. The profile modules land with their FerroFED issues (Annex A).
 #![doc(test(attr(deny(warnings))))]
 
+#[cfg(feature = "atna")]
+pub mod atna;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd"))]
@@ -26,7 +30,13 @@ pub mod pdqm;
 pub mod pixm;
 #[cfg(feature = "pmir")]
 pub mod pmir;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "xcpd"))]
+#[cfg(any(
+    feature = "atna",
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "xcpd"
+))]
 mod redact;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd"))]
 mod search;

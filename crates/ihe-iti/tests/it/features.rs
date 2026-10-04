@@ -9,15 +9,17 @@
 //! them as a dependency of its own. `quick-xml` itself is in every FHIR
 //! feature's graph already, through `fhir-types`, which depends on it
 //! unconditionally; what `xcpd` adds is the crate's own use of it, its
-//! message and query ids, and its clock. No feature reaches a crate of the
-//! application this crate was written for, so any caller can use it as it is.
+//! message and query ids, and its clock. `atna` writes XML and timestamps
+//! too, so it shares the clock and the XML writer, and never the message ids.
+//! No feature reaches a crate of the application this crate was written for,
+//! so any caller can use it as it is.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
 /// Every feature of the crate.
-const FEATURES: &[&str] = &["pixm", "pdqm", "mcsd", "pmir", "xcpd"];
+const FEATURES: &[&str] = &["atna", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
 
 /// The crates only `xcpd` compiles.
 const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
@@ -82,7 +84,15 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
     for name in XCPD_DIRECT {
         assert!(xcpd_direct.contains(*name), "xcpd names {name}");
     }
-    for feature in FEATURES.iter().filter(|feature| **feature != "xcpd") {
+    let atna = tree("atna", None);
+    assert!(
+        !atna.contains("uuid"),
+        "atna compiles the message ids: {atna:?}"
+    );
+    for feature in FEATURES
+        .iter()
+        .filter(|feature| !["xcpd", "atna"].contains(*feature))
+    {
         let closure = tree(feature, None);
         let leaked: Vec<&&str> = XCPD_ONLY
             .iter()

@@ -13,6 +13,7 @@ framework, with a feature per profile.
 | `mcsd` | Mobile Care Services Discovery | ITI-90, ITI-91 |
 | `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
+| `atna` | Audit Trail and Node Authentication | ITI-20 |
 
 The crate depends on no application, so a federation gateway, a master patient
 index or any other caller can use it as it is. Only the `xcpd` feature may carry
@@ -130,14 +131,46 @@ error carries a value or the gateway's free text.
 
 `XcpdClient::audited` hands the ITI-55 Initiating Gateway audit message of
 every exchange (§3.55.5.1.1) to an `AuditRecorder` you route to your ATNA
-audit repository. The message carries the query parameters, which name the
-patient, as a `SecretString`. A message the recorder refuses fails the
-discovery with `XcpdError::Audit`, so no answer is used without its audit.
+audit repository; the client awaits `record` before it returns the answer.
+The message carries the query parameters, which name the patient, as a
+`SecretString`. A message the recorder refuses fails the discovery with
+`XcpdError::Audit`, so no answer is used without its audit. With `atna`,
+`AuditEvent::message` writes it as the DICOM PS3.15 audit message the
+Initiating Gateway's table fills.
 
 The XML is read and written with `quick-xml`, which the FHIR features
 compile already through `fhir-types`; `xcpd` adds only `uuid` for the
-message ids and `jiff` for the creation time, and no other feature compiles
-either.
+message ids and `jiff` for the creation time, and no other feature but
+`atna`, which writes timestamps too, compiles either.
+
+## ATNA (`atna`)
+
+`ihe_iti::atna` is the sending half of ITI-20, Record Audit Event (ITI TF-2
+§3.20), as syslog with the DICOM message:
+
+- `message::AuditMessage`: the DICOM PS3.15 Annex A.5 audit message, with
+  its participant objects held as secrets and written to UTF-8 XML with no
+  byte order mark.
+- `syslog::Sender`: the RFC 5424 message with the PRI `<85>` and the MSGID
+  `IHE+RFC-3881` §3.20.4.1.2 fixes, in its RFC 5425 octet-counted frame.
+- `repository::Repository`: the connection to an Audit Record Repository,
+  `tls://host[:port]` over rustls at TLS 1.2 or later with the platform's
+  roots and yours, and an optional client certificate;
+  `unencrypted_for_development` admits `tcp://` for development and tests.
+- `spool::Spool`: the bounded store a sender that cannot reach its
+  repository keeps the records in (§3.20.4.1.1), one fsynced file per
+  message in a directory private to its owner, or a queue in memory. A
+  message that cannot be read or is no whole frame moves to its
+  `quarantine` subdirectory, so the drain never stalls on it.
+- `repository::Timeouts`: the connect timeout, and the send timeout that
+  bounds the TLS handshake and each write and flush.
+- `forwarder::Forwarder`: stores every message first, then delivers it from
+  the spool in order, retries a transport failure with a jittered backoff
+  capped where the caller says, and reports the spool's depth, its
+  quarantine, its deliveries and its retries.
+
+The RESTful ATNA FHIR feed is an option of ITI-20 this crate does not
+send.
 
 The other profile modules hold their place and land with their FerroFED issues
 (<https://github.com/FerroHEALTH/FerroFED>).

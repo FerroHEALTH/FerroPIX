@@ -25,8 +25,9 @@ use super::{
 #[derive(Default)]
 struct Kept(Mutex<Vec<AuditEvent>>);
 
+#[async_trait::async_trait]
 impl AuditRecorder for Kept {
-    fn record(&self, event: AuditEvent) -> Result<(), AuditError> {
+    async fn record(&self, event: AuditEvent) -> Result<(), AuditError> {
         self.0
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -43,8 +44,9 @@ struct Refusing;
 #[error("synthetic audit repository outage")]
 struct Outage;
 
+#[async_trait::async_trait]
 impl AuditRecorder for Refusing {
-    fn record(&self, _event: AuditEvent) -> Result<(), AuditError> {
+    async fn record(&self, _event: AuditEvent) -> Result<(), AuditError> {
         Err(AuditError(Box::new(Outage)))
     }
 }
@@ -190,4 +192,63 @@ fn the_fixed_codes_are_the_table_s() {
     .map(EventOutcome::code)
     .collect();
     assert_eq!(vec!["0", "4", "8"], codes, "DICOM PS3.15 Annex A.5");
+}
+
+#[cfg(feature = "atna")]
+#[tokio::test]
+async fn the_dicom_message_fills_the_initiating_gateway_table() {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD;
+    use ihe_iti::atna::message::{AccessPoint, AuditSource};
+
+    let kept = Arc::new(Kept::default());
+    let audited = client().audited(kept.clone());
+    let server = answering("no-match.xml").await;
+    let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
+    let _answer = audited
+        .discover(&responding(&server), &asked, None, PROMPT)
+        .await;
+    let event = kept.events().remove(0);
+    let source = AuditSource {
+        id: "gateway.example.org".to_owned(),
+        enterprise_site: Some("2.999.40".to_owned()),
+    };
+    let host = AccessPoint {
+        type_code: "1",
+        id: "gateway.example.org".to_owned(),
+    };
+    let xml = event.message(&source, &host).to_xml().expect("written");
+    let xml = String::from_utf8(xml.expose_secret().to_vec()).expect("UTF-8");
+
+    let source_participant = format!(
+        "<ActiveParticipant UserID=\"http://www.w3.org/2005/08/addressing/anonymous\" AlternativeUserID=\"{}\" UserIsRequestor=\"true\" NetworkAccessPointID=\"gateway.example.org\" NetworkAccessPointTypeCode=\"1\"><RoleIDCode csd-code=\"110153\" codeSystemName=\"DCM\" originalText=\"Source Role ID\"/>",
+        std::process::id()
+    );
+    let detail = format!(
+        "<ParticipantObjectDetail type=\"ihe:homeCommunityID\" value=\"{}\"/>",
+        STANDARD.encode("urn:oid:2.999.40")
+    );
+    let query = format!(
+        "<ParticipantObjectQuery>{}</ParticipantObjectQuery>",
+        STANDARD.encode(event.query.expose_secret())
+    );
+    for expected in [
+        "<EventIdentification EventActionCode=\"E\"",
+        "EventOutcomeIndicator=\"0\"",
+        "<EventID csd-code=\"110112\" codeSystemName=\"DCM\" originalText=\"Query\"/>",
+        "<EventTypeCode csd-code=\"ITI-55\" codeSystemName=\"IHE Transactions\" originalText=\"Cross Gateway Patient Discovery\"/>",
+        &source_participant,
+        "UserIsRequestor=\"false\" NetworkAccessPointID=\"127.0.0.1\" NetworkAccessPointTypeCode=\"2\"><RoleIDCode csd-code=\"110152\" codeSystemName=\"DCM\" originalText=\"Destination Role ID\"/>",
+        "<AuditSourceIdentification AuditEnterpriseSiteID=\"2.999.40\" AuditSourceID=\"gateway.example.org\"/>",
+        "ParticipantObjectTypeCode=\"2\" ParticipantObjectTypeCodeRole=\"24\"><ParticipantObjectIDTypeCode csd-code=\"ITI-55\"",
+        &detail,
+        &query,
+    ] {
+        assert!(xml.contains(expected), "{expected} in {xml}");
+    }
+    assert!(
+        !xml.contains(PATIENT_VALUE),
+        "the identifier travels only base64-encoded inside the query"
+    );
+    assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?><AuditMessage>"));
 }

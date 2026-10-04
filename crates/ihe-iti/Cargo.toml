@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ihe-iti"
-description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile"
+description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.13"
+version = "0.0.14"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -78,6 +78,7 @@ pmir = []
 # supplied by the caller and embedded as written, so no signing crate is
 # compiled.
 xcpd = [
+  "dep:async-trait",
   "dep:http",
   "dep:jiff",
   "dep:quick-xml",
@@ -87,23 +88,51 @@ xcpd = [
   "dep:url",
   "dep:uuid",
 ]
+# ATNA, the audit trail (ITI-20, #418): the DICOM PS3.15 audit message, the
+# RFC 5424 syslog message it travels in, the RFC 5425 TLS connection to an
+# Audit Record Repository on rustls with the platform's roots, and the bounded
+# store-and-forward spool ITI-20 requires of a sender. With `xcpd`, it also
+# writes the ITI-55 audit message.
+atna = [
+  "dep:base64",
+  "dep:jiff",
+  "dep:quick-xml",
+  "dep:rustls",
+  "dep:rustls-platform-verifier",
+  "dep:secrecy",
+  "dep:thiserror",
+  "dep:tokio",
+  "dep:tokio-rustls",
+  "dep:tracing",
+  "dep:url",
+]
 
 [dependencies]
+async-trait = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
+rustls = { workspace = true, optional = true }
+rustls-platform-verifier = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["fs", "io-util", "net", "rt", "sync", "time"] }
+tokio-rustls = { workspace = true, optional = true, features = ["tls12", "aws_lc_rs"] }
+tracing = { workspace = true, optional = true }
 url = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+base64 = { workspace = true }
+async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["rt", "macros", "time"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util"] }
 wiremock = { workspace = true }
 
 [lints]

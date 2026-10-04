@@ -164,28 +164,110 @@ impl fmt::Debug for AuditEvent {
 /// Audit Record Repository (ITI TF-1 Table 27.1.3-1 groups every XCPD actor
 /// with an ATNA Secure Node or Secure Application).
 ///
-/// [`AuditRecorder::record`] is called once per exchange, on the task that
-/// ran it, so it must not block: a recorder that sends over the network
-/// queues the event and sends it elsewhere, and one that needs durability
-/// buffers it locally.
+/// [`AuditRecorder::record`] is awaited once per exchange, before its answer
+/// is returned: a recorder that sends over the network stores the event
+/// first and delivers it elsewhere, as ITI-20 has a sender do (ITI TF-2
+/// §3.20.4.1.1), and returns once the event is stored.
 ///
 /// The audit message is part of the exchange (§3.55.5.1): an event the
 /// recorder cannot accept fails the discovery with
 /// [`XcpdError::Audit`](super::error::XcpdError::Audit), and its answer is
 /// never used.
+#[async_trait::async_trait]
 pub trait AuditRecorder: Send + Sync {
     /// Records `event`.
     ///
     /// # Errors
     ///
     /// An [`AuditError`] when the recorder cannot accept the event.
-    fn record(&self, event: AuditEvent) -> Result<(), AuditError>;
+    async fn record(&self, event: AuditEvent) -> Result<(), AuditError>;
 }
 
 /// Why an audit recorder could not accept an event.
 #[derive(Debug, thiserror::Error)]
 #[error("the audit recorder could not accept the ITI-55 audit message")]
 pub struct AuditError(#[source] pub Box<dyn std::error::Error + Send + Sync>);
+
+/// The `RoleIDCode` of the source: `EV(110153, DCM, "Source Role ID")`.
+#[cfg(feature = "atna")]
+pub const SOURCE_ROLE: (&str, &str, &str) = ("110153", "DCM", "Source Role ID");
+
+/// The `RoleIDCode` of the destination:
+/// `EV(110152, DCM, "Destination Role ID")`.
+#[cfg(feature = "atna")]
+pub const DESTINATION_ROLE: (&str, &str, &str) = ("110152", "DCM", "Destination Role ID");
+
+#[cfg(feature = "atna")]
+impl AuditEvent {
+    /// The DICOM PS3.15 audit message of this event, as the Initiating
+    /// Gateway's audit table fills it (§3.55.5.1.1), written by `source` on
+    /// the host `host`.
+    #[must_use]
+    pub fn message(
+        &self,
+        source: &crate::atna::message::AuditSource,
+        host: &crate::atna::message::AccessPoint,
+    ) -> crate::atna::message::AuditMessage {
+        use crate::atna::message::{
+            AccessPoint, ActiveParticipant, AuditMessage, CodedValue, EventIdentification,
+            ParticipantObject,
+        };
+        let transaction = CodedValue::of(EVENT_TYPE);
+        AuditMessage {
+            event: EventIdentification {
+                event_id: CodedValue::of(EVENT_ID),
+                action: EVENT_ACTION,
+                date_time: self.date_time,
+                outcome: self.outcome.code(),
+                type_codes: vec![transaction.clone()],
+            },
+            participants: vec![
+                ActiveParticipant {
+                    // NOTE: ITI TF-2 §3.55.5.1.1 leaves a synchronous exchange's source UserID
+                    // not specialized, and PS3.15 A.5.1 requires one: it is the wsa:ReplyTo sent.
+                    user_id: super::request::ANONYMOUS.to_owned(),
+                    alternative_user_id: Some(self.process_id.to_string()),
+                    user_is_requestor: true,
+                    role_id_codes: vec![CodedValue::of(SOURCE_ROLE)],
+                    access_point: Some(host.clone()),
+                },
+                ActiveParticipant {
+                    user_id: self.destination.to_string(),
+                    alternative_user_id: None,
+                    user_is_requestor: false,
+                    role_id_codes: vec![CodedValue::of(DESTINATION_ROLE)],
+                    access_point: self
+                        .destination_access_point
+                        .as_ref()
+                        .map(|point| AccessPoint {
+                            type_code: point.type_code(),
+                            id: point.id(),
+                        }),
+                },
+            ],
+            source: source.clone(),
+            objects: vec![ParticipantObject {
+                // NOTE: ITI TF-2 §3.55.5.1.1 leaves ParticipantObjectID optional and PS3.15
+                // A.5.1 requires the attribute, so it is written empty.
+                id: SecretString::from(String::new()),
+                type_code: Some("2"),
+                type_code_role: Some("24"),
+                id_type_code: transaction,
+                query: Some(self.query.clone()),
+                details: self
+                    .home_community
+                    .iter()
+                    .map(|community| {
+                        (
+                            HOME_COMMUNITY_DETAIL.to_owned(),
+                            SecretString::from(community.to_string()),
+                        )
+                    })
+                    .collect(),
+            }],
+        }
+    }
+}
 
 /// The destination `endpoint` as the audit names it: without userinfo.
 pub(super) fn destination(endpoint: &Url) -> Url {

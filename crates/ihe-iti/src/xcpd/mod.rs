@@ -185,7 +185,7 @@ impl XcpdClient {
             };
             // NOTE: ITI TF-2 §3.55.5.1, ITI TF-1 Table 27.1.3-1: the actor shall record the
             // exchange, so an answer whose audit message was not accepted is not used.
-            recorder.record(event).map_err(XcpdError::Audit)?;
+            recorder.record(event).await.map_err(XcpdError::Audit)?;
         }
         answer
     }

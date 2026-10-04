@@ -75,27 +75,67 @@ pub enum LrzaError {
 /// [`LrzaError::EmptyValue`] for a URA identifier without a value, and
 /// [`LrzaError::Ambiguous`] for two different URAs.
 pub fn ura(organization: &Organization) -> Result<Option<Ura>, LrzaError> {
+    let identifiers = organization.identifier.iter().map(|identifier| {
+        (
+            identifier
+                .system
+                .as_ref()
+                .and_then(|uri| uri.value.as_deref()),
+            identifier
+                .value
+                .as_ref()
+                .and_then(|value| value.value.as_deref()),
+        )
+    });
+    match ura_in(identifiers)? {
+        Some(ura) => Ok(Some(ura)),
+        None if organization.part_of.is_some() => Ok(None),
+        None => Err(LrzaError::Missing),
+    }
+}
+
+/// Returns the URA among an organisation's identifiers, each given as its
+/// `system` and its `value`: `Some` when they carry one URA, `None` when
+/// they carry none.
+///
+/// It applies the rules of [`ura`] to identifiers read from anywhere, such as
+/// a registry that kept an organisation's identifiers, and leaves the
+/// `partOf` rule to the caller, which alone knows the hierarchy.
+///
+/// # Examples
+///
+/// ```
+/// use nl_generic_functions::identification::URA_SYSTEM;
+/// use nl_generic_functions::lrza;
+///
+/// let identifiers = [
+///     (Some("urn:oid:2.999.7"), Some("org-1")),
+///     (Some(URA_SYSTEM), Some("ura-test-0001")),
+/// ];
+/// let ura = lrza::ura_in(identifiers)?;
+/// assert_eq!(ura.map(|ura| ura.to_string()).as_deref(), Some("ura-test-0001"));
+/// # Ok::<(), lrza::LrzaError>(())
+/// ```
+///
+/// # Errors
+///
+/// [`LrzaError::EmptyValue`] for a URA identifier without a value, and
+/// [`LrzaError::Ambiguous`] for two different URAs.
+pub fn ura_in<'a>(
+    identifiers: impl IntoIterator<Item = (Option<&'a str>, Option<&'a str>)>,
+) -> Result<Option<Ura>, LrzaError> {
     let mut found = BTreeSet::new();
-    for identifier in &organization.identifier {
-        let system = identifier
-            .system
-            .as_ref()
-            .and_then(|uri| uri.value.as_deref());
+    for (system, value) in identifiers {
         if system != Some(URA_SYSTEM) {
             continue;
         }
-        let value = identifier
-            .value
-            .as_ref()
-            .and_then(|value| value.value.as_deref())
-            .ok_or(LrzaError::EmptyValue)?;
+        let value = value.ok_or(LrzaError::EmptyValue)?;
         found.insert(Ura::new(value).map_err(|_empty| LrzaError::EmptyValue)?);
     }
     let mut found = found.into_iter();
     match (found.next(), found.next()) {
         (Some(ura), None) => Ok(Some(ura)),
         (Some(_), Some(_)) => Err(LrzaError::Ambiguous),
-        (None, _) if organization.part_of.is_some() => Ok(None),
-        (None, _) => Err(LrzaError::Missing),
+        (None, _) => Ok(None),
     }
 }

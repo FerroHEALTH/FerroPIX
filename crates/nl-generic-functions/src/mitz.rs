@@ -3,7 +3,7 @@
 
 //! GF-Consent through Mitz (feature `mitz`).
 //!
-//! Mitz holds the patient's recorded consent, asked as an optional
-//! pre-filter before localization.
+//! Mitz answers a closed allow or deny question over the patient's recorded
+//! consent, the optional Step-1 consent pre-filter (Annex B §B.6, N27a).
 
-// TODO(#87): the Mitz consent client this module holds the place for.
+// TODO(#475): the Mitz consent client this module holds the place for.

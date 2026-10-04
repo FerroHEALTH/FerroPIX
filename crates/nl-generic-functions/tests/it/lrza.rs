@@ -134,3 +134,39 @@ fn a_ura_identifier_without_a_value_is_refused() {
     }));
     assert_eq!(lrza::ura(&empty), Err(LrzaError::EmptyValue));
 }
+
+const URA: &str = "http://fhir.nl/fhir/NamingSystem/ura";
+
+#[test]
+fn identifiers_read_elsewhere_name_their_ura_by_the_same_rules() {
+    let one = [
+        (Some("urn:oid:2.999.7"), Some("org-1")),
+        (Some(URA), Some("ura-test-0001")),
+        (Some(URA), Some("ura-test-0001")),
+    ];
+    assert_eq!(
+        lrza::ura_in(one).map(|ura| ura.map(|ura| ura.to_string())),
+        Ok(Some("ura-test-0001".to_owned())),
+        "one URA, written twice, is one care provider"
+    );
+    assert_eq!(
+        lrza::ura_in([(Some("urn:oid:2.999.7"), Some("org-1"))]),
+        Ok(None),
+        "no URA: the partOf rule is the caller's"
+    );
+    assert_eq!(
+        lrza::ura_in([
+            (Some(URA), Some("ura-test-0001")),
+            (Some(URA), Some("ura-test-0002")),
+        ]),
+        Err(LrzaError::Ambiguous)
+    );
+    assert_eq!(
+        lrza::ura_in([(Some(URA), None)]),
+        Err(LrzaError::EmptyValue)
+    );
+    assert_eq!(
+        lrza::ura_in([(Some(URA), Some(""))]),
+        Err(LrzaError::EmptyValue)
+    );
+}

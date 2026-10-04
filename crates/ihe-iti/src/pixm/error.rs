@@ -59,6 +59,11 @@ pub enum PixmError {
     /// The answer does not hold to ITI-83.
     #[error("the PIX Manager's answer does not hold to ITI-83")]
     Malformed(#[from] Malformation),
+    /// The audit recorder could not accept the exchange's audit record, so
+    /// its answer is not used (feature `balp`, §2:3.83.5.1.1).
+    #[cfg(feature = "balp")]
+    #[error("the ITI-83 audit record could not be recorded")]
+    Audit(#[source] crate::balp::AuditError),
 }
 
 /// How an answer departs from ITI-83 (§2:3.83.4.2.2.1, the

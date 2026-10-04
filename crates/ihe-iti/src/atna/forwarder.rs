@@ -9,11 +9,15 @@
 //! [`Forwarder::submit`] only ever writes to the spool: it never waits on
 //! the network, so a slow repository never holds an exchange.
 //!
-//! [`Forwarder::run`] is the delivery loop: it keeps one connection open,
-//! writes each stored message to it within the repository's timeouts,
-//! removes the message once it is written, and after any transport failure
-//! drops the connection and retries with an exponential backoff, with
-//! jitter, capped at the configured longest wait.
+//! [`Forwarder::run`] is the delivery loop. To a syslog repository it keeps
+//! one connection open, writes each stored message to it within the
+//! repository's timeouts, removes the message once it is written, and after
+//! any transport failure drops the connection and retries with an
+//! exponential backoff, with jitter, capped at the configured longest wait.
+//! To a FHIR Feed repository (feature `balp`) it posts each stored record,
+//! removes it on a `2xx`, retries the same way after a failure that may
+//! pass, and quarantines a record the repository refused, so the drain goes
+//! on.
 
 use std::hash::BuildHasher as _;
 use std::sync::Arc;
@@ -23,8 +27,10 @@ use std::time::{Duration, Instant};
 use secrecy::SecretSlice;
 use tokio::sync::Notify;
 
+#[cfg(feature = "balp")]
+use super::feed::{FeedError, FeedRepository};
 use super::repository::{Connection, Repository};
-use super::spool::{Depth, Spool, SpoolError};
+use super::spool::{Depth, Spool, SpoolError, Stored};
 
 /// The first wait after a failed delivery.
 const FIRST_RETRY: Duration = Duration::from_millis(250);
@@ -46,11 +52,21 @@ pub struct Status {
     pub durable: bool,
 }
 
+/// Where a forwarder delivers to.
+#[derive(Debug)]
+enum Destination {
+    /// A syslog repository (ITI TF-2 §3.20.4.1).
+    Syslog(Repository),
+    /// A FHIR Feed repository (ITI TF-2 §3.20.4.2).
+    #[cfg(feature = "balp")]
+    Feed(FeedRepository),
+}
+
 /// The store-and-forward sender to one Audit Record Repository.
 #[derive(Debug)]
 pub struct Forwarder {
     spool: Spool,
-    repository: Repository,
+    destination: Destination,
     retry_max: Duration,
     wake: Notify,
     delivered: AtomicU64,
@@ -59,13 +75,25 @@ pub struct Forwarder {
 }
 
 impl Forwarder {
-    /// The sender of the messages in `spool` to `repository`, waiting at
-    /// most `retry_max` between two attempts.
+    /// The sender of the syslog frames in `spool` to `repository`, waiting
+    /// at most `retry_max` between two attempts.
     #[must_use]
     pub fn new(spool: Spool, repository: Repository, retry_max: Duration) -> Arc<Self> {
+        Self::to(spool, Destination::Syslog(repository), retry_max)
+    }
+
+    /// The sender of the `AuditEvent` records in `spool` to the FHIR Feed
+    /// repository `feed`, waiting at most `retry_max` between two attempts.
+    #[cfg(feature = "balp")]
+    #[must_use]
+    pub fn fhir_feed(spool: Spool, feed: FeedRepository, retry_max: Duration) -> Arc<Self> {
+        Self::to(spool, Destination::Feed(feed), retry_max)
+    }
+
+    fn to(spool: Spool, destination: Destination, retry_max: Duration) -> Arc<Self> {
         Arc::new(Self {
             spool,
-            repository,
+            destination,
             retry_max: retry_max.max(FIRST_RETRY),
             wake: Notify::new(),
             delivered: AtomicU64::new(0),
@@ -103,20 +131,57 @@ impl Forwarder {
     /// The caller spawns it once and aborts the task to stop it; a message
     /// in flight then stays stored and is delivered again by the next run.
     pub async fn run(self: Arc<Self>) {
+        match &self.destination {
+            Destination::Syslog(repository) => self.run_syslog(repository).await,
+            #[cfg(feature = "balp")]
+            Destination::Feed(feed) => self.run_feed(feed).await,
+        }
+    }
+
+    /// The oldest stored message, after waiting for one while the spool is
+    /// empty; `None` after a wake-up or after a failure to read the spool,
+    /// which has backed off.
+    async fn next(&self, retry: &mut Duration) -> Option<Stored> {
+        match self.spool.oldest().await {
+            Ok(Some(stored)) => Some(stored),
+            Ok(None) => {
+                self.wake.notified().await;
+                None
+            }
+            Err(error) => {
+                tracing::warn!(error = %chain(&error), "the audit spool could not be read");
+                *retry = self.back_off(*retry).await;
+                None
+            }
+        }
+    }
+
+    /// Removes the delivered message `sequence` and counts it.
+    async fn delivered(&self, sequence: u64, retry: &mut Duration) {
+        self.reachable.store(true, Ordering::Relaxed);
+        *retry = FIRST_RETRY;
+        match self.spool.remove(sequence).await {
+            Ok(()) => {
+                self.delivered.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(error) => {
+                tracing::warn!(
+                    error = %chain(&error),
+                    "a delivered audit message could not be removed from the spool"
+                );
+                *retry = self.back_off(*retry).await;
+            }
+        }
+    }
+
+    // NOTE: RFC 5425 §4.3 carries no application-level acknowledgement, so a
+    // syslog repository never refuses a frame: only a transport failure retries.
+    async fn run_syslog(&self, repository: &Repository) {
         let mut connection: Option<Connection> = None;
         let mut retry = FIRST_RETRY;
         loop {
-            let stored = match self.spool.oldest().await {
-                Ok(Some(stored)) => stored,
-                Ok(None) => {
-                    self.wake.notified().await;
-                    continue;
-                }
-                Err(error) => {
-                    tracing::warn!(error = %chain(&error), "the audit spool could not be read");
-                    retry = self.back_off(retry).await;
-                    continue;
-                }
+            let Some(stored) = self.next(&mut retry).await else {
+                continue;
             };
             let reusable = match connection.take() {
                 Some(mut open) => (!open.is_closed().await).then_some(open),
@@ -124,7 +189,7 @@ impl Forwarder {
             };
             let mut open = match reusable {
                 Some(open) => open,
-                None => match self.repository.connect().await {
+                None => match repository.connect().await {
                     Ok(open) => open,
                     Err(error) => {
                         tracing::warn!(
@@ -145,16 +210,40 @@ impl Forwarder {
                 continue;
             }
             connection = Some(open);
-            self.reachable.store(true, Ordering::Relaxed);
-            retry = FIRST_RETRY;
-            match self.spool.remove(stored.sequence).await {
-                Ok(()) => {
-                    self.delivered.fetch_add(1, Ordering::Relaxed);
+            self.delivered(stored.sequence, &mut retry).await;
+        }
+    }
+
+    // NOTE: the `RESTful` ATNA supplement §3.20.4.3.3 leaves a failure to the
+    // client: a refusal is quarantined, every other failure is retried.
+    #[cfg(feature = "balp")]
+    async fn run_feed(&self, feed: &FeedRepository) {
+        let mut retry = FIRST_RETRY;
+        loop {
+            let Some(stored) = self.next(&mut retry).await else {
+                continue;
+            };
+            match feed.send(&stored.message).await {
+                Ok(()) => self.delivered(stored.sequence, &mut retry).await,
+                Err(FeedError::Rejected { status }) => {
+                    self.reachable.store(true, Ordering::Relaxed);
+                    tracing::error!(
+                        sequence = stored.sequence,
+                        status = status.as_u16(),
+                        "the audit repository refused an AuditEvent; it is quarantined"
+                    );
+                    if let Err(error) = self.spool.reject(stored.sequence).await {
+                        tracing::warn!(
+                            error = %chain(&error),
+                            "a refused audit message could not be quarantined"
+                        );
+                        retry = self.back_off(retry).await;
+                    }
                 }
                 Err(error) => {
                     tracing::warn!(
                         error = %chain(&error),
-                        "a delivered audit message could not be removed from the spool"
+                        "an AuditEvent could not be delivered; it stays spooled"
                     );
                     retry = self.back_off(retry).await;
                 }

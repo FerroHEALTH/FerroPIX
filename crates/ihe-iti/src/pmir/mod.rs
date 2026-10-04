@@ -55,12 +55,16 @@
 //! # }
 //! ```
 
+#[cfg(feature = "balp")]
+pub mod audit;
 pub mod error;
 pub mod feed;
 mod message;
 pub mod subscription;
 
 use std::fmt;
+#[cfg(feature = "balp")]
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::StatusCode;
@@ -84,6 +88,8 @@ const LIMIT: usize = 1 << 20;
 pub struct PmirSubscriber {
     endpoint: Url,
     http: reqwest::Client,
+    #[cfg(feature = "balp")]
+    audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
 
 impl PmirSubscriber {
@@ -100,7 +106,44 @@ impl PmirSubscriber {
     /// without a query or a fragment.
     pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
         let endpoint = crate::search::under_base(base, "Subscription").ok_or(InvalidInput::Base)?;
-        Ok(Self { endpoint, http })
+        Ok(Self {
+            endpoint,
+            http,
+            #[cfg(feature = "balp")]
+            audit: None,
+        })
+    }
+
+    /// This subscriber, recording the audit record of every exchange with
+    /// the Registry through `recorder` (§2:3.94.5.1, feature `balp`).
+    ///
+    /// An audited subscriber records each exchange before it returns,
+    /// whatever its outcome; one whose record the recorder does not accept
+    /// fails with [`SubscribeError::Audit`], and its answer is not used.
+    #[cfg(feature = "balp")]
+    #[must_use]
+    pub fn audited(mut self, recorder: Arc<dyn crate::balp::AuditRecorder>) -> Self {
+        self.audit = Some(recorder);
+        self
+    }
+
+    /// Records the exchange `exchange` describes, when the subscriber is
+    /// audited, and returns `result` unless the record was refused.
+    #[cfg(feature = "balp")]
+    async fn audit<T>(
+        &self,
+        exchange: impl FnOnce(&Result<T, SubscribeError>) -> crate::balp::Exchange,
+        result: Result<T, SubscribeError>,
+    ) -> Result<T, SubscribeError> {
+        if let Some(recorder) = &self.audit {
+            // NOTE: PMIR §2:3.94.5.1 makes the audit record part of the exchange, so
+            // an answer whose record was refused is not used.
+            recorder
+                .record(exchange(&result))
+                .await
+                .map_err(SubscribeError::Audit)?;
+        }
+        result
     }
 
     /// Returns the `[base]/Subscription` URL subscriptions are created at.
@@ -133,9 +176,23 @@ impl PmirSubscriber {
         let mut url = self.endpoint.clone();
         url.query_pairs_mut()
             .append_pair("url", request.endpoint().as_str());
+        let result = self.find_at(&url, request, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self
+            .audit(|result| audit::search(&self.endpoint, &url, result), result)
+            .await;
+        result
+    }
+
+    async fn find_at(
+        &self,
+        url: &Url,
+        request: &SubscriptionRequest,
+        timeout: Duration,
+    ) -> Result<subscription::Search, SubscribeError> {
         let response = self
             .http
-            .get(url)
+            .get(url.clone())
             .header(ACCEPT, FHIR_JSON)
             .timeout(timeout)
             .send()
@@ -171,6 +228,33 @@ impl PmirSubscriber {
     /// [`SubscribeError::Timeout`] or [`SubscribeError::Transport`] when no
     /// answer arrives.
     pub async fn subscribe(
+        &self,
+        request: &SubscriptionRequest,
+        timeout: Duration,
+    ) -> Result<Subscribed, SubscribeError> {
+        let result = self.create(request, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self
+            .audit(
+                |result| {
+                    let reference = result.as_ref().ok().and_then(|subscribed| {
+                        audit::subscription_reference(subscribed.location())
+                    });
+                    audit::subscription(
+                        audit::SUBSCRIPTION_CREATE,
+                        &self.endpoint,
+                        reference,
+                        Some(request.criteria().text()),
+                        result,
+                    )
+                },
+                result,
+            )
+            .await;
+        result
+    }
+
+    async fn create(
         &self,
         request: &SubscriptionRequest,
         timeout: Duration,
@@ -215,6 +299,30 @@ impl PmirSubscriber {
         subscribed: &Subscribed,
         timeout: Duration,
     ) -> Result<SubscriptionStatus, SubscribeError> {
+        let result = self.read(subscribed, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self
+            .audit(
+                |result| {
+                    audit::subscription(
+                        audit::SUBSCRIPTION_READ,
+                        &self.endpoint,
+                        audit::subscription_reference(subscribed.location()),
+                        None,
+                        result,
+                    )
+                },
+                result,
+            )
+            .await;
+        result
+    }
+
+    async fn read(
+        &self,
+        subscribed: &Subscribed,
+        timeout: Duration,
+    ) -> Result<SubscriptionStatus, SubscribeError> {
         let response = self
             .http
             .get(subscribed.location().clone())
@@ -244,6 +352,30 @@ impl PmirSubscriber {
     /// [`SubscribeError::Timeout`] or [`SubscribeError::Transport`] when no
     /// answer arrives.
     pub async fn unsubscribe(
+        &self,
+        subscribed: &Subscribed,
+        timeout: Duration,
+    ) -> Result<(), SubscribeError> {
+        let result = self.delete(subscribed, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self
+            .audit(
+                |result| {
+                    audit::subscription(
+                        audit::SUBSCRIPTION_DELETE,
+                        &self.endpoint,
+                        audit::subscription_reference(subscribed.location()),
+                        None,
+                        result,
+                    )
+                },
+                result,
+            )
+            .await;
+        result
+    }
+
+    async fn delete(
         &self,
         subscribed: &Subscribed,
         timeout: Duration,

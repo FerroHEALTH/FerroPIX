@@ -19,7 +19,7 @@ use std::path::Path;
 use std::process::Command;
 
 /// Every feature of the crate.
-const FEATURES: &[&str] = &["atna", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
+const FEATURES: &[&str] = &["atna", "balp", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
 
 /// The crates only `xcpd` compiles.
 const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
@@ -84,14 +84,16 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
     for name in XCPD_DIRECT {
         assert!(xcpd_direct.contains(*name), "xcpd names {name}");
     }
-    let atna = tree("atna", None);
-    assert!(
-        !atna.contains("uuid"),
-        "atna compiles the message ids: {atna:?}"
-    );
+    for feature in ["atna", "balp"] {
+        let closure = tree(feature, None);
+        assert!(
+            !closure.contains("uuid"),
+            "{feature} compiles the message ids: {closure:?}"
+        );
+    }
     for feature in FEATURES
         .iter()
-        .filter(|feature| !["xcpd", "atna"].contains(*feature))
+        .filter(|feature| !["xcpd", "atna", "balp"].contains(*feature))
     {
         let closure = tree(feature, None);
         let leaked: Vec<&&str> = XCPD_ONLY

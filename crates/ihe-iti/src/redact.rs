@@ -13,7 +13,8 @@
     feature = "pdqm",
     feature = "mcsd",
     feature = "pmir",
-    feature = "xcpd"
+    feature = "xcpd",
+    feature = "balp"
 ))]
 use std::fmt;
 
@@ -26,7 +27,8 @@ pub(crate) const REDACTED: &str = "***";
     feature = "pdqm",
     feature = "mcsd",
     feature = "pmir",
-    feature = "xcpd"
+    feature = "xcpd",
+    feature = "balp"
 ))]
 pub(crate) struct RedactedUrl<'a>(pub(crate) &'a str);
 
@@ -35,7 +37,8 @@ pub(crate) struct RedactedUrl<'a>(pub(crate) &'a str);
     feature = "pdqm",
     feature = "mcsd",
     feature = "pmir",
-    feature = "xcpd"
+    feature = "xcpd",
+    feature = "balp"
 ))]
 impl fmt::Debug for RedactedUrl<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -61,7 +64,8 @@ impl fmt::Debug for RedactedUrl<'_> {
     feature = "pdqm",
     feature = "mcsd",
     feature = "pmir",
-    feature = "xcpd"
+    feature = "xcpd",
+    feature = "balp"
 ))]
 fn redact(url: &str) -> String {
     if url.is_empty() {
@@ -105,7 +109,8 @@ fn redact(url: &str) -> String {
         feature = "pdqm",
         feature = "mcsd",
         feature = "pmir",
-        feature = "xcpd"
+        feature = "xcpd",
+        feature = "balp"
     )
 ))]
 mod tests {

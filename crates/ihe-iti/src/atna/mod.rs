@@ -14,12 +14,17 @@
 //!   cannot reach its repository (§3.20.4.1.1): one file per message on disk,
 //!   fsynced before it counts as stored, or a queue in memory for
 //!   development.
+//! - [`feed`] (feature `balp`): the ATX: FHIR Feed Option's Send Audit
+//!   Resource Request, a FHIR `create` of one `AuditEvent` (the `RESTful` ATNA
+//!   supplement, ITI TF-2 §3.20.4.2).
 //! - [`forwarder`]: the sender that writes every message to the spool first
 //!   and delivers it from there, in order.
 //!
 //! A message names whatever its event names, a patient identifier included,
 //! so no part of this module logs a message or renders one in `Debug`.
 
+#[cfg(feature = "balp")]
+pub mod feed;
 pub mod forwarder;
 pub mod message;
 pub mod repository;

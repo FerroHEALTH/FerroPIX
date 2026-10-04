@@ -22,6 +22,8 @@ use fhir_types::r4::endpoint::Endpoint;
 use fhir_types::r4::organization::Organization;
 use http::header::{ACCEPT, CONTENT_TYPE, DATE};
 use std::fmt;
+#[cfg(feature = "balp")]
+use std::sync::Arc;
 use url::Url;
 
 use super::budget::Budget;
@@ -262,6 +264,8 @@ pub struct McsdClient {
     organization: Interactions,
     endpoint: Interactions,
     http: reqwest::Client,
+    #[cfg(feature = "balp")]
+    audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
 
 /// The URLs of the two interactions on one resource type.
@@ -302,7 +306,41 @@ impl McsdClient {
             endpoint: Interactions::of(&base, CareService::Endpoint)?,
             base,
             http,
+            #[cfg(feature = "balp")]
+            audit: None,
         })
+    }
+
+    /// This client, recording the audit record of every ITI-90 search and
+    /// ITI-91 history through `recorder` (§2:3.90.5.1, §2:3.91.5.1, feature
+    /// `balp`).
+    ///
+    /// An audited client records each transaction before it returns,
+    /// whatever its outcome; one whose record the recorder does not accept
+    /// fails with [`McsdError::Audit`], and its answer is not used.
+    #[cfg(feature = "balp")]
+    #[must_use]
+    pub fn audited(mut self, recorder: Arc<dyn crate::balp::AuditRecorder>) -> Self {
+        self.audit = Some(recorder);
+        self
+    }
+
+    /// Records the transaction of `kind` begun with `request`, when the
+    /// client is audited, and returns `result` unless the record was refused.
+    #[cfg(feature = "balp")]
+    async fn audit<T>(
+        &self,
+        kind: crate::balp::EventKind,
+        request: &Url,
+        result: Result<T, McsdError>,
+    ) -> Result<T, McsdError> {
+        if let Some(recorder) = &self.audit {
+            let exchange = super::audit::exchange(kind, &self.base, request, &result);
+            // NOTE: mCSD §2:3.90.5.1 and §2:3.91.5.1 make the audit record part of
+            // the transaction, so an answer whose record was refused is not used.
+            recorder.record(exchange).await.map_err(McsdError::Audit)?;
+        }
+        result
     }
 
     /// The interactions on `kind`.
@@ -328,8 +366,9 @@ impl McsdClient {
     ///
     /// # Errors
     /// A [`McsdError`] for a page that is not a `searchset` Bundle of `kind`,
-    /// a page link off the directory's origin, a budget that runs out, and a
-    /// failure to get a page at all.
+    /// a page link off the directory's origin, a budget that runs out, a
+    /// failure to get a page at all, and, when audited, a record the
+    /// recorder refused.
     pub async fn find(
         &self,
         kind: CareService,
@@ -340,6 +379,19 @@ impl McsdClient {
         if !parameters.is_empty() {
             url.query_pairs_mut().extend_pairs(parameters);
         }
+        let result = self.find_pages(url.clone(), kind, budget).await;
+        #[cfg(feature = "balp")]
+        let result = self.audit(super::audit::QUERY, &url, result).await;
+        result
+    }
+
+    /// Reads every page of the search that begins at `url`.
+    async fn find_pages(
+        &self,
+        url: Url,
+        kind: CareService,
+        budget: &mut Budget,
+    ) -> Result<Found, McsdError> {
         let mut matches = Vec::new();
         let mut answered_at = None;
         let mut next = Some(url);
@@ -369,8 +421,9 @@ impl McsdClient {
     ///
     /// # Errors
     /// A [`McsdError`] for a page that is not a `history` Bundle of `kind`,
-    /// a page link off the directory's origin, a budget that runs out, and a
-    /// failure to get a page at all.
+    /// a page link off the directory's origin, a budget that runs out, a
+    /// failure to get a page at all, and, when audited, a record the
+    /// recorder refused.
     pub async fn updates(
         &self,
         kind: CareService,
@@ -379,6 +432,19 @@ impl McsdClient {
     ) -> Result<Updates, McsdError> {
         let mut url = self.interactions(kind).history.clone();
         url.query_pairs_mut().append_pair("_since", since);
+        let result = self.history_pages(url.clone(), kind, budget).await;
+        #[cfg(feature = "balp")]
+        let result = self.audit(super::audit::UPDATES, &url, result).await;
+        result
+    }
+
+    /// Reads every page of the history that begins at `url`.
+    async fn history_pages(
+        &self,
+        url: Url,
+        kind: CareService,
+        budget: &mut Budget,
+    ) -> Result<Updates, McsdError> {
         let mut changes = Vec::new();
         let mut answered_at = None;
         let mut next = Some(url);

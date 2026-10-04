@@ -59,12 +59,16 @@
 //! # }
 //! ```
 
+#[cfg(feature = "balp")]
+pub mod audit;
 pub mod error;
 pub mod identifier;
 mod request;
 mod response;
 
 use std::fmt;
+#[cfg(feature = "balp")]
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
@@ -85,6 +89,8 @@ const FHIR_JSON: &str = "application/fhir+json";
 pub struct PixmClient {
     endpoint: Url,
     http: reqwest::Client,
+    #[cfg(feature = "balp")]
+    audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
 
 impl PixmClient {
@@ -104,7 +110,18 @@ impl PixmClient {
         Ok(Self {
             endpoint: request::endpoint(base)?,
             http,
+            #[cfg(feature = "balp")]
+            audit: None,
         })
+    }
+
+    /// This client, recording the audit record of every exchange through
+    /// `recorder` (§2:3.83.5.1.1, feature `balp`).
+    #[cfg(feature = "balp")]
+    #[must_use]
+    pub fn audited(mut self, recorder: Arc<dyn crate::balp::AuditRecorder>) -> Self {
+        self.audit = Some(recorder);
+        self
     }
 
     /// Returns the `[base]/Patient/$ihe-pix` URL the client asks
@@ -121,19 +138,43 @@ impl PixmClient {
     /// `timeout` bounds the whole exchange, from connecting until the answer is
     /// read.
     ///
+    /// An audited client records the exchange before it returns, whatever
+    /// its outcome; an exchange whose record the recorder does not accept
+    /// fails, and its answer is not used (§2:3.83.5.1.1).
+    ///
     /// # Errors
     /// A [`PixmError`] for every answer that is neither a cross-reference nor
-    /// one of the profile's two not-found answers, and for a failure to get an
-    /// answer at all.
+    /// one of the profile's two not-found answers, for a failure to get an
+    /// answer at all, and, when audited, [`PixmError::Audit`] for a record
+    /// the recorder refused.
     pub async fn cross_reference(
         &self,
         source: &SourceIdentifier,
         targets: &[TargetSystem],
         timeout: Duration,
     ) -> Result<CrossReference, PixmError> {
+        let url = request::query(&self.endpoint, source, targets);
+        let result = self.ask(&url, source, targets, timeout).await;
+        #[cfg(feature = "balp")]
+        if let Some(recorder) = &self.audit {
+            let exchange = audit::exchange(&self.endpoint, &url, source, &result);
+            // NOTE: PIXm §2:3.83.5.1.1 makes the audit record part of the exchange,
+            // so an answer whose record was not accepted is not used.
+            recorder.record(exchange).await.map_err(PixmError::Audit)?;
+        }
+        result
+    }
+
+    async fn ask(
+        &self,
+        url: &Url,
+        source: &SourceIdentifier,
+        targets: &[TargetSystem],
+        timeout: Duration,
+    ) -> Result<CrossReference, PixmError> {
         let response = self
             .http
-            .get(request::query(&self.endpoint, source, targets))
+            .get(url.clone())
             .header(ACCEPT, FHIR_JSON)
             .timeout(timeout)
             .send()

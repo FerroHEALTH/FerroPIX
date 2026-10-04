@@ -10,6 +10,9 @@
 #[cfg(feature = "atna")]
 mod atna;
 #[cfg(test)]
+#[cfg(feature = "balp")]
+mod balp;
+#[cfg(test)]
 mod features;
 #[cfg(test)]
 #[cfg(feature = "mcsd")]

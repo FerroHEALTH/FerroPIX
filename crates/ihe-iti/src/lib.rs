@@ -12,6 +12,10 @@
 //!   SOAP 1.2 with HL7 v3 and SAML XUA.
 //! - `atna`: Audit Trail and Node Authentication, ITI-20, the DICOM audit
 //!   message over syslog with TLS.
+//! - `balp`: the Basic Audit Log Patterns, the FHIR `AuditEvent` the FHIR
+//!   profiles audit their transactions as, sent over ITI-20's FHIR Feed; with
+//!   `pixm`, `pdqm`, `mcsd` or `pmir` it also audits that profile's
+//!   transactions.
 //!
 //! The profiles are published at <https://profiles.ihe.net/ITI/>. The crate
 //! depends on no application: it is the profiles' transactions as Rust, for
@@ -20,6 +24,8 @@
 
 #[cfg(feature = "atna")]
 pub mod atna;
+#[cfg(feature = "balp")]
+pub mod balp;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
@@ -39,7 +45,13 @@ pub mod pmir;
     feature = "xcpd"
 ))]
 mod redact;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "balp"
+))]
 mod search;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

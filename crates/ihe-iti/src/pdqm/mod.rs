@@ -58,6 +58,8 @@
 //! # }
 //! ```
 
+#[cfg(feature = "balp")]
+pub mod audit;
 pub mod error;
 pub mod matches;
 pub mod query;
@@ -88,6 +90,8 @@ pub struct PdqmClient {
     base: Url,
     endpoint: Url,
     http: reqwest::Client,
+    #[cfg(feature = "balp")]
+    audit: Option<std::sync::Arc<dyn crate::balp::AuditRecorder>>,
 }
 
 impl PdqmClient {
@@ -108,7 +112,39 @@ impl PdqmClient {
             endpoint: request::endpoint(base.clone())?,
             base,
             http,
+            #[cfg(feature = "balp")]
+            audit: None,
         })
+    }
+
+    /// This client, recording the audit record of every search and every
+    /// page through `recorder` (§2:3.78.5.1, feature `balp`).
+    ///
+    /// An audited client records each request before it returns, whatever
+    /// its outcome; one whose record the recorder does not accept fails with
+    /// [`PdqmError::Audit`], and its answer is not used.
+    #[cfg(feature = "balp")]
+    #[must_use]
+    pub fn audited(mut self, recorder: std::sync::Arc<dyn crate::balp::AuditRecorder>) -> Self {
+        self.audit = Some(recorder);
+        self
+    }
+
+    /// Records the request `request`, when the client is audited, and
+    /// returns `result` unless the record was refused.
+    #[cfg(feature = "balp")]
+    async fn audit(
+        &self,
+        request: impl FnOnce() -> secrecy::SecretString,
+        result: Result<SearchResult, PdqmError>,
+    ) -> Result<SearchResult, PdqmError> {
+        if let Some(recorder) = &self.audit {
+            let exchange = audit::exchange(&self.base, request(), &result);
+            // NOTE: PDQm §2:3.78.5.1 makes the audit record part of the query, so
+            // an answer whose record was refused is not used.
+            recorder.record(exchange).await.map_err(PdqmError::Audit)?;
+        }
+        result
     }
 
     /// Returns the `[base]/Patient/_search` URL the client posts to
@@ -127,6 +163,33 @@ impl PdqmClient {
     /// A [`PdqmError`] for every answer that is not a `searchset` Bundle, and
     /// for a failure to get an answer at all.
     pub async fn search(
+        &self,
+        query: &PatientQuery,
+        timeout: Duration,
+    ) -> Result<SearchResult, PdqmError> {
+        let result = self.post(query, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self
+            .audit(
+                || {
+                    // NOTE: BALP Query records the raw request; a POST search is its
+                    // request line, media type and form body, as BALP's own example writes.
+                    secrecy::SecretString::from(format!(
+                        "POST {}\nContent-Type: {}\n\n{}",
+                        secrecy::ExposeSecret::expose_secret(&crate::balp::request_text(
+                            &self.endpoint
+                        )),
+                        request::FORM,
+                        query.form()
+                    ))
+                },
+                result,
+            )
+            .await;
+        result
+    }
+
+    async fn post(
         &self,
         query: &PatientQuery,
         timeout: Duration,
@@ -160,6 +223,15 @@ impl PdqmClient {
         if page.url().origin() != self.endpoint.origin() {
             return Err(PdqmError::ForeignPage);
         }
+        let result = self.get(page, timeout).await;
+        #[cfg(feature = "balp")]
+        let result = self
+            .audit(|| crate::balp::request_text(page.url()), result)
+            .await;
+        result
+    }
+
+    async fn get(&self, page: &Page, timeout: Duration) -> Result<SearchResult, PdqmError> {
         let response = self
             .http
             .get(page.url().clone())

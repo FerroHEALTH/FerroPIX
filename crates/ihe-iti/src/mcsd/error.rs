@@ -123,6 +123,11 @@ pub enum McsdError {
     /// The answer does not hold to ITI-90 or ITI-91.
     #[error("the directory's answer does not hold to mCSD")]
     Malformed(#[from] Malformation),
+    /// The audit recorder could not accept the transaction's audit record,
+    /// so its answer is not used (feature `balp`, §2:3.90.5.1, §2:3.91.5.1).
+    #[cfg(feature = "balp")]
+    #[error("the mCSD audit record could not be recorded")]
+    Audit(#[source] crate::balp::AuditError),
 }
 
 impl McsdError {
@@ -137,10 +142,15 @@ impl McsdError {
     }
 
     /// Whether the directory answered at all: `false` for a deadline that
-    /// passed and for a request that could not be sent or whose answer could
-    /// not be read.
+    /// passed, for a request that could not be sent or whose answer could
+    /// not be read, and for an answer set aside because its audit record was
+    /// not accepted.
     #[must_use]
     pub fn answered(&self) -> bool {
+        #[cfg(feature = "balp")]
+        if matches!(self, Self::Audit(_)) {
+            return false;
+        }
         !matches!(self, Self::Timeout | Self::Transport(_))
     }
 

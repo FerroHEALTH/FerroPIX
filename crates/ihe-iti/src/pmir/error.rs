@@ -65,6 +65,11 @@ pub enum SubscribeError {
     /// The answer does not hold to ITI-94.
     #[error("the Patient Identity Registry's answer does not hold to ITI-94")]
     Malformed(#[from] SubscriptionMalformation),
+    /// The audit recorder could not accept the exchange's audit record, so
+    /// its answer is not used (feature `balp`, §2:3.94.5.1).
+    #[cfg(feature = "balp")]
+    #[error("the ITI-94 audit record could not be recorded")]
+    Audit(#[source] crate::balp::AuditError),
 }
 
 impl SubscribeError {

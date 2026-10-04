@@ -67,6 +67,11 @@ pub enum PdqmError {
     /// The answer does not hold to ITI-78.
     #[error("the Supplier's answer does not hold to ITI-78")]
     Malformed(#[from] Malformation),
+    /// The audit recorder could not accept the request's audit record, so
+    /// its answer is not used (feature `balp`, §2:3.78.5.1).
+    #[cfg(feature = "balp")]
+    #[error("the ITI-78 audit record could not be recorded")]
+    Audit(#[source] crate::balp::AuditError),
 }
 
 /// How an answer departs from ITI-78 (§2:3.78.4.2.2, the Query Patient

@@ -29,6 +29,7 @@ pub(crate) fn under_base(mut base: Url, interaction: &str) -> Option<Url> {
 /// Returns `part` with the characters FHIR search gives a meaning to escaped
 /// by a backslash: `\`, `|`, `,` and `$` (FHIR R4 search, Escaping Search
 /// Parameters, <http://hl7.org/fhir/R4/search.html#escaping>).
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 pub(crate) fn escape(part: &str) -> String {
     let mut escaped = String::with_capacity(part.len());
     for character in part.chars() {
@@ -40,7 +41,10 @@ pub(crate) fn escape(part: &str) -> String {
     escaped
 }
 
-#[cfg(test)]
+#[cfg(all(
+    test,
+    any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir")
+))]
 mod tests {
     use super::escape;
 

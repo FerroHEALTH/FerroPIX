@@ -18,12 +18,15 @@
 //! names a patient. In memory ([`Spool::in_memory`]), the messages live as
 //! long as the process, for a development deployment.
 //!
-//! A stored message that cannot be read, or that is no whole RFC 5425 frame,
+//! A spool holds one [`Content`]: RFC 5425 syslog frames, or, with the
+//! `balp` feature, FHIR `AuditEvent` records for the FHIR Feed. A stored
+//! message that cannot be read, or that is no message of the spool's content,
 //! is moved to the `quarantine` subdirectory when the drain reaches it,
 //! logged with its sequence number and never its content, and the drain goes
-//! on with the next one, so one bad file never holds back the rest. A
-//! quarantined message stays counted under the bounds until an operator
-//! removes it. A file the spool did not write refuses [`Spool::open`]
+//! on with the next one, so one bad file never holds back the rest. So is a
+//! message the repository refused ([`Spool::reject`]). A quarantined message
+//! stays counted under the bounds until an operator removes it; in memory,
+//! it stays held until the process ends. A file the spool did not write refuses [`Spool::open`]
 //! instead, naming the file to move: in a directory only the gateway's user
 //! may enter, it was put there by hand.
 //!
@@ -47,6 +50,42 @@ const PARTIAL: &str = "partial";
 
 /// The subdirectory a message that cannot be delivered is moved to.
 pub const QUARANTINE: &str = "quarantine";
+
+/// What a spool on disk holds, which a stored file is read back as.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Content {
+    /// RFC 5425 syslog frames, each a DICOM audit message (ITI TF-2
+    /// §3.20.4.1).
+    #[default]
+    SyslogFrames,
+    /// FHIR `AuditEvent` resources as JSON, for the FHIR Feed (ITI TF-2
+    /// §3.20.4.2).
+    #[cfg(feature = "balp")]
+    AuditEvents,
+}
+
+impl Content {
+    /// Whether `bytes` are one message of this content.
+    fn holds(self, bytes: &[u8]) -> bool {
+        match self {
+            Self::SyslogFrames => super::syslog::is_frame(bytes),
+            #[cfg(feature = "balp")]
+            Self::AuditEvents => {
+                serde_json::from_slice::<fhir_types::r4::audit_event::AuditEvent>(bytes).is_ok()
+            }
+        }
+    }
+
+    /// What a stored file of another content is, as the quarantine logs it.
+    fn mismatch(self) -> &'static str {
+        match self {
+            Self::SyslogFrames => "it is no whole RFC 5425 frame",
+            #[cfg(feature = "balp")]
+            Self::AuditEvents => "it is no FHIR AuditEvent",
+        }
+    }
+}
 
 /// The bounds of a spool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,15 +201,29 @@ struct Inner {
 enum Store {
     Disk {
         directory: PathBuf,
+        content: Content,
         sizes: BTreeMap<u64, u64>,
         quarantined: BTreeMap<u64, u64>,
     },
-    Memory(VecDeque<(u64, SecretSlice<u8>)>),
+    Memory {
+        queue: VecDeque<(u64, SecretSlice<u8>)>,
+        held: Vec<(u64, SecretSlice<u8>)>,
+    },
 }
 
 impl Spool {
-    /// The spool in `directory`, created when missing, holding the messages
-    /// a previous process left in it.
+    /// The spool of syslog frames in `directory`, created when missing,
+    /// holding the messages a previous process left in it.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Spool::open_for`].
+    pub fn open(directory: &Path, bounds: Bounds) -> Result<Self, SpoolError> {
+        Self::open_for(directory, bounds, Content::SyslogFrames)
+    }
+
+    /// The spool of `content` in `directory`, created when missing, holding
+    /// the messages a previous process left in it.
     ///
     /// # Errors
     ///
@@ -178,7 +231,11 @@ impl Spool {
     /// group or other users access to it (Unix), [`SpoolError::Foreign`]
     /// when either holds a file the spool did not write, and
     /// [`SpoolError::Io`] when they cannot be created, read or written.
-    pub fn open(directory: &Path, bounds: Bounds) -> Result<Self, SpoolError> {
+    pub fn open_for(
+        directory: &Path,
+        bounds: Bounds,
+        content: Content,
+    ) -> Result<Self, SpoolError> {
         let held = directory.join(QUARANTINE);
         create_private(directory)?;
         check_private(directory)?;
@@ -203,6 +260,7 @@ impl Spool {
         Ok(Self::with(
             Store::Disk {
                 directory: directory.to_owned(),
+                content,
                 sizes,
                 quarantined,
             },
@@ -216,7 +274,15 @@ impl Spool {
     /// deployment.
     #[must_use]
     pub fn in_memory(bounds: Bounds) -> Self {
-        Self::with(Store::Memory(VecDeque::new()), bounds, Depth::default(), 0)
+        Self::with(
+            Store::Memory {
+                queue: VecDeque::new(),
+                held: Vec::new(),
+            },
+            bounds,
+            Depth::default(),
+            0,
+        )
     }
 
     fn with(store: Store, bounds: Bounds, depth: Depth, next: u64) -> Self {
@@ -267,8 +333,8 @@ impl Spool {
 
     /// The oldest message that can be delivered, still stored.
     ///
-    /// Every older message that cannot be read, or is no whole RFC 5425
-    /// frame, is moved to the quarantine on the way.
+    /// Every older message that cannot be read, or is no message of the
+    /// spool's [`Content`], is moved to the quarantine on the way.
     ///
     /// # Errors
     ///
@@ -281,6 +347,24 @@ impl Spool {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .oldest()
+        })
+        .await
+        .map_err(SpoolError::Task)?
+    }
+
+    /// Moves the message `sequence`, which the repository refused, to the
+    /// quarantine, where it stays counted, so the drain goes on.
+    ///
+    /// # Errors
+    ///
+    /// [`SpoolError::Io`] when it cannot be moved.
+    pub async fn reject(&self, sequence: u64) -> Result<(), SpoolError> {
+        let inner = Arc::clone(&self.inner);
+        tokio::task::spawn_blocking(move || {
+            inner
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .reject(sequence)
         })
         .await
         .map_err(SpoolError::Task)?
@@ -322,7 +406,7 @@ impl Inner {
                 write_durably(directory, sequence, &message)?;
                 sizes.insert(sequence, size);
             }
-            Store::Memory(queue) => queue.push_back((sequence, message)),
+            Store::Memory { queue, .. } => queue.push_back((sequence, message)),
         }
         self.next = sequence.saturating_add(1);
         self.depth.messages = self.depth.messages.saturating_add(1);
@@ -332,28 +416,31 @@ impl Inner {
 
     fn oldest(&mut self) -> Result<Option<Stored>, SpoolError> {
         loop {
-            let (directory, sequence) = match &self.store {
-                Store::Memory(queue) => {
+            let (directory, content, sequence) = match &self.store {
+                Store::Memory { queue, .. } => {
                     return Ok(queue.front().map(|(sequence, message)| Stored {
                         sequence: *sequence,
                         message: SecretSlice::from(message.expose_secret().to_vec()),
                     }));
                 }
                 Store::Disk {
-                    directory, sizes, ..
+                    directory,
+                    content,
+                    sizes,
+                    ..
                 } => match sizes.keys().next() {
                     None => return Ok(None),
-                    Some(sequence) => (directory.clone(), *sequence),
+                    Some(sequence) => (directory.clone(), *content, *sequence),
                 },
             };
             match fs::read(file(&directory, sequence, STORED)) {
-                Ok(message) if super::syslog::is_frame(&message) => {
+                Ok(message) if content.holds(&message) => {
                     return Ok(Some(Stored {
                         sequence,
                         message: SecretSlice::from(message),
                     }));
                 }
-                Ok(_) => self.quarantine(&directory, sequence, "it is no whole RFC 5425 frame")?,
+                Ok(_) => self.quarantine(&directory, sequence, content.mismatch())?,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                     tracing::error!(sequence, "a spooled audit message is gone from the spool");
                     self.forget(sequence);
@@ -397,14 +484,41 @@ impl Inner {
             quarantined.insert(sequence, size);
             self.depth.quarantined = self.depth.quarantined.saturating_add(1);
         }
-        // NOTE: RFC 5425 §4.3 carries no application-level acknowledgement, so
-        // only a file the spool cannot send is quarantined, never a rejection.
         tracing::error!(
             sequence,
             reason = why,
             "a spooled audit message was moved to the quarantine; the drain goes on"
         );
         Ok(())
+    }
+
+    fn reject(&mut self, sequence: u64) -> Result<(), SpoolError> {
+        match &mut self.store {
+            Store::Disk {
+                directory, sizes, ..
+            } => {
+                if !sizes.contains_key(&sequence) {
+                    return Ok(());
+                }
+                let directory = directory.clone();
+                self.quarantine(&directory, sequence, "the audit repository refused it")
+            }
+            Store::Memory { queue, held } => {
+                let Some(position) = queue.iter().position(|(kept, _)| *kept == sequence) else {
+                    return Ok(());
+                };
+                if let Some(message) = queue.remove(position) {
+                    held.push(message);
+                    self.depth.quarantined = self.depth.quarantined.saturating_add(1);
+                    tracing::error!(
+                        sequence,
+                        reason = "the audit repository refused it",
+                        "an audit message held in memory was set aside; the drain goes on"
+                    );
+                }
+                Ok(())
+            }
+        }
     }
 
     fn remove(&mut self, sequence: u64) -> Result<(), SpoolError> {
@@ -420,7 +534,7 @@ impl Inner {
                 sizes.remove(&sequence);
                 size
             }
-            Store::Memory(queue) => {
+            Store::Memory { queue, .. } => {
                 let Some(position) = queue.iter().position(|(held, _)| *held == sequence) else {
                     return Ok(());
                 };

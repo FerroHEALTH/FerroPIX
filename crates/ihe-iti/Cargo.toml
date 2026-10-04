@@ -5,7 +5,7 @@ name = "ihe-iti"
 description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.17"
+version = "0.0.18"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -119,6 +119,21 @@ atna = [
   "dep:tokio-rustls",
   "dep:tracing",
   "dep:url",
+]
+# BALP, the Basic Audit Log Patterns (#486): the FHIR R4 AuditEvent the FHIR
+# profiles audit their transactions as, and the ATNA ATX: FHIR Feed Option of
+# ITI-20 that posts it to an Audit Record Repository through the `atna` spool
+# and forwarder. With `pixm`, `pdqm`, `mcsd` or `pmir` it also writes that
+# profile's audit records.
+balp = [
+  "atna",
+  "dep:async-trait",
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:serde_json",
 ]
 
 [dependencies]

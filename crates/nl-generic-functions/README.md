@@ -10,16 +10,23 @@ the implementation guide, with a feature per function.
 | Feature | Generic Function | Service | What the crate holds |
 |---|---|---|---|
 | `nvi` | GF-Localization | the national index (NVI) | the Localization Service search: which care providers (by URA) hold data for a patient (by pseudonymised BSN) |
-| `mitz` | GF-Consent | Mitz | nothing yet |
+| `mitz` | GF-Consent | Mitz | the closed authorization question ("gesloten autorisatievraag"): may a data holder make a patient's data of each category available to a data user, asked on the BSN and answered `Permit` or `Deny` |
 | `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization`, so a directory reader can join a localization custodian to its organisation |
 | `nuts-auth` | GF-Authentication | the Nuts profile | nothing yet |
 
 The identifier systems the functions share (the pseudonymised BSN and the
-URA) are in `identification`, compiled with `nvi` or `lrza`.
+URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.
 
 The NVI client never puts the pseudonym in an error, a `Debug` rendering or
 anything but the request to the service, and it follows a `next` link only on
 its own search endpoint.
+
+The Mitz client follows the VZVZ *Implementatiehandleiding Open en gesloten
+autorisatievraag* 3.8.2: a SOAP 1.2 request carrying one XACML 3.0
+`XACMLAuthzDecisionQuery`, over mutual TLS. Only `Permit` and `Deny` are
+decisions; `Indeterminate`, `NotApplicable`, a fault, a timeout and an answer
+that does not hold to the question are typed errors. The BSN travels only in
+the request to Mitz, and the client follows no redirect.
 
 The crate depends on no application. The implementation guide is published at
 <https://build.fhir.org/ig/nuts-foundation/nl-generic-functions-ig/>.

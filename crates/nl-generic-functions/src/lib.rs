@@ -7,20 +7,22 @@
 //!
 //! - `nvi`: GF-Localization through the national index (NVI): which care
 //!   providers hold data for a patient, asked on a pseudonymised BSN.
-//! - `mitz`: GF-Consent through Mitz.
+//! - `mitz`: GF-Consent through Mitz: the closed authorization question,
+//!   whether a data holder may make a patient's data available to a data
+//!   user, asked on the BSN.
 //! - `lrza`: GF-Addressing through the national address book (LRZa): the
 //!   care provider identifier (URA) of an NL-GF `Organization`.
 //! - `nuts-auth`: GF-Authentication on the Nuts profile.
 //!
 //! The identifier systems the functions share, GF-Identification, are in
-//! the `identification` module, built whenever `nvi` or `lrza` is on.
+//! the `identification` module, built whenever `nvi`, `lrza` or `mitz` is on.
 //!
 //! The implementation guide is published at
 //! <https://build.fhir.org/ig/nuts-foundation/nl-generic-functions-ig/>. The
 //! crate depends on no application.
 #![doc(test(attr(deny(warnings))))]
 
-#[cfg(any(feature = "nvi", feature = "lrza"))]
+#[cfg(any(feature = "nvi", feature = "lrza", feature = "mitz"))]
 pub mod identification;
 #[cfg(feature = "lrza")]
 pub mod lrza;

@@ -5,7 +5,7 @@ name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.7"
+version = "0.0.8"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -41,8 +41,20 @@ nvi = [
   "dep:thiserror",
   "dep:url",
 ]
-# GF-Consent through Mitz, the optional Step-1 pre-filter.
-mitz = []
+# GF-Consent through Mitz, the optional Step-1 pre-filter (Annex B §B.6): the
+# closed authorization question of the Mitz afsprakenstelsel, a SOAP 1.2
+# request with an XACML 3.0 decision query, written and read with the XML
+# crate, sent over HTTP with a request id, and the redacting secret type the
+# BSN travels in.
+mitz = [
+  "dep:http",
+  "dep:quick-xml",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:thiserror",
+  "dep:url",
+  "dep:uuid",
+]
 # GF-Addressing through the national address book (LRZa): the URA of an
 # NL-GF Organization, over the FHIR R4 `resources` root set.
 lrza = [
@@ -57,11 +69,13 @@ nuts-auth = []
 [dependencies]
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 url = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 fhir-types = { workspace = true, features = ["r4", "resources"] }

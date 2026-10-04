@@ -7,9 +7,9 @@
 //!
 //! A patient is named by a pseudonymised BSN ([`PSEUDO_BSN_SYSTEM`]), never
 //! by the BSN itself, and a care provider by its URA ([`URA_SYSTEM`]). A
-//! [`PseudoBsn`] is personal data: its value is a [`SecretString`], its
-//! `Debug` is redacted and it has no `Display`. A [`Ura`] names an
-//! organisation, not a person, and prints as written.
+//! `PseudoBsn` (feature `nvi`) is personal data: its value is a
+//! `secrecy::SecretString`, its `Debug` is redacted and it has no `Display`.
+//! A [`Ura`] names an organisation, not a person, and prints as written.
 
 use std::fmt;
 

@@ -13,7 +13,7 @@
 //! - `nuts-auth`: GF-Authentication on the Nuts profile.
 //!
 //! The identifier systems the functions share, GF-Identification, are in
-//! [`identification`] whenever `nvi` or `lrza` is on.
+//! the `identification` module, built whenever `nvi` or `lrza` is on.
 //!
 //! The implementation guide is published at
 //! <https://build.fhir.org/ig/nuts-foundation/nl-generic-functions-ig/>. The

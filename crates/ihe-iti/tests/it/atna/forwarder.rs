@@ -11,14 +11,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use ihe_iti::atna::forwarder::{Forwarder, Status};
+use ihe_iti::atna::forwarder::Forwarder;
 use ihe_iti::atna::repository::{Repository, Timeouts, TlsSettings};
 use ihe_iti::atna::spool::{Bounds, QUARANTINE, Spool};
 use tokio::io::AsyncReadExt as _;
 use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 
-use super::message;
+use super::{message, until};
+use crate::timing;
 
 /// The RFC 5425 frame of `text`: its octet count, a space, and `text`.
 fn framed(text: &str) -> secrecy::SecretSlice<u8> {
@@ -34,6 +35,17 @@ const BOUNDS: Bounds = Bounds {
 const TIMEOUTS: Timeouts = Timeouts {
     connect: Duration::from_secs(2),
     send: Duration::from_secs(2),
+};
+
+/// The longest one delivery attempt may take under [`TIMEOUTS`].
+const ATTEMPT: Duration = TIMEOUTS.connect.saturating_add(TIMEOUTS.send);
+
+/// The timeouts towards a repository that stops reading. The send timeout is
+/// the slack a loaded host gets, so a store held to it tolerates the host
+/// and still fails if it sits out a stalled write.
+const STALLING: Timeouts = Timeouts {
+    connect: TIMEOUTS.connect,
+    send: timing::SLACK,
 };
 
 const RETRY_MAX: Duration = Duration::from_millis(400);
@@ -88,21 +100,20 @@ async fn read_frames(mut stream: TcpStream, sink: Arc<Mutex<Vec<String>>>) {
     }
 }
 
-/// Waits up to `within` until `done` holds of the forwarder's status, and
-/// returns the last status.
-async fn until(forwarder: &Forwarder, within: Duration, done: impl Fn(&Status) -> bool) -> Status {
-    let deadline = Instant::now() + within;
+fn kept_now(kept: &Mutex<Vec<String>>) -> Vec<String> {
+    kept.lock().unwrap_or_else(PoisonError::into_inner).clone()
+}
+
+/// Waits until the repository has kept `count` messages or `deadline`
+/// passes, and returns what it kept.
+async fn kept_by(kept: &Mutex<Vec<String>>, count: usize, deadline: Instant) -> Vec<String> {
     loop {
-        let status = forwarder.status();
-        if done(&status) || Instant::now() >= deadline {
-            return status;
+        let now = kept_now(kept);
+        if now.len() >= count || Instant::now() >= deadline {
+            return now;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-}
-
-fn kept_now(kept: &Mutex<Vec<String>>) -> Vec<String> {
-    kept.lock().unwrap_or_else(PoisonError::into_inner).clone()
 }
 
 #[tokio::test]
@@ -114,19 +125,16 @@ async fn stored_messages_are_delivered_in_order_and_leave_the_spool() {
         forwarder.submit(framed(text)).await.expect("stored");
     }
     let running = tokio::spawn(Arc::clone(&forwarder).run());
-    let status = until(&forwarder, Duration::from_secs(5), |status| {
+    let status = until(&forwarder, timing::deadline(ATTEMPT), |status| {
         status.delivered == 3
     })
     .await;
     assert_eq!(3, status.delivered);
     assert_eq!(0, status.depth.messages);
     assert!(status.reachable);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while kept_now(&kept).len() < 3 && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    let received = kept_by(&kept, 3, timing::deadline(Duration::ZERO)).await;
     running.abort();
-    assert_eq!(vec!["one", "two", "three"], kept_now(&kept));
+    assert_eq!(vec!["one", "two", "three"], received);
 }
 
 #[tokio::test]
@@ -138,9 +146,11 @@ async fn a_repository_that_cannot_be_reached_leaves_every_message_stored() {
     for text in ["kept", "also kept"] {
         forwarder.submit(framed(text)).await.expect("stored");
     }
-    let status = until(&forwarder, Duration::from_secs(5), |status| {
-        status.retries >= 2
-    })
+    let status = until(
+        &forwarder,
+        timing::deadline(ATTEMPT.saturating_add(RETRY_MAX).saturating_mul(2)),
+        |status| status.retries >= 2,
+    )
     .await;
     running.abort();
     assert!(!status.reachable);
@@ -152,11 +162,7 @@ async fn a_repository_that_cannot_be_reached_leaves_every_message_stored() {
 #[tokio::test]
 async fn a_repository_that_stops_reading_is_given_up_within_the_send_timeout() {
     let (url, kept, reading) = repository(false).await;
-    let timeouts = Timeouts {
-        connect: Duration::from_secs(2),
-        send: Duration::from_millis(300),
-    };
-    let repository = Repository::unencrypted_for_development(&url, timeouts).expect("a repository");
+    let repository = Repository::unencrypted_for_development(&url, STALLING).expect("a repository");
     let forwarder = Forwarder::new(Spool::in_memory(BOUNDS), repository, RETRY_MAX);
     // NOTE: a message larger than the socket buffers, so the write blocks
     // on a repository that never reads.
@@ -164,10 +170,8 @@ async fn a_repository_that_stops_reading_is_given_up_within_the_send_timeout() {
     forwarder.submit(framed(&large)).await.expect("stored");
     let running = tokio::spawn(Arc::clone(&forwarder).run());
 
-    let stalled = until(&forwarder, Duration::from_secs(3), |status| {
-        status.retries >= 1
-    })
-    .await;
+    let given_up_by = timing::deadline(STALLING.connect.saturating_add(STALLING.send));
+    let stalled = until(&forwarder, given_up_by, |status| status.retries >= 1).await;
     assert!(
         stalled.retries >= 1,
         "the stalled write ends within the send timeout"
@@ -178,12 +182,19 @@ async fn a_repository_that_stops_reading_is_given_up_within_the_send_timeout() {
     let submitted = Instant::now();
     forwarder.submit(framed("after")).await.expect("stored");
     assert!(
-        submitted.elapsed() < Duration::from_millis(300),
+        submitted.elapsed() < STALLING.send,
         "storing never waits on the network"
     );
 
     reading.store(true, Ordering::SeqCst);
-    let recovered = until(&forwarder, Duration::from_secs(10), |status| {
+    // The forwarder may be in a stalled write: it gives that up, backs off,
+    // reconnects, and writes both messages, each within the send timeout.
+    let recovery = STALLING
+        .send
+        .saturating_add(RETRY_MAX)
+        .saturating_add(STALLING.connect)
+        .saturating_add(STALLING.send.saturating_mul(2));
+    let recovered = until(&forwarder, timing::deadline(recovery), |status| {
         status.delivered == 2
     })
     .await;
@@ -192,12 +203,9 @@ async fn a_repository_that_stops_reading_is_given_up_within_the_send_timeout() {
         "delivered once the repository reads again"
     );
     assert_eq!(0, recovered.depth.messages);
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while kept_now(&kept).len() < 2 && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    let received = kept_by(&kept, 2, timing::deadline(Duration::ZERO)).await;
     running.abort();
-    assert_eq!(Some("after"), kept_now(&kept).get(1).map(String::as_str));
+    assert_eq!(Some("after"), received.get(1).map(String::as_str));
 }
 
 #[tokio::test]
@@ -218,14 +226,11 @@ async fn a_spooled_message_that_cannot_be_sent_is_quarantined_and_the_rest_deliv
     let spool = Spool::open(&path, BOUNDS).expect("the spool reopens");
     let forwarder = Forwarder::new(spool, repository, RETRY_MAX);
     let running = tokio::spawn(Arc::clone(&forwarder).run());
-    let status = until(&forwarder, Duration::from_secs(5), |status| {
+    let status = until(&forwarder, timing::deadline(ATTEMPT), |status| {
         status.delivered == 2
     })
     .await;
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while kept_now(&kept).len() < 2 && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    let received = kept_by(&kept, 2, timing::deadline(Duration::ZERO)).await;
     running.abort();
 
     assert_eq!(2, status.delivered, "one bad file never blocks the rest");
@@ -234,7 +239,7 @@ async fn a_spooled_message_that_cannot_be_sent_is_quarantined_and_the_rest_deliv
         1, status.depth.messages,
         "the quarantined message stays counted"
     );
-    assert_eq!(vec!["second", "third"], kept_now(&kept));
+    assert_eq!(vec!["second", "third"], received);
     assert!(
         path.join(QUARANTINE)
             .join(format!("{:020}.msg", 0))

@@ -8,10 +8,11 @@
 //! quarantined so the drain goes on (§3.20.4.3.3).
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use ihe_iti::atna::feed::{FeedAddressError, FeedRepository};
-use ihe_iti::atna::forwarder::{Forwarder, Status};
+use ihe_iti::atna::forwarder::Forwarder;
 use ihe_iti::atna::spool::{Bounds, Content, QUARANTINE, Spool};
 use ihe_iti::balp::{
     DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, Outcome, Peer, REST, SEARCH,
@@ -23,6 +24,8 @@ use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::observer;
+use crate::atna::until;
+use crate::timing;
 
 const BOUNDS: Bounds = Bounds {
     max_messages: 16,
@@ -30,7 +33,14 @@ const BOUNDS: Bounds = Bounds {
     write_timeout: Duration::from_secs(10),
 };
 
+/// The timeout of each request to the repository.
+const REQUEST: Duration = Duration::from_secs(2);
+
 const RETRY_MAX: Duration = Duration::from_millis(400);
+
+/// The longest one failed delivery may hold the forwarder: its request and
+/// the backoff after it.
+const FAILED_ATTEMPT: Duration = REQUEST.saturating_add(RETRY_MAX);
 
 /// A search on the BALP Patient Query pattern.
 const KIND: EventKind = EventKind {
@@ -52,8 +62,7 @@ fn http() -> reqwest::Client {
 /// The repository at `server`'s `/arr/` base, over clear text for the test.
 fn repository(server: &MockServer) -> FeedRepository {
     let base = Url::parse(&format!("{}/arr/", server.uri())).expect("a base");
-    FeedRepository::cleartext_for_development(base, http(), Duration::from_secs(2))
-        .expect("a repository")
+    FeedRepository::cleartext_for_development(base, http(), REQUEST).expect("a repository")
 }
 
 /// One synthetic ITI-83 record naming the patient `value`.
@@ -75,22 +84,29 @@ fn record(value: &str) -> SecretSlice<u8> {
     .into_bytes()
 }
 
-async fn until(forwarder: &Forwarder, within: Duration, done: impl Fn(&Status) -> bool) -> Status {
-    let deadline = Instant::now() + within;
-    loop {
-        let status = forwarder.status();
-        if done(&status) || Instant::now() >= deadline {
-            return status;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-}
-
 async fn answering(server: &MockServer, status: u16) {
     Mock::given(method("POST"))
         .and(path("/arr/AuditEvent"))
         .and(header("content-type", "application/fhir+json"))
         .respond_with(ResponseTemplate::new(status))
+        .mount(server)
+        .await;
+}
+
+/// A repository that answers `503` until `taking` is set and `201` from
+/// then on, so no request finds the repository without an answer between
+/// the two.
+async fn answering_once_taking(server: &MockServer, taking: Arc<AtomicBool>) {
+    Mock::given(method("POST"))
+        .and(path("/arr/AuditEvent"))
+        .and(header("content-type", "application/fhir+json"))
+        .respond_with(move |_: &wiremock::Request| {
+            ResponseTemplate::new(if taking.load(Ordering::SeqCst) {
+                201
+            } else {
+                503
+            })
+        })
         .mount(server)
         .await;
 }
@@ -106,7 +122,7 @@ async fn a_stored_record_is_created_at_the_repository_as_fhir_json() {
         .await
         .expect("stored");
     let running = tokio::spawn(Arc::clone(&forwarder).run());
-    let status = until(&forwarder, Duration::from_secs(5), |status| {
+    let status = until(&forwarder, timing::deadline(REQUEST), |status| {
         status.delivered == 1
     })
     .await;
@@ -121,22 +137,27 @@ async fn a_stored_record_is_created_at_the_repository_as_fhir_json() {
 #[tokio::test]
 async fn a_repository_that_cannot_take_records_leaves_them_spooled_until_it_can() {
     let server = MockServer::start().await;
-    answering(&server, 503).await;
+    let taking = Arc::new(AtomicBool::new(false));
+    answering_once_taking(&server, Arc::clone(&taking)).await;
     let forwarder = Forwarder::fhir_feed(Spool::in_memory(BOUNDS), repository(&server), RETRY_MAX);
     let running = tokio::spawn(Arc::clone(&forwarder).run());
     for value in ["Qz7-feed-2", "Qz7-feed-3"] {
         forwarder.submit(record(value)).await.expect("stored");
     }
-    let down = until(&forwarder, Duration::from_secs(5), |status| {
-        status.retries >= 2
-    })
+    let down = until(
+        &forwarder,
+        timing::deadline(FAILED_ATTEMPT.saturating_mul(2)),
+        |status| status.retries >= 2,
+    )
     .await;
     assert!(!down.reachable);
     assert_eq!(2, down.depth.waiting(), "nothing is dropped");
     assert_eq!(0, down.delivered);
-    server.reset().await;
-    answering(&server, 201).await;
-    let up = until(&forwarder, Duration::from_secs(10), |status| {
+    taking.store(true, Ordering::SeqCst);
+    // The forwarder may be in a failing attempt: it ends that and its
+    // backoff, then posts both records, each within the request timeout.
+    let recovery = FAILED_ATTEMPT.saturating_add(REQUEST.saturating_mul(2));
+    let up = until(&forwarder, timing::deadline(recovery), |status| {
         status.delivered == 2
     })
     .await;
@@ -162,9 +183,11 @@ async fn a_refused_record_is_quarantined_and_the_drain_goes_on() {
         forwarder.submit(record(value)).await.expect("stored");
     }
     let running = tokio::spawn(Arc::clone(&forwarder).run());
-    let status = until(&forwarder, Duration::from_secs(5), |status| {
-        status.delivered == 1 && status.depth.quarantined == 1
-    })
+    let status = until(
+        &forwarder,
+        timing::deadline(REQUEST.saturating_mul(2)),
+        |status| status.delivered == 1 && status.depth.quarantined == 1,
+    )
     .await;
     running.abort();
     assert_eq!(1, status.delivered, "the next record is delivered");

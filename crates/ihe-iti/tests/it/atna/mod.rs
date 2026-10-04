@@ -8,9 +8,28 @@
 mod forwarder;
 mod spool;
 
+use std::time::{Duration, Instant};
+
+use ihe_iti::atna::forwarder::{Forwarder, Status};
 use secrecy::SecretSlice;
 
 /// A synthetic message, `text` as bytes.
 fn message(text: &str) -> SecretSlice<u8> {
     SecretSlice::from(text.as_bytes().to_vec())
+}
+
+/// Waits until `done` holds of the forwarder's status or `deadline` passes,
+/// and returns the last status.
+pub(crate) async fn until(
+    forwarder: &Forwarder,
+    deadline: Instant,
+    done: impl Fn(&Status) -> bool,
+) -> Status {
+    loop {
+        let status = forwarder.status();
+        if done(&status) || Instant::now() >= deadline {
+            return status;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }

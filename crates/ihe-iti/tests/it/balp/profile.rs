@@ -55,8 +55,10 @@ impl AuditRecorder for Refusing {
 }
 
 /// A recorder that never accepts, as a spool whose disk stalled does not.
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
 pub(crate) struct Stalled;
 
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
 #[async_trait::async_trait]
 impl AuditRecorder for Stalled {
     async fn record(&self, _exchange: Exchange) -> Result<(), AuditError> {
@@ -304,6 +306,7 @@ fn agents_of<'a>(record: &'a Value, system: &str, code: &str) -> Vec<&'a Value> 
 /// checks it names [`user`] as BALP 1.1.4 §3:5.7.5.4 maps the token: `iss`
 /// and `sub` in `who.identifier`, the purpose of use in `purposeOfUse`, and
 /// `client_id` in the `who.identifier.value` of one Application agent.
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
 pub(crate) fn names_the_user(record: &Value) {
     let definition = vendored(
         "ihe-balp",

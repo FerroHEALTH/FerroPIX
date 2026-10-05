@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Vernum Projecten B.V.
+// SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
 //! BALP, the IHE Basic Audit Log Patterns 1.1.4 (feature `balp`): the FHIR R4

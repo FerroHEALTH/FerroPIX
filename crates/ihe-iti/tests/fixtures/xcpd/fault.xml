@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- SPDX-FileCopyrightText: Vernum Projecten B.V. -->
+<!-- SPDX-FileCopyrightText: Cadasto B.V. -->
 <!-- SPDX-License-Identifier: BUSL-1.1 -->
 <!-- A SOAP 1.2 fault, the transmission error an initiating gateway shall
      accept (ITI TF-2 3.55.4.2.3); its reason quotes the synthetic patient

@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use ihe_iti::balp::{AuditError, AuditRecorder, Exchange};
+use ihe_iti::user::{OnBehalfOf, PurposeOfUse, User};
 use secrecy::ExposeSecret as _;
 use serde_json::Value;
 
@@ -250,6 +251,152 @@ pub(crate) fn holds_to(record: &Value, profile: &Value) {
                 );
             }
         }
+    }
+}
+
+/// The issuer of the synthetic user's token.
+pub(crate) const ISSUER: &str = "https://issuer.example.test";
+
+/// The synthetic user's `sub`, unlike any other text.
+pub(crate) const SUBJECT: &str = "Qz7-clinician-31";
+
+/// The synthetic user's `client_id`, unlike any other text.
+pub(crate) const CLIENT: &str = "Qz7-client-32";
+
+/// The audience the synthetic user's token names.
+pub(crate) const AUDIENCE: &str = "urn:example:gateway-under-test";
+
+/// The HL7 v3 `ActReason` code system of the synthetic purpose of use.
+pub(crate) const ACT_REASON: &str = "http://terminology.hl7.org/CodeSystem/v3-ActReason";
+
+/// A synthetic user who asked for an exchange through their OAuth token, for
+/// the purpose of use `TREAT`.
+pub(crate) fn user() -> OnBehalfOf {
+    OnBehalfOf::User(
+        User::new(ISSUER.to_owned(), SUBJECT.to_owned(), CLIENT.to_owned())
+            .with_audience(Some(AUDIENCE.to_owned()))
+            .with_purposes(vec![PurposeOfUse {
+                system: Some(ACT_REASON.to_owned()),
+                code: "TREAT".to_owned(),
+            }]),
+    )
+}
+
+/// The agents of `record` whose type is `(system, code)`.
+fn agents_of<'a>(record: &'a Value, system: &str, code: &str) -> Vec<&'a Value> {
+    record["agent"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|agent| {
+            agent["type"]["coding"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|coding| coding["system"] == system && coding["code"] == code)
+        })
+        .collect()
+}
+
+/// Holds `record` to the `agent:user` slice of BALP Query, which Patient
+/// Query and every transaction profile built on either inherit: exactly one agent of the slice's fixed type,
+/// with a `who`, `requestor` as fixed, and no `network` or `media`; and
+/// checks it names [`user`] as BALP 1.1.4 §3:5.7.5.4 maps the token: `iss`
+/// and `sub` in `who.identifier`, the purpose of use in `purposeOfUse`, and
+/// `client_id` in the `who.identifier.value` of one Application agent.
+pub(crate) fn names_the_user(record: &Value) {
+    let definition = vendored(
+        "ihe-balp",
+        "package/StructureDefinition-IHE.BasicAudit.Query.json",
+    );
+    let elements = definition["differential"]["element"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let element = |id: &str| {
+        elements
+            .iter()
+            .find(|element| element["id"] == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("BALP Query defines {id}"))
+    };
+    let typed = element("AuditEvent.agent:user.type");
+    let coding = &typed["patternCodeableConcept"]["coding"][0];
+    let users = agents_of(
+        record,
+        coding["system"].as_str().expect("a system"),
+        coding["code"].as_str().expect("a code"),
+    );
+    let [person] = users.as_slice() else {
+        panic!("one agent:user, got {}", users.len());
+    };
+    assert_eq!(
+        element("AuditEvent.agent:user")["max"],
+        "1",
+        "BALP Query: agent:user is 0..1"
+    );
+    assert!(person["who"].is_object(), "agent:user.who is 1..1");
+    assert_eq!(
+        person["requestor"],
+        element("AuditEvent.agent:user.requestor")["patternBoolean"],
+        "agent:user.requestor"
+    );
+    for absent in ["network", "media"] {
+        assert_eq!(
+            element(&format!("AuditEvent.agent:user.{absent}"))["max"],
+            "0"
+        );
+        assert!(person[absent].is_null(), "agent:user.{absent} is 0..0");
+    }
+    assert_eq!(person["who"]["identifier"]["system"], ISSUER, "iss");
+    assert_eq!(person["who"]["identifier"]["value"], SUBJECT, "sub");
+    assert_eq!(
+        person["purposeOfUse"][0]["coding"][0]["system"], ACT_REASON,
+        "purpose_of_use"
+    );
+    assert_eq!(person["purposeOfUse"][0]["coding"][0]["code"], "TREAT");
+    let applications = agents_of(
+        record,
+        "http://dicom.nema.org/resources/ontology/DCM",
+        "110150",
+    );
+    let [application] = applications.as_slice() else {
+        panic!("one Application agent, got {}", applications.len());
+    };
+    assert_eq!(
+        application["who"]["identifier"]["value"], CLIENT,
+        "client_id"
+    );
+    assert_eq!(application["requestor"], false);
+}
+
+/// Checks `record` names no user: no `IRCP` agent and no Application agent,
+/// as the BALP examples of an event no user caused do.
+pub(crate) fn names_no_user(record: &Value) {
+    assert!(
+        agents_of(
+            record,
+            "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+            "IRCP"
+        )
+        .is_empty(),
+        "no agent:user"
+    );
+    assert!(
+        agents_of(
+            record,
+            "http://dicom.nema.org/resources/ontology/DCM",
+            "110150"
+        )
+        .is_empty()
+            || record["meta"]["profile"][0]
+                .as_str()
+                .is_some_and(|profile| profile.contains("Delete")),
+        "no Application agent beside a Delete pattern's own client"
+    );
+    let text = record.to_string();
+    for value in [SUBJECT, CLIENT] {
+        assert!(!text.contains(value), "the record names no user");
     }
 }
 

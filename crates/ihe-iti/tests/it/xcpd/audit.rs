@@ -7,6 +7,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
+use ihe_iti::user::{OnBehalfOf, PurposeOfUse, User};
 use ihe_iti::xcpd::audit::{
     AuditError, AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint,
 };
@@ -69,7 +70,13 @@ async fn a_match_whose_event_is_not_stored_within_the_exchange_s_time_is_not_use
     let matched = answering("match.xml").await;
     let asked = std::time::Instant::now();
     let answer = audited
-        .discover(&responding(&matched), &query(), None, budget)
+        .discover(
+            &responding(&matched),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            budget,
+        )
         .await;
     assert!(asked.elapsed() < budget + slack, "{:?}", asked.elapsed());
     match answer {
@@ -85,7 +92,13 @@ async fn an_event_the_recorder_refuses_fails_the_discovery() {
     let audited = client().audited(Arc::new(Refusing));
     let matched = answering("match.xml").await;
     let answer = audited
-        .discover(&responding(&matched), &query(), None, PROMPT)
+        .discover(
+            &responding(&matched),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     match answer {
         Err(error @ XcpdError::Audit(_)) => {
@@ -101,7 +114,13 @@ async fn the_recorded_query_is_the_query_sent() {
     let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
     let _answer = audited
-        .discover(&responding(&server), &query(), None, PROMPT)
+        .discover(
+            &responding(&server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     let sent = super::sent(&server).await;
     let recorded = kept.events()[0].query.expose_secret().to_owned();
@@ -133,7 +152,9 @@ async fn every_exchange_records_one_event_with_its_outcome() {
     .expect("a gateway");
     let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
     for target in [responding(&matched), responding(&faulting), unreachable] {
-        let _answer = audited.discover(&target, &asked, None, PROMPT).await;
+        let _answer = audited
+            .discover(&target, &asked, None, &OnBehalfOf::System, PROMPT)
+            .await;
     }
 
     let events = kept.events();
@@ -187,7 +208,9 @@ async fn the_event_shows_no_identifier_and_no_userinfo() {
         .expect("a password");
     let target =
         RespondingGateway::unencrypted_for_development(endpoint, oid(RECEIVER)).expect("a gateway");
-    let _answer = audited.discover(&target, &query(), None, PROMPT).await;
+    let _answer = audited
+        .discover(&target, &query(), None, &OnBehalfOf::System, PROMPT)
+        .await;
 
     let events = kept.events();
     assert_eq!(1, events.len());
@@ -235,7 +258,13 @@ async fn the_dicom_message_fills_the_initiating_gateway_table() {
     let server = answering("no-match.xml").await;
     let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
     let _answer = audited
-        .discover(&responding(&server), &asked, None, PROMPT)
+        .discover(
+            &responding(&server),
+            &asked,
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     let event = kept.events().remove(0);
     let source = AuditSource {
@@ -280,4 +309,118 @@ async fn the_dicom_message_fills_the_initiating_gateway_table() {
         "the identifier travels only base64-encoded inside the query"
     );
     assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?><AuditMessage>"));
+}
+
+/// The `sub` of the synthetic user, unlike any other text.
+const SUBJECT: &str = "Qz7-clinician-55";
+
+/// The `client_id` of the synthetic user, unlike any other text.
+const CLIENT: &str = "Qz7-client-55";
+
+/// A synthetic user who asked for the discovery through their OAuth token.
+fn user() -> OnBehalfOf {
+    OnBehalfOf::User(
+        User::new(
+            "https://issuer.example.test".to_owned(),
+            SUBJECT.to_owned(),
+            CLIENT.to_owned(),
+        )
+        .with_audience(Some("urn:example:gateway-under-test".to_owned()))
+        .with_purposes(vec![PurposeOfUse {
+            system: None,
+            code: "TREAT".to_owned(),
+        }]),
+    )
+}
+
+#[tokio::test]
+async fn the_event_of_a_discovery_made_for_a_user_names_them_and_shows_none_of_it() {
+    let kept = Arc::new(Kept::default());
+    let audited = client().audited(kept.clone());
+    let server = answering("no-match.xml").await;
+    let _answer = audited
+        .discover(&responding(&server), &query(), None, &user(), PROMPT)
+        .await;
+    let event = kept.events().remove(0);
+    assert_eq!(event.on_behalf, user());
+    let rendered = format!("{event:?}");
+    for value in [SUBJECT, CLIENT] {
+        assert!(!rendered.contains(value), "Debug names no user: {rendered}");
+    }
+}
+
+/// The DICOM message of one discovery made for `on_behalf`, as UTF-8 XML,
+/// and the event it was written from.
+#[cfg(feature = "atna")]
+async fn message_for(on_behalf: &OnBehalfOf) -> (String, AuditEvent) {
+    use ihe_iti::atna::message::{AccessPoint, AuditSource};
+    let kept = Arc::new(Kept::default());
+    let audited = client().audited(kept.clone());
+    let server = answering("no-match.xml").await;
+    let _answer = audited
+        .discover(&responding(&server), &query(), None, on_behalf, PROMPT)
+        .await;
+    let event = kept.events().remove(0);
+    let source = AuditSource {
+        id: "gateway.example.org".to_owned(),
+        enterprise_site: None,
+    };
+    let host = AccessPoint {
+        type_code: "1",
+        id: "gateway.example.org".to_owned(),
+    };
+    let message = event.message(&source, &host);
+    let xml = message.to_xml().expect("written");
+    let rendered = format!("{event:?} {message:?}");
+    for value in [SUBJECT, CLIENT] {
+        assert!(!rendered.contains(value), "Debug names no user: {rendered}");
+    }
+    (
+        String::from_utf8(xml.expose_secret().to_vec()).expect("UTF-8"),
+        event,
+    )
+}
+
+#[cfg(feature = "atna")]
+#[tokio::test]
+async fn the_dicom_message_names_the_user_as_its_human_requestor() {
+    let (xml, _event) = message_for(&user()).await;
+    // NOTE: ITI TF-2 §3.55.5.1.1 Human Requestor (if known): UserID the human's identity;
+    // IUA ITI TF-2 §3.72.5.1 UserName alias<user@issuer> from a JWT's aud, sub and iss.
+    let requestor = format!(
+        "<ActiveParticipant UserID=\"{SUBJECT}\" UserName=\"urn:example:gateway-under-test&lt;{SUBJECT}@https://issuer.example.test&gt;\" UserIsRequestor=\"true\"></ActiveParticipant>"
+    );
+    assert!(xml.contains(&requestor), "{requestor} in {xml}");
+    assert!(
+        xml.contains(&format!(
+            "AlternativeUserID=\"{}\" UserIsRequestor=\"false\"",
+            std::process::id()
+        )),
+        "DICOM PS3.15 A.5.2: one participant is the requestor, the user: {xml}"
+    );
+    assert!(
+        !xml.contains(CLIENT),
+        "PS3.15 A.5.1 has no element for the client application"
+    );
+    assert_eq!(3, xml.matches("<ActiveParticipant ").count());
+}
+
+#[cfg(feature = "atna")]
+#[tokio::test]
+async fn the_dicom_message_of_the_gateway_s_own_discovery_names_no_human_requestor() {
+    let (xml, event) = message_for(&OnBehalfOf::System).await;
+    assert_eq!(event.on_behalf, OnBehalfOf::System);
+    assert_eq!(
+        2,
+        xml.matches("<ActiveParticipant ").count(),
+        "the source and the destination: {xml}"
+    );
+    assert!(!xml.contains("UserName="), "{xml}");
+    assert!(
+        xml.contains(&format!(
+            "AlternativeUserID=\"{}\" UserIsRequestor=\"true\"",
+            std::process::id()
+        )),
+        "the gateway is the requestor of its own discovery: {xml}"
+    );
 }

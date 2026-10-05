@@ -18,6 +18,9 @@
 //! query entity, and the patient entity when the input names the patient by
 //! one identifier, which the profile asks for when "one patient is explicitly
 //! identified".
+//!
+//! A search, a page or a match made for a user names them from their OAuth
+//! token, in the user agent BALP's patterns leave optional.
 
 use jiff::Timestamp;
 use secrecy::SecretString;
@@ -28,6 +31,7 @@ use crate::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, Outcome, Peer, REST, SEARCH,
     SOURCE_ROLE,
 };
+use crate::user::OnBehalfOf;
 
 /// The `ITI-78` subtype.
 pub const ITI_78: Coded = Coded {
@@ -65,22 +69,28 @@ pub const MATCH_CONSUMER: EventKind = EventKind {
 };
 
 /// The audit record of one ITI-78 request `request` to the Supplier at
-/// `base`, which ended in `result`.
+/// `base`, made for `on_behalf`, which ended in `result`.
 pub(super) fn exchange<T>(
     base: &Url,
     request: SecretString,
+    on_behalf: &OnBehalfOf,
     result: &Result<T, PdqmError>,
 ) -> Exchange {
-    recorded(QUERY_CONSUMER, base, vec![Entity::Query(request)], result)
+    recorded(
+        (QUERY_CONSUMER, base),
+        vec![Entity::Query(request)],
+        on_behalf,
+        result,
+    )
 }
 
 /// The audit record of one ITI-119 request `request` to the Supplier at
-/// `base`, naming the patient `patient` when the input identified one, which
-/// ended in `result`.
+/// `base`, naming the patient `patient` when the input identified one, made
+/// for `on_behalf`, which ended in `result`.
 pub(super) fn match_exchange<T>(
     base: &Url,
-    request: SecretString,
-    patient: Option<(&str, &SecretString)>,
+    (request, patient): (SecretString, Option<(&str, &SecretString)>),
+    on_behalf: &OnBehalfOf,
     result: &Result<T, PdqmError>,
 ) -> Exchange {
     let mut entities = vec![Entity::Query(request)];
@@ -90,15 +100,15 @@ pub(super) fn match_exchange<T>(
             value: value.clone(),
         });
     }
-    recorded(MATCH_CONSUMER, base, entities, result)
+    recorded((MATCH_CONSUMER, base), entities, on_behalf, result)
 }
 
 /// The record of `kind` for an exchange with the Supplier at `base` over
-/// `entities`, which ended in `result`.
+/// `entities`, made for `on_behalf`, which ended in `result`.
 fn recorded<T>(
-    kind: EventKind,
-    base: &Url,
+    (kind, base): (EventKind, &Url),
     entities: Vec<Entity>,
+    on_behalf: &OnBehalfOf,
     result: &Result<T, PdqmError>,
 ) -> Exchange {
     let outcome = match result {
@@ -113,6 +123,7 @@ fn recorded<T>(
         direction: Direction::Sent {
             server: Peer::server(base),
         },
+        on_behalf: on_behalf.clone(),
         entities,
     }
 }

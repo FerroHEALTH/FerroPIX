@@ -5,6 +5,7 @@
 //! (§2:3.78.4.2.2.4, <http://hl7.org/fhir/R4/http.html#paging>).
 
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
+use ihe_iti::user::OnBehalfOf;
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -60,12 +61,15 @@ async fn the_next_link_is_followed_on_the_suppliers_origin() {
     let server = two_pages(|uri| format!("{uri}/fhir/Patient?page=2")).await;
     let client = client(&server);
     let first = client
-        .search(&schmidt(), PROMPT)
+        .search(&schmidt(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("a first page");
     assert_eq!(ids(&first), [Some("first".to_owned())], "the first page");
     let page = first.next().expect("a next link");
-    let second = client.next_page(page, PROMPT).await.expect("a second page");
+    let second = client
+        .next_page(page, &OnBehalfOf::System, PROMPT)
+        .await
+        .expect("a second page");
     assert_eq!(ids(&second), [Some("second".to_owned())], "the second page");
     assert!(second.next().is_none(), "the last page");
 }
@@ -75,11 +79,14 @@ async fn a_relative_next_link_resolves_against_the_fhir_base() {
     let server = two_pages(|_uri| "Patient?page=2".to_owned()).await;
     let client = client(&server);
     let first = client
-        .search(&schmidt(), PROMPT)
+        .search(&schmidt(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("a first page");
     let page = first.next().expect("a next link");
-    let second = client.next_page(page, PROMPT).await.expect("a second page");
+    let second = client
+        .next_page(page, &OnBehalfOf::System, PROMPT)
+        .await
+        .expect("a second page");
     assert_eq!(ids(&second), [Some("second".to_owned())], "the second page");
 }
 
@@ -88,13 +95,13 @@ async fn a_next_link_to_another_origin_is_not_followed() {
     let server = two_pages(|_uri| "https://elsewhere.example/fhir/Patient?page=2".to_owned()).await;
     let client = client(&server);
     let first = client
-        .search(&schmidt(), PROMPT)
+        .search(&schmidt(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("a first page");
     let page = first.next().expect("a next link");
     assert!(
         matches!(
-            client.next_page(page, PROMPT).await,
+            client.next_page(page, &OnBehalfOf::System, PROMPT).await,
             Err(PdqmError::ForeignPage)
         ),
         "the credentials stay with the Supplier"
@@ -106,7 +113,9 @@ async fn a_next_link_that_is_no_url_is_malformed() {
     let server = two_pages(|_uri| "http://[".to_owned()).await;
     assert!(
         matches!(
-            client(&server).search(&schmidt(), PROMPT).await,
+            client(&server)
+                .search(&schmidt(), &OnBehalfOf::System, PROMPT)
+                .await,
             Err(PdqmError::Malformed(Malformation::NextLink))
         ),
         "an unparsable next link"

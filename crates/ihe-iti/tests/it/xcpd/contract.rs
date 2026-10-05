@@ -6,6 +6,7 @@
 //! `PRPA_IN201305UV02` wrappers (Appendix O, Table 3.55.4.1.2.3-1), and the
 //! query by the shared identifier alone (§3.55.1, §3.55.4.1.2.1).
 
+use ihe_iti::user::OnBehalfOf;
 use ihe_iti::xcpd::error::InvalidInput;
 use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid};
 use ihe_iti::xcpd::request::RespondingGateway;
@@ -24,7 +25,9 @@ const ASSERTION: &str = r#"<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML
 async fn the_envelope_carries_the_ws_addressing_headers_appendix_v_requires() {
     let server = answering("no-match.xml").await;
     let gateway = responding(&server);
-    let _answer = client().discover(&gateway, &query(), None, PROMPT).await;
+    let _answer = client()
+        .discover(&gateway, &query(), None, &OnBehalfOf::System, PROMPT)
+        .await;
     let body = sent(&server).await;
 
     assert!(body.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
@@ -53,7 +56,13 @@ async fn the_envelope_carries_the_ws_addressing_headers_appendix_v_requires() {
 async fn the_request_is_posted_as_soap_1_2_with_its_action() {
     let server = answering("no-match.xml").await;
     let _answer = client()
-        .discover(&responding(&server), &query(), None, PROMPT)
+        .discover(
+            &responding(&server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     let requests = server.received_requests().await.expect("recording is on");
     let media = requests[0]
@@ -71,7 +80,13 @@ async fn the_request_is_posted_as_soap_1_2_with_its_action() {
 async fn the_wrappers_hold_to_table_3_55_4_1_2_3_1() {
     let server = answering("no-match.xml").await;
     let _answer = client()
-        .discover(&responding(&server), &query(), None, PROMPT)
+        .discover(
+            &responding(&server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     let body = sent(&server).await;
 
@@ -108,7 +123,13 @@ async fn the_wrappers_hold_to_table_3_55_4_1_2_3_1() {
 async fn the_query_names_the_shared_identifier_and_no_demographics() {
     let server = answering("no-match.xml").await;
     let _answer = client()
-        .discover(&responding(&server), &query(), None, PROMPT)
+        .discover(
+            &responding(&server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     let body = sent(&server).await;
 
@@ -135,7 +156,9 @@ async fn the_sender_and_target_communities_are_named_when_given() {
     let server = answering("no-match.xml").await;
     let gateway = responding(&server).targeting(HomeCommunityId::new(oid("2.999.50")));
     let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
-    let _answer = client().discover(&gateway, &asked, None, PROMPT).await;
+    let _answer = client()
+        .discover(&gateway, &asked, None, &OnBehalfOf::System, PROMPT)
+        .await;
     let body = sent(&server).await;
 
     for community in ["2.999.50", "2.999.40"] {
@@ -153,7 +176,13 @@ async fn an_assertion_rides_in_a_ws_security_header_as_written() {
     let server = answering("no-match.xml").await;
     let assertion = XuaAssertion::new(ASSERTION).expect("an assertion");
     let _answer = client()
-        .discover(&responding(&server), &query(), Some(&assertion), PROMPT)
+        .discover(
+            &responding(&server),
+            &query(),
+            Some(&assertion),
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await;
     let body = sent(&server).await;
     let security = between(&body, "<wsse:Security ", "</wsse:Security>").unwrap_or_default();

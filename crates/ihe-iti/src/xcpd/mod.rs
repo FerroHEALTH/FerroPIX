@@ -40,6 +40,7 @@
 //! use ihe_iti::xcpd::XcpdClient;
 //! use ihe_iti::xcpd::discovery::Discovery;
 //! use ihe_iti::xcpd::identifier::{Oid, PatientIdentifier};
+//! use ihe_iti::user::OnBehalfOf;
 //! use ihe_iti::xcpd::request::{DiscoveryQuery, RespondingGateway};
 //! use secrecy::SecretString;
 //! use url::Url;
@@ -55,7 +56,11 @@
 //! )?;
 //! let patient = PatientIdentifier::new(Oid::new("2.999.1")?, SecretString::from("9999"))?;
 //! let query = DiscoveryQuery::new(Oid::new("2.999.40.1")?, patient);
-//! match client.discover(&gateway, &query, None, Duration::from_secs(5)).await? {
+//! let on_behalf = OnBehalfOf::System;
+//! match client
+//!     .discover(&gateway, &query, None, &on_behalf, Duration::from_secs(5))
+//!     .await?
+//! {
 //!     Discovery::Matched(found) => {
 //!         for record in found {
 //!             let _community = record.community();
@@ -86,6 +91,7 @@ use std::time::Duration;
 use http::header::{ACCEPT, CONTENT_TYPE};
 
 use crate::recording::{Late, Recorded, within};
+use crate::user::OnBehalfOf;
 use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
 use error::{Malformation, XcpdError};
@@ -151,7 +157,9 @@ impl XcpdClient {
     }
 
     /// Asks `gateway` whether its community knows the patient `query` names
-    /// (§3.55.4.1), with `assertion` in the WS-Security header when given.
+    /// (§3.55.4.1), with `assertion` in the WS-Security header when given, on
+    /// behalf of `on_behalf`, whom an audited client's message names as its
+    /// Human Requestor (§3.55.5.1.1).
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer
     /// is read, and an audited client's record of it ([`crate::recording`]).
@@ -167,6 +175,7 @@ impl XcpdClient {
         gateway: &RespondingGateway,
         query: &DiscoveryQuery,
         assertion: Option<&XuaAssertion>,
+        on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
         let deadline = crate::recording::deadline(timeout);
@@ -186,6 +195,7 @@ impl XcpdClient {
                 destination_access_point: NetworkAccessPoint::of(gateway.endpoint()),
                 query: written.query,
                 home_community: query.community().cloned(),
+                on_behalf: on_behalf.clone(),
             };
             // NOTE: ITI TF-2 §3.55.5.1, ITI TF-1 Table 27.1.3-1: the actor shall record the
             // exchange, so an answer whose audit message was not accepted is not used.

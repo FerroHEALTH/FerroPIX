@@ -40,6 +40,7 @@ fn exchange() -> Exchange {
                     .expect("a URL"),
             ),
         },
+        on_behalf: ihe_iti::user::OnBehalfOf::System,
         entities: vec![
             Entity::Query(SecretString::from(format!(
                 "https://pix.example.org/fhir/Patient?identifier={SEARCHED}"
@@ -61,6 +62,25 @@ fn no_debug_shows_a_patient_or_the_request() {
         for value in [VALUE, REFERENCE, SEARCHED, "Qz7-password", "Qz7-token"] {
             assert!(!shown.contains(value), "{value} in {shown}");
         }
+    }
+}
+
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
+#[test]
+fn no_debug_shows_the_user_and_the_record_names_them_toward_the_repository() {
+    use super::profile::{AUDIENCE, CLIENT, ISSUER, SUBJECT, user};
+    let exchange = Exchange {
+        on_behalf: user(),
+        ..exchange()
+    };
+    let record = exchange.audit_event(&observer()).expect("a record");
+    let shown = format!("{exchange:?} {record:?} {:?}", user());
+    for value in [SUBJECT, CLIENT, ISSUER, AUDIENCE] {
+        assert!(!shown.contains(value), "{value} in {shown}");
+    }
+    let text = String::from_utf8_lossy(record.into_bytes().expose_secret()).into_owned();
+    for value in [SUBJECT, CLIENT, ISSUER] {
+        assert!(text.contains(value), "{value} reaches the repository");
     }
 }
 

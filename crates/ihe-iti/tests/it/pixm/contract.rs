@@ -8,6 +8,7 @@
 use std::collections::BTreeSet;
 
 use ihe_iti::pixm::{Invocation, PixmClient};
+use ihe_iti::user::OnBehalfOf;
 use serde::Deserialize;
 use url::Url;
 use wiremock::{MockServer, Request};
@@ -126,7 +127,12 @@ async fn the_request_carries_only_in_parameters_with_their_cardinality() {
     )
     .await;
     client(&server)
-        .cross_reference(&red_source(), &[target(BLUE), target(GREEN)], PROMPT)
+        .cross_reference(
+            &red_source(),
+            &[target(BLUE), target(GREEN)],
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -194,7 +200,12 @@ async fn the_request_is_the_igs_own_example_query() {
     )
     .await;
     client(&server)
-        .cross_reference(&red_source(), &[target(BLUE), target(GREEN)], PROMPT)
+        .cross_reference(
+            &red_source(),
+            &[target(BLUE), target(GREEN)],
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -265,7 +276,12 @@ async fn a_posted_request_carries_the_in_parameters_in_its_body_and_none_in_its_
     )
     .await;
     posting_client(&server)
-        .cross_reference(&red_source(), &[target(BLUE), target(GREEN)], PROMPT)
+        .cross_reference(
+            &red_source(),
+            &[target(BLUE), target(GREEN)],
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await
         .expect("an answer");
     let (request, body) = posted(&server).await;
@@ -336,7 +352,12 @@ async fn the_posted_body_is_the_igs_own_example_request() {
     )
     .await;
     posting_client(&server)
-        .cross_reference(&red_source(), &[target(BLUE), target(GREEN)], PROMPT)
+        .cross_reference(
+            &red_source(),
+            &[target(BLUE), target(GREEN)],
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await
         .expect("an answer");
     let (_, body) = posted(&server).await;

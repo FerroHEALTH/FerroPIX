@@ -9,7 +9,8 @@
 //! [`Exchange`] per search ([`QUERY`], on the BALP Query pattern) and per
 //! history ([`UPDATES`]), with the first request as sent in the query
 //! entity. A care services search names no patient, so no patient entity is
-//! written.
+//! written. The client is told of no user, so each record is the client's
+//! own system's ([`OnBehalfOf::System`]) and names no user agent.
 
 use jiff::Timestamp;
 use url::Url;
@@ -19,6 +20,7 @@ use crate::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, HISTORY_TYPE, Outcome, Peer,
     REST, SEARCH, SOURCE_ROLE, request_text,
 };
+use crate::user::OnBehalfOf;
 
 /// The `ITI-90` subtype.
 pub const ITI_90: Coded = Coded {
@@ -79,6 +81,7 @@ pub(super) fn exchange<T>(
         direction: Direction::Sent {
             server: Peer::server(base),
         },
+        on_behalf: OnBehalfOf::System,
         entities: vec![Entity::Query(request_text(request))],
     }
 }

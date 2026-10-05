@@ -74,6 +74,7 @@ fn record(value: &str) -> SecretSlice<u8> {
         direction: Direction::Sent {
             server: Peer::server(&Url::parse("https://pix.example.org/fhir/").expect("a URL")),
         },
+        on_behalf: ihe_iti::user::OnBehalfOf::System,
         entities: vec![Entity::Patient {
             system: "urn:oid:2.999.1".to_owned(),
             value: SecretString::from(value),

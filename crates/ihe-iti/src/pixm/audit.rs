@@ -10,7 +10,9 @@
 //! it: built on the BALP Patient Query pattern, the `ITI-83` and `search`
 //! subtypes, the request as sent in the query entity (its URL for a `GET`,
 //! its request line, media type and `Parameters` body for a `POST`), and the
-//! source identifier in the patient entity.
+//! source identifier in the patient entity. An exchange made for a user
+//! names them from their OAuth token, as §2:3.83.5.2.1 asks the record to
+//! be augmented "following IHE-BALP".
 
 use jiff::Timestamp;
 use secrecy::{ExposeSecret, SecretString};
@@ -24,6 +26,7 @@ use crate::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, Outcome, Peer, REST, SEARCH,
     SOURCE_ROLE, request_text,
 };
+use crate::user::OnBehalfOf;
 
 /// The `ITI-83` subtype.
 pub const ITI_83: Coded = Coded {
@@ -44,11 +47,12 @@ pub const QUERY_CONSUMER: EventKind = EventKind {
 
 /// The audit record of one ITI-83 exchange that asked the Manager at its
 /// `operation` URL, `[base]/Patient/\$ihe-pix`, with the
-/// request `request` about `source`, and ended in `result`.
+/// request `request` about `source`, made for `on_behalf`, and ended in
+/// `result`.
 pub(super) fn exchange<T>(
     operation: &Url,
-    request: &Request,
-    source: &SourceIdentifier,
+    (request, source): (&Request, &SourceIdentifier),
+    on_behalf: &OnBehalfOf,
     result: &Result<T, PixmError>,
 ) -> Exchange {
     Exchange {
@@ -58,6 +62,7 @@ pub(super) fn exchange<T>(
         direction: Direction::Sent {
             server: Peer::server(&operation.join("..").unwrap_or_else(|_| operation.clone())),
         },
+        on_behalf: on_behalf.clone(),
         entities: vec![
             Entity::Query(query(operation, request)),
             Entity::Patient {

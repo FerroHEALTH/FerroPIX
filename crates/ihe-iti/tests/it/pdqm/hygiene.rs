@@ -13,6 +13,7 @@ use std::time::Duration;
 use ihe_iti::pdqm::PdqmClient;
 use ihe_iti::pdqm::error::PdqmError;
 use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
+use ihe_iti::user::OnBehalfOf;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
 use url::Url;
@@ -69,7 +70,7 @@ fn rendered(error: &PdqmError) -> String {
 async fn the_criteria_reach_the_supplier_in_the_body_only() {
     let server = supplier(200, FHIR_JSON, searchset(0, &[], &[])).await;
     client(&server)
-        .search(&query(), PROMPT)
+        .search(&query(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -146,7 +147,7 @@ async fn no_failure_carries_a_value() {
     for (status, body) in bodies {
         let server = supplier(status, FHIR_JSON, body).await;
         let error = client(&server)
-            .search(&query(), PROMPT)
+            .search(&query(), &OnBehalfOf::System, PROMPT)
             .await
             .expect_err("a failure");
         let shown = rendered(&error);
@@ -167,7 +168,7 @@ async fn a_timeout_or_transport_failure_carries_no_url() {
         .await;
     let client = client(&server);
     let limit = Duration::from_millis(200);
-    let error = timing::bounded(limit, client.search(&query(), limit))
+    let error = timing::bounded(limit, client.search(&query(), &OnBehalfOf::System, limit))
         .await
         .expect_err("a timeout");
     assert!(
@@ -175,7 +176,7 @@ async fn a_timeout_or_transport_failure_carries_no_url() {
         "the timeout carries a value"
     );
     let error = unreachable_client()
-        .search(&query(), PROMPT)
+        .search(&query(), &OnBehalfOf::System, PROMPT)
         .await
         .expect_err("no Supplier");
     let shown = rendered(&error);
@@ -206,7 +207,10 @@ async fn a_page_link_and_its_failure_carry_no_value() {
         .mount(&server)
         .await;
     let client = client(&server);
-    let first = client.search(&query(), PROMPT).await.expect("a first page");
+    let first = client
+        .search(&query(), &OnBehalfOf::System, PROMPT)
+        .await
+        .expect("a first page");
     let page = first.next().expect("a next link");
     assert!(
         !shows_a_value(&format!("{first:?} {page:?}")),
@@ -214,7 +218,7 @@ async fn a_page_link_and_its_failure_carry_no_value() {
     );
     assert_eq!("Page(***)", format!("{page:?}"), "the family's placeholder");
     let limit = Duration::from_millis(200);
-    let error = timing::bounded(limit, client.next_page(page, limit))
+    let error = timing::bounded(limit, client.next_page(page, &OnBehalfOf::System, limit))
         .await
         .expect_err("a timeout");
     assert!(
@@ -239,7 +243,7 @@ async fn a_match_shows_no_demographics() {
     );
     let server = supplier(200, FHIR_JSON, body).await;
     let found = client(&server)
-        .search(&query(), PROMPT)
+        .search(&query(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("a result set");
     assert_eq!(found.patients().len(), 1, "one match");

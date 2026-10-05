@@ -77,18 +77,36 @@ pub struct AccessPoint {
 }
 
 /// `ActiveParticipant`: a user, process or system that took part.
-#[derive(Debug, Clone)]
+///
+/// A participant may be a person, so `Debug` shows neither its `UserID` nor
+/// its `UserName`.
+#[derive(Clone)]
 pub struct ActiveParticipant {
     /// `UserID`.
     pub user_id: String,
     /// `AlternativeUserID`, when the table fills it.
     pub alternative_user_id: Option<String>,
+    /// `UserName`, when the table or a grouped profile fills it.
+    pub user_name: Option<String>,
     /// `UserIsRequestor`.
     pub user_is_requestor: bool,
     /// `RoleIDCode`, in order.
     pub role_id_codes: Vec<CodedValue>,
     /// The network access point, when the participant has one.
     pub access_point: Option<AccessPoint>,
+}
+
+impl fmt::Debug for ActiveParticipant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ActiveParticipant")
+            .field("user_id", &REDACTED)
+            .field("alternative_user_id", &self.alternative_user_id)
+            .field("user_name", &self.user_name.as_ref().map(|_| REDACTED))
+            .field("user_is_requestor", &self.user_is_requestor)
+            .field("role_id_codes", &self.role_id_codes)
+            .field("access_point", &self.access_point)
+            .finish()
+    }
 }
 
 /// `AuditSourceIdentification`: the system that wrote the message.
@@ -248,6 +266,9 @@ fn write_participant(
     let mut attributes = vec![("UserID", participant.user_id.as_str())];
     if let Some(alternative) = &participant.alternative_user_id {
         attributes.push(("AlternativeUserID", alternative.as_str()));
+    }
+    if let Some(name) = &participant.user_name {
+        attributes.push(("UserName", name.as_str()));
     }
     attributes.push((
         "UserIsRequestor",

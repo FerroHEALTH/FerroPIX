@@ -5,6 +5,7 @@
 //! XUA assertion appear in no `Debug` rendering and no error: they travel in
 //! the request body to the responding gateway only.
 
+use ihe_iti::user::OnBehalfOf;
 use ihe_iti::xcpd::security::XuaAssertion;
 
 use super::{
@@ -46,6 +47,7 @@ async fn no_rendering_of_a_match_shows_the_patient_ids() {
             &responding(&answering("match.xml").await),
             &query(),
             None,
+            &OnBehalfOf::System,
             PROMPT,
         )
         .await
@@ -59,7 +61,13 @@ async fn no_rendering_of_a_match_shows_the_patient_ids() {
 async fn no_error_carries_the_gateway_text_or_the_identifier() {
     let server = gateway(Templated::new(500, SOAP_XML, fixture("fault.xml"))).await;
     let error = client()
-        .discover(&responding(&server), &query(), None, PROMPT)
+        .discover(
+            &responding(&server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await
         .expect_err("a fault");
     let rendered = format!("{error} {error:?}");

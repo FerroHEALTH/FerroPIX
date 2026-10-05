@@ -14,6 +14,7 @@ framework, with a feature per profile.
 | `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
 | `atna` | Audit Trail and Node Authentication | ITI-20 |
+| `balp` | Basic Audit Log Patterns: the FHIR `AuditEvent` of the FHIR profiles, sent over the ITI-20 FHIR Feed | ITI-20 |
 
 The crate depends on no application, so a federation gateway, a master patient
 index or any other caller can use it as it is. Only the `xcpd` feature may carry
@@ -157,6 +158,20 @@ compile already through `fhir-types`; `xcpd` adds only `uuid` for the
 message ids and `jiff` for the creation time, and no other feature but
 `atna`, which writes timestamps too, compiles either.
 
+## Whom an exchange is made for
+
+`PixmClient::cross_reference`, the `PdqmClient` searches, pages and
+matches, and `XcpdClient::discover` each take an `ihe_iti::user::OnBehalfOf`:
+the `User` an OAuth 2.0 access token names (its `iss`, `sub`, `client_id`,
+`aud` and purposes of use), or `System` for an exchange the client's own
+system makes. An audited exchange's record names the user: the `AuditEvent`
+of the `balp` feature carries the BALP `agent:user` and an Application agent
+with the `client_id` (PIXm §2:3.83.5.2.1, BALP 1.1.4 §3:5.7.5.4), and the
+ITI-55 message carries the Human Requestor, with `UserName` written
+`aud<sub@iss>` (ITI TF-2 §3.55.5.1.1, IUA ITI TF-2 §3.72.5.1). A `System`
+exchange names no user. `User`'s `Debug` shows none of its values. The mCSD
+and PMIR exchanges are always the system's own.
+
 ## ATNA (`atna`)
 
 `ihe_iti::atna` is the sending half of ITI-20, Record Audit Event (ITI TF-2
@@ -188,9 +203,6 @@ message ids and `jiff` for the creation time, and no other feature but
   the spool in order, retries a transport failure with a jittered backoff
   capped where the caller says, and reports the spool's depth, its
   quarantine, its deliveries and its retries.
-
-The RESTful ATNA FHIR feed is an option of ITI-20 this crate does not
-send.
 
 The other profile modules hold their place and land with their FerroFED issues
 (<https://github.com/FerroHEALTH/FerroFED>).

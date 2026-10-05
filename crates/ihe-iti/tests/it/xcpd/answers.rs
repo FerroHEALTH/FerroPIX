@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use ihe_iti::user::OnBehalfOf;
 use ihe_iti::xcpd::discovery::{Discovery, RequestedAttribute};
 use ihe_iti::xcpd::error::{DetectedIssue, FaultCode, Malformation, XcpdError};
 use secrecy::ExposeSecret;
@@ -20,7 +21,13 @@ use crate::timing;
 
 async fn ask(server: &MockServer) -> Result<Discovery, XcpdError> {
     client()
-        .discover(&responding(server), &query(), None, PROMPT)
+        .discover(
+            &responding(server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
         .await
 }
 
@@ -150,6 +157,7 @@ async fn every_error_names_the_status_the_gateway_answered_with() {
             .expect("a gateway"),
             &query(),
             None,
+            &OnBehalfOf::System,
             PROMPT,
         )
         .await;
@@ -269,6 +277,10 @@ async fn a_gateway_silent_past_the_timeout_is_a_timeout() {
     let gateway = responding(&server);
     let query = query();
     let limit = Duration::from_millis(200);
-    let answer = timing::bounded(limit, client.discover(&gateway, &query, None, limit)).await;
+    let answer = timing::bounded(
+        limit,
+        client.discover(&gateway, &query, None, &OnBehalfOf::System, limit),
+    )
+    .await;
     assert!(matches!(answer, Err(XcpdError::Timeout)), "{answer:?}");
 }

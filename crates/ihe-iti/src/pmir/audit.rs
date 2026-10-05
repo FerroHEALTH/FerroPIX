@@ -19,6 +19,10 @@
 //! A subscription names an identifier system at most, never a patient, so
 //! no ITI-94 record carries a patient entity (each profile's
 //! `entity:patient` is `0..*`).
+//!
+//! Every exchange is the system's own ([`OnBehalfOf::System`]): a
+//! subscription is the Consumer's, and a feed message the Registry sends of
+//! its own accord, so no record names a user agent.
 
 use jiff::Timestamp;
 use secrecy::{ExposeSecret, SecretString};
@@ -31,6 +35,7 @@ use crate::balp::{
     Entity, EventKind, Exchange, Outcome, Peer, READ, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT,
     request_text,
 };
+use crate::user::OnBehalfOf;
 
 /// The `ITI-93` subtype.
 pub const ITI_93: Coded = Coded {
@@ -159,6 +164,7 @@ pub(super) fn subscription<T>(
         direction: Direction::Sent {
             server: registry(subscriptions),
         },
+        on_behalf: OnBehalfOf::System,
         entities: vec![Entity::Resource {
             reference,
             resource_type: "Subscription",
@@ -184,6 +190,7 @@ pub(super) fn search<T>(
         direction: Direction::Sent {
             server: registry(subscriptions),
         },
+        on_behalf: OnBehalfOf::System,
         entities: vec![Entity::Query(request_text(request))],
     }
 }
@@ -235,6 +242,7 @@ pub fn received(registry: &Url, endpoint: &Url, feed: Option<&Feed>) -> Exchange
             client: Peer::server(registry),
             endpoint: endpoint.clone(),
         },
+        on_behalf: OnBehalfOf::System,
         entities,
     }
 }

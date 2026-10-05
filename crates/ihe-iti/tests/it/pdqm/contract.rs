@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::query::{DatePrefix, Gender, PatientQuery, StringMatch};
+use ihe_iti::user::OnBehalfOf;
 use secrecy::SecretString;
 use serde::Deserialize;
 
@@ -158,7 +159,7 @@ fn the_consumer_statement_searches_the_patient_type() {
 async fn the_search_is_a_form_post_asking_for_fhir_json() {
     let server = supplier(200, FHIR_JSON, searchset(0, &[], &[])).await;
     client(&server)
-        .search(&every_parameter(), PROMPT)
+        .search(&every_parameter(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -233,7 +234,10 @@ async fn the_reader_enforces_the_response_profiles_constraints() {
     ];
     for (body, expected) in cases {
         let server = supplier(200, FHIR_JSON, body).await;
-        match client(&server).search(&super::schmidt(), PROMPT).await {
+        match client(&server)
+            .search(&super::schmidt(), &OnBehalfOf::System, PROMPT)
+            .await
+        {
             Err(PdqmError::Malformed(found)) => assert_eq!(found, expected, "the profile"),
             other => panic!("{expected:?}, got {other:?}"),
         }

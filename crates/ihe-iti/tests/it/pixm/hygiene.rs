@@ -13,6 +13,7 @@ use std::time::Duration;
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier};
 use ihe_iti::pixm::{Invocation, PixmClient};
+use ihe_iti::user::OnBehalfOf;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
 use url::Url;
@@ -51,7 +52,7 @@ fn rendered(error: &PixmError) -> String {
 
 async fn failure(server: &MockServer, timeout: Duration) -> PixmError {
     client(server)
-        .cross_reference(&source(), &[target(BLUE)], timeout)
+        .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, timeout)
         .await
         .expect_err("a failure")
 }
@@ -60,7 +61,7 @@ async fn failure(server: &MockServer, timeout: Duration) -> PixmError {
 async fn the_identifier_reaches_the_manager() {
     let server = manager(200, FHIR_JSON, r#"{"resourceType":"Parameters"}"#).await;
     client(&server)
-        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -128,7 +129,7 @@ async fn a_timeout_or_transport_failure_carries_no_request_url() {
         "the timeout carries the identifier"
     );
     let error = unreachable_client()
-        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
         .await
         .expect_err("no Manager");
     let shown = rendered(&error);
@@ -145,7 +146,7 @@ async fn an_answer_shows_no_identifier_value() {
     );
     let server = manager(200, FHIR_JSON, body).await;
     let answer = client(&server)
-        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     assert!(
@@ -162,7 +163,7 @@ async fn an_answer_shows_no_identifier_value() {
 async fn a_posted_query_carries_the_identifier_in_its_body_and_in_no_url_or_header() {
     let server = posting_manager(200, FHIR_JSON, r#"{"resourceType":"Parameters"}"#).await;
     posting_client(&server)
-        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -199,7 +200,7 @@ async fn no_failure_of_a_posted_query_carries_the_identifier() {
     ] {
         let server = posting_manager(status, FHIR_JSON, body).await;
         let error = posting_client(&server)
-            .cross_reference(&source(), &[target(BLUE)], PROMPT)
+            .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
             .await
             .expect_err("a failure");
         assert!(
@@ -209,7 +210,7 @@ async fn no_failure_of_a_posted_query_carries_the_identifier() {
     }
     let error = unreachable_client()
         .invoked_by(Invocation::Post)
-        .cross_reference(&source(), &[target(BLUE)], PROMPT)
+        .cross_reference(&source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
         .await
         .expect_err("no Manager");
     let shown = rendered(&error);

@@ -9,6 +9,7 @@ use http::StatusCode;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pixm::error::{Malformation, PixmError};
 use ihe_iti::pixm::identifier::{CrossReference, CrossReferences};
+use ihe_iti::user::OnBehalfOf;
 use secrecy::ExposeSecret;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -26,7 +27,7 @@ const NOT_FOUND: &str = "example/OperationOutcome-pixm-response-error-not-found.
 async fn ask(server: &MockServer, targets: &[&str]) -> Result<CrossReference, PixmError> {
     let targets: Vec<_> = targets.iter().map(|system| target(system)).collect();
     client(server)
-        .cross_reference(&red_source(), &targets, PROMPT)
+        .cross_reference(&red_source(), &targets, &OnBehalfOf::System, PROMPT)
         .await
 }
 
@@ -249,7 +250,7 @@ async fn a_manager_that_does_not_answer_in_time_is_a_timeout() {
     let limit = Duration::from_millis(200);
     let answer = timing::bounded(
         limit,
-        client.cross_reference(&red_source(), &[target(BLUE)], limit),
+        client.cross_reference(&red_source(), &[target(BLUE)], &OnBehalfOf::System, limit),
     )
     .await;
     assert!(matches!(answer, Err(PixmError::Timeout)), "got {answer:?}");
@@ -258,7 +259,7 @@ async fn a_manager_that_does_not_answer_in_time_is_a_timeout() {
 #[tokio::test]
 async fn an_unreachable_manager_is_a_transport_failure() {
     let answer = unreachable_client()
-        .cross_reference(&red_source(), &[target(BLUE)], PROMPT)
+        .cross_reference(&red_source(), &[target(BLUE)], &OnBehalfOf::System, PROMPT)
         .await;
     assert!(
         matches!(answer, Err(PixmError::Transport(_))),

@@ -19,11 +19,14 @@ use ihe_iti::pmir::audit::received;
 use ihe_iti::pmir::error::SubscribeError;
 use ihe_iti::pmir::feed::Feed;
 use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest};
+use ihe_iti::user::OnBehalfOf;
 use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::profile::{Kept, Refusing, base64_decoded, holds_to, like, vendored, written};
+use super::profile::{
+    Kept, Refusing, base64_decoded, holds_to, like, names_no_user, vendored, written,
+};
 use crate::pmir::{DOMAIN, FHIR_JSON, PROMPT, subscriber};
 
 const FEED_ENDPOINT: &str = "https://gateway.example.org/pmir/feed";
@@ -195,6 +198,25 @@ fn create_record() -> (serde_json::Value, String) {
     );
     assert_eq!(exchange.outcome, Outcome::Success);
     (written(&exchange), format!("{exchange:?}"))
+}
+
+#[tokio::test]
+async fn every_subscription_interaction_and_received_message_names_no_user() {
+    let server = registry().await;
+    let kept = Arc::new(Kept::default());
+    let client = subscriber(&server).audited(kept.clone());
+    let subscribed = client.subscribe(&request(), PROMPT).await.expect("created");
+    client.status(&subscribed, PROMPT).await.expect("a status");
+    client
+        .unsubscribe(&subscribed, PROMPT)
+        .await
+        .expect("deleted");
+    for exchange in kept.taken() {
+        assert_eq!(exchange.on_behalf, OnBehalfOf::System);
+        names_no_user(&written(&exchange));
+    }
+    let (record, _) = create_record();
+    names_no_user(&record);
 }
 
 #[test]

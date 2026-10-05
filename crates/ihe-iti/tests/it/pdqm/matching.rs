@@ -16,6 +16,7 @@ use ihe_iti::outcome::IssueType;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::input::MatchInput;
 use ihe_iti::pdqm::matches::MatchGrade;
+use ihe_iti::user::OnBehalfOf;
 use secrecy::SecretString;
 use serde_json::Value;
 use wiremock::matchers::{method, path};
@@ -60,7 +61,7 @@ async fn the_request_posts_a_parameters_resource_to_the_match_operation() {
     )
     .await;
     client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -102,7 +103,7 @@ async fn the_request_has_the_shape_of_the_igs_only_certain_matches_example() {
     )
     .await;
     client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -150,7 +151,7 @@ async fn the_parameters_profile_admits_the_three_parameters_the_input_sends() {
     .await;
     let counted = input().count(NonZeroU16::new(5).expect("five"));
     client(&server)
-        .match_patient(&counted, PROMPT)
+        .match_patient(&counted, &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -183,7 +184,7 @@ async fn one_certain_match_is_read_with_its_score_and_grade() {
     )
     .await;
     let found = client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let [matched] = found.patients() else {
@@ -203,7 +204,7 @@ async fn several_matches_are_read_most_likely_first() {
     )
     .await;
     let found = client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer");
     let grades: Vec<Option<MatchGrade>> = found
@@ -227,7 +228,7 @@ async fn no_match_is_an_answer_with_no_patient() {
     )
     .await;
     let found = client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer (§2:3.119.4.1.3, Cases 5 and 7)");
     assert!(found.patients().is_empty());
@@ -243,7 +244,7 @@ async fn an_error_outcome_in_a_successful_answer_is_refused() {
     ] {
         let server = matcher(200, FHIR_JSON, vendored(example)).await;
         let error = client(&server)
-            .match_patient(&input(), PROMPT)
+            .match_patient(&input(), &OnBehalfOf::System, PROMPT)
             .await
             .expect_err("an error outcome is no success");
         assert!(
@@ -265,7 +266,7 @@ async fn a_warning_outcome_is_kept_beside_the_match() {
     );
     let server = matcher(200, FHIR_JSON, bundle).await;
     let found = client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect("an answer (§2:3.119.4.1.3, Case 10)");
     assert_eq!(found.patients().len(), 1);
@@ -281,7 +282,7 @@ async fn a_failure_answer_keeps_the_issue_codes_of_a_bundle_of_outcomes() {
     )
     .await;
     let error = client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect_err("a failure (§2:3.119.4.1.3, Case 9)");
     let PdqmError::Rejected { status, issues } = error else {
@@ -317,7 +318,7 @@ async fn a_patient_entry_without_its_score_grade_or_mode_is_refused() {
         );
         let server = matcher(200, FHIR_JSON, bundle).await;
         let error = client(&server)
-            .match_patient(&input(), PROMPT)
+            .match_patient(&input(), &OnBehalfOf::System, PROMPT)
             .await
             .expect_err("the Match Output Bundle profile refuses it");
         assert!(
@@ -338,7 +339,7 @@ async fn a_patient_entry_without_its_score_grade_or_mode_is_refused() {
 async fn the_demographics_reach_the_supplier_in_the_body_only() {
     let server = matcher(404, FHIR_JSON, outcome("error", "not-found", SENTINEL)).await;
     let error = client(&server)
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect_err("a refusal");
     let requests = server.received_requests().await.expect("recorded requests");
@@ -352,7 +353,7 @@ async fn the_demographics_reach_the_supplier_in_the_body_only() {
         "no error and no Debug names the identifier"
     );
     let unreachable = unreachable_client()
-        .match_patient(&input(), PROMPT)
+        .match_patient(&input(), &OnBehalfOf::System, PROMPT)
         .await
         .expect_err("no Supplier answers");
     assert!(!format!("{unreachable} {unreachable:?}").contains(SENTINEL));

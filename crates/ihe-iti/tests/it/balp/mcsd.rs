@@ -11,10 +11,13 @@ use std::sync::Arc;
 use ihe_iti::balp::Outcome;
 use ihe_iti::mcsd::client::CareService;
 use ihe_iti::mcsd::error::McsdError;
+use ihe_iti::user::OnBehalfOf;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::profile::{Kept, Refusing, base64_decoded, holds_to, like, vendored, written};
+use super::profile::{
+    Kept, Refusing, base64_decoded, holds_to, like, names_no_user, vendored, written,
+};
 use crate::mcsd::{BASE, FHIR_JSON, budget, bundle, client, full_url, matched, organization};
 
 /// A directory that answers `GET {BASE}{at}` with one page of `kind`.
@@ -37,6 +40,20 @@ async fn directory(at: &str, kind: &str) -> MockServer {
         .mount(&server)
         .await;
     server
+}
+
+#[tokio::test]
+async fn a_directory_search_is_the_system_s_own_and_names_no_user() {
+    let server = directory("Organization", "searchset").await;
+    let kept = Arc::new(Kept::default());
+    client(&server)
+        .audited(kept.clone())
+        .find(CareService::Organization, &[], &mut budget())
+        .await
+        .expect("a search");
+    let [exchange] = kept.taken().try_into().expect("one record");
+    assert_eq!(exchange.on_behalf, OnBehalfOf::System);
+    names_no_user(&written(&exchange));
 }
 
 #[tokio::test]

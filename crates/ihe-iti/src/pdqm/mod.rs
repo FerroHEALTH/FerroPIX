@@ -38,6 +38,7 @@
 //!
 //! use ihe_iti::pdqm::PdqmClient;
 //! use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
+//! use ihe_iti::user::OnBehalfOf;
 //! use secrecy::{ExposeSecret, SecretString};
 //! use url::Url;
 //!
@@ -49,14 +50,17 @@
 //! let query = PatientQuery::new()
 //!     .family(&SecretString::from("Schmidt"), StringMatch::Exact)?
 //!     .birthdate(DatePrefix::Eq, &SecretString::from("1923-07-25"))?;
-//! let mut page = client.search(&query, Duration::from_secs(2)).await?;
+//! let on_behalf = OnBehalfOf::System;
+//! let mut page = client.search(&query, &on_behalf, Duration::from_secs(2)).await?;
 //! loop {
 //!     for matched in page.patients() {
 //!         let _location = matched.full_url().expose_secret();
 //!         let _deprecated = matched.patient().active.as_ref();
 //!     }
 //!     let Some(next) = page.next() else { break };
-//!     page = client.next_page(next, Duration::from_secs(2)).await?;
+//!     page = client
+//!         .next_page(next, &on_behalf, Duration::from_secs(2))
+//!         .await?;
 //! }
 //! # Ok(())
 //! # }
@@ -81,6 +85,7 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
 use crate::redact::RedactedUrl;
+use crate::user::OnBehalfOf;
 use error::{InvalidInput, PdqmError};
 use input::MatchInput;
 use matches::{MatchResult, Page, SearchResult};
@@ -150,12 +155,13 @@ impl PdqmClient {
     async fn audit(
         &self,
         request: impl FnOnce() -> secrecy::SecretString,
+        on_behalf: &OnBehalfOf,
         result: Result<SearchResult, PdqmError>,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<SearchResult, PdqmError> {
         use crate::recording::{Late, Recorded, within};
         if let Some(recorder) = &self.audit {
-            let exchange = audit::exchange(&self.base, request(), &result);
+            let exchange = audit::exchange(&self.base, request(), on_behalf, &result);
             // NOTE: PDQm §2:3.78.5.1 makes the audit record part of the query, so
             // an answer whose record was refused is not used.
             match within(deadline, recorder.record(exchange)).await {
@@ -183,7 +189,8 @@ impl PdqmClient {
         &self.match_endpoint
     }
 
-    /// Asks the Supplier for the Patients that match `input` (ITI-119).
+    /// Asks the Supplier for the Patients that match `input` (ITI-119), on
+    /// behalf of `on_behalf`, whom an audited client's record names.
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer is
     /// read, and an audited client's record of it.
@@ -195,6 +202,14 @@ impl PdqmClient {
     pub async fn match_patient(
         &self,
         input: &MatchInput,
+        #[cfg_attr(
+            not(feature = "balp"),
+            expect(
+                unused_variables,
+                reason = "only an audited client names whom it acted for"
+            )
+        )]
+        on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<MatchResult, PdqmError> {
         #[cfg(feature = "balp")]
@@ -204,7 +219,9 @@ impl PdqmClient {
         );
         let result = self.post_match(&body, timeout).await;
         #[cfg(feature = "balp")]
-        let result = self.audit_match(input, &body, result, deadline).await;
+        let result = self
+            .audit_match((input, &body), on_behalf, result, deadline)
+            .await;
         result
     }
 
@@ -215,8 +232,8 @@ impl PdqmClient {
     #[cfg(feature = "balp")]
     async fn audit_match(
         &self,
-        input: &MatchInput,
-        body: &secrecy::SecretString,
+        (input, body): (&MatchInput, &secrecy::SecretString),
+        on_behalf: &OnBehalfOf,
         result: Result<MatchResult, PdqmError>,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<MatchResult, PdqmError> {
@@ -230,8 +247,12 @@ impl PdqmClient {
                 crate::balp::request_text(&self.match_endpoint).expose_secret(),
                 body.expose_secret()
             ));
-            let exchange =
-                audit::match_exchange(&self.base, request, input.sole_identifier(), &result);
+            let exchange = audit::match_exchange(
+                &self.base,
+                (request, input.sole_identifier()),
+                on_behalf,
+                &result,
+            );
             // NOTE: PDQm §2:3.119.5.1.1 makes the audit record part of the match, so
             // an answer whose record was refused is not used.
             match within(deadline, recorder.record(exchange)).await {
@@ -272,7 +293,8 @@ impl PdqmClient {
         response::read_match(status, media.as_deref(), &body)
     }
 
-    /// Asks the Supplier for the first page of Patients that match `query`.
+    /// Asks the Supplier for the first page of Patients that match `query`,
+    /// on behalf of `on_behalf`, whom an audited client's record names.
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer is
     /// read, and an audited client's record of it.
@@ -283,6 +305,14 @@ impl PdqmClient {
     pub async fn search(
         &self,
         query: &PatientQuery,
+        #[cfg_attr(
+            not(feature = "balp"),
+            expect(
+                unused_variables,
+                reason = "only an audited client names whom it acted for"
+            )
+        )]
+        on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
         #[cfg(feature = "balp")]
@@ -303,6 +333,7 @@ impl PdqmClient {
                         query.form()
                     ))
                 },
+                on_behalf,
                 result,
                 deadline,
             )
@@ -329,7 +360,8 @@ impl PdqmClient {
     }
 
     /// Asks the Supplier for the page `page` links to, the `next` link of an
-    /// earlier page (FHIR R4 paging, <http://hl7.org/fhir/R4/http.html#paging>).
+    /// earlier page (FHIR R4 paging, <http://hl7.org/fhir/R4/http.html#paging>),
+    /// on behalf of `on_behalf`, whom an audited client's record names.
     ///
     /// # Errors
     /// [`PdqmError::ForeignPage`] when `page` is not on the Supplier's origin,
@@ -337,6 +369,14 @@ impl PdqmClient {
     pub async fn next_page(
         &self,
         page: &Page,
+        #[cfg_attr(
+            not(feature = "balp"),
+            expect(
+                unused_variables,
+                reason = "only an audited client names whom it acted for"
+            )
+        )]
+        on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
         // NOTE: no specification governs this: our own design, so a Supplier's
@@ -349,7 +389,12 @@ impl PdqmClient {
         let result = self.get(page, timeout).await;
         #[cfg(feature = "balp")]
         let result = self
-            .audit(|| crate::balp::request_text(page.url()), result, deadline)
+            .audit(
+                || crate::balp::request_text(page.url()),
+                on_behalf,
+                result,
+                deadline,
+            )
             .await;
         result
     }

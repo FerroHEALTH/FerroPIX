@@ -17,6 +17,10 @@
 //! which names the patient identifier, as the audit table requires: the event
 //! holds them as a [`SecretString`], its `Debug` redacts them, and a recorder
 //! that logs the event must leave them out.
+//!
+//! An exchange made for a user names them as the table's Human Requestor
+//! "if known", from their OAuth token. `Debug` shows none of the user's
+//! values, and a recorder sends them to its audit repository alone.
 
 use std::fmt;
 use std::net::IpAddr;
@@ -27,6 +31,7 @@ use url::Url;
 
 use super::identifier::HomeCommunityId;
 use crate::redact::{REDACTED, RedactedUrl};
+use crate::user::OnBehalfOf;
 
 /// The DICOM `EventID` of the message: `EV(110112, DCM, "Query")`.
 pub const EVENT_ID: (&str, &str, &str) = ("110112", "DCM", "Query");
@@ -119,8 +124,10 @@ impl NetworkAccessPoint {
 ///
 /// The source's `NetworkAccessPointID` and the `AuditSourceIdentification`
 /// name the host the deployment runs on, which the client does not know: the
-/// recorder adds them. No `Human Requestor` is named, since the client is
-/// told of none, and no `Patient` participant, as the table requires.
+/// recorder adds them. A `Human Requestor` is named when the exchange was
+/// made for a user, and no `Patient` participant, as the table requires. The
+/// DICOM PS3.15 A.5.1 schema has no element for the user's client
+/// application or purpose of use, so the message names the user alone.
 #[derive(Clone)]
 pub struct AuditEvent {
     /// `EventDateTime`: when the exchange ended.
@@ -144,6 +151,9 @@ pub struct AuditEvent {
     /// `homeCommunityId` the request named as the initiating community's
     /// (§3.55.4.1.2.4), when it named one.
     pub home_community: Option<HomeCommunityId>,
+    /// Whom the exchange was made for: a user is the message's Human
+    /// Requestor.
+    pub on_behalf: OnBehalfOf,
 }
 
 impl fmt::Debug for AuditEvent {
@@ -156,6 +166,7 @@ impl fmt::Debug for AuditEvent {
             .field("destination_access_point", &self.destination_access_point)
             .field("query", &REDACTED)
             .field("home_community", &self.home_community)
+            .field("on_behalf", &self.on_behalf)
             .finish()
     }
 }
@@ -213,6 +224,44 @@ impl AuditEvent {
             ParticipantObject,
         };
         let transaction = CodedValue::of(EVENT_TYPE);
+        let mut participants = vec![ActiveParticipant {
+            // NOTE: ITI TF-2 §3.55.5.1.1 leaves a synchronous exchange's source UserID
+            // not specialized, and PS3.15 A.5.1 requires one: it is the wsa:ReplyTo sent.
+            user_id: super::request::ANONYMOUS.to_owned(),
+            alternative_user_id: Some(self.process_id.to_string()),
+            user_name: None,
+            // NOTE: DICOM PS3.15 A.5.2 names one participant as UserIsRequestor, the
+            // initiator: the user when one asked, the gateway when it acted on its own.
+            user_is_requestor: self.on_behalf.user().is_none(),
+            role_id_codes: vec![CodedValue::of(SOURCE_ROLE)],
+            access_point: Some(host.clone()),
+        }];
+        if let Some(user) = self.on_behalf.user() {
+            // NOTE: ITI TF-2 §3.55.5.1.1 Human Requestor UserID is the human's identity, and
+            // IUA ITI TF-2 §3.72.5.1 writes a JWT's aud, sub and iss into UserName.
+            participants.push(ActiveParticipant {
+                user_id: user.subject().to_owned(),
+                alternative_user_id: None,
+                user_name: Some(user.atna_user_name()),
+                user_is_requestor: true,
+                role_id_codes: Vec::new(),
+                access_point: None,
+            });
+        }
+        participants.push(ActiveParticipant {
+            user_id: self.destination.to_string(),
+            alternative_user_id: None,
+            user_name: None,
+            user_is_requestor: false,
+            role_id_codes: vec![CodedValue::of(DESTINATION_ROLE)],
+            access_point: self
+                .destination_access_point
+                .as_ref()
+                .map(|point| AccessPoint {
+                    type_code: point.type_code(),
+                    id: point.id(),
+                }),
+        });
         AuditMessage {
             event: EventIdentification {
                 event_id: CodedValue::of(EVENT_ID),
@@ -221,30 +270,7 @@ impl AuditEvent {
                 outcome: self.outcome.code(),
                 type_codes: vec![transaction.clone()],
             },
-            participants: vec![
-                ActiveParticipant {
-                    // NOTE: ITI TF-2 §3.55.5.1.1 leaves a synchronous exchange's source UserID
-                    // not specialized, and PS3.15 A.5.1 requires one: it is the wsa:ReplyTo sent.
-                    user_id: super::request::ANONYMOUS.to_owned(),
-                    alternative_user_id: Some(self.process_id.to_string()),
-                    user_is_requestor: true,
-                    role_id_codes: vec![CodedValue::of(SOURCE_ROLE)],
-                    access_point: Some(host.clone()),
-                },
-                ActiveParticipant {
-                    user_id: self.destination.to_string(),
-                    alternative_user_id: None,
-                    user_is_requestor: false,
-                    role_id_codes: vec![CodedValue::of(DESTINATION_ROLE)],
-                    access_point: self
-                        .destination_access_point
-                        .as_ref()
-                        .map(|point| AccessPoint {
-                            type_code: point.type_code(),
-                            id: point.id(),
-                        }),
-                },
-            ],
+            participants,
             source: source.clone(),
             objects: vec![ParticipantObject {
                 // NOTE: ITI TF-2 §3.55.5.1.1 leaves ParticipantObjectID optional and PS3.15

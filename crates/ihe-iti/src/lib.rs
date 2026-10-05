@@ -17,6 +17,10 @@
 //!   `pixm`, `pdqm`, `mcsd` or `pmir` it also audits that profile's
 //!   transactions.
 //!
+//! An audited PIXm, PDQm or XCPD exchange names whom it is made for, a user
+//! or the client's own system (module `user`), and its audit record names that
+//! user.
+//!
 //! The profiles are published at <https://profiles.ihe.net/ITI/>. The crate
 //! depends on no application: it is the profiles' transactions as Rust, for
 //! any caller. The profile modules land with their FerroFED issues (Annex A).
@@ -58,5 +62,7 @@ mod redact;
     feature = "balp"
 ))]
 mod search;
+#[cfg(any(feature = "balp", feature = "pixm", feature = "pdqm", feature = "xcpd"))]
+pub mod user;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

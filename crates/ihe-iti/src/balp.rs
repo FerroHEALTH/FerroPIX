@@ -10,7 +10,8 @@
 //! §2:3.93.5.1 and §2:3.94.5.1). A client of this crate that is
 //! [audited](AuditRecorder) hands its recorder one [`Exchange`] per
 //! transaction: what the transaction's audit profile fixes ([`EventKind`]),
-//! the outcome, the other party, and the entities the event concerned.
+//! the outcome, the other party, whom the exchange was made for
+//! ([`OnBehalfOf`]), and the entities the event concerned.
 //! [`Exchange::audit_event`] writes the `AuditEvent` with the
 //! [`Observer`] that records it, the system the client runs on, which the
 //! client does not know.
@@ -24,7 +25,10 @@
 //! inside the search request of an [`Entity::Query`], as the audit profiles
 //! require: every such value is a [`SecretString`], `Debug` redacts it, and
 //! the written record is an [`AuditRecord`], whose bytes `Debug` never shows.
-//! A recorder that logs an exchange must leave them out.
+//! A recorder that logs an exchange must leave them out. An `Exchange` made
+//! for a user names them too, as the audit record names its requestor (PIXm
+//! §2:3.83.5.2.1): `Debug` shows none of the user's values, and a recorder
+//! sends them to its Audit Record Repository alone.
 
 use std::fmt;
 use std::net::IpAddr;
@@ -45,6 +49,7 @@ use secrecy::{ExposeSecret, SecretSlice, SecretString};
 use url::Url;
 
 use crate::redact::{REDACTED, RedactedUrl};
+use crate::user::{OnBehalfOf, PurposeOfUse, User};
 
 /// A coding a profile fixes: its `system`, `code` and `display`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,6 +105,14 @@ pub const APPLICATION: Coded = Coded {
     system: "http://dicom.nema.org/resources/ontology/DCM",
     code: "110150",
     display: "Application",
+};
+
+/// The agent type of the user an exchange is made for: `IRCP`, as every
+/// BALP pattern's `agent:user` slice fixes it.
+pub const INFORMATION_RECIPIENT: Coded = Coded {
+    system: "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+    code: "IRCP",
+    display: "information recipient",
 };
 
 /// The server's agent type of the Delete pattern: `custodian`
@@ -428,8 +441,12 @@ impl fmt::Debug for Entity {
 /// One exchange as the transaction knows it; the [`Observer`] that records
 /// it is added by [`Exchange::audit_event`].
 ///
-/// No user agent is written (`agent:user` is `0..1` in every BALP pattern):
-/// a client of this crate is told of no user.
+/// An exchange made for a [`User`] names them in two agents, as BALP 1.1.4
+/// §3:5.7.5.4 maps an OAuth token's fields: the `agent:user` slice every BALP
+/// pattern has (`0..1`) with the token's `iss`, `sub` and purposes of use,
+/// and an Application agent with its `client_id`. One the system makes on
+/// its own behalf names neither. The Delete pattern admits one `110150`
+/// agent, its own `agent:client`, so a Delete exchange is the system's.
 #[derive(Clone)]
 pub struct Exchange {
     /// What the transaction's audit profile fixes.
@@ -440,6 +457,8 @@ pub struct Exchange {
     pub outcome: Outcome,
     /// The recording system's part, and the other party.
     pub direction: Direction,
+    /// Whom the exchange was made for.
+    pub on_behalf: OnBehalfOf,
     /// `entity`, in order.
     pub entities: Vec<Entity>,
 }
@@ -457,6 +476,7 @@ impl fmt::Debug for Exchange {
             .field("recorded", &self.recorded)
             .field("outcome", &self.outcome)
             .field("direction", &direction)
+            .field("on_behalf", &self.on_behalf)
             .field("entities", &self.entities)
             .finish()
     }
@@ -521,7 +541,7 @@ impl Exchange {
         };
         // NOTE: BALP's client examples (AuditEvent-ex-auditBasicQueryGetClient and
         // the others) set requestor false on both system agents; only a user is one.
-        let agent = match &self.direction {
+        let mut agent = match &self.direction {
             Direction::Sent { server } => vec![
                 own(self.kind.client, observer.host.clone()),
                 other(self.kind.server, server),
@@ -531,6 +551,9 @@ impl Exchange {
                 own(self.kind.server, NetworkAddress::uri(endpoint)),
             ],
         };
+        if let Some(user) = self.on_behalf.user() {
+            agent.extend(user_agents(user));
+        }
         let event = AuditEvent {
             meta: Some(Meta {
                 profile: vec![primitives::Canonical::from(self.kind.profile)],
@@ -558,6 +581,49 @@ impl Exchange {
         serde_json::to_vec(&event)
             .map(|json| AuditRecord(SecretSlice::from(json)))
             .map_err(RecordError)
+    }
+}
+
+/// The two agents that name `user` (BALP 1.1.4 §3:5.7.5.4): the
+/// `agent:user` slice with the token's `iss` and `sub` as `who.identifier`,
+/// as `requestor`, with its purposes of use, and the Application agent with
+/// the token's `client_id` as `who.identifier.value`.
+fn user_agents(user: &User) -> [AuditEventAgent; 2] {
+    let identified = |system: Option<&str>, value: &str| Reference {
+        identifier: Some(Box::new(Identifier {
+            system: system.map(primitives::Uri::from),
+            value: Some(primitives::String::from(value)),
+            ..Identifier::default()
+        })),
+        ..Reference::default()
+    };
+    // NOTE: BALP 1.1.4 agent:user fixes requestor true and allows no network; the
+    // client's agent follows ex-auditBasicReadOServer, requestor false.
+    let person = AuditEventAgent {
+        r#type: Some(concept(INFORMATION_RECIPIENT)),
+        who: Some(identified(Some(user.issuer()), user.subject())),
+        requestor: primitives::Boolean::from(true),
+        purpose_of_use: user.purposes().iter().map(purpose).collect(),
+        ..AuditEventAgent::default()
+    };
+    let application = AuditEventAgent {
+        r#type: Some(concept(APPLICATION)),
+        who: Some(identified(None, user.client_id())),
+        requestor: primitives::Boolean::from(false),
+        ..AuditEventAgent::default()
+    };
+    [person, application]
+}
+
+/// A purpose of use as `agent.purposeOfUse` codes it.
+fn purpose(purpose: &PurposeOfUse) -> CodeableConcept {
+    CodeableConcept {
+        coding: vec![Coding {
+            system: purpose.system.as_deref().map(primitives::Uri::from),
+            code: Some(primitives::Code::from(purpose.code.as_str())),
+            ..Coding::default()
+        }],
+        ..CodeableConcept::default()
     }
 }
 

@@ -34,6 +34,7 @@
 //!
 //! use ihe_iti::pixm::PixmClient;
 //! use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier, TargetSystem};
+//! use ihe_iti::user::OnBehalfOf;
 //! use secrecy::{ExposeSecret, SecretString};
 //! use url::Url;
 //!
@@ -47,7 +48,11 @@
 //!     SecretString::from("IHERED-994"),
 //! )?;
 //! let targets = [TargetSystem::new("urn:oid:1.3.6.1.4.1.21367.13.20.3000")?];
-//! match client.cross_reference(&source, &targets, Duration::from_secs(2)).await? {
+//! let on_behalf = OnBehalfOf::System;
+//! match client
+//!     .cross_reference(&source, &targets, &on_behalf, Duration::from_secs(2))
+//!     .await?
+//! {
 //!     CrossReference::Matched(found) => {
 //!         for identifier in found.identifiers() {
 //!             let _value = identifier.value().expose_secret();
@@ -80,6 +85,7 @@ use secrecy::ExposeSecret;
 use url::Url;
 
 use crate::redact::RedactedUrl;
+use crate::user::OnBehalfOf;
 use error::{InvalidInput, PixmError};
 use identifier::{CrossReference, SourceIdentifier, TargetSystem};
 use request::Request;
@@ -182,13 +188,14 @@ impl PixmClient {
 
     /// Asks the PIX Manager for the identifiers the `targets` domains hold for
     /// the patient `source` names, or every domain's when `targets` is empty
-    /// (§2:3.83.4.1.2.2).
+    /// (§2:3.83.4.1.2.2), on behalf of `on_behalf`.
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer is
     /// read, and an audited client's record of it.
     ///
     /// An audited client records the exchange before it returns, whatever
-    /// its outcome; an exchange whose record the recorder does not accept
+    /// its outcome, naming the user `on_behalf` names, from their OAuth token
+    /// (§2:3.83.5.2.1); an exchange whose record the recorder does not accept
     /// fails, and its answer is not used (§2:3.83.5.1.1). So does an
     /// exchange that succeeded and whose record is not accepted within
     /// `timeout` ([`crate::recording`]).
@@ -204,6 +211,14 @@ impl PixmClient {
         &self,
         source: &SourceIdentifier,
         targets: &[TargetSystem],
+        #[cfg_attr(
+            not(feature = "balp"),
+            expect(
+                unused_variables,
+                reason = "only an audited client names whom it acted for"
+            )
+        )]
+        on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<CrossReference, PixmError> {
         #[cfg(feature = "balp")]
@@ -214,7 +229,7 @@ impl PixmClient {
         #[cfg(feature = "balp")]
         if let Some(recorder) = &self.audit {
             use crate::recording::{Late, Recorded, within};
-            let exchange = audit::exchange(&self.endpoint, &request, source, &result);
+            let exchange = audit::exchange(&self.endpoint, (&request, source), on_behalf, &result);
             // NOTE: PIXm §2:3.83.5.1.1 makes the audit record part of the exchange,
             // so an answer whose record was not accepted is not used.
             match within(deadline, recorder.record(exchange)).await {

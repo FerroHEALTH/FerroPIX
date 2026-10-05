@@ -11,6 +11,7 @@ use ihe_iti::outcome::IssueType;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::matches::{MatchGrade, SearchResult};
 use ihe_iti::pdqm::query::PatientQuery;
+use ihe_iti::user::OnBehalfOf;
 use secrecy::ExposeSecret;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -22,7 +23,9 @@ use super::{
 use crate::timing;
 
 async fn ask(server: &MockServer, query: &PatientQuery) -> Result<SearchResult, PdqmError> {
-    client(server).search(query, PROMPT).await
+    client(server)
+        .search(query, &OnBehalfOf::System, PROMPT)
+        .await
 }
 
 fn found(answer: Result<SearchResult, PdqmError>) -> SearchResult {
@@ -260,7 +263,8 @@ async fn a_slow_supplier_times_out() {
         .await;
     let client = client(&server);
     let limit = Duration::from_millis(200);
-    let answer = timing::bounded(limit, client.search(&schmidt(), limit)).await;
+    let answer =
+        timing::bounded(limit, client.search(&schmidt(), &OnBehalfOf::System, limit)).await;
     assert!(
         matches!(answer, Err(PdqmError::Timeout)),
         "a timeout, got {answer:?}"
@@ -269,7 +273,9 @@ async fn a_slow_supplier_times_out() {
 
 #[tokio::test]
 async fn an_unreachable_supplier_is_a_transport_error() {
-    let answer = unreachable_client().search(&schmidt(), PROMPT).await;
+    let answer = unreachable_client()
+        .search(&schmidt(), &OnBehalfOf::System, PROMPT)
+        .await;
     assert!(
         matches!(answer, Err(PdqmError::Transport(_))),
         "a transport error, got {answer:?}"

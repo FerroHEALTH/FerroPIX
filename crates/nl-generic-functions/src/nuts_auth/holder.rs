@@ -27,7 +27,7 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 
 /// The prefix of every identifier of the `did:web` method (DID 1.0 §3.1, the
-/// did:web Method Specification §3.1).
+/// did:web Method Specification, Method name).
 pub const DID_WEB_PREFIX: &str = "did:web:";
 
 /// A holder that cannot present.
@@ -37,7 +37,7 @@ pub const DID_WEB_PREFIX: &str = "did:web:";
 #[non_exhaustive]
 pub enum HolderError {
     /// The identifier is not a `did:web` DID (DID 1.0 §3.1, the did:web
-    /// Method Specification §3.1).
+    /// Method Specification, Method name and Method-specific identifier).
     #[error("the holder identifier is not a did:web DID")]
     Did,
     /// The key's `kid` is not a DID URL of the holder's DID with a fragment
@@ -97,8 +97,8 @@ pub struct Did(String);
 impl Did {
     /// Reads `text` as a `did:web` DID: `did:web:` followed by one or more
     /// colon-separated segments of the DID 1.0 `idchar` set or
-    /// percent-encoded octets (DID 1.0 §3.1, the did:web Method Specification
-    /// §3.1).
+    /// percent-encoded octets (DID 1.0 §3.1, the did:web Method Specification,
+    /// Method-specific identifier).
     ///
     /// # Errors
     ///

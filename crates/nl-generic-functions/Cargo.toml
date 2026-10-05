@@ -1,11 +1,11 @@
-# SPDX-FileCopyrightText: Vernum Projecten B.V.
+# SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.15"
+version = "0.0.16"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

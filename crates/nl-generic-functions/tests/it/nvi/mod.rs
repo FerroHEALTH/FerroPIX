@@ -11,6 +11,7 @@
 )]
 
 mod answers;
+mod authorizer;
 mod contract;
 mod hygiene;
 

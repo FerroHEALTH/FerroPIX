@@ -59,6 +59,16 @@ pub(super) fn query(endpoint: &Url, patient: &PseudoBsn) -> Url {
     url
 }
 
+/// The request URL `url` without its query and fragment, the `htu` a `DPoP`
+/// proof binds (RFC 9449 §4.2), which an authorizer is handed so the
+/// pseudonym in the query never reaches it.
+pub(super) fn target(url: &Url) -> Url {
+    let mut target = url.clone();
+    target.set_query(None);
+    target.set_fragment(None);
+    target
+}
+
 /// The `next` link `next` as a URL to follow, when it stays on the search
 /// endpoint: the same scheme, host, port and path, so the pseudonym it may
 /// carry reaches no other resource or server (FHIR R4 paging,

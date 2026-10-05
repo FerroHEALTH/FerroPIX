@@ -25,6 +25,11 @@
 //! request URL, a pseudonym or the service's free text, and the types that
 //! hold the pseudonym redact it in `Debug`.
 //!
+//! The data user authenticates through the transport, a default header of
+//! the HTTP client, or an [`authorizer::Authorizer`] that gives each request
+//! its own headers, as the `DPoP`-bound token of GF-Authentication needs
+//! (the IG's GFI-005; RFC 9449 §7.1).
+//!
 //! # Examples
 //!
 //! ```no_run
@@ -52,18 +57,22 @@
 //! # }
 //! ```
 
+pub mod authorizer;
 pub mod error;
 mod request;
 mod response;
 
 use std::collections::BTreeSet;
 use std::fmt;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use http::header::{ACCEPT, CONTENT_TYPE};
+use http::{HeaderMap, Method};
 use url::Url;
 
 use crate::identification::{PseudoBsn, Ura};
+use authorizer::{Authorizer, Retry};
 use error::{InvalidInput, Malformation, NviError};
 
 /// The system of the localization record type the IG fixes (LOINC).
@@ -106,12 +115,14 @@ impl Localization {
 
 /// A data user of the Localization Service bound to one NVI.
 ///
-/// `Debug` shows the endpoint with its userinfo and query redacted, and
-/// leaves out the HTTP client, whose default headers may hold a credential.
+/// `Debug` shows the endpoint with its userinfo and query redacted, whether
+/// an authorizer is set, and leaves out the HTTP client, whose default
+/// headers may hold a credential.
 #[derive(Clone)]
 pub struct NviClient {
     endpoint: Url,
     http: reqwest::Client,
+    authorizer: Option<Arc<dyn Authorizer>>,
 }
 
 impl NviClient {
@@ -132,7 +143,19 @@ impl NviClient {
         Ok(Self {
             endpoint: request::endpoint(base)?,
             http,
+            authorizer: None,
         })
+    }
+
+    /// Returns this client, asking `authorizer` for the headers of every
+    /// request and handing it every answer (the IG's GFI-005).
+    ///
+    /// Build the HTTP client without a default `Authorization` header then:
+    /// the authorizer's headers are added to it, never in its place.
+    #[must_use]
+    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 
     /// Returns the `[base]/DocumentReference` URL the client searches.
@@ -146,13 +169,14 @@ impl NviClient {
     /// links under the endpoint.
     ///
     /// `timeout` bounds the whole exchange, every page included, from
-    /// connecting until the last answer is read.
+    /// connecting until the last answer is read; the time an authorizer
+    /// takes to make its headers counts toward it.
     ///
     /// # Errors
     ///
     /// A [`NviError`] for every answer that is not a `searchset` of
-    /// localization records about `patient`, and for a failure to get an
-    /// answer at all.
+    /// localization records about `patient`, for a request the authorizer
+    /// cannot authenticate, and for a failure to get an answer at all.
     pub async fn localize(
         &self,
         patient: &PseudoBsn,
@@ -162,18 +186,7 @@ impl NviClient {
         let mut url = request::query(&self.endpoint, patient);
         let mut custodians = BTreeSet::new();
         for _page in 0..PAGES {
-            let remaining = deadline
-                .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
-                .filter(|remaining| !remaining.is_zero())
-                .ok_or(NviError::Timeout)?;
-            let response = self
-                .http
-                .get(url)
-                .header(ACCEPT, FHIR_JSON)
-                .timeout(remaining)
-                .send()
-                .await
-                .map_err(error::transport)?;
+            let response = self.send(&url, deadline).await?;
             let status = response.status();
             let media = response
                 .headers()
@@ -190,12 +203,54 @@ impl NviClient {
         }
         Err(Malformation::TooManyPages { limit: PAGES }.into())
     }
+
+    /// Sends the search `url` before `deadline`, with the authorizer's
+    /// headers when there is one, once more when the authorizer asks for it.
+    async fn send(
+        &self,
+        url: &Url,
+        deadline: Option<Instant>,
+    ) -> Result<reqwest::Response, NviError> {
+        let target = request::target(url);
+        let mut resent = false;
+        loop {
+            let headers = match &self.authorizer {
+                Some(authorizer) => authorizer
+                    .authorize(&Method::GET, &target)
+                    .await
+                    .map_err(NviError::Unauthenticated)?,
+                None => HeaderMap::new(),
+            };
+            let remaining = deadline
+                .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
+                .filter(|remaining| !remaining.is_zero())
+                .ok_or(NviError::Timeout)?;
+            let response = self
+                .http
+                .get(url.clone())
+                .headers(headers)
+                .header(ACCEPT, FHIR_JSON)
+                .timeout(remaining)
+                .send()
+                .await
+                .map_err(error::transport)?;
+            let Some(authorizer) = &self.authorizer else {
+                return Ok(response);
+            };
+            let retry = authorizer.answered(&target, response.status(), response.headers());
+            if resent || retry == Retry::Done {
+                return Ok(response);
+            }
+            resent = true;
+        }
+    }
 }
 
 impl fmt::Debug for NviClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NviClient")
             .field("endpoint", &request::Redacted(&self.endpoint))
+            .field("authorizer", &self.authorizer.is_some())
             .finish_non_exhaustive()
     }
 }

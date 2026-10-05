@@ -107,8 +107,9 @@ const HL7: &str = "urn:hl7-org:v3";
 /// The WS-Addressing action of the question (§3.2.4.4).
 pub const ACTION: &str = "XACMLAuthorizationDecisionQueryRequest";
 
-/// The OID of the BSN, the root of the patient's identifier (§4).
-pub const BSN_ROOT: &str = "2.16.840.1.113883.2.4.6.3";
+/// The OID of the BSN, the root of the patient's identifier (§4): the dotted
+/// OID of [`BSN_SYSTEMS`](crate::identification::BSN_SYSTEMS).
+pub const BSN_ROOT: &str = crate::identification::BSN_OID;
 
 /// The OID of the URA register, the root of an organisation's identifier
 /// (§4).

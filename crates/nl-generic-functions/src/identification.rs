@@ -24,6 +24,17 @@ pub const PSEUDO_BSN_SYSTEM: &str = "http://fhir.nl/fhir/NamingSystem/pseudo-bsn
 /// CIBG URA register (the IG's `$ura` alias).
 pub const URA_SYSTEM: &str = "http://fhir.nl/fhir/NamingSystem/ura";
 
+// The OID the BSN is registered under, dotted, as a literal the URN form of
+// `BSN_SYSTEMS` is concatenated from.
+macro_rules! bsn_oid {
+    () => {
+        "2.16.840.1.113883.2.4.6.3"
+    };
+}
+
+/// The OID the BSN is registered under, dotted, the last of [`BSN_SYSTEMS`].
+pub(crate) const BSN_OID: &str = bsn_oid!();
+
 /// The naming systems of the BSN itself: the IG's `$bsn` system, and the OID
 /// it is registered under, as a URN and dotted.
 ///
@@ -31,8 +42,8 @@ pub const URA_SYSTEM: &str = "http://fhir.nl/fhir/NamingSystem/ura";
 /// which is the only patient identifier the NVI is keyed on.
 pub const BSN_SYSTEMS: [&str; 3] = [
     "http://fhir.nl/fhir/NamingSystem/bsn",
-    "urn:oid:2.16.840.1.113883.2.4.6.3",
-    "2.16.840.1.113883.2.4.6.3",
+    concat!("urn:oid:", bsn_oid!()),
+    BSN_OID,
 ];
 
 /// Returns whether `namespace` names the BSN itself, one of [`BSN_SYSTEMS`].

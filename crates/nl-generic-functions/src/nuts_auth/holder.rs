@@ -117,6 +117,35 @@ impl Did {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The path of the URL the DID resolves to, where its DID document is
+    /// served: `/.well-known/did.json` for a DID that names a host alone,
+    /// and each further colon-separated segment as a path segment before
+    /// `/did.json` otherwise (the did:web Method Specification, Read
+    /// (Resolve)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use nl_generic_functions::nuts_auth::holder::Did;
+    ///
+    /// let host = Did::new("did:web:gateway.example.org%3A8443")?;
+    /// assert_eq!("/.well-known/did.json", host.document_path());
+    /// let path = Did::new("did:web:gateway.example.org:fed:nuts")?;
+    /// assert_eq!("/fed/nuts/did.json", path.document_path());
+    /// # Ok::<(), nl_generic_functions::nuts_auth::holder::HolderError>(())
+    /// ```
+    #[must_use]
+    pub fn document_path(&self) -> String {
+        // NOTE: the did:web Method Specification, Read (Resolve): the segment after
+        // the method name is the host, with its port, and every later one a path.
+        let path: Vec<&str> = self.0.split(':').skip(3).collect();
+        if path.is_empty() {
+            String::from("/.well-known/did.json")
+        } else {
+            format!("/{}/did.json", path.join("/"))
+        }
+    }
 }
 
 impl fmt::Display for Did {
@@ -156,6 +185,7 @@ pub struct HolderKey {
     kid: String,
     algorithm: Algorithm,
     private: EncodingKey,
+    public: Jwk,
 }
 
 impl HolderKey {
@@ -182,18 +212,27 @@ impl HolderKey {
         }
         let private =
             EncodingKey::from_ec_pem(pem.expose_secret().as_bytes()).map_err(HolderError::Pem)?;
-        let algorithm = match Jwk::from_encoding_key(&private, Algorithm::ES256) {
-            Ok(_p256) => Algorithm::ES256,
-            Err(_not_p256) => {
-                Jwk::from_encoding_key(&private, Algorithm::ES384).map_err(HolderError::Curve)?;
-                Algorithm::ES384
-            }
+        let (algorithm, public) = match Jwk::from_encoding_key(&private, Algorithm::ES256) {
+            Ok(public) => (Algorithm::ES256, public),
+            Err(_not_p256) => (
+                Algorithm::ES384,
+                Jwk::from_encoding_key(&private, Algorithm::ES384).map_err(HolderError::Curve)?,
+            ),
         };
         Ok(Self {
             kid: kid.to_owned(),
             algorithm,
             private,
+            public,
         })
+    }
+
+    /// The public half of the key, as the JWK its verification method in
+    /// the holder's DID document carries (DID 1.0 §5.2.1): the curve and
+    /// coordinates, and `alg`, never a private member.
+    #[must_use]
+    pub fn public(&self) -> &Jwk {
+        &self.public
     }
 
     /// The DID URL of the key's verification method, the `kid` of every

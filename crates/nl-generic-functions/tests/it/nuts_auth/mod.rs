@@ -7,6 +7,7 @@
 //! run time, and credentials minted for the test.
 
 mod corpus;
+mod did_document;
 mod flow;
 mod hygiene;
 mod refusals;

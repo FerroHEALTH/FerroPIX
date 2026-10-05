@@ -35,6 +35,11 @@
 //!    presentation nonce);
 //! 5. it takes the token only when it is `DPoP`-bound (RFC 9449 §5, GFI-004).
 //!
+//! The authorization server verifies the presentation with the key its `kid`
+//! names in the holder's DID document, which [`did_document`] builds from
+//! the holder's keys for the holder to serve at the location its `did:web`
+//! DID resolves to (RFC021 §4.2 item 4).
+//!
 //! The crate depends on no application: the key the token is bound to is
 //! the caller's, behind [`DpopProver`], and the same key proves every request
 //! the token is sent with (GFI-005).
@@ -88,6 +93,7 @@
 //! # }
 //! ```
 
+pub mod did_document;
 pub mod error;
 pub mod holder;
 mod metadata;

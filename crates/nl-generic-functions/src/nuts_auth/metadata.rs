@@ -5,7 +5,7 @@
 //! §3.1 and §5; RFC 9449 §5.1).
 //!
 //! The issuer and endpoint checks both Annex B tracks share are
-//! [`crate::oauth_metadata`]'s; the members only the Nuts profile reads are
+//! [`oauth_server_metadata`]'s; the members only the Nuts profile reads are
 //! checked here.
 
 use std::collections::BTreeMap;
@@ -15,7 +15,7 @@ use url::Url;
 
 use crate::nuts_auth::error::MetadataError;
 use crate::nuts_auth::presentation::JWT_VP;
-use crate::oauth_metadata::{EndpointError, Issuer};
+use oauth_server_metadata::{EndpointError, Issuer};
 
 /// The metadata members the grant reads.
 #[derive(Deserialize)]

@@ -108,7 +108,7 @@ use error::{InvalidInput, Malformation, NutsAuthError, Step, bounded};
 use holder::Holder;
 use presentation::PresentationDefinition;
 
-use crate::oauth_metadata::{self, Issuer};
+use oauth_server_metadata::Issuer;
 
 /// The `grant_type` of the VP Token Grant Type (Nuts RFC021 §3).
 pub const GRANT_TYPE: &str = "vp_token-bearer";
@@ -513,7 +513,7 @@ fn json<T: DeserializeOwned>(answer: &Answer, step: Step) -> Result<T, NutsAuthE
     if !answer.json {
         return Err(malformed(Malformation::MediaType));
     }
-    oauth_metadata::repeats_no_name(&answer.body).map_err(|error| {
+    oauth_server_metadata::repeats_no_name(&answer.body).map_err(|error| {
         malformed(if error.is_data() {
             Malformation::RepeatedName {
                 line: error.line(),

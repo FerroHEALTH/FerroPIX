@@ -21,6 +21,19 @@ index or any other caller can use it as it is. Only the `xcpd` feature may carry
 the SOAP 1.2, HL7 v3 and SAML XUA stack; a build without it compiles none of it.
 The profiles are published at <https://profiles.ihe.net/ITI/>.
 
+## Access tokens (IUA ITI-72)
+
+The PIXm, PDQm, mCSD and PMIR clients send the credential their
+`reqwest::Client` carries in its default headers, or, built
+`.with_authorizer(…)`, ask an `ihe_iti::authorizer::Authorizer` for the
+headers of every request: an OAuth 2.0 access token incorporated as IUA
+ITI-72 §3.72.4.2 asks, which the authorizer refreshes before it expires. The
+authorizer reads every answer, and a request it asks for again after a `401`
+is sent once more with new headers (§3.72.4.3), never more than twice in all.
+The authorizer is handed the request URL without its query, so no patient
+identifier or search criterion reaches it, and a request it cannot
+authenticate is not sent.
+
 ## PIXm (`pixm`)
 
 `ihe_iti::pixm::PixmClient` is the Patient Identifier Cross-reference

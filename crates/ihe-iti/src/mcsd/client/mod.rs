@@ -22,12 +22,12 @@ use fhir_types::r4::endpoint::Endpoint;
 use fhir_types::r4::organization::Organization;
 use http::header::{ACCEPT, CONTENT_TYPE, DATE};
 use std::fmt;
-#[cfg(feature = "balp")]
 use std::sync::Arc;
 use url::Url;
 
 use super::budget::Budget;
 use super::error::{InvalidBase, McsdError};
+use crate::authorizer::{self, Authorizer};
 use crate::redact::RedactedUrl;
 use crate::search;
 
@@ -264,6 +264,7 @@ pub struct McsdClient {
     organization: Interactions,
     endpoint: Interactions,
     http: reqwest::Client,
+    authorizer: Option<Arc<dyn Authorizer>>,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
@@ -306,9 +307,22 @@ impl McsdClient {
             endpoint: Interactions::of(&base, CareService::Endpoint)?,
             base,
             http,
+            authorizer: None,
             #[cfg(feature = "balp")]
             audit: None,
         })
+    }
+
+    /// This client, asking `authorizer` for the headers of every request and
+    /// handing it every answer, as for an access token it incorporates (IUA
+    /// ITI-72 §3.72.4.2).
+    ///
+    /// Build the HTTP client without a default `Authorization` header then:
+    /// the authorizer's headers are added to it, never in its place.
+    #[must_use]
+    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 
     /// This client, recording the audit record of every ITI-90 search and
@@ -474,14 +488,20 @@ impl McsdClient {
         if url.origin() != self.base.origin() {
             return Err(McsdError::ForeignPage);
         }
-        let answer = self
+        let request = self
             .http
             .get(url)
             .header(ACCEPT, FHIR_JSON)
-            .timeout(budget.remaining()?)
-            .send()
-            .await
+            .build()
             .map_err(response::transport)?;
+        let answer = authorizer::send(
+            &self.http,
+            self.authorizer.as_deref(),
+            request,
+            budget.remaining()?,
+        )
+        .await
+        .map_err(response::unsent)?;
         let status = answer.status();
         let media = answer
             .headers()
@@ -502,6 +522,7 @@ impl fmt::Debug for McsdClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("McsdClient")
             .field("base", &RedactedUrl(self.base.as_str()))
+            .field("authorizer", &self.authorizer.is_some())
             .finish_non_exhaustive()
     }
 }

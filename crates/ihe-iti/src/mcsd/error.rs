@@ -120,6 +120,10 @@ pub enum McsdError {
     /// The request could not be sent or the answer could not be read.
     #[error("the directory could not be reached")]
     Transport(#[source] reqwest::Error),
+    /// The authorizer made no headers for the request, so nothing was sent
+    /// (IUA ITI-72 §3.72.4.2).
+    #[error("the request to the directory could not be authenticated")]
+    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
     /// The answer does not hold to ITI-90 or ITI-91.
     #[error("the directory's answer does not hold to mCSD")]
     Malformed(#[from] Malformation),

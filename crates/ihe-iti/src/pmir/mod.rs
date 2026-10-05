@@ -63,7 +63,6 @@ mod message;
 pub mod subscription;
 
 use std::fmt;
-#[cfg(feature = "balp")]
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -71,6 +70,7 @@ use http::StatusCode;
 use http::header::{ACCEPT, CONTENT_TYPE, LOCATION};
 use url::Url;
 
+use crate::authorizer::{self, Authorizer};
 use crate::outcome;
 use crate::redact::RedactedUrl;
 use error::{InvalidInput, SubscribeError, SubscriptionMalformation};
@@ -88,6 +88,7 @@ const LIMIT: usize = 1 << 20;
 pub struct PmirSubscriber {
     endpoint: Url,
     http: reqwest::Client,
+    authorizer: Option<Arc<dyn Authorizer>>,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
@@ -109,9 +110,34 @@ impl PmirSubscriber {
         Ok(Self {
             endpoint,
             http,
+            authorizer: None,
             #[cfg(feature = "balp")]
             audit: None,
         })
+    }
+
+    /// This subscriber, asking `authorizer` for the headers of every request
+    /// and handing it every answer, as for an access token it incorporates
+    /// (IUA ITI-72 §3.72.4.2).
+    ///
+    /// Build the HTTP client without a default `Authorization` header then:
+    /// the authorizer's headers are added to it, never in its place.
+    #[must_use]
+    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
+    }
+
+    /// Sends `request` within `timeout`, authenticated by the authorizer when
+    /// there is one.
+    async fn send(
+        &self,
+        request: reqwest::Request,
+        timeout: Duration,
+    ) -> Result<reqwest::Response, SubscribeError> {
+        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout)
+            .await
+            .map_err(error::unsent)
     }
 
     /// This subscriber, recording the audit record of every exchange with
@@ -190,14 +216,13 @@ impl PmirSubscriber {
         request: &SubscriptionRequest,
         timeout: Duration,
     ) -> Result<subscription::Search, SubscribeError> {
-        let response = self
+        let built = self
             .http
             .get(url.clone())
             .header(ACCEPT, FHIR_JSON)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         let status = response.status();
         let media = media(&response);
         let body = read_body(response).await?;
@@ -260,16 +285,15 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<Subscribed, SubscribeError> {
         let body = serde_json::to_vec(&request.resource()).map_err(SubscribeError::Unwritable)?;
-        let response = self
+        let built = self
             .http
             .post(self.endpoint.clone())
             .header(CONTENT_TYPE, FHIR_JSON)
             .header(ACCEPT, FHIR_JSON)
             .body(body)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         let status = response.status();
         let location = response
             .headers()
@@ -323,14 +347,13 @@ impl PmirSubscriber {
         subscribed: &Subscribed,
         timeout: Duration,
     ) -> Result<SubscriptionStatus, SubscribeError> {
-        let response = self
+        let built = self
             .http
             .get(subscribed.location().clone())
             .header(ACCEPT, FHIR_JSON)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         let status = response.status();
         let media = media(&response);
         let body = read_body(response).await?;
@@ -380,14 +403,13 @@ impl PmirSubscriber {
         subscribed: &Subscribed,
         timeout: Duration,
     ) -> Result<(), SubscribeError> {
-        let response = self
+        let built = self
             .http
             .delete(subscribed.location().clone())
             .header(ACCEPT, FHIR_JSON)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         let status = response.status();
         let media = media(&response);
         let body = read_body(response).await?;
@@ -409,6 +431,7 @@ impl fmt::Debug for PmirSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PmirSubscriber")
             .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
+            .field("authorizer", &self.authorizer.is_some())
             .finish_non_exhaustive()
     }
 }

@@ -76,7 +76,6 @@ mod request;
 mod response;
 
 use std::fmt;
-#[cfg(feature = "balp")]
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -84,6 +83,7 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use secrecy::ExposeSecret;
 use url::Url;
 
+use crate::authorizer::{self, Authorizer};
 use crate::redact::RedactedUrl;
 use crate::user::OnBehalfOf;
 use error::{InvalidInput, PixmError};
@@ -127,6 +127,7 @@ pub struct PixmClient {
     endpoint: Url,
     invocation: Invocation,
     http: reqwest::Client,
+    authorizer: Option<Arc<dyn Authorizer>>,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
@@ -152,9 +153,22 @@ impl PixmClient {
             endpoint: request::endpoint(base)?,
             invocation: Invocation::default(),
             http,
+            authorizer: None,
             #[cfg(feature = "balp")]
             audit: None,
         })
+    }
+
+    /// This client, asking `authorizer` for the headers of every request and
+    /// handing it every answer, as for an access token it incorporates (IUA
+    /// ITI-72 §3.72.4.2).
+    ///
+    /// Build the HTTP client without a default `Authorization` header then:
+    /// the authorizer's headers are added to it, never in its place.
+    #[must_use]
+    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 
     /// This client, asking the Manager with `invocation`.
@@ -258,12 +272,13 @@ impl PixmClient {
                 .header(CONTENT_TYPE, FHIR_JSON)
                 .body(body.expose_secret().as_bytes().to_vec()),
         };
-        let response = builder
+        let built = builder
             .header(ACCEPT, FHIR_JSON)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = authorizer::send(&self.http, self.authorizer.as_deref(), built, timeout)
+            .await
+            .map_err(error::unsent)?;
         let status = response.status();
         let media = response
             .headers()
@@ -280,6 +295,7 @@ impl fmt::Debug for PixmClient {
         f.debug_struct("PixmClient")
             .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
             .field("invocation", &self.invocation)
+            .field("authorizer", &self.authorizer.is_some())
             .finish_non_exhaustive()
     }
 }

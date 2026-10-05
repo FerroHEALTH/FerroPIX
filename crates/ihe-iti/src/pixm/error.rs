@@ -10,6 +10,7 @@
 
 use http::StatusCode;
 
+use crate::authorizer::Unsent;
 use crate::outcome::IssueType;
 
 /// An argument the client refuses before anything is sent.
@@ -56,6 +57,10 @@ pub enum PixmError {
     /// The request could not be sent or the answer could not be read.
     #[error("the PIX Manager could not be reached")]
     Transport(#[source] reqwest::Error),
+    /// The authorizer made no headers for the request, so nothing was sent
+    /// (IUA ITI-72 §3.72.4.2).
+    #[error("the request to the PIX Manager could not be authenticated")]
+    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
     /// The answer does not hold to ITI-83.
     #[error("the PIX Manager's answer does not hold to ITI-83")]
     Malformed(#[from] Malformation),
@@ -171,5 +176,15 @@ pub(super) fn transport(error: reqwest::Error) -> PixmError {
         PixmError::Timeout
     } else {
         PixmError::Transport(error)
+    }
+}
+
+/// A send that produced no answer, a transport failure read as [`transport`]
+/// reads it.
+pub(super) fn unsent(error: Unsent) -> PixmError {
+    match error {
+        Unsent::Unauthenticated(source) => PixmError::Unauthenticated(source),
+        Unsent::Timeout => PixmError::Timeout,
+        Unsent::Transport(source) => transport(source),
     }
 }

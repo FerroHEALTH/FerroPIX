@@ -79,11 +79,13 @@ mod request;
 mod response;
 
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
+use crate::authorizer::{self, Authorizer};
 use crate::redact::RedactedUrl;
 use crate::user::OnBehalfOf;
 use error::{InvalidInput, PdqmError};
@@ -105,8 +107,9 @@ pub struct PdqmClient {
     endpoint: Url,
     match_endpoint: Url,
     http: reqwest::Client,
+    authorizer: Option<Arc<dyn Authorizer>>,
     #[cfg(feature = "balp")]
-    audit: Option<std::sync::Arc<dyn crate::balp::AuditRecorder>>,
+    audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
 }
 
 impl PdqmClient {
@@ -128,9 +131,22 @@ impl PdqmClient {
             match_endpoint: request::match_endpoint(base.clone())?,
             base,
             http,
+            authorizer: None,
             #[cfg(feature = "balp")]
             audit: None,
         })
+    }
+
+    /// This client, asking `authorizer` for the headers of every request and
+    /// handing it every answer, as for an access token it incorporates (IUA
+    /// ITI-72 §3.72.4.2).
+    ///
+    /// Build the HTTP client without a default `Authorization` header then:
+    /// the authorizer's headers are added to it, never in its place.
+    #[must_use]
+    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 
     /// This client, recording the audit record of every search, every page
@@ -142,7 +158,7 @@ impl PdqmClient {
     /// [`PdqmError::Audit`], and its answer is not used.
     #[cfg(feature = "balp")]
     #[must_use]
-    pub fn audited(mut self, recorder: std::sync::Arc<dyn crate::balp::AuditRecorder>) -> Self {
+    pub fn audited(mut self, recorder: Arc<dyn crate::balp::AuditRecorder>) -> Self {
         self.audit = Some(recorder);
         self
     }
@@ -273,16 +289,15 @@ impl PdqmClient {
     ) -> Result<MatchResult, PdqmError> {
         use secrecy::ExposeSecret as _;
         let body = body.expose_secret().as_bytes().to_vec();
-        let response = self
+        let built = self
             .http
             .post(self.match_endpoint.clone())
             .header(ACCEPT, FHIR_JSON)
             .header(CONTENT_TYPE, FHIR_JSON)
             .body(body)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         let status = response.status();
         let media = response
             .headers()
@@ -346,16 +361,15 @@ impl PdqmClient {
         query: &PatientQuery,
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
-        let response = self
+        let built = self
             .http
             .post(self.endpoint.clone())
             .header(ACCEPT, FHIR_JSON)
             .header(CONTENT_TYPE, request::FORM)
             .body(query.form())
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         self.answer(response, query.names_domain()).await
     }
 
@@ -400,15 +414,26 @@ impl PdqmClient {
     }
 
     async fn get(&self, page: &Page, timeout: Duration) -> Result<SearchResult, PdqmError> {
-        let response = self
+        let built = self
             .http
             .get(page.url().clone())
             .header(ACCEPT, FHIR_JSON)
-            .timeout(timeout)
-            .send()
-            .await
+            .build()
             .map_err(error::transport)?;
+        let response = self.send(built, timeout).await?;
         self.answer(response, false).await
+    }
+
+    /// Sends `request` within `timeout`, authenticated by the authorizer when
+    /// there is one.
+    async fn send(
+        &self,
+        request: reqwest::Request,
+        timeout: Duration,
+    ) -> Result<reqwest::Response, PdqmError> {
+        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout)
+            .await
+            .map_err(error::unsent)
     }
 
     async fn answer(
@@ -432,6 +457,7 @@ impl fmt::Debug for PdqmClient {
         f.debug_struct("PdqmClient")
             .field("base", &RedactedUrl(self.base.as_str()))
             .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
+            .field("authorizer", &self.authorizer.is_some())
             .finish_non_exhaustive()
     }
 }

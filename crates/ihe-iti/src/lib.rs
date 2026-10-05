@@ -17,6 +17,10 @@
 //!   `pixm`, `pdqm`, `mcsd` or `pmir` it also audits that profile's
 //!   transactions.
 //!
+//! The PIXm, PDQm, mCSD and PMIR clients authenticate with a credential the
+//! HTTP client carries, or with an access token incorporated in each request
+//! by an authorizer the caller supplies (module `authorizer`, IUA ITI-72).
+//!
 //! An audited PIXm, PDQm or XCPD exchange names whom it is made for, a user
 //! or the client's own system (module `user`), and its audit record names that
 //! user.
@@ -28,6 +32,8 @@
 
 #[cfg(feature = "atna")]
 pub mod atna;
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
+pub mod authorizer;
 #[cfg(feature = "balp")]
 pub mod balp;
 #[cfg(feature = "mcsd")]

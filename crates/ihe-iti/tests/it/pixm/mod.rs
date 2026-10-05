@@ -6,6 +6,7 @@
 //! the source identifier.
 
 mod answers;
+mod authorized;
 mod contract;
 mod hygiene;
 

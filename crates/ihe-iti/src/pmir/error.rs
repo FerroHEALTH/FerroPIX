@@ -58,6 +58,10 @@ pub enum SubscribeError {
     /// The request could not be sent or the answer could not be read.
     #[error("the Patient Identity Registry could not be reached")]
     Transport(#[source] reqwest::Error),
+    /// The authorizer made no headers for the request, so nothing was sent
+    /// (IUA ITI-72 §3.72.4.2).
+    #[error("the request to the Patient Identity Registry could not be authenticated")]
+    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
     /// The `Subscription` could not be written as FHIR JSON, so nothing was
     /// sent.
     #[error("the Subscription cannot be written as FHIR JSON")]
@@ -296,5 +300,17 @@ pub(super) fn transport(error: reqwest::Error) -> SubscribeError {
         SubscribeError::Timeout
     } else {
         SubscribeError::Transport(error)
+    }
+}
+
+/// A send that produced no answer, a transport failure read as [`transport`]
+/// reads it.
+pub(super) fn unsent(error: crate::authorizer::Unsent) -> SubscribeError {
+    match error {
+        crate::authorizer::Unsent::Unauthenticated(source) => {
+            SubscribeError::Unauthenticated(source)
+        }
+        crate::authorizer::Unsent::Timeout => SubscribeError::Timeout,
+        crate::authorizer::Unsent::Transport(source) => transport(source),
     }
 }

@@ -49,6 +49,16 @@ pub(super) fn transport(error: reqwest::Error) -> McsdError {
     }
 }
 
+/// A send that produced no answer, a transport failure read as [`transport`]
+/// reads it.
+pub(super) fn unsent(error: crate::authorizer::Unsent) -> McsdError {
+    match error {
+        crate::authorizer::Unsent::Unauthenticated(source) => McsdError::Unauthenticated(source),
+        crate::authorizer::Unsent::Timeout => McsdError::Timeout,
+        crate::authorizer::Unsent::Transport(source) => transport(source),
+    }
+}
+
 /// Reads the answer's body, spending its bytes from `budget` as they arrive.
 pub(super) async fn body(
     mut response: reqwest::Response,

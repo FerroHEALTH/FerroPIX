@@ -24,6 +24,23 @@ pub const PSEUDO_BSN_SYSTEM: &str = "http://fhir.nl/fhir/NamingSystem/pseudo-bsn
 /// CIBG URA register (the IG's `$ura` alias).
 pub const URA_SYSTEM: &str = "http://fhir.nl/fhir/NamingSystem/ura";
 
+/// The naming systems of the BSN itself: the IG's `$bsn` system, and the OID
+/// it is registered under, as a URN and dotted.
+///
+/// None of them may stand for the pseudonymised BSN ([`PSEUDO_BSN_SYSTEM`]),
+/// which is the only patient identifier the NVI is keyed on.
+pub const BSN_SYSTEMS: [&str; 3] = [
+    "http://fhir.nl/fhir/NamingSystem/bsn",
+    "urn:oid:2.16.840.1.113883.2.4.6.3",
+    "2.16.840.1.113883.2.4.6.3",
+];
+
+/// Returns whether `namespace` names the BSN itself, one of [`BSN_SYSTEMS`].
+#[must_use]
+pub fn is_bsn_system(namespace: &str) -> bool {
+    BSN_SYSTEMS.contains(&namespace)
+}
+
 /// Why an identifier is refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -105,7 +122,18 @@ impl fmt::Debug for PseudoBsn {
 
 #[cfg(test)]
 mod tests {
-    use super::{IdentifierError, Ura};
+    use super::{IdentifierError, PSEUDO_BSN_SYSTEM, URA_SYSTEM, Ura, is_bsn_system};
+
+    #[test]
+    fn each_bsn_system_is_one_and_the_pseudonym_and_ura_systems_are_not() {
+        assert!(is_bsn_system("http://fhir.nl/fhir/NamingSystem/bsn"));
+        assert!(is_bsn_system("urn:oid:2.16.840.1.113883.2.4.6.3"));
+        assert!(is_bsn_system("2.16.840.1.113883.2.4.6.3"));
+        assert!(!is_bsn_system(PSEUDO_BSN_SYSTEM));
+        assert!(!is_bsn_system(URA_SYSTEM));
+        assert!(!is_bsn_system("urn:oid:2.999.1"));
+        assert!(!is_bsn_system(""));
+    }
 
     #[test]
     fn an_empty_ura_is_refused_and_any_other_is_kept_as_written() {

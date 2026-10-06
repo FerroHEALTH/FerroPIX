@@ -272,3 +272,121 @@ async fn a_file_the_spool_did_not_write_refuses_the_start_naming_it() {
         other => panic!("a foreign file refuses the start: {other:?}"),
     }
 }
+
+/// The names in `directory`, sorted, or none when it does not exist.
+fn listing(directory: &std::path::Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = entries
+        .map(|entry| {
+            entry
+                .expect("an entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn inspecting_a_missing_spool_under_a_writable_parent_creates_nothing() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let path = directory.path().join("spool");
+    Spool::inspect(&path).expect("the spool would open");
+    assert!(!path.exists());
+    assert!(listing(directory.path()).is_empty());
+}
+
+#[test]
+fn inspecting_a_spool_whose_parents_are_missing_reads_the_nearest_ancestor() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let path = directory.path().join("missing").join("spool");
+    Spool::inspect(&path).expect("opening creates the missing parents");
+    assert!(listing(directory.path()).is_empty());
+
+    let file = directory.path().join("a-file");
+    std::fs::write(&file, b"a file").expect("a file");
+    match Spool::inspect(&file.join("below").join("spool")) {
+        Err(error @ SpoolError::NotADirectory(_)) => {
+            assert!(error.to_string().contains(&file.display().to_string()));
+        }
+        other => panic!("a file above the spool is refused: {other:?}"),
+    }
+    assert_eq!(vec![String::from("a-file")], listing(directory.path()));
+}
+
+#[tokio::test]
+async fn inspecting_a_spool_in_use_changes_nothing_in_it() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let path = directory.path().join("spool");
+    let spool = Spool::open(&path, ROOMY).expect("the spool opens");
+    spool.push(framed("kept")).await.expect("stored");
+    drop(spool);
+    std::fs::write(path.join("00000000000000000007.partial"), b"torn").expect("a partial");
+    let before = listing(&path);
+    Spool::inspect(&path).expect("the spool would open");
+    assert_eq!(before, listing(&path));
+    assert!(before.contains(&String::from("00000000000000000007.partial")));
+}
+
+#[test]
+fn inspecting_a_spool_with_a_foreign_file_names_it() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let path = directory.path().join("spool");
+    drop(Spool::open(&path, ROOMY).expect("the spool opens"));
+    let stray = path.join(QUARANTINE).join("notes.txt");
+    std::fs::write(&stray, b"not a message").expect("a stray file");
+    match Spool::inspect(&path) {
+        Err(error @ SpoolError::Foreign { .. }) => {
+            assert!(error.to_string().contains(&stray.display().to_string()));
+        }
+        other => panic!("a foreign file is refused: {other:?}"),
+    }
+}
+
+#[test]
+fn inspecting_a_file_in_place_of_the_spool_is_refused() {
+    let directory = tempfile::tempdir().expect("a directory");
+    let path = directory.path().join("spool");
+    std::fs::write(&path, b"a file").expect("a file");
+    assert!(matches!(
+        Spool::inspect(&path),
+        Err(SpoolError::NotADirectory(refused)) if refused == path
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn inspecting_refuses_what_opening_refuses_by_mode() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = tempfile::tempdir().expect("a directory");
+    let path = directory.path().join("spool");
+    drop(Spool::open(&path, ROOMY).expect("the spool opens"));
+    let chmod = |path: &std::path::Path, mode: u32| {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).expect("chmod");
+    };
+
+    chmod(&path, 0o750);
+    assert!(matches!(Spool::inspect(&path), Err(SpoolError::Exposed(_))));
+    chmod(&path, 0o500);
+    let unwritable = Spool::inspect(&path);
+    chmod(&path, 0o700);
+    assert!(
+        matches!(&unwritable, Err(SpoolError::Unwritable(refused)) if *refused == path),
+        "{unwritable:?}"
+    );
+
+    let parent = directory.path().join("closed");
+    std::fs::create_dir_all(&parent).expect("a parent");
+    chmod(&parent, 0o555);
+    let refused = Spool::inspect(&parent.join("missing").join("spool"));
+    chmod(&parent, 0o700);
+    assert!(
+        matches!(&refused, Err(SpoolError::Unwritable(closed)) if *closed == parent),
+        "{refused:?}"
+    );
+}

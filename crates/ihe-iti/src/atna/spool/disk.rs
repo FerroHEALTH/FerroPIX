@@ -57,6 +57,55 @@ pub(super) fn scan(
     Ok(sizes)
 }
 
+/// The first file in `directory` the spool did not write, `skip`, the
+/// quarantine, passed over; a partial file a crash left is the spool's own.
+/// Nothing is removed or written.
+pub(super) fn first_foreign(
+    directory: &Path,
+    skip: Option<&Path>,
+) -> Result<Option<PathBuf>, SpoolError> {
+    for entry in fs::read_dir(directory).map_err(io("read", directory))? {
+        let path = entry.map_err(io("read", directory))?.path();
+        if Some(path.as_path()) == skip {
+            continue;
+        }
+        let extension = path.extension().and_then(OsStr::to_str);
+        let numbered = path
+            .file_stem()
+            .and_then(OsStr::to_str)
+            .is_some_and(|stem| stem.parse::<u64>().is_ok());
+        if !(numbered && matches!(extension, Some(STORED | PARTIAL))) {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
+/// Whether the mode of the directory at `path` lets one class of users,
+/// its owner, its group or every other user, both write in it and enter it.
+///
+/// Only the mode is read: neither the process user nor a read-only mount is,
+/// so a directory on a filesystem mounted read-only for a check still passes.
+#[cfg(unix)]
+pub(super) fn writable_by_mode(path: &Path) -> Result<bool, SpoolError> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mode = fs::metadata(path)
+        .map_err(io("read", path))?
+        .permissions()
+        .mode();
+    Ok([0o300, 0o030, 0o003]
+        .into_iter()
+        .any(|bits| mode & bits == bits))
+}
+
+#[cfg(not(unix))]
+pub(super) fn writable_by_mode(path: &Path) -> Result<bool, SpoolError> {
+    Ok(!fs::metadata(path)
+        .map_err(io("read", path))?
+        .permissions()
+        .readonly())
+}
+
 /// Writes and removes a partial file, so a directory that cannot take a
 /// message is refused when it is opened, not when the first message
 /// arrives; one a crash leaves behind is removed by the next open.

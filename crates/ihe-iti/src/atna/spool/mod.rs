@@ -42,6 +42,7 @@
 
 mod disk;
 pub(super) mod in_flight;
+mod inspect;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
@@ -141,6 +142,16 @@ pub enum SpoolError {
         /// The file to move.
         path: PathBuf,
     },
+    /// The path of the spool directory, of its quarantine, or of the nearest
+    /// existing directory above a missing one, is a file.
+    #[error("{} is no directory, so no audit spool can be opened there", .0.display())]
+    NotADirectory(PathBuf),
+    /// The mode of the directory admits no writer.
+    #[error(
+        "the audit spool directory {} gives no user write access; grant the gateway's user write access to it",
+        .0.display()
+    )]
+    Unwritable(PathBuf),
     /// A file system operation failed.
     #[error("the audit spool at {path} could not be {action}")]
     Io {

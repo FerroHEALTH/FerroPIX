@@ -55,6 +55,17 @@ pub struct User {
     purposes: Vec<PurposeOfUse>,
     organisation: Option<String>,
     alt_id: Option<String>,
+    stated: Box<Stated>,
+}
+
+/// What a token states about its user beyond who they are, boxed so an
+/// [`OnBehalfOf`] stays small.
+#[derive(Clone, Default, PartialEq, Eq)]
+struct Stated {
+    name: Option<String>,
+    provider_identifier: Option<String>,
+    assurance: Option<Code>,
+    roles: Vec<Code>,
 }
 
 impl User {
@@ -71,7 +82,68 @@ impl User {
             purposes: Vec::new(),
             organisation: None,
             alt_id: None,
+            stated: Box::default(),
         }
+    }
+
+    /// Returns this user, named `name`, the IHE IUA `subject_name`, which
+    /// BALP 1.1.4 §3:5.7.5.4 writes as `agent[user].who.display`.
+    #[must_use]
+    pub fn with_name(mut self, name: Option<String>) -> Self {
+        self.stated.name = name;
+        self
+    }
+
+    /// Returns the user's name, when the token states one.
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        self.stated.name.as_deref()
+    }
+
+    /// Returns this user, identified by `identifier` as well, the IHE IUA
+    /// `national_provider_identifier`, which BALP 1.1.4 §3:5.7.5.4 writes as
+    /// `agent[user].extension[otherId][npi]`.
+    #[must_use]
+    pub fn with_provider_identifier(mut self, identifier: Option<String>) -> Self {
+        self.stated.provider_identifier = identifier;
+        self
+    }
+
+    /// Returns the identifier the user's national authority issued them as a
+    /// health care provider, when the token states one.
+    #[must_use]
+    pub fn provider_identifier(&self) -> Option<&str> {
+        self.stated.provider_identifier.as_deref()
+    }
+
+    /// Returns this user, authenticated at the assurance level `assurance`
+    /// codes, which BALP 1.1.4 writes as `agent[user].extension[assuranceLevel]`.
+    #[must_use]
+    pub fn with_assurance(mut self, assurance: Option<Code>) -> Self {
+        self.stated.assurance = assurance;
+        self
+    }
+
+    /// Returns the assurance level of the user's authentication, when it is
+    /// known.
+    #[must_use]
+    pub fn assurance(&self) -> Option<&Code> {
+        self.stated.assurance.as_ref()
+    }
+
+    /// Returns this user, acting under `roles`, which BALP 1.1.4
+    /// §3:5.7.5.4 writes as `agent[user].role`, as it does the IHE IUA
+    /// `subject_role`.
+    #[must_use]
+    pub fn with_roles(mut self, roles: Vec<Code>) -> Self {
+        self.stated.roles = roles;
+        self
+    }
+
+    /// Returns every role the user acts under.
+    #[must_use]
+    pub fn roles(&self) -> &[Code] {
+        &self.stated.roles
     }
 
     /// Returns this user, acting for the organisation `organisation` names,
@@ -169,6 +241,16 @@ impl fmt::Debug for User {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("User").field(&REDACTED).finish()
     }
+}
+
+/// A code an audit record writes about its user, such as a role or an
+/// assurance level: the code and the system that defines it, when one does.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Code {
+    /// The code system, when one defines the code.
+    pub system: Option<String>,
+    /// The code.
+    pub code: String,
 }
 
 /// One purpose of use: a code and the system that defines it, the HL7 v3

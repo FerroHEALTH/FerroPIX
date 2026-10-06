@@ -565,7 +565,8 @@ impl fmt::Debug for Entity {
 /// An exchange made for a [`User`](crate::user::User) names them in two agents, as BALP 1.1.4
 /// §3:5.7.5.4 maps an OAuth token's fields: the `agent:user` slice every BALP
 /// pattern has (`0..1`) with the token's `iss`, `sub` and purposes of use,
-/// and an Application agent with its `client_id`. One the system makes on
+/// and the user's name, provider identifier, roles and assurance level when
+/// they are known, and an Application agent with its `client_id`. One the system makes on
 /// its own behalf names neither. The Delete pattern admits one `110150`
 /// agent, its own `agent:client`, so an exchange whose client is of that type
 /// names the user's application there alone. A user's organisation, when

@@ -12,6 +12,7 @@ use fhir_types::r4::audit_event::{
 };
 use fhir_types::r4::codeable_concept::CodeableConcept;
 use fhir_types::r4::coding::Coding;
+use fhir_types::r4::extension::{Extension, ExtensionValue};
 use fhir_types::r4::identifier::Identifier;
 use fhir_types::r4::meta::Meta;
 use fhir_types::r4::primitives;
@@ -23,7 +24,22 @@ use super::{
     NetworkAddress, Observer, PATIENT_ROLE, PERSON, Peer, QUERY_ROLE, RecordError, SYSTEM_OBJECT,
     What,
 };
-use crate::user::{PurposeOfUse, User};
+use crate::user::{Code, PurposeOfUse, User};
+
+/// The BALP extension that carries an agent's assurance level.
+const ASSURANCE_LEVEL_EXTENSION: &str =
+    "https://profiles.ihe.net/ITI/BALP/StructureDefinition/ihe-assuranceLevel";
+
+/// The BALP extension that carries another identifier of an agent.
+const OTHER_ID_EXTENSION: &str =
+    "https://profiles.ihe.net/ITI/BALP/StructureDefinition/ihe-otherId";
+
+/// The HL7 v2 identifier types (table 0203), which BALP's
+/// `OtherIdentifierTypesVS` draws `NPI` and `PRN` from.
+const IDENTIFIER_TYPES: &str = "http://terminology.hl7.org/CodeSystem/v2-0203";
+
+/// The identifier type of a national provider identifier.
+const NATIONAL_PROVIDER_IDENTIFIER: &str = "NPI";
 
 impl Exchange {
     /// The `AuditEvent` of this exchange as `observer` records it.
@@ -115,8 +131,13 @@ fn user_agents(user: &User) -> [AuditEventAgent; 2] {
     // NOTE: BALP 1.1.4 agent:user fixes requestor true and allows no network; the
     // client's agent follows ex-auditBasicReadOServer, requestor false.
     let person = AuditEventAgent {
+        extension: user_extensions(user),
         r#type: Some(concept(INFORMATION_RECIPIENT)),
-        who: Some(identified(Some(user.issuer()), user.subject())),
+        role: user.roles().iter().map(coded).collect(),
+        who: Some(Reference {
+            display: user.name().map(primitives::String::from),
+            ..identified(Some(user.issuer()), user.subject())
+        }),
         alt_id: user.alt_id().map(primitives::String::from),
         requestor: primitives::Boolean::from(true),
         purpose_of_use: user.purposes().iter().map(purpose).collect(),
@@ -148,6 +169,48 @@ fn organisation_agent(user: &User) -> Option<AuditEventAgent> {
         requestor: primitives::Boolean::from(false),
         ..AuditEventAgent::default()
     })
+}
+
+/// The extensions of `user`'s agent: the assurance level of their
+/// authentication (`ihe-assuranceLevel`) and their provider identifier
+/// (`ihe-otherId`, typed `NPI`), as BALP 1.1.4 §3:5.7.5.4 maps the IHE IUA
+/// `national_provider_identifier` and the `AuditEvent-ex-auditPoke-SAML-Comp`
+/// example writes both.
+fn user_extensions(user: &User) -> Vec<Extension> {
+    let assurance = user.assurance().map(|level| Extension {
+        url: ASSURANCE_LEVEL_EXTENSION.to_owned(),
+        value: Some(ExtensionValue::CodeableConcept(Box::new(coded(level)))),
+        ..Extension::default()
+    });
+    let provider = user.provider_identifier().map(|identifier| Extension {
+        url: OTHER_ID_EXTENSION.to_owned(),
+        value: Some(ExtensionValue::Identifier(Box::new(Identifier {
+            r#type: Some(CodeableConcept {
+                coding: vec![Coding {
+                    system: Some(primitives::Uri::from(IDENTIFIER_TYPES)),
+                    code: Some(primitives::Code::from(NATIONAL_PROVIDER_IDENTIFIER)),
+                    ..Coding::default()
+                }],
+                ..CodeableConcept::default()
+            }),
+            value: Some(primitives::String::from(identifier)),
+            ..Identifier::default()
+        }))),
+        ..Extension::default()
+    });
+    assurance.into_iter().chain(provider).collect()
+}
+
+/// A [`Code`] as a `CodeableConcept`.
+fn coded(code: &Code) -> CodeableConcept {
+    CodeableConcept {
+        coding: vec![Coding {
+            system: code.system.as_deref().map(primitives::Uri::from),
+            code: Some(primitives::Code::from(code.code.as_str())),
+            ..Coding::default()
+        }],
+        ..CodeableConcept::default()
+    }
 }
 
 /// A purpose of use as `agent.purposeOfUse` codes it.

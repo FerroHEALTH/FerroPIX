@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! A described entity and a user's organisation and alternative identity:
+//! A described entity and a user's organisation, alternative identity,
+//! name, provider identifier, roles and assurance level:
 //! written to the record toward the repository, shown by no `Debug`.
 #![expect(
     clippy::disallowed_types,
@@ -12,7 +13,7 @@ use ihe_iti::balp::{
     DESTINATION_ROLE, Described, Detail, Direction, Entity, EventKind, Exchange, OTHER, Outcome,
     Peer, READ, REQUEST_ID, REST, SOURCE_ROLE, What,
 };
-use ihe_iti::user::{OnBehalfOf, User};
+use ihe_iti::user::{Code, OnBehalfOf, User};
 use secrecy::ExposeSecret as _;
 use serde_json::Value;
 use url::Url;
@@ -33,6 +34,13 @@ const TEMPLATE: &str = "Qz7-template-31";
 const REQUEST: &str = "Qz7-request-32";
 const ORGANISATION: &str = "Qz7-organisation-33";
 const PROFESSIONAL: &str = "Qz7-professional-34";
+const NAME: &str = "Qz7-name-37";
+const PROVIDER_ID: &str = "Qz7-provider-id-38";
+const ROLE: &str = "Qz7-role-39";
+const LEVEL: &str = "Qz7-level-40";
+
+/// A synthetic code system of assurance levels.
+const LEVELS: &str = "urn:example:assurance";
 
 fn exchange() -> Exchange {
     Exchange {
@@ -117,11 +125,118 @@ fn the_user_is_written_with_the_organisation_and_alternative_identity() {
     assert!(organisation.get("type").is_none(), "it fills no BALP slice");
 }
 
+/// The exchange of [`exchange`], its user stated with a name, a provider
+/// identifier, a role and an assurance level.
+fn with_professional() -> Exchange {
+    let mut exchange = exchange();
+    let OnBehalfOf::User(user) = exchange.on_behalf else {
+        panic!("the exchange is made for a user");
+    };
+    exchange.on_behalf = OnBehalfOf::User(
+        user.with_name(Some(NAME.to_owned()))
+            .with_provider_identifier(Some(PROVIDER_ID.to_owned()))
+            .with_roles(vec![Code {
+                system: None,
+                code: ROLE.to_owned(),
+            }])
+            .with_assurance(Some(Code {
+                system: Some(LEVELS.to_owned()),
+                code: LEVEL.to_owned(),
+            })),
+    );
+    exchange
+}
+
+/// The `agent:user` of `record`.
+fn user_agent(record: &Value) -> &Value {
+    record["agent"]
+        .as_array()
+        .expect("agents")
+        .iter()
+        .find(|agent| agent["type"]["coding"][0]["code"] == "IRCP")
+        .expect("the user agent")
+}
+
+/// BALP 1.1.4 §3:5.7.5.4: the IUA `subject_name` is `agent[user].who.display`
+/// and `national_provider_identifier` is `agent[user].extension[otherId][npi]`,
+/// written as the `AuditEvent-ex-auditPoke-SAML-Comp` example writes it.
+#[test]
+fn the_users_name_and_provider_identifier_are_written_as_balp_maps_them() {
+    let record = written(&with_professional());
+    let user = user_agent(&record);
+    assert_eq!(user["who"]["display"], NAME);
+    assert_eq!(user["who"]["identifier"]["value"], "Qz7-subject-35");
+    let other_ids: Vec<&Value> = user["extension"]
+        .as_array()
+        .expect("extensions")
+        .iter()
+        .filter(|extension| {
+            extension["url"] == "https://profiles.ihe.net/ITI/BALP/StructureDefinition/ihe-otherId"
+        })
+        .collect();
+    let [npi] = other_ids.as_slice() else {
+        panic!("one otherId, got {other_ids:?}");
+    };
+    let coding = &npi["valueIdentifier"]["type"]["coding"][0];
+    assert_eq!(
+        coding["system"],
+        "http://terminology.hl7.org/CodeSystem/v2-0203"
+    );
+    assert_eq!(coding["code"], "NPI", "OtherIdentifierTypesVS");
+    assert_eq!(npi["valueIdentifier"]["value"], PROVIDER_ID);
+}
+
+/// The `ihe-assuranceLevel` extension (context `AuditEvent.agent`) carries
+/// the level as a `CodeableConcept`, and `agent.role` the user's roles.
+#[test]
+fn the_users_assurance_level_and_roles_are_written_on_the_user_agent() {
+    let record = written(&with_professional());
+    let user = user_agent(&record);
+    let levels: Vec<&Value> = user["extension"]
+        .as_array()
+        .expect("extensions")
+        .iter()
+        .filter(|extension| {
+            extension["url"]
+                == "https://profiles.ihe.net/ITI/BALP/StructureDefinition/ihe-assuranceLevel"
+        })
+        .collect();
+    let [level] = levels.as_slice() else {
+        panic!("one assurance level, got {levels:?}");
+    };
+    assert_eq!(level["valueCodeableConcept"]["coding"][0]["system"], LEVELS);
+    assert_eq!(level["valueCodeableConcept"]["coding"][0]["code"], LEVEL);
+    assert_eq!(user["role"][0]["coding"][0]["code"], ROLE);
+    assert!(
+        user["role"][0]["coding"][0].get("system").is_none(),
+        "a code no system defines names none"
+    );
+}
+
+#[test]
+fn a_user_stated_with_none_of_them_is_written_without_them() {
+    let record = written(&exchange());
+    let user = user_agent(&record);
+    for absent in ["extension", "role"] {
+        assert!(user.get(absent).is_none(), "{absent}: {user}");
+    }
+    assert!(user["who"].get("display").is_none(), "{user}");
+}
+
 #[test]
 fn no_debug_shows_a_described_value_or_the_users_organisation() {
-    let exchange = exchange();
+    let exchange = with_professional();
     let shown = format!("{exchange:?}");
-    for value in [TEMPLATE, REQUEST, ORGANISATION, PROFESSIONAL] {
+    for value in [
+        TEMPLATE,
+        REQUEST,
+        ORGANISATION,
+        PROFESSIONAL,
+        NAME,
+        PROVIDER_ID,
+        ROLE,
+        LEVEL,
+    ] {
         assert!(!shown.contains(value), "{value} in {shown}");
     }
     assert!(shown.contains("template-id"), "the detail's name is shown");

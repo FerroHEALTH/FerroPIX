@@ -53,6 +53,8 @@ pub struct User {
     client_id: String,
     audience: Option<String>,
     purposes: Vec<PurposeOfUse>,
+    organisation: Option<String>,
+    alt_id: Option<String>,
 }
 
 impl User {
@@ -67,7 +69,37 @@ impl User {
             client_id,
             audience: None,
             purposes: Vec::new(),
+            organisation: None,
+            alt_id: None,
         }
+    }
+
+    /// Returns this user, acting for the organisation `organisation` names,
+    /// such as the IHE IUA `subject_organization_id`.
+    #[must_use]
+    pub fn with_organisation(mut self, organisation: Option<String>) -> Self {
+        self.organisation = organisation;
+        self
+    }
+
+    /// Returns this user, known by `alt_id` as well, such as a professional
+    /// registration number the token states beside its `sub`.
+    #[must_use]
+    pub fn with_alt_id(mut self, alt_id: Option<String>) -> Self {
+        self.alt_id = alt_id;
+        self
+    }
+
+    /// Returns the organisation the user acts for, when the token names one.
+    #[must_use]
+    pub fn organisation(&self) -> Option<&str> {
+        self.organisation.as_deref()
+    }
+
+    /// Returns the user's alternative identity, when one is known.
+    #[must_use]
+    pub fn alt_id(&self) -> Option<&str> {
+        self.alt_id.as_deref()
     }
 
     /// Returns this user, the token they presented naming `audience` in its

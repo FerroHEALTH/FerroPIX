@@ -7,6 +7,7 @@
 //! ATNA supplement, ITI TF-2 §3.20.4.2); and the hygiene of the patient
 //! identifier a record carries.
 
+mod described;
 mod feed;
 mod hygiene;
 #[cfg(feature = "mcsd")]

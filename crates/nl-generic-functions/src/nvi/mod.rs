@@ -26,7 +26,7 @@
 //! hold the pseudonym redact it in `Debug`.
 //!
 //! The data user authenticates through the transport, a default header of
-//! the HTTP client, or an [`authorizer::Authorizer`] that gives each request
+//! the HTTP client, or an [`Authorizer`] that gives each request
 //! its own headers, as the `DPoP`-bound token of GF-Authentication needs
 //! (the IG's GFI-005; RFC 9449 §7.1).
 //!
@@ -57,7 +57,6 @@
 //! # }
 //! ```
 
-pub mod authorizer;
 pub mod error;
 mod request;
 mod response;
@@ -71,8 +70,8 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use http::{HeaderMap, Method};
 use url::Url;
 
+use crate::authorizer::{Authorizer, Retry};
 use crate::identification::{PseudoBsn, Ura};
-use authorizer::{Authorizer, Retry};
 use error::{InvalidInput, Malformation, NviError};
 
 /// The system of the localization record type the IG fixes (LOINC).

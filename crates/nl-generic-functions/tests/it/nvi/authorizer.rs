@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use http::header::AUTHORIZATION;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
-use nl_generic_functions::nvi::authorizer::{Authorized, Authorizer, AuthorizerError, Retry};
+use nl_generic_functions::authorizer::{Authorized, Authorizer, AuthorizerError, Retry};
 use nl_generic_functions::nvi::error::NviError;
 use url::Url;
 use wiremock::matchers::{header, method, path};

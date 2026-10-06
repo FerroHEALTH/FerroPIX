@@ -14,6 +14,11 @@ the implementation guide, with a feature per function.
 | `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization`, so a directory reader can join a localization custodian to its organisation |
 | `nuts-auth` | GF-Authentication | the Nuts profile | the access token request of Nuts RFC021: the authorization server metadata, the Presentation Definition for a scope, a JWT Verifiable Presentation of the holder's credentials signed with its `did:web` key, and a `DPoP`-bound token, proven through a prover the caller supplies; and the holder's DID document, built from its keys, with the path its `did:web` DID resolves to |
 
+The `authorizer` feature holds the trait a data user implements to give each
+request to a Generic Function its own headers, as the `DPoP`-bound token of
+GF-Authentication needs (the IG's GFI-005). It compiles no FHIR model, so a
+crate that only implements an authorizer builds none; `nvi` turns it on.
+
 The identifier systems the functions share (the pseudonymised BSN and the
 URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.
 

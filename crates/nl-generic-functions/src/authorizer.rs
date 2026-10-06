@@ -1,21 +1,22 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! How the data user authenticates each request to the Localization Service
-//! when a fixed header cannot do it.
+//! How a data user authenticates each request to a Generic Function when a
+//! fixed header cannot do it (feature `authorizer`, which `nvi` turns on).
 //!
 //! The IG authenticates a data user to a Generic Function on
 //! GF-Authentication: the user holds an access token from GFI-004 and sends
 //! it in an Authenticated Interaction (GFI-005), under the `DPoP` scheme with
 //! a proof made for that one request (RFC 9449 §7.1). A proof binds the
 //! request's method and URL, so it cannot ride in a default header of the
-//! HTTP client. An [`Authorizer`] the caller supplies
-//! ([`NviClient::with_authorizer`](super::NviClient::with_authorizer)) gives
-//! the headers of each request and reads each answer.
+//! HTTP client. An [`Authorizer`] the caller supplies to a client, such as
+//! the NVI client's `NviClient::with_authorizer`, gives the headers of each
+//! request and reads each answer.
 //!
-//! The authorizer is handed the request URL without its query and fragment,
-//! the `htu` of RFC 9449 §4.2, so the pseudonym the query carries never
-//! reaches it.
+//! The module holds no FHIR model, so a crate that only implements an
+//! [`Authorizer`] compiles none. A client hands the authorizer the request
+//! URL without its query and fragment, the `htu` of RFC 9449 §4.2, so the
+//! NVI client never shows it the pseudonym its query carries.
 
 use std::fmt;
 use std::future::Future;
@@ -28,8 +29,8 @@ use url::Url;
 pub type Authorized<'a> =
     Pin<Box<dyn Future<Output = Result<HeaderMap, AuthorizerError>> + Send + 'a>>;
 
-/// The source of the headers that authenticate each request to the
-/// Localization Service, such as `Authorization` and `DPoP` (the IG's
+/// The source of the headers, such as `Authorization` and `DPoP`, that
+/// authenticate each request to a Generic Function service (the IG's
 /// GFI-005).
 pub trait Authorizer: Send + Sync + fmt::Debug {
     /// Returns the headers that authenticate a request with `method` to

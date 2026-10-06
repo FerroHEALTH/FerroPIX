@@ -5,7 +5,7 @@ name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
 # The crate line starts above the 0.0.0 name reservation on crates.io (no
 # specification governs this: our own design).
-version = "0.0.20"
+version = "0.0.21"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -26,11 +26,17 @@ include = ["src/**", "README.md", "LICENSE"]
 # (no specification governs this: our own design). The crate depends on nothing
 # in FerroFED.
 [features]
+# The authorizer a data user supplies to authenticate each request to a
+# Generic Function (the IG's GFI-005), with no FHIR, so a crate that only
+# implements it, such as the source of a `DPoP`-bound token, compiles no FHIR
+# model.
+authorizer = ["dep:http", "dep:thiserror", "dep:url"]
 # GF-Localization through the national index (NVI): the HTTP client of the
 # Localization Service search, the FHIR R4 `resources` root set for the
 # Bundle of DocumentReference records it answers with, and the redacting
 # secret type the pseudonymised patient identifier travels in.
 nvi = [
+  "authorizer",
   "dep:fhir-types",
   "fhir-types/r4",
   "fhir-types/resources",

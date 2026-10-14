@@ -381,6 +381,54 @@ impl DirectoryEndpoint {
             })
     }
 
+    /// The `valueCanonical` of each extension of the endpoint whose `url` is
+    /// `url`, in resource order; `None` for one that carries another value
+    /// type or no value.
+    pub fn extension_canonicals<'a>(
+        &'a self,
+        url: &'a str,
+    ) -> impl Iterator<Item = Option<&'a str>> {
+        self.extensions(url).map(|value| match value {
+            Some(ExtensionValue::Canonical(canonical)) => canonical.value.as_deref(),
+            _ => None,
+        })
+    }
+
+    /// The `valueUri` of each extension of the endpoint whose `url` is
+    /// `url`, in resource order; `None` for one that carries another value
+    /// type or no value.
+    pub fn extension_uris<'a>(&'a self, url: &'a str) -> impl Iterator<Item = Option<&'a str>> {
+        self.extensions(url).map(|value| match value {
+            Some(ExtensionValue::Uri(uri)) => uri.value.as_deref(),
+            _ => None,
+        })
+    }
+
+    /// The `code` of each coding in `system` of the endpoint's `payloadType`
+    /// concepts, in resource order; `None` for one that carries the system
+    /// and no code.
+    pub fn payload_type_codes<'a>(
+        &'a self,
+        system: &'a str,
+    ) -> impl Iterator<Item = Option<&'a str>> {
+        self.resource
+            .payload_type
+            .iter()
+            .flat_map(|concept| concept.coding.iter())
+            .filter(move |coding| {
+                coding.system.as_ref().and_then(|uri| uri.value.as_deref()) == Some(system)
+            })
+            .map(|coding| coding.code.as_ref()?.value.as_deref())
+    }
+
+    fn extensions<'a>(&'a self, url: &'a str) -> impl Iterator<Item = Option<&'a ExtensionValue>> {
+        self.resource
+            .extension
+            .iter()
+            .filter(move |extension| extension.url == url)
+            .map(|extension| extension.value.as_ref())
+    }
+
     /// The endpoint's `address`, its technical base address.
     #[must_use]
     pub fn address(&self) -> Option<&str> {

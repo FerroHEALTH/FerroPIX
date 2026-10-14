@@ -227,6 +227,53 @@ fn an_identifier_with_the_system_and_no_value_is_reported_as_none() {
 }
 
 #[test]
+fn payload_type_codes_are_read_by_system_in_resource_order() {
+    let mut ep = endpoint("ep-a", "unused");
+    ep["resource"]["payloadType"] = json!([
+        {"coding": [
+            {"system": "https://example.org/kind", "code": "first"},
+            {"system": "https://example.org/other", "code": "elsewhere"},
+        ]},
+        {"text": "no coding"},
+        {"coding": [
+            {"system": "https://example.org/kind"},
+            {"system": "https://example.org/kind", "code": "second"},
+        ]},
+    ]);
+    let directory = Directory::from_json(&bundle("collection", vec![ep])).expect("reads");
+    let ep = directory.endpoints().first().expect("one endpoint");
+    assert_eq!(
+        ep.payload_type_codes("https://example.org/kind")
+            .collect::<Vec<_>>(),
+        vec![Some("first"), None, Some("second")]
+    );
+    assert_eq!(ep.payload_type_codes("https://example.org/none").count(), 0);
+}
+
+#[test]
+fn extension_values_are_read_by_url_and_value_type() {
+    let mut ep = endpoint("ep-a", "unused");
+    ep["resource"]["extension"] = json!([
+        {"url": "https://example.org/canonical", "valueCanonical": "https://example.org/Profile/a"},
+        {"url": "https://example.org/uri", "valueUri": "urn:oid:2.999.1"},
+        {"url": "https://example.org/canonical", "valueUri": "https://example.org/Profile/b"},
+        {"url": "https://example.org/uri", "valueCode": "not-a-uri"},
+    ]);
+    let directory = Directory::from_json(&bundle("collection", vec![ep])).expect("reads");
+    let ep = directory.endpoints().first().expect("one endpoint");
+    assert_eq!(
+        ep.extension_canonicals("https://example.org/canonical")
+            .collect::<Vec<_>>(),
+        vec![Some("https://example.org/Profile/a"), None]
+    );
+    assert_eq!(
+        ep.extension_uris("https://example.org/uri")
+            .collect::<Vec<_>>(),
+        vec![Some("urn:oid:2.999.1"), None]
+    );
+}
+
+#[test]
 fn text_that_is_not_json_is_refused() {
     assert!(matches!(
         Directory::from_json(b"{"),

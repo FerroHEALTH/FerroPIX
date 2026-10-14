@@ -4,8 +4,8 @@
 //! BALP: the `AuditEvent` each audited client records, held to the vendored
 //! audit profile of its transaction, the BALP pattern beneath it and the
 //! profile's own example; the ATX: FHIR Feed that sends it (the `RESTful`
-//! ATNA supplement, ITI TF-2 §3.20.4.2); and the hygiene of the patient
-//! identifier a record carries.
+//! ATNA supplement, ITI TF-2 §3.20.4.2); the hygiene of the patient
+//! identifier a record carries, and where it carries the purposes of use.
 
 mod described;
 mod feed;
@@ -20,6 +20,7 @@ mod pixm;
 mod pmir;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 mod profile;
+mod purposes;
 
 use ihe_iti::balp::{NetworkAddress, Observer};
 

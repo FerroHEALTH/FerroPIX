@@ -85,6 +85,7 @@ impl Exchange {
             }
             agent.extend(organisation_agent(user));
         }
+        let purpose_of_event = purposes_of_event(&agent);
         let event = AuditEvent {
             meta: (!self.kind.profile.is_empty()).then(|| Meta {
                 profile: vec![primitives::Canonical::from(self.kind.profile)],
@@ -100,6 +101,7 @@ impl Exchange {
             action: Some(primitives::Code::from(self.kind.action)),
             recorded: primitives::Instant::from(self.recorded.to_string()),
             outcome: Some(primitives::Code::from(self.outcome.code())),
+            purpose_of_event,
             agent,
             source: AuditEventSource {
                 site: observer.site.as_deref().map(primitives::String::from),
@@ -113,6 +115,22 @@ impl Exchange {
             .map(|json| AuditRecord(SecretSlice::from(json)))
             .map_err(RecordError)
     }
+}
+
+/// The purposes of use of every agent in `agents`, each once, in the order
+/// the agents and their purposes first name it, for `AuditEvent.purposeOfEvent`.
+///
+/// The agents keep their own `purposeOfUse` (BALP 1.1.4 `agent:user`).
+// NOTE: RESTful ATNA Rev. 3.6 Table 3.81.4.2.2.1-1 maps agent.purposeOfUse to "NOT PRESENT" and
+// purposeOfEvent to EventIdentification.purposeOfUse, so a DICOM-form repository keeps only these.
+fn purposes_of_event(agents: &[AuditEventAgent]) -> Vec<CodeableConcept> {
+    let mut purposes: Vec<CodeableConcept> = Vec::new();
+    for purpose in agents.iter().flat_map(|agent| &agent.purpose_of_use) {
+        if !purposes.contains(purpose) {
+            purposes.push(purpose.clone());
+        }
+    }
+    purposes
 }
 
 /// The two agents that name `user` (BALP 1.1.4 §3:5.7.5.4): the
@@ -347,5 +365,41 @@ fn described_entity(described: &Described) -> AuditEventEntity {
             })
             .collect(),
         ..AuditEventEntity::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fhir_types::r4::audit_event::AuditEventAgent;
+
+    use super::{purpose, purposes_of_event};
+    use crate::user::PurposeOfUse;
+
+    fn coded(code: &str) -> PurposeOfUse {
+        PurposeOfUse {
+            system: Some("http://terminology.hl7.org/CodeSystem/v3-ActReason".to_owned()),
+            code: code.to_owned(),
+        }
+    }
+
+    fn carrying(codes: &[&str]) -> AuditEventAgent {
+        AuditEventAgent {
+            purpose_of_use: codes.iter().map(|code| purpose(&coded(code))).collect(),
+            ..AuditEventAgent::default()
+        }
+    }
+
+    #[test]
+    fn a_purpose_two_agents_carry_appears_once_in_first_seen_order() {
+        let agents = [
+            carrying(&["BTG", "TREAT"]),
+            carrying(&[]),
+            carrying(&["TREAT", "ETREAT"]),
+        ];
+        let expected: Vec<_> = ["BTG", "TREAT", "ETREAT"]
+            .iter()
+            .map(|code| purpose(&coded(code)))
+            .collect();
+        assert_eq!(purposes_of_event(&agents), expected);
     }
 }

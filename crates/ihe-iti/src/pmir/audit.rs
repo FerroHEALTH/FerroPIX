@@ -173,6 +173,7 @@ pub(super) fn subscription<T>(
             name: None,
             query: criteria,
         }],
+        security: Vec::new(),
     }
 }
 
@@ -192,6 +193,7 @@ pub(super) fn search<T>(
         },
         on_behalf: OnBehalfOf::System,
         entities: vec![Entity::Query(request_text(request))],
+        security: Vec::new(),
     }
 }
 
@@ -244,6 +246,7 @@ pub fn received(registry: &Url, endpoint: &Url, feed: Option<&Feed>) -> Exchange
         },
         on_behalf: OnBehalfOf::System,
         entities,
+        security: Vec::new(),
     }
 }
 

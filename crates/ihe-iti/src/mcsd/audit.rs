@@ -83,5 +83,6 @@ pub(super) fn exchange<T>(
         },
         on_behalf: OnBehalfOf::System,
         entities: vec![Entity::Query(request_text(request))],
+        security: Vec::new(),
     }
 }

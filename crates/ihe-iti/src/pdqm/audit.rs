@@ -125,5 +125,6 @@ fn recorded<T>(
         },
         on_behalf: on_behalf.clone(),
         entities,
+        security: Vec::new(),
     }
 }

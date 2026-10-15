@@ -450,6 +450,8 @@ pub struct Described {
     pub description: Option<String>,
     /// `detail`, in order, each a `valueString`.
     pub details: Vec<Detail>,
+    /// `securityLabel`, in order.
+    pub security_labels: Vec<SecurityLabel>,
 }
 
 /// What a [`Described`] entity names.
@@ -470,6 +472,27 @@ pub enum What {
         /// `what.identifier.value`.
         value: String,
     },
+}
+
+/// A security label: the `Coding` a record or one of its entities is
+/// labelled with, so the repository that holds the record can decide who
+/// reads it.
+///
+/// A record writes its labels to `meta.security`, the "security labels
+/// applied to this resource", which "connect specific resources to the overall
+/// security policy and infrastructure" (FHIR R4 `Meta.security`, as
+/// `fhir_types::r4::meta::Meta::security` documents it), and an entity to
+/// `entity.securityLabel`, which the `RESTful` ATNA mapping carries to and from
+/// the DICOM `ParticipantObjectSensitivity` (`RESTful` ATNA Rev. 3.6
+/// Table 3.20.4.2.2.1-1).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SecurityLabel {
+    /// `system`.
+    pub system: String,
+    /// `version`, when the system's version is known.
+    pub version: Option<String>,
+    /// `code`.
+    pub code: String,
 }
 
 /// One `entity.detail`: its `type` and its `valueString`.
@@ -504,6 +527,7 @@ impl fmt::Debug for Described {
             .field("kind", &self.kind)
             .field("role", &self.role)
             .field("details", &details)
+            .field("security_labels", &self.security_labels)
             .finish_non_exhaustive()
     }
 }
@@ -585,6 +609,8 @@ pub struct Exchange {
     pub on_behalf: OnBehalfOf,
     /// `entity`, in order.
     pub entities: Vec<Entity>,
+    /// `meta.security`, in order: the labels the record as a whole carries.
+    pub security: Vec<SecurityLabel>,
 }
 
 impl fmt::Debug for Exchange {
@@ -602,6 +628,7 @@ impl fmt::Debug for Exchange {
             .field("direction", &direction)
             .field("on_behalf", &self.on_behalf)
             .field("entities", &self.entities)
+            .field("security", &self.security)
             .finish()
     }
 }

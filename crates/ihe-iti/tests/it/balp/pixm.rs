@@ -280,6 +280,7 @@ fn the_record_bytes_are_never_shown() {
             system: RED.to_owned(),
             value: secrecy::SecretString::from(RED_VALUE),
         }],
+        security: Vec::new(),
     };
     let record = exchange.audit_event(&super::observer()).expect("a record");
     assert!(!format!("{record:?}").contains(RED_VALUE));

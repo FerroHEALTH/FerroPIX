@@ -69,6 +69,7 @@ fn exchange(purposes: Vec<PurposeOfUse>) -> Exchange {
             .with_purposes(purposes),
         ),
         entities: Vec::new(),
+        security: Vec::new(),
     }
 }
 

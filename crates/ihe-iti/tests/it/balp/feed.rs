@@ -79,6 +79,7 @@ fn record(value: &str) -> SecretSlice<u8> {
             system: "urn:oid:2.999.1".to_owned(),
             value: SecretString::from(value),
         }],
+        security: Vec::new(),
     }
     .audit_event(&observer())
     .expect("a record")

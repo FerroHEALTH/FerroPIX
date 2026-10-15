@@ -11,7 +11,7 @@
 
 use ihe_iti::balp::{
     DESTINATION_ROLE, Described, Detail, Direction, Entity, EventKind, Exchange, OTHER, Outcome,
-    Peer, READ, REQUEST_ID, REST, SOURCE_ROLE, What,
+    Peer, READ, REQUEST_ID, REST, SOURCE_ROLE, SecurityLabel, What,
 };
 use ihe_iti::user::{Code, OnBehalfOf, User};
 use secrecy::ExposeSecret as _;
@@ -71,6 +71,7 @@ fn exchange() -> Exchange {
                 name: None,
                 description: None,
                 details: Vec::new(),
+                security_labels: Vec::new(),
             }),
             Entity::Described(Described {
                 what: None,
@@ -79,8 +80,10 @@ fn exchange() -> Exchange {
                 name: Some("category".to_owned()),
                 description: None,
                 details: vec![Detail::new("template-id", TEMPLATE)],
+                security_labels: Vec::new(),
             }),
         ],
+        security: Vec::new(),
     }
 }
 
@@ -240,4 +243,65 @@ fn no_debug_shows_a_described_value_or_the_users_organisation() {
         assert!(!shown.contains(value), "{value} in {shown}");
     }
     assert!(shown.contains("template-id"), "the detail's name is shown");
+}
+
+/// The labels a record carries, by the `Coding` each is written as.
+fn labels() -> Vec<SecurityLabel> {
+    vec![
+        SecurityLabel {
+            system: "https://example.org/fhir/CodeSystem/category".to_owned(),
+            version: Some("1.0.0".to_owned()),
+            code: "lab".to_owned(),
+        },
+        SecurityLabel {
+            system: "https://example.org/fhir/CodeSystem/origin".to_owned(),
+            version: None,
+            code: "node-a".to_owned(),
+        },
+    ]
+}
+
+/// FHIR R4 `Meta.security` holds the labels applied to the resource, and
+/// `AuditEvent.entity.securityLabel` those of one entity, which `RESTful`
+/// ATNA Rev. 3.6 Table 3.20.4.2.2.1-1 maps to the DICOM
+/// `ParticipantObjectSensitivity`.
+#[test]
+fn the_security_labels_are_written_to_meta_and_to_their_entity() {
+    let mut exchange = exchange();
+    exchange.security = labels();
+    let Some(Entity::Described(described)) = exchange.entities.get_mut(1) else {
+        panic!("the second entity is described");
+    };
+    described.security_labels = labels().into_iter().take(1).collect();
+    let record = written(&exchange);
+    assert_eq!(record["meta"]["profile"][0], KIND.profile);
+    let security = record["meta"]["security"]
+        .as_array()
+        .expect("meta.security");
+    assert_eq!(security.len(), 2);
+    assert_eq!(
+        security[0]["system"],
+        "https://example.org/fhir/CodeSystem/category"
+    );
+    assert_eq!(security[0]["version"], "1.0.0");
+    assert_eq!(security[0]["code"], "lab");
+    assert_eq!(security[1]["code"], "node-a");
+    assert!(security[1].get("version").is_none());
+    let labelled = &record["entity"][1]["securityLabel"];
+    assert_eq!(labelled.as_array().map(Vec::len), Some(1));
+    assert_eq!(labelled[0]["code"], "lab");
+    assert!(record["entity"][0].get("securityLabel").is_none());
+}
+
+/// A record that claims no profile and carries labels writes `meta` with
+/// the labels alone; one with neither writes no `meta`.
+#[test]
+fn meta_is_written_for_labels_alone_and_left_out_with_neither() {
+    let mut exchange = exchange();
+    exchange.kind.profile = "";
+    assert!(written(&exchange).get("meta").is_none());
+    exchange.security = labels();
+    let record = written(&exchange);
+    assert!(record.pointer("/meta/profile").is_none(), "{record}");
+    assert_eq!(record["meta"]["security"].as_array().map(Vec::len), Some(2));
 }

@@ -22,7 +22,7 @@ use secrecy::{ExposeSecret, SecretSlice};
 use super::{
     APPLICATION, AuditRecord, Coded, Described, Direction, Entity, Exchange, INFORMATION_RECIPIENT,
     NetworkAddress, Observer, PATIENT_ROLE, PERSON, Peer, QUERY_ROLE, RecordError, SYSTEM_OBJECT,
-    What,
+    SecurityLabel, What,
 };
 use crate::user::{Code, PurposeOfUse, User};
 
@@ -87,8 +87,12 @@ impl Exchange {
         }
         let purpose_of_event = purposes_of_event(&agent);
         let event = AuditEvent {
-            meta: (!self.kind.profile.is_empty()).then(|| Meta {
-                profile: vec![primitives::Canonical::from(self.kind.profile)],
+            meta: (!self.kind.profile.is_empty() || !self.security.is_empty()).then(|| Meta {
+                profile: (!self.kind.profile.is_empty())
+                    .then(|| primitives::Canonical::from(self.kind.profile))
+                    .into_iter()
+                    .collect(),
+                security: self.security.iter().map(label).collect(),
                 ..Meta::default()
             }),
             r#type: self.kind.event_type.coding(),
@@ -364,7 +368,18 @@ fn described_entity(described: &Described) -> AuditEventEntity {
                 )),
             })
             .collect(),
+        security_label: described.security_labels.iter().map(label).collect(),
         ..AuditEventEntity::default()
+    }
+}
+
+/// The `Coding` a security label is written as.
+fn label(label: &SecurityLabel) -> Coding {
+    Coding {
+        system: Some(primitives::Uri::from(label.system.as_str())),
+        version: label.version.as_deref().map(primitives::String::from),
+        code: Some(primitives::Code::from(label.code.as_str())),
+        ..Coding::default()
     }
 }
 

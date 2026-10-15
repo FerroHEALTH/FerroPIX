@@ -51,6 +51,7 @@ fn exchange() -> Exchange {
             },
             Entity::PatientReference(SecretString::from(REFERENCE)),
         ],
+        security: Vec::new(),
     }
 }
 

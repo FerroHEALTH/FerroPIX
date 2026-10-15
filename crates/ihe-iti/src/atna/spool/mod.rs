@@ -43,6 +43,7 @@
 mod disk;
 pub(super) mod in_flight;
 mod inspect;
+pub mod reserve;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fs;
@@ -435,6 +436,12 @@ impl Spool {
     pub async fn push(&self, message: SecretSlice<u8>) -> Result<(), SpoolError> {
         let size = u64::try_from(message.expose_secret().len()).unwrap_or(u64::MAX);
         let place = self.admit(size)?;
+        self.push_in(message, place).await
+    }
+
+    /// Stores `message` in the `place` it holds under the bounds, waiting at
+    /// most [`Bounds::write_timeout`].
+    async fn push_in(&self, message: SecretSlice<u8>, place: Place) -> Result<(), SpoolError> {
         let bound = self.bounds.write_timeout;
         let store = self.store(message, place);
         match tokio::time::Instant::now().checked_add(bound) {

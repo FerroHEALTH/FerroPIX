@@ -33,6 +33,7 @@ use super::chain;
 #[cfg(feature = "balp")]
 use super::feed::{FeedError, FeedRepository};
 use super::repository::{Connection, Repository};
+use super::spool::reserve::Reservation;
 use super::spool::{Depth, Spool, SpoolError, Stored};
 
 /// The first wait after a failed delivery.
@@ -116,6 +117,16 @@ impl Forwarder {
     /// once its write stores it.
     pub async fn submit(&self, frame: SecretSlice<u8>) -> Result<(), SpoolError> {
         self.spool.push(frame).await
+    }
+
+    /// Takes the place of one message of at most `bytes` bytes in the spool
+    /// before the message exists, as [`Spool::reserve`] does.
+    ///
+    /// # Errors
+    ///
+    /// [`SpoolError::Full`] when the spool has no room for it.
+    pub fn reserve(&self, bytes: u64) -> Result<Reservation, SpoolError> {
+        self.spool.reserve(bytes)
     }
 
     /// What the forwarder holds and how its deliveries went.

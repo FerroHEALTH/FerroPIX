@@ -659,6 +659,34 @@ pub trait AuditRecorder: Send + Sync {
     ///
     /// An [`AuditError`] when the recorder cannot accept the exchange.
     async fn record(&self, exchange: Exchange) -> Result<(), AuditError>;
+
+    /// Takes the place of one record before the exchange it records is
+    /// made, so an exchange whose record this recorder could not take is
+    /// refused before it reaches the other party.
+    ///
+    /// `None` says the recorder holds no bounded store, so
+    /// [`AuditRecorder::record`] alone decides whether it takes a record;
+    /// that is what a recorder that does not override this returns.
+    ///
+    /// # Errors
+    ///
+    /// An [`AuditError`] when the recorder has no room for one more record.
+    async fn reserve(&self) -> Result<Option<Box<dyn Reserved>>, AuditError> {
+        Ok(None)
+    }
+}
+
+/// The place of one record an [`AuditRecorder`] took before its exchange
+/// was made; dropped unfilled, it gives the place back.
+#[async_trait::async_trait]
+pub trait Reserved: Send + fmt::Debug {
+    /// Records `exchange` in this place.
+    ///
+    /// # Errors
+    ///
+    /// An [`AuditError`] when the record cannot be stored even so: it could
+    /// not be written, or not within the recorder's bound.
+    async fn record(self: Box<Self>, exchange: Exchange) -> Result<(), AuditError>;
 }
 
 /// Why an audit recorder could not accept an exchange.

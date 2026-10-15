@@ -15,7 +15,7 @@
 //! so any caller can use it as it is.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Every feature of the crate.
@@ -30,18 +30,52 @@ const XCPD_DIRECT: &[&str] = &["jiff", "quick-xml", "uuid"];
 /// The workspace root, two levels above this crate's manifest.
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
+/// A cargo home of its own for a child cargo, in a temporary directory whose
+/// `registry` and `git` link to the real home's.
+///
+/// The child resolves offline from the lockfile and the registry already on
+/// disk (`--frozen`), which only reads those caches, yet cargo still takes
+/// the package cache lock of its home, and a cargo building elsewhere on the
+/// machine holds that lock for its whole build. No other cargo takes the lock
+/// of this home (the Cargo book, "Cargo Home"). The engine's architecture
+/// tests do the same; this crate keeps its own copy because the testkit
+/// depends on it, and a dev-dependency back on the testkit would unify the
+/// testkit's features of this crate into every test build of it.
+fn private_cargo_home() -> tempfile::TempDir {
+    let home = tempfile::tempdir().expect("a temporary cargo home");
+    let shared = std::env::var_os("CARGO_HOME").map_or_else(
+        || {
+            std::env::home_dir()
+                .expect("CARGO_HOME or a home directory names the cargo home")
+                .join(".cargo")
+        },
+        PathBuf::from,
+    );
+    for cache in ["registry", "git"] {
+        let source = shared.join(cache);
+        if source.exists() {
+            std::os::unix::fs::symlink(&source, home.path().join(cache))
+                .expect("the shared cache links into the private home");
+        }
+    }
+    home
+}
+
 /// The package names `cargo tree` lists for this crate with only `feature`
 /// on, through normal dependencies, down to `depth` when given.
 fn tree(feature: &str, depth: Option<&str>) -> BTreeSet<String> {
+    let home = private_cargo_home();
     let mut command = Command::new(env!("CARGO"));
     command
+        .env("CARGO_HOME", home.path())
+        .env("CARGO_CACHE_AUTO_CLEAN_FREQUENCY", "never")
         .arg("tree")
         .arg("--manifest-path")
         .arg(Path::new(ROOT).join("Cargo.toml"))
         .args(["--package", "ihe-iti"])
         .args(["--edges", "normal"])
         .args(["--prefix", "none", "--format", "{p}"])
-        .args(["--no-default-features", "--features", feature, "--locked"]);
+        .args(["--no-default-features", "--features", feature, "--frozen"]);
     if let Some(depth) = depth {
         command.args(["--depth", depth]);
     }

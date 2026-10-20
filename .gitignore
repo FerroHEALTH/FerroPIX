@@ -16,3 +16,7 @@
 
 # IDE metadata.
 .idea/
+
+# Vendored texts whose licence keeps them out of the tree, fetched by
+# scripts/vendor/*.sh for a local read (.claude/rules/vendored-inputs.md).
+/.vendor-cache/

@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+name: Bug report
+description: Report a defect in the cross-reference, a PIX or PDQ transaction, the pseudonymous identifiers or the server.
+type: Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. A maintainer sets the priority during
+        triage. Do not use this form for a security vulnerability; see
+        [SECURITY.md](https://github.com/FerroHEALTH/FerroPIX/blob/main/SECURITY.md).
+        Never paste patient data, a real identifier, a token or a password:
+        describe its shape, or make up a synthetic one.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What goes wrong, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The configuration, the request or message, and what you did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What the specification says should happen, with the transaction and section if you have them (for example ITI TF-2 3.83.4.1.3).
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead, with the status and the OperationOutcome or acknowledgment if any.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.0.1, or a commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: The deployment, and the client or source system that called FerroPIX.
+    validations:
+      required: false

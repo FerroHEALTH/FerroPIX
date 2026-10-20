@@ -29,6 +29,7 @@ cd "$(dirname "$0")/../.."
 # listed here.
 readonly CRATES=(
   ihe-iti
+  nl-generic-functions
 )
 
 # The version cargo resolves for one member: its own, or the workspace's when

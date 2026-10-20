@@ -61,6 +61,11 @@ The build order is the milestones:
   audit record on the `ihe-atna` audit trail; moved from FerroFED with its
   history (FerroHEALTH/FerroFED#367). The user an exchange names is
   `ihe_atna::user`.
+- `crates/nl-generic-functions`: the Dutch Generic Functions (NVI, Mitz,
+  LRZa, Nuts authentication and the shared identifiers), a feature each,
+  moved from FerroFED with its history; the Nuts grant holds its
+  authorization server to RFC 8414 on `ferrohealth-smart`'s metadata module.
+  Its Nuts tests run against the test devices under `tests/it/testkit/`.
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.
   `docs/specs/` holds the vendored corpora the identity crates read, each
   with a `PROVENANCE.md`, fetched by `scripts/vendor/*.sh` (with the shared

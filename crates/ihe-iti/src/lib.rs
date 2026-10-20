@@ -10,11 +10,13 @@
 //! - `pmir`: Patient Master Identity Registry, ITI-93 and ITI-94.
 //! - `xcpd`: Cross-Community Patient Discovery, ITI-55, the one profile on
 //!   SOAP 1.2 with HL7 v3 and SAML XUA.
-//! - `audit`: the audit record each profile defines for its transactions:
-//!   the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93
-//!   and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`, and the DICOM audit
-//!   message of ITI-55 with `xcpd`. The audit trail they are recorded on
-//!   (ATNA ITI-20 and its FHIR Feed) is the `ihe-atna` crate.
+//! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
+//!   ITI-91, ITI-93 and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`.
+//! - `atna`: the DICOM audit message of ITI-55 with `xcpd`, with no FHIR
+//!   model.
+//!
+//! The audit trail the records go to (ATNA ITI-20 and its FHIR Feed) is the
+//! `ihe-atna` crate.
 //!
 //! The PIXm, PDQm, mCSD and PMIR clients authenticate with a credential the
 //! HTTP client carries, or with an access token incorporated in each request
@@ -43,7 +45,7 @@ pub mod pixm;
 #[cfg(feature = "pmir")]
 pub mod pmir;
 #[cfg(any(
-    all(feature = "audit", any(feature = "pixm", feature = "pdqm")),
+    all(feature = "balp", any(feature = "pixm", feature = "pdqm")),
     feature = "xcpd"
 ))]
 pub mod recording;

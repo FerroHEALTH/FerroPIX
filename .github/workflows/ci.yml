@@ -430,7 +430,7 @@ jobs:
           done <<< "$crates"
 
   # Each published crate is one specification with a feature per profile, so
-  # every feature, and every profile with the `audit` feature, must lint and
+  # every feature, and every profile with its audit feature, must lint and
   # test on its own as well as in the workspace union (the Cargo reference,
   # Features; no specification governs the layout: our own design).
   features:
@@ -450,12 +450,13 @@ jobs:
           - { package: ihe-iti, features: mcsd }
           - { package: ihe-iti, features: pmir }
           - { package: ihe-iti, features: xcpd }
-          - { package: ihe-iti, features: audit }
-          - { package: ihe-iti, features: "pixm,audit" }
-          - { package: ihe-iti, features: "pdqm,audit" }
-          - { package: ihe-iti, features: "mcsd,audit" }
-          - { package: ihe-iti, features: "pmir,audit" }
-          - { package: ihe-iti, features: "xcpd,audit" }
+          - { package: ihe-iti, features: balp }
+          - { package: ihe-iti, features: atna }
+          - { package: ihe-iti, features: "pixm,balp" }
+          - { package: ihe-iti, features: "pdqm,balp" }
+          - { package: ihe-iti, features: "mcsd,balp" }
+          - { package: ihe-iti, features: "pmir,balp" }
+          - { package: ihe-iti, features: "xcpd,atna" }
           - { package: nl-generic-functions, features: authorizer }
           - { package: nl-generic-functions, features: nvi }
           - { package: nl-generic-functions, features: mitz }

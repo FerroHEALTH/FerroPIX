@@ -200,15 +200,15 @@ pub trait AuditRecorder: Send + Sync {
 pub struct AuditError(#[source] pub Box<dyn std::error::Error + Send + Sync>);
 
 /// The `RoleIDCode` of the source: `EV(110153, DCM, "Source Role ID")`.
-#[cfg(feature = "audit")]
+#[cfg(feature = "atna")]
 pub const SOURCE_ROLE: (&str, &str, &str) = ("110153", "DCM", "Source Role ID");
 
 /// The `RoleIDCode` of the destination:
 /// `EV(110152, DCM, "Destination Role ID")`.
-#[cfg(feature = "audit")]
+#[cfg(feature = "atna")]
 pub const DESTINATION_ROLE: (&str, &str, &str) = ("110152", "DCM", "Destination Role ID");
 
-#[cfg(feature = "audit")]
+#[cfg(feature = "atna")]
 impl AuditEvent {
     /// The DICOM PS3.15 audit message of this event, as the Initiating
     /// Gateway's audit table fills it (§3.55.5.1.1), written by `source` on

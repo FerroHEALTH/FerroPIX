@@ -9,8 +9,9 @@
 //! them as a dependency of its own. `quick-xml` itself is in every FHIR
 //! feature's graph already, through `fhir-types`, which depends on it
 //! unconditionally; what `xcpd` adds is the crate's own use of it, its
-//! message and query ids, and its clock. `audit` stamps each record with its
-//! time, so it shares the clock, and never the message ids. No feature
+//! message and query ids, and its clock. `balp` stamps each record with its
+//! time, so it shares the clock, and never the message ids; `atna` writes
+//! the ITI-55 message with `xcpd` and compiles no FHIR model. No feature
 //! reaches another member of this workspace or an application of the
 //! family, so any caller can use the crate as it is.
 
@@ -19,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Every feature of the crate.
-const FEATURES: &[&str] = &["audit", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
+const FEATURES: &[&str] = &["atna", "balp", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
 
 /// The crates only `xcpd` compiles.
 const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
@@ -118,14 +119,16 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
     for name in XCPD_DIRECT {
         assert!(xcpd_direct.contains(*name), "xcpd names {name}");
     }
-    let audit = tree("audit", None);
-    assert!(
-        !audit.contains("uuid"),
-        "audit compiles the message ids: {audit:?}"
-    );
+    for feature in ["atna", "balp"] {
+        let closure = tree(feature, None);
+        assert!(
+            !closure.contains("uuid"),
+            "{feature} compiles the message ids: {closure:?}"
+        );
+    }
     for feature in FEATURES
         .iter()
-        .filter(|feature| !["xcpd", "audit"].contains(*feature))
+        .filter(|feature| !["xcpd", "atna", "balp"].contains(*feature))
     {
         let closure = tree(feature, None);
         let leaked: Vec<&&str> = XCPD_ONLY
@@ -139,6 +142,17 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
             .filter(|name| direct.contains(**name))
             .collect();
         assert!(named.is_empty(), "{feature} names {named:?} itself");
+    }
+}
+
+#[test]
+fn the_iti_55_audit_message_compiles_no_fhir_model() {
+    let closure = tree("xcpd,atna", None);
+    for name in ["fhir-types", "serde_json"] {
+        assert!(
+            !closure.contains(name),
+            "xcpd with atna compiles {name}: {closure:?}"
+        );
     }
 }
 

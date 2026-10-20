@@ -8,7 +8,7 @@
 
 #[cfg(test)]
 #[cfg(all(
-    feature = "audit",
+    feature = "balp",
     any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir")
 ))]
 mod audit;

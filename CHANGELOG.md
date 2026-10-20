@@ -11,6 +11,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- `ihe-iti` 0.0.40 splits the `audit` feature in two: `balp`, the BALP
+  `AuditEvent` of the PIXm, PDQm, mCSD and PMIR transactions on
+  `ihe-atna/balp`, and `atna`, the ITI-55 audit message of `xcpd` on
+  `ihe-atna/atna`, which compiles no FHIR model. A product that enabled
+  `audit` enables `balp`, `atna` or both. Published between releases (#32).
+
 ## [0.0.2] - 2026-10-20
 
 The move from FerroFED (FerroHEALTH/FerroFED#367): `ihe-iti` 0.0.39 and

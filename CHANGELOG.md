@@ -34,6 +34,8 @@ and this project adheres to
 - `SUPPORT.md`, `GOVERNANCE.md` and `CODE_OF_CONDUCT.md`, and a README and
   CONTRIBUTING.md that name what FerroPIX is, how to build and test it and
   the specifications that govern it (#14).
+- The owner's rule for moving the vendored corpora with the crates, in
+  `.claude/rules/vendored-inputs.md` and the memory (#20).
 - The Cargo workspace skeleton: the root manifest with the family lint set
   and the release profile, the pinned toolchain, and the cargo-deny, clippy
   and rustfmt configuration. The workspace has no member until the move from

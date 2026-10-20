@@ -11,6 +11,9 @@
 - [Built in FerroFED first, then moved](build-in-fed-first.md): the identity
   protocols were built in FerroFED, shaped to move; the move is v0.0.2, one
   step per crate with history (FerroFED#367)
+- [Corpora move with the crates](corpora-move-with-crates.md): every corpus
+  the moved crates read comes here with its script and provenance; each
+  FerroFED swap PR removes the copies nothing there reads; owner 2026-10-20
 - [Licence: BUSL 1.1](license-busl.md): the FerroHEALTH terms, Cadasto B.V.
   the Licensor, Apache 2.0 four years after each version
 - [No AI attribution](no-ai-attribution.md): never, anywhere; the hook

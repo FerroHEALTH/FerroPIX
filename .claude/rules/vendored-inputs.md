@@ -32,5 +32,20 @@ FerroFED's pins.
 - **Bumping a pin** is a deliberate change: rerun the script, read what
   changed against the citations in the code, and record the new version in
   `PROVENANCE.md` and `docs/VERSIONS.md`.
+## Moving the corpora with the crates (owner, 2026-10-20)
+
+- **Every corpus `ihe-iti` and `nl-generic-functions` read moves here with
+  its committed vendor script and its `PROVENANCE.md`**, at FerroFED's pin:
+  `ihe-pixm`, `ihe-pdqm`, `ihe-pmir`, `ihe-mcsd`, `ihe-iua`, `ihe-iti-tf`
+  and their page trees, the Swiss pins, `nl-gf`, `mitz`, `nuts-rfc`, and
+  whatever else their tests read. The ITI TF-2 HL7 v2 texts are vendored
+  new, by a new script.
+- **The FerroFED swap pull request that follows each move removes every
+  corpus copy nothing left in FerroFED reads.** FerroFED keeps only what its
+  identity adapters and its citation guard (`scripts/checks/ihe-citations.sh`)
+  still read, at the same pin as FerroPIX's. The pull request body lists the
+  kept and the removed corpora with their readers, and each removal is proven
+  by FerroFED's guards passing.
+
 - **No patient data and no credential** ever enters the tree under any
   name.

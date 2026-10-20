@@ -24,3 +24,19 @@ and this project adheres to
   empty and closes it after the release, the crates.io lane through Trusted
   Publishing, and the pull request and issue templates (#12).
 - `docs/VERSIONS.md`, the pin matrix the guards read (#11).
+- The working discipline: `CLAUDE.md` with the scope the owner settled on
+  2026-10-20, the rules, the `spec-researcher` and `implementer` agents, the
+  `spec-lookup`, `next-task`, `phase-done` and `phase-status` skills, the
+  hooks (the destructive-command hook with its self-test) and the memory
+  (#13).
+- The specification versions of every identity profile that moves from
+  FerroFED in `docs/VERSIONS.md` (#13).
+- `SUPPORT.md`, `GOVERNANCE.md` and `CODE_OF_CONDUCT.md`, and a README and
+  CONTRIBUTING.md that name what FerroPIX is, how to build and test it and
+  the specifications that govern it (#14).
+
+### Changed
+
+- `SECURITY.md` supports only the newest release, with the Cyber Resilience
+  Act commitment to publish security fixes for at least five years after
+  each release (#14).

@@ -3,21 +3,78 @@
 
 # Contributing to FerroPIX
 
-FerroPIX is one of the [FerroHEALTH](https://ferrohealth.eu/) family and has no
-code yet. The design happens on the tracker of this repository, and the
-tracker is the record of it. The conventions the family shares apply from the
-first commit.
+FerroPIX is the FerroHEALTH family's Master Patient Index over IHE PIX,
+PIXm, PDQ and PDQm. The working discipline is [`CLAUDE.md`](CLAUDE.md) and
+the plan is the tracker of this repository, with one milestone per release.
+Read both before making a change.
 
-## Pull requests
+## Build and test
 
-- Branch from `main` with a conventional-type name (`feat/`, `fix/`, `chore/`,
-  `docs/`, `refactor/`, `perf/`, `test/`, `ci/`, `build/`, `release/`).
-- Every commit is signed, and the pull request body declares `Closes #<n>` for
-  the tracker issue it answers, one `Closes` keyword per issue.
-- No AI or assistant attribution anywhere in the commits or the pull request.
+Once the workspace has a member (the first crates arrive with the move from
+FerroFED):
+
+```
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo nextest run --workspace --locked
+cargo nextest run --workspace --all-features --locked
+cargo test --doc --workspace --all-features --locked
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps --document-private-items
+cargo deny check
+```
+
+A change to a workflow or a shell script also needs the linters CI runs,
+and the self-test of every script it touches:
+
+```
+zizmor --min-severity=low .github/
+actionlint
+shellcheck --severity=style <the shell files you touched>
+bash scripts/checks/<guard>.sh --self-test
+```
+
+## The specifications are the authority
+
+The IHE ITI Technical Framework, the IHE PIXm, PDQm and PMIR implementation
+guides, HL7 FHIR R4 and the HL7 v2 PIX and PDQ transactions decide every
+transaction, parameter, status and acknowledgment; the docs.rs pages of the
+pinned crates decide how the tools are used. Cite the section in the pull
+request and in each `// NOTE:`. Where none governs a choice, say so: "no
+specification governs this: our own design".
+
+## Branches and commits
+
+- Branch from `main` with a conventional-type name: `feat/<slug>`,
+  `fix/<slug>`, `chore/<slug>`, `docs/<slug>`, `refactor/<slug>`,
+  `perf/<slug>`, `test/<slug>`, `ci/<slug>`, `build/<slug>`,
+  `release/<slug>`.
+- Commit messages describe only the change. Do **not** add AI or assistant
+  attribution, co-author trailers, or "generated with" lines anywhere.
+- **Sign your commits.** `main` refuses an unsigned commit and takes changes
+  only through pull requests and the merge queue.
 - Every first-party file carries the SPDX header
   (`SPDX-FileCopyrightText: Cadasto B.V.`,
   `SPDX-License-Identifier: BUSL-1.1`).
+
+## Pull requests
+
+- Declare `Closes #N` for each tracker issue the pull request answers, one
+  keyword per issue.
+- Never weaken, skip, or delete a test to make a build pass; every refusal
+  you add has an asserted negative test.
+- Add a `CHANGELOG.md` entry under `[Unreleased]` for any change a caller
+  sees, and name what a caller must change when an interface breaks.
+- Never put patient data or a real identifier in a fixture, a test or an
+  example.
+- Write prose to `.claude/rules/writing-style.md`.
+
+## Using AI tools
+
+You may. If a contribution has AI-generated content, say so in the pull
+request description: which tool, and what it did. Disclosure lives in the
+description, never in a commit trailer. You remain responsible for the
+submission in full.
 
 ## Licensing of contributions
 
@@ -39,8 +96,8 @@ with one licensor: a commercial licence, a change of the licence parameters, or 
 transfer of the project can then cover every line, not only the maintainer's own.
 There is no separate agreement to sign: the pull request template carries a
 checkbox recording your acceptance of these terms, and a pull request from a
-person does not merge without it (the `contribution-licence-guard` check, backed
-by `scripts/checks/contribution-licence.sh`).
+person does not merge without it (the `contribution-licence` check, backed by
+`scripts/checks/contribution-licence.sh`).
 
 ## Security
 

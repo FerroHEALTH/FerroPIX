@@ -15,6 +15,7 @@
 # type before this script runs.
 #
 # Usage: PR_BODY="$body" scripts/checks/contribution-licence.sh   (no arguments)
+#        scripts/checks/contribution-licence.sh --self-test
 #
 # With PR_BODY unset there is no pull request to judge, so the script checks
 # itself instead: a ticked line passes, an unticked line and a body without the
@@ -22,18 +23,21 @@
 # skip it, and what a CI run never does, because CI always sets PR_BODY.
 set -euo pipefail
 
+if [ "$#" -eq 1 ] && [ "$1" = "--self-test" ]; then
+  unset PR_BODY
+  shift
+fi
 if [ "$#" -ne 0 ]; then
-  echo "usage: $0   (reads the pull request body from PR_BODY; takes no arguments)" >&2
+  echo "usage: $0 [--self-test]   (reads the pull request body from PR_BODY)" >&2
   exit 2
 fi
 
 if [ -z "${PR_BODY+set}" ]; then
-  self="$0"
-  PR_BODY='- [x] I accept the terms in [CONTRIBUTING.md § Licensing of contributions](x)' "$self" >/dev/null
-  if PR_BODY='- [ ] I accept the terms in [CONTRIBUTING.md § Licensing of contributions](x)' "$self" 2>/dev/null; then
+  PR_BODY='- [x] I accept the terms in [CONTRIBUTING.md § Licensing of contributions](x)' bash "$0" >/dev/null
+  if PR_BODY='- [ ] I accept the terms in [CONTRIBUTING.md § Licensing of contributions](x)' bash "$0" 2>/dev/null; then
     echo "self-test: an unticked line passed" >&2; exit 1
   fi
-  if PR_BODY='Closes #1' "$self" 2>/dev/null; then
+  if PR_BODY='Closes #1' bash "$0" 2>/dev/null; then
     echo "self-test: a body without the line passed" >&2; exit 1
   fi
   echo "ok: contribution-licence self-test (a ticked line passes, an unticked or missing line fails)"

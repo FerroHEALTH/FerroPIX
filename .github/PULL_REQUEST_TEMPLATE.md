@@ -3,7 +3,7 @@
 
 ## What changed and why
 
-<!-- Describe the change and the reason for it. Keep it to what a reviewer needs. -->
+<!-- Describe the change and the reason for it. Name what a caller must change if an interface breaks. -->
 
 Closes #NNN
 
@@ -13,14 +13,11 @@ Closes #NNN
 
 ## Checklist
 
-- [ ] Shell and workflow files are clean: `shellcheck --severity=style`, `actionlint`, `zizmor --min-severity=low .github/`.
-- [ ] Rust gates pass, once a workspace exists: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo nextest run --workspace --locked`, `cargo deny check`.
-- [ ] Docs are updated, if behaviour changed.
+- [ ] Every conformance decision cites the specification (the IHE ITI Technical Framework, PIXm, PDQm, HL7 FHIR R4, HL7 v2), never memory and never another implementation.
+- [ ] Rust gates pass, once the workspace has a member: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` with and without `--all-features`, `cargo nextest run --workspace --locked`, `cargo doc` with `RUSTDOCFLAGS=-D warnings`, and `cargo deny check`.
+- [ ] Every refusal the change adds has an asserted negative test, and no test was weakened to pass.
+- [ ] Shell and workflow files are clean: `shellcheck --severity=style`, `actionlint`, `zizmor --min-severity=low .github/`, and the self-test of every script the change touches.
+- [ ] `CHANGELOG.md` has an `[Unreleased]` entry, or the change carries the `no-changelog` label.
+- [ ] No patient data, real identifier, key, token or password in a fixture, test or example.
 - [ ] Every commit is signed.
 - [ ] No AI or assistant attribution anywhere in the commits or this PR.
-
-Contributions carry the licensing terms in
-[CONTRIBUTING.md](../CONTRIBUTING.md#licensing-of-contributions); the
-`contribution-licence-guard` check reads the box above, and there is no separate
-agreement to sign. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full
-contribution guide.

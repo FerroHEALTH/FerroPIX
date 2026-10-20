@@ -5,7 +5,7 @@
 //! Client (mCSD 4.0.0 §2:3.90.5.1, §2:3.91.5.1), feature `balp`.
 //!
 //! [`McsdClient::audited`](super::client::McsdClient::audited) gives the
-//! client a [`AuditRecorder`](crate::balp::AuditRecorder); it records one
+//! client a [`AuditRecorder`](ihe_atna::balp::AuditRecorder); it records one
 //! [`Exchange`] per search ([`QUERY`], on the BALP Query pattern) and per
 //! history ([`UPDATES`]), with the first request as sent in the query
 //! entity. A care services search names no patient, so no patient entity is
@@ -16,22 +16,22 @@ use jiff::Timestamp;
 use url::Url;
 
 use super::error::McsdError;
-use crate::balp::{
+use ihe_atna::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, HISTORY_TYPE, Outcome, Peer,
     REST, SEARCH, SOURCE_ROLE, request_text,
 };
-use crate::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-90` subtype.
 pub const ITI_90: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-90",
     display: "Find Matching Care Services",
 };
 
 /// The `ITI-91` subtype.
 pub const ITI_91: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-91",
     display: "Request Care Services Updates",
 };

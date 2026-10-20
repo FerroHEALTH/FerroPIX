@@ -5,7 +5,7 @@
 //! XUA assertion appear in no `Debug` rendering and no error: they travel in
 //! the request body to the responding gateway only.
 
-use ihe_iti::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::xcpd::security::XuaAssertion;
 
 use super::{

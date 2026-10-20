@@ -31,7 +31,7 @@ use url::Url;
 
 use super::identifier::HomeCommunityId;
 use crate::redact::{REDACTED, RedactedUrl};
-use crate::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 
 /// The DICOM `EventID` of the message: `EV(110112, DCM, "Query")`.
 pub const EVENT_ID: (&str, &str, &str) = ("110112", "DCM", "Query");
@@ -200,15 +200,15 @@ pub trait AuditRecorder: Send + Sync {
 pub struct AuditError(#[source] pub Box<dyn std::error::Error + Send + Sync>);
 
 /// The `RoleIDCode` of the source: `EV(110153, DCM, "Source Role ID")`.
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 pub const SOURCE_ROLE: (&str, &str, &str) = ("110153", "DCM", "Source Role ID");
 
 /// The `RoleIDCode` of the destination:
 /// `EV(110152, DCM, "Destination Role ID")`.
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 pub const DESTINATION_ROLE: (&str, &str, &str) = ("110152", "DCM", "Destination Role ID");
 
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 impl AuditEvent {
     /// The DICOM PS3.15 audit message of this event, as the Initiating
     /// Gateway's audit table fills it (§3.55.5.1.1), written by `source` on
@@ -216,10 +216,10 @@ impl AuditEvent {
     #[must_use]
     pub fn message(
         &self,
-        source: &crate::atna::message::AuditSource,
-        host: &crate::atna::message::AccessPoint,
-    ) -> crate::atna::message::AuditMessage {
-        use crate::atna::message::{
+        source: &ihe_atna::atna::message::AuditSource,
+        host: &ihe_atna::atna::message::AccessPoint,
+    ) -> ihe_atna::atna::message::AuditMessage {
+        use ihe_atna::atna::message::{
             AccessPoint, ActiveParticipant, AuditMessage, CodedValue, EventIdentification,
             ParticipantObject,
         };

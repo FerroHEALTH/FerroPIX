@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ihe-iti"
-description = "The IHE IT Infrastructure (ITI) profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94), XCPD (ITI-55) and ATNA (ITI-20), one feature per profile"
-# The crate line starts above the 0.0.0 name reservation on crates.io (no
+description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile, with each profile's audit record behind `audit`"
+# The crate's own version line, continued from FerroFED's 0.0.38 and apart
+# from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.38"
+version = "0.0.39"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -16,22 +17,21 @@ documentation = "https://docs.rs/ihe-iti"
 readme = "README.md"
 keywords = ["ihe", "fhir", "pixm", "mcsd", "health"]
 categories = ["api-bindings", "science"]
-# The workspace switch decides whether this crate is publishable
-# (no specification governs this: our own design); include is the packaged
-# content.
-publish.workspace = true
+# The packaged content.
 include = ["src/**", "README.md", "LICENSE"]
 
 # One crate for the IHE ITI Technical Framework, one feature per profile
-# (no specification governs this: our own design). The crate depends on nothing
-# in FerroFED, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
-# XUA stack.
+# (no specification governs this: our own design). The crate depends on no
+# application, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
+# XUA stack. The user an exchange is made for is `ihe-atna`'s model, so an
+# audit record and the exchange share one type.
 [features]
-# PIXm, the patient identifier cross-reference (ITI-83, #42): the HTTP client,
+# PIXm, the patient identifier cross-reference (ITI-83): the HTTP client,
 # the FHIR R4 `terminology` root set for Parameters and OperationOutcome, and
 # the redacting secret type the identifiers travel in.
 pixm = [
   "dep:fhir-types",
+  "dep:ihe-atna",
   "fhir-types/r4",
   "fhir-types/terminology",
   "dep:http",
@@ -41,12 +41,13 @@ pixm = [
   "dep:thiserror",
   "dep:url",
 ]
-# PDQm, the patient demographics query and match (ITI-78, #119; ITI-119, #487):
+# PDQm, the patient demographics query and match (ITI-78, ITI-119):
 # the HTTP client, the FHIR R4 `resources` root set for the Patient resources
 # a search or a match answers with and the Parameters a match posts, and the
 # redacting secret type the demographics travel in.
 pdqm = [
   "dep:fhir-types",
+  "dep:ihe-atna",
   "fhir-types/r4",
   "fhir-types/resources",
   "dep:http",
@@ -57,9 +58,8 @@ pdqm = [
   "dep:url",
 ]
 # mCSD, the care services directory (ITI-90, ITI-91): the FHIR R4 `resources`
-# root set for the Organization and Endpoint resources a directory publishes
-# (#74), and the HTTP client of the ITI-90 searches and the ITI-91 history
-# (#86).
+# root set for the Organization and Endpoint resources a directory publishes,
+# and the HTTP client of the ITI-90 searches and the ITI-91 history.
 mcsd = [
   "dep:fhir-types",
   "fhir-types/r4",
@@ -70,7 +70,7 @@ mcsd = [
   "dep:thiserror",
   "dep:url",
 ]
-# PMIR, the patient master identity registry (ITI-93, ITI-94, #147): the HTTP
+# PMIR, the patient master identity registry (ITI-93, ITI-94): the HTTP
 # client of the ITI-94 subscription, the FHIR R4 `resources` root set for the
 # Subscription, the message Bundle, its MessageHeader and the Patient resources
 # an ITI-93 feed carries, and the redacting secret type the identifiers travel
@@ -86,7 +86,7 @@ pmir = [
   "dep:thiserror",
   "dep:url",
 ]
-# XCPD, cross-community patient discovery (ITI-55, #85): the HTTP client the
+# XCPD, cross-community patient discovery (ITI-55): the HTTP client the
 # SOAP 1.2 envelope travels on, the XML reader and writer of the envelope and
 # the HL7 v3 messages, the message and query ids, the creation time, the
 # redacting secret type the identifiers travel in, and the timer that bounds
@@ -96,6 +96,7 @@ pmir = [
 xcpd = [
   "dep:async-trait",
   "dep:http",
+  "dep:ihe-atna",
   "dep:jiff",
   "dep:quick-xml",
   "dep:reqwest",
@@ -105,62 +106,34 @@ xcpd = [
   "dep:url",
   "dep:uuid",
 ]
-# ATNA, the audit trail (ITI-20, #418): the DICOM PS3.15 audit message, the
-# RFC 5424 syslog message it travels in, the RFC 5425 TLS connection to an
-# Audit Record Repository on rustls with the platform's roots, and the bounded
-# store-and-forward spool ITI-20 requires of a sender. With `xcpd`, it also
-# writes the ITI-55 audit message.
-atna = [
-  "dep:base64",
-  "dep:jiff",
-  "dep:quick-xml",
-  "dep:rustls",
-  "dep:rustls-platform-verifier",
-  "dep:secrecy",
-  "dep:thiserror",
-  "dep:tokio",
-  "dep:tokio-rustls",
-  "dep:tracing",
-  "dep:url",
-]
-# BALP, the Basic Audit Log Patterns (#486): the FHIR R4 AuditEvent the FHIR
-# profiles audit their transactions as, and the ATNA ATX: FHIR Feed Option of
-# ITI-20 that posts it to an Audit Record Repository through the `atna` spool
-# and forwarder. With `pixm`, `pdqm`, `mcsd` or `pmir` it also writes that
-# profile's audit records.
-balp = [
-  "atna",
-  "dep:async-trait",
-  "dep:fhir-types",
-  "fhir-types/r4",
-  "fhir-types/resources",
-  "dep:http",
-  "dep:reqwest",
-  "dep:serde_json",
-]
+# The audit record each profile defines for its own transactions, written
+# for the audit trail of `ihe-atna`: with `pixm`, `pdqm`, `mcsd` or `pmir` the
+# BALP AuditEvent of that profile's transactions, recorded through an
+# `ihe_atna::balp::AuditRecorder`, and with `xcpd` the DICOM audit message of
+# ITI-55 (§3.55.5.1), which needs `ihe-atna`'s `atna`, part of its `balp`.
+# A record carries the time of its event, and the recorder's wait is bounded
+# by the exchange's own deadline.
+audit = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
 
 [dependencies]
 async-trait = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
+ihe-atna = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
-rustls = { workspace = true, optional = true }
-rustls-platform-verifier = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["fs", "io-util", "net", "rt", "sync", "time"] }
-tokio-rustls = { workspace = true, optional = true, features = ["tls12", "aws_lc_rs"] }
-tracing = { workspace = true, optional = true }
 url = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
 async-trait = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

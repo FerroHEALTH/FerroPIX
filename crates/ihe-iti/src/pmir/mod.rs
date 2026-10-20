@@ -55,7 +55,7 @@
 //! # }
 //! ```
 
-#[cfg(feature = "balp")]
+#[cfg(feature = "audit")]
 pub mod audit;
 pub mod error;
 pub mod feed;
@@ -89,8 +89,8 @@ pub struct PmirSubscriber {
     endpoint: Url,
     http: reqwest::Client,
     authorizer: Option<Arc<dyn Authorizer>>,
-    #[cfg(feature = "balp")]
-    audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
+    #[cfg(feature = "audit")]
+    audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
 impl PmirSubscriber {
@@ -111,7 +111,7 @@ impl PmirSubscriber {
             endpoint,
             http,
             authorizer: None,
-            #[cfg(feature = "balp")]
+            #[cfg(feature = "audit")]
             audit: None,
         })
     }
@@ -146,19 +146,19 @@ impl PmirSubscriber {
     /// An audited subscriber records each exchange before it returns,
     /// whatever its outcome; one whose record the recorder does not accept
     /// fails with [`SubscribeError::Audit`], and its answer is not used.
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     #[must_use]
-    pub fn audited(mut self, recorder: Arc<dyn crate::balp::AuditRecorder>) -> Self {
+    pub fn audited(mut self, recorder: Arc<dyn ihe_atna::balp::AuditRecorder>) -> Self {
         self.audit = Some(recorder);
         self
     }
 
     /// Records the exchange `exchange` describes, when the subscriber is
     /// audited, and returns `result` unless the record was refused.
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     async fn audit<T>(
         &self,
-        exchange: impl FnOnce(&Result<T, SubscribeError>) -> crate::balp::Exchange,
+        exchange: impl FnOnce(&Result<T, SubscribeError>) -> ihe_atna::balp::Exchange,
         result: Result<T, SubscribeError>,
     ) -> Result<T, SubscribeError> {
         if let Some(recorder) = &self.audit {
@@ -203,7 +203,7 @@ impl PmirSubscriber {
         url.query_pairs_mut()
             .append_pair("url", request.endpoint().as_str());
         let result = self.find_at(&url, request, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit(|result| audit::search(&self.endpoint, &url, result), result)
             .await;
@@ -258,7 +258,7 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<Subscribed, SubscribeError> {
         let result = self.create(request, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit(
                 |result| {
@@ -324,7 +324,7 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<SubscriptionStatus, SubscribeError> {
         let result = self.read(subscribed, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit(
                 |result| {
@@ -380,7 +380,7 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<(), SubscribeError> {
         let result = self.delete(subscribed, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit(
                 |result| {

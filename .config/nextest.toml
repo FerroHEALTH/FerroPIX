@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+# The nextest configuration (https://nexte.st/docs/configuration/). A test
+# that runs past its slow-timeout period is reported as slow, and one that
+# runs past terminate-after periods is killed and fails the run by name, so
+# a hang never stalls a run (https://nexte.st/docs/features/slow-tests/).
+# No specification governs the limits: our own design, carried over from
+# FerroFED with the crates.
+
+[profile.default]
+# The slowest offline test waits on a 10-second timeout of its own.
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+# The ihe-iti feature tests run a cargo tree per feature, one or two each,
+# so they get three minutes, and their child cargo takes a package cache lock
+# of its own.
+[[profile.default.overrides]]
+filter = 'package(ihe-iti) & test(/^features::/)'
+slow-timeout = { period = "30s", terminate-after = 6 }

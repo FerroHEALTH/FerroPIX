@@ -7,9 +7,9 @@
 
 use std::collections::BTreeSet;
 
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::query::{DatePrefix, Gender, PatientQuery, StringMatch};
-use ihe_iti::user::OnBehalfOf;
 use secrecy::SecretString;
 use serde::Deserialize;
 

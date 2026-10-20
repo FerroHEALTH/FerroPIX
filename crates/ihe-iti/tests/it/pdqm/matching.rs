@@ -12,11 +12,11 @@
 
 use std::num::NonZeroU16;
 
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::input::MatchInput;
 use ihe_iti::pdqm::matches::MatchGrade;
-use ihe_iti::user::OnBehalfOf;
 use secrecy::SecretString;
 use serde_json::Value;
 use wiremock::matchers::{method, path};

@@ -13,6 +13,19 @@ and this project adheres to
 
 ### Added
 
+- `ihe-iti` 0.0.39, moved from FerroFED with its history: the IHE PIXm,
+  PDQm, PMIR, mCSD and XCPD clients and the IUA authorizer, a feature each.
+  The `atna` and `balp` features are gone: the audit trail is the `ihe-atna`
+  crate of FerroAUDIT. The audit record each profile defines for its own
+  transactions stays here behind the new `audit` feature, on `ihe-atna`
+  `=0.1.0`. A product changes `ihe_iti::user` to `ihe_atna::user`,
+  `ihe_iti::balp` and `ihe_iti::atna` to `ihe_atna::balp` and
+  `ihe_atna::atna`, and the features `balp` and `atna` to `audit` (#25).
+- The IHE citation guard, `scripts/checks/ihe-citations.sh`, and the corpora
+  its audit citations read at FerroFED's pins: the BALP package and
+  narrative pages and the ITI-20 page with the RESTful ATNA supplement
+  (#25).
+
 - The corpora `ihe-iti` and `nl-generic-functions` read, vendored under
   `docs/specs/` by FerroFED's scripts at FerroFED's pins and byte-identical
   to FerroFED's copies: the IHE PIXm, PDQm, PMIR and mCSD packages and
@@ -25,6 +38,8 @@ and this project adheres to
 
 ### Changed
 
+- The minimum supported Rust version is 1.98, the version `ihe-atna`
+  requires (#25).
 - Two version lines, the model FerroBRIDGE uses: the product version is the
   workspace version and the release tag, and each published crate keeps its
   own version, which never adopts the product version. The crate-version

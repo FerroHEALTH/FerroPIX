@@ -30,23 +30,23 @@ use url::Url;
 
 use super::error::SubscribeError;
 use super::feed::{Event, Feed, PatientIdentity};
-use crate::balp::{
+use ihe_atna::balp::{
     APPLICATION, CREATE, CUSTODIAN, Coded, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE, Direction,
     Entity, EventKind, Exchange, Outcome, Peer, READ, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT,
     request_text,
 };
-use crate::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-93` subtype.
 pub const ITI_93: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-93",
     display: "Mobile Patient Identity Feed",
 };
 
 /// The `ITI-94` subtype.
 pub const ITI_94: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-94",
     display: "Subscribe to Patient Updates",
 };

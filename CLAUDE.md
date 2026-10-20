@@ -54,8 +54,13 @@ The build order is the milestones:
 ## Repo map
 
 - `Cargo.toml`, `rust-toolchain.toml`, `deny.toml`, `clippy.toml`,
-  `rustfmt.toml`: the workspace skeleton with the family lint set. The
-  workspace has no member until the move.
+  `rustfmt.toml`: the workspace with the family lint set; `.config/nextest.toml`
+  the test time limits.
+- `crates/ihe-iti`: the IHE identity profiles (PIXm, PDQm, PMIR, mCSD, XCPD,
+  with the IUA authorizer), a feature each, and `audit`, each profile's own
+  audit record on the `ihe-atna` audit trail; moved from FerroFED with its
+  history (FerroHEALTH/FerroFED#367). The user an exchange names is
+  `ihe_atna::user`.
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.
   `docs/specs/` holds the vendored corpora the identity crates read, each
   with a `PROVENANCE.md`, fetched by `scripts/vendor/*.sh` (with the shared
@@ -65,9 +70,11 @@ The build order is the milestones:
   `watch-prs.sh`, `changelog-merge.sh`, and `project.sh`, a stub: there is no
   roadmap board). `scripts/checks/`: the guards (comment style, versions and
   licence headers, file length, `TODO` pointers, the crate version, the
-  changelog, the contribution licence). `scripts/release/`: the milestone
-  check and close and the crates.io publish. Every script has a
-  `--self-test`, and CI runs them all.
+  changelog, the contribution licence, and `ihe-citations.sh`, every IHE
+  section the tree cites held to the vendored text). `scripts/release/`: the
+  milestone check and close and the crates.io publish. Every helper, guard
+  and release script has a `--self-test`, and CI runs them all; a vendor
+  script is proven by re-running it against its pin.
 - `.github/`: CI with the single required `conclusion` check, CodeQL,
   Scorecard, Dependabot, the release lane (`release.yml`,
   `release-crate.yml`) and `publish-crates.yml` through Trusted Publishing,

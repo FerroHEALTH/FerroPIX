@@ -11,10 +11,10 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use http::header::AUTHORIZATION;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::authorizer::{Authorized, Authorizer, AuthorizerError, Retry};
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::CrossReference;
-use ihe_iti::user::OnBehalfOf;
 use url::Url;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};

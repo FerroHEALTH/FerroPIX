@@ -40,7 +40,7 @@
 //! use ihe_iti::xcpd::XcpdClient;
 //! use ihe_iti::xcpd::discovery::Discovery;
 //! use ihe_iti::xcpd::identifier::{Oid, PatientIdentifier};
-//! use ihe_iti::user::OnBehalfOf;
+//! use ihe_atna::user::OnBehalfOf;
 //! use ihe_iti::xcpd::request::{DiscoveryQuery, RespondingGateway};
 //! use secrecy::SecretString;
 //! use url::Url;
@@ -91,10 +91,10 @@ use std::time::Duration;
 use http::header::{ACCEPT, CONTENT_TYPE};
 
 use crate::recording::{Late, Recorded, within};
-use crate::user::OnBehalfOf;
 use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
 use error::{Malformation, XcpdError};
+use ihe_atna::user::OnBehalfOf;
 use request::{DiscoveryQuery, Ids, RespondingGateway};
 use security::XuaAssertion;
 

@@ -1,18 +1,16 @@
 # SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 
-# The workspace has no member yet: the first crates (`ihe-iti` and
-# `nl-generic-functions`) arrive with the move from FerroFED, and the server
-# glue under `app/` follows. Each joins this list, or a `crates/*` and `app/*`
-# glob once both folders exist, in the change that adds it.
+# The published crates under `crates/`; the server glue under `app/` joins
+# with its own glob in the change that adds it.
 [workspace]
 resolver = "3"
-members = []
+members = ["crates/*"]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.98"
 license = "BUSL-1.1"
 repository = "https://github.com/FerroHEALTH/FerroPIX"
 homepage = "https://ferropix.eu/"
@@ -20,9 +18,32 @@ authors = ["Ruben Talstra"]
 
 # The authoritative third-party set. A crate takes a dependency with
 # dep.workspace = true, and every version is checked against crates.io on the
-# day it is added (.claude/rules/reliability.md). Empty until the first
-# member needs one.
+# day it is added (.claude/rules/reliability.md). The versions are the ones
+# FerroFED pins, so a product that takes these crates resolves one copy of
+# each.
 [workspace.dependencies]
+async-trait = "0.1.92"
+base64 = { version = "0.23.1", default-features = false, features = ["std"] }
+# The generated FHIR model of FerroBRIDGE, at the version FerroFED and
+# ihe-atna pin.
+fhir-types = { version = "0.1.113", default-features = false }
+http = "1.5.0"
+# The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
+# model the identity profiles share; pinned exactly, as every family crate.
+ihe-atna = { version = "=0.1.0", default-features = false }
+jiff = { version = "0.2.37", default-features = false, features = ["std"] }
+quick-xml = { version = "0.42.0", default-features = false }
+reqwest = { version = "0.13.5", default-features = false }
+secrecy = "0.10.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["raw_value"] }
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", default-features = false }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "env-filter", "json", "ansi"] }
+url = "2.5.8"
+uuid = { version = "1.26.1", default-features = false, features = ["v4", "std"] }
+wiremock = "0.6.5"
 
 # The reliability bar (no specification governs it: our own design), the
 # FerroHEALTH family's lint set as FerroSMART carries it.

@@ -24,10 +24,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-# The published members, in dependency order. None yet: the first arrives
-# with the move from FerroFED, and each name is reserved on crates.io and its
-# Trusted Publishing configured by the owner before it is listed here.
+# The published members, in dependency order. Each name is reserved on
+# crates.io and its Trusted Publishing configured by the owner before it is
+# listed here.
 readonly CRATES=(
+  ihe-iti
 )
 
 # The version cargo resolves for one member: its own, or the workspace's when

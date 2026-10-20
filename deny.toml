@@ -40,7 +40,13 @@ confidence-threshold = 0.9
 # The project's own crates and the family's BUSL-1.1 crates (LICENSE): each
 # joins the day it is a member or a dependency (`ihe-iti` and
 # `nl-generic-functions` with the move, `ferrohealth-smart`, `ihe-atna`).
-exceptions = []
+# The family's own crates are under the Business Source License 1.1, which
+# no permissive allow-list names, so each is admitted by name: this
+# repository's published crates, and the FerroHEALTH crates they depend on.
+exceptions = [
+  { allow = ["BUSL-1.1"], crate = "ihe-iti" },
+  { allow = ["BUSL-1.1"], crate = "ihe-atna" },
+]
 
 [bans]
 multiple-versions = "warn"

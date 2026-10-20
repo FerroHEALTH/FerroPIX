@@ -10,10 +10,10 @@ use std::error::Error;
 use std::fmt::Write;
 use std::time::Duration;
 
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::PdqmClient;
 use ihe_iti::pdqm::error::PdqmError;
 use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
-use ihe_iti::user::OnBehalfOf;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
 use url::Url;

@@ -5,7 +5,7 @@
 //! Consumer (PIXm 3.1.0 §2:3.83.5.1.1), feature `balp`.
 //!
 //! [`PixmClient::audited`](super::PixmClient::audited) gives the client a
-//! [`AuditRecorder`](crate::balp::AuditRecorder); after every exchange it
+//! [`AuditRecorder`](ihe_atna::balp::AuditRecorder); after every exchange it
 //! records one [`Exchange`] as the PIXm Query Consumer audit profile fixes
 //! it: built on the BALP Patient Query pattern, the `ITI-83` and `search`
 //! subtypes, the request as sent in the query entity (its URL for a `GET`,
@@ -22,15 +22,15 @@ use super::FHIR_JSON;
 use super::error::PixmError;
 use super::identifier::SourceIdentifier;
 use super::request::Request;
-use crate::balp::{
+use ihe_atna::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, Outcome, Peer, REST, SEARCH,
     SOURCE_ROLE, request_text,
 };
-use crate::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-83` subtype.
 pub const ITI_83: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-83",
     display: "Mobile Patient Identifier Cross-reference Query",
 };

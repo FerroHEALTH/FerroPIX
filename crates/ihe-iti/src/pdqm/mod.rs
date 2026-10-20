@@ -38,7 +38,7 @@
 //!
 //! use ihe_iti::pdqm::PdqmClient;
 //! use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
-//! use ihe_iti::user::OnBehalfOf;
+//! use ihe_atna::user::OnBehalfOf;
 //! use secrecy::{ExposeSecret, SecretString};
 //! use url::Url;
 //!
@@ -69,7 +69,7 @@
 //! # }
 //! ```
 
-#[cfg(feature = "balp")]
+#[cfg(feature = "audit")]
 pub mod audit;
 pub mod error;
 pub mod input;
@@ -87,8 +87,8 @@ use url::Url;
 
 use crate::authorizer::{self, Authorizer};
 use crate::redact::RedactedUrl;
-use crate::user::OnBehalfOf;
 use error::{InvalidInput, PdqmError};
+use ihe_atna::user::OnBehalfOf;
 use input::MatchInput;
 use matches::{MatchResult, Page, SearchResult};
 use query::PatientQuery;
@@ -108,8 +108,8 @@ pub struct PdqmClient {
     match_endpoint: Url,
     http: reqwest::Client,
     authorizer: Option<Arc<dyn Authorizer>>,
-    #[cfg(feature = "balp")]
-    audit: Option<Arc<dyn crate::balp::AuditRecorder>>,
+    #[cfg(feature = "audit")]
+    audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
 impl PdqmClient {
@@ -132,7 +132,7 @@ impl PdqmClient {
             base,
             http,
             authorizer: None,
-            #[cfg(feature = "balp")]
+            #[cfg(feature = "audit")]
             audit: None,
         })
     }
@@ -156,9 +156,9 @@ impl PdqmClient {
     /// An audited client records each request before it returns, whatever
     /// its outcome; one whose record the recorder does not accept fails with
     /// [`PdqmError::Audit`], and its answer is not used.
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     #[must_use]
-    pub fn audited(mut self, recorder: Arc<dyn crate::balp::AuditRecorder>) -> Self {
+    pub fn audited(mut self, recorder: Arc<dyn ihe_atna::balp::AuditRecorder>) -> Self {
         self.audit = Some(recorder);
         self
     }
@@ -167,7 +167,7 @@ impl PdqmClient {
     /// returns `result` unless the record was refused, or was not accepted
     /// by `deadline` for an answer that would be used
     /// ([`crate::recording`]).
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     async fn audit(
         &self,
         request: impl FnOnce() -> secrecy::SecretString,
@@ -183,7 +183,7 @@ impl PdqmClient {
             match within(deadline, recorder.record(exchange)).await {
                 Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
                 Recorded::Late if result.is_ok() => {
-                    return Err(PdqmError::Audit(crate::balp::AuditError(Box::new(Late))));
+                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(Late))));
                 }
                 Recorded::Accepted | Recorded::Late => {}
             }
@@ -219,7 +219,7 @@ impl PdqmClient {
         &self,
         input: &MatchInput,
         #[cfg_attr(
-            not(feature = "balp"),
+            not(feature = "audit"),
             expect(
                 unused_variables,
                 reason = "only an audited client names whom it acted for"
@@ -228,13 +228,13 @@ impl PdqmClient {
         on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<MatchResult, PdqmError> {
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let deadline = crate::recording::deadline(timeout);
         let body = secrecy::SecretString::from(
             serde_json::to_string(&input.parameters()).map_err(PdqmError::Unwritable)?,
         );
         let result = self.post_match(&body, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit_match((input, &body), on_behalf, result, deadline)
             .await;
@@ -245,7 +245,7 @@ impl PdqmClient {
     /// audited, and returns `result` unless the record was refused, or was
     /// not accepted by `deadline` for an answer that would be used
     /// ([`crate::recording`]).
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     async fn audit_match(
         &self,
         (input, body): (&MatchInput, &secrecy::SecretString),
@@ -260,7 +260,7 @@ impl PdqmClient {
             // request line, media type and body, as for the ITI-78 POST search.
             let request = secrecy::SecretString::from(format!(
                 "POST {}\nContent-Type: {FHIR_JSON}\n\n{}",
-                crate::balp::request_text(&self.match_endpoint).expose_secret(),
+                ihe_atna::balp::request_text(&self.match_endpoint).expose_secret(),
                 body.expose_secret()
             ));
             let exchange = audit::match_exchange(
@@ -274,7 +274,7 @@ impl PdqmClient {
             match within(deadline, recorder.record(exchange)).await {
                 Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
                 Recorded::Late if result.is_ok() => {
-                    return Err(PdqmError::Audit(crate::balp::AuditError(Box::new(Late))));
+                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(Late))));
                 }
                 Recorded::Accepted | Recorded::Late => {}
             }
@@ -321,7 +321,7 @@ impl PdqmClient {
         &self,
         query: &PatientQuery,
         #[cfg_attr(
-            not(feature = "balp"),
+            not(feature = "audit"),
             expect(
                 unused_variables,
                 reason = "only an audited client names whom it acted for"
@@ -330,10 +330,10 @@ impl PdqmClient {
         on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let deadline = crate::recording::deadline(timeout);
         let result = self.post(query, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit(
                 || {
@@ -341,7 +341,7 @@ impl PdqmClient {
                     // request line, media type and form body, as BALP's own example writes.
                     secrecy::SecretString::from(format!(
                         "POST {}\nContent-Type: {}\n\n{}",
-                        secrecy::ExposeSecret::expose_secret(&crate::balp::request_text(
+                        secrecy::ExposeSecret::expose_secret(&ihe_atna::balp::request_text(
                             &self.endpoint
                         )),
                         request::FORM,
@@ -384,7 +384,7 @@ impl PdqmClient {
         &self,
         page: &Page,
         #[cfg_attr(
-            not(feature = "balp"),
+            not(feature = "audit"),
             expect(
                 unused_variables,
                 reason = "only an audited client names whom it acted for"
@@ -398,13 +398,13 @@ impl PdqmClient {
         if page.url().origin() != self.endpoint.origin() {
             return Err(PdqmError::ForeignPage);
         }
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let deadline = crate::recording::deadline(timeout);
         let result = self.get(page, timeout).await;
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         let result = self
             .audit(
-                || crate::balp::request_text(page.url()),
+                || ihe_atna::balp::request_text(page.url()),
                 on_behalf,
                 result,
                 deadline,

@@ -7,7 +7,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use ihe_iti::user::{OnBehalfOf, PurposeOfUse, User};
+use ihe_atna::user::{OnBehalfOf, PurposeOfUse, User};
 use ihe_iti::xcpd::audit::{
     AuditError, AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint,
 };
@@ -246,12 +246,12 @@ fn the_fixed_codes_are_the_table_s() {
     assert_eq!(vec!["0", "4", "8"], codes, "DICOM PS3.15 Annex A.5");
 }
 
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 #[tokio::test]
 async fn the_dicom_message_fills_the_initiating_gateway_table() {
     use base64::Engine as _;
     use base64::engine::general_purpose::STANDARD;
-    use ihe_iti::atna::message::{AccessPoint, AuditSource};
+    use ihe_atna::atna::message::{AccessPoint, AuditSource};
 
     let kept = Arc::new(Kept::default());
     let audited = client().audited(kept.clone());
@@ -351,9 +351,9 @@ async fn the_event_of_a_discovery_made_for_a_user_names_them_and_shows_none_of_i
 
 /// The DICOM message of one discovery made for `on_behalf`, as UTF-8 XML,
 /// and the event it was written from.
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 async fn message_for(on_behalf: &OnBehalfOf) -> (String, AuditEvent) {
-    use ihe_iti::atna::message::{AccessPoint, AuditSource};
+    use ihe_atna::atna::message::{AccessPoint, AuditSource};
     let kept = Arc::new(Kept::default());
     let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
@@ -381,7 +381,7 @@ async fn message_for(on_behalf: &OnBehalfOf) -> (String, AuditEvent) {
     )
 }
 
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 #[tokio::test]
 async fn the_dicom_message_names_the_user_as_its_human_requestor() {
     let (xml, _event) = message_for(&user()).await;
@@ -405,7 +405,7 @@ async fn the_dicom_message_names_the_user_as_its_human_requestor() {
     assert_eq!(3, xml.matches("<ActiveParticipant ").count());
 }
 
-#[cfg(feature = "atna")]
+#[cfg(feature = "audit")]
 #[tokio::test]
 async fn the_dicom_message_of_the_gateway_s_own_discovery_names_no_human_requestor() {
     let (xml, event) = message_for(&OnBehalfOf::System).await;

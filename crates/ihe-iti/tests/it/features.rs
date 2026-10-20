@@ -9,17 +9,17 @@
 //! them as a dependency of its own. `quick-xml` itself is in every FHIR
 //! feature's graph already, through `fhir-types`, which depends on it
 //! unconditionally; what `xcpd` adds is the crate's own use of it, its
-//! message and query ids, and its clock. `atna` writes XML and timestamps
-//! too, so it shares the clock and the XML writer, and never the message ids.
-//! No feature reaches a crate of the application this crate was written for,
-//! so any caller can use it as it is.
+//! message and query ids, and its clock. `audit` stamps each record with its
+//! time, so it shares the clock, and never the message ids. No feature
+//! reaches another member of this workspace or an application of the
+//! family, so any caller can use the crate as it is.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Every feature of the crate.
-const FEATURES: &[&str] = &["atna", "balp", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
+const FEATURES: &[&str] = &["audit", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
 
 /// The crates only `xcpd` compiles.
 const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
@@ -118,16 +118,14 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
     for name in XCPD_DIRECT {
         assert!(xcpd_direct.contains(*name), "xcpd names {name}");
     }
-    for feature in ["atna", "balp"] {
-        let closure = tree(feature, None);
-        assert!(
-            !closure.contains("uuid"),
-            "{feature} compiles the message ids: {closure:?}"
-        );
-    }
+    let audit = tree("audit", None);
+    assert!(
+        !audit.contains("uuid"),
+        "audit compiles the message ids: {audit:?}"
+    );
     for feature in FEATURES
         .iter()
-        .filter(|feature| !["xcpd", "atna", "balp"].contains(*feature))
+        .filter(|feature| !["xcpd", "audit"].contains(*feature))
     {
         let closure = tree(feature, None);
         let leaked: Vec<&&str> = XCPD_ONLY
@@ -145,20 +143,22 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
 }
 
 #[test]
-fn no_feature_depends_on_anything_in_ferrofed() {
+fn no_feature_depends_on_another_member_or_an_application() {
     let mut internal = members("crates");
-    internal.extend(members("app"));
-    internal.extend(members("tools"));
+    if Path::new(ROOT).join("app").is_dir() {
+        internal.extend(members("app"));
+    }
     assert!(internal.remove("ihe-iti"), "the crate map lost ihe-iti");
-    assert!(
-        internal.contains("ferrofed-identity"),
-        "the crate map lost the app"
-    );
     for feature in FEATURES {
         let closure = tree(feature, None);
-        let reached: Vec<&String> = internal
+        let reached: Vec<&String> = closure
             .iter()
-            .filter(|name| closure.contains(*name))
+            .filter(|name| {
+                internal.contains(*name)
+                    || ["ferropix-", "ferrofed-", "ferroehr-"]
+                        .iter()
+                        .any(|application| name.starts_with(application))
+            })
             .collect();
         assert!(reached.is_empty(), "{feature} depends on {reached:?}");
     }

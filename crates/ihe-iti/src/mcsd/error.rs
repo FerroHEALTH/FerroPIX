@@ -129,9 +129,9 @@ pub enum McsdError {
     Malformed(#[from] Malformation),
     /// The audit recorder could not accept the transaction's audit record,
     /// so its answer is not used (feature `balp`, §2:3.90.5.1, §2:3.91.5.1).
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     #[error("the mCSD audit record could not be recorded")]
-    Audit(#[source] crate::balp::AuditError),
+    Audit(#[source] ihe_atna::balp::AuditError),
 }
 
 impl McsdError {
@@ -151,7 +151,7 @@ impl McsdError {
     /// not accepted.
     #[must_use]
     pub fn answered(&self) -> bool {
-        #[cfg(feature = "balp")]
+        #[cfg(feature = "audit")]
         if matches!(self, Self::Audit(_)) {
             return false;
         }

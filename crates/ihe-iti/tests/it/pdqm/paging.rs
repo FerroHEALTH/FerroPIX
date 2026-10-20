@@ -4,8 +4,8 @@
 //! The incremental response: FHIR paging over the result set
 //! (§2:3.78.4.2.2.4, <http://hl7.org/fhir/R4/http.html#paging>).
 
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
-use ihe_iti::user::OnBehalfOf;
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

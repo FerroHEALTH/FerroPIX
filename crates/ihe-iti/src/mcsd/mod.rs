@@ -49,7 +49,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-#[cfg(feature = "balp")]
+#[cfg(feature = "audit")]
 pub mod audit;
 pub mod budget;
 pub mod client;

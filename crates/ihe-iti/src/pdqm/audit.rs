@@ -5,7 +5,7 @@
 //! (PDQm 3.2.0 §2:3.78.5.1 and §2:3.119.5.1.1), feature `balp`.
 //!
 //! [`PdqmClient::audited`](super::PdqmClient::audited) gives the client a
-//! [`AuditRecorder`](crate::balp::AuditRecorder); every search and every
+//! [`AuditRecorder`](ihe_atna::balp::AuditRecorder); every search and every
 //! page it asks for is recorded as one [`Exchange`] the PDQm Query Consumer
 //! audit profile fixes: built on the BALP Query pattern, the `ITI-78` and
 //! `search` subtypes, and the request as sent in the query entity. The
@@ -27,22 +27,22 @@ use secrecy::SecretString;
 use url::Url;
 
 use super::error::PdqmError;
-use crate::balp::{
+use ihe_atna::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, Outcome, Peer, REST, SEARCH,
     SOURCE_ROLE,
 };
-use crate::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-78` subtype.
 pub const ITI_78: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-78",
     display: "Mobile Patient Demographics Query",
 };
 
 /// The `ITI-119` subtype.
 pub const ITI_119: Coded = Coded {
-    system: crate::balp::IHE_TRANSACTIONS,
+    system: ihe_atna::balp::IHE_TRANSACTIONS,
     code: "ITI-119",
     display: "Patient Demographics Match",
 };

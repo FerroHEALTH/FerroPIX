@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use ihe_iti::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::xcpd::discovery::{Discovery, RequestedAttribute};
 use ihe_iti::xcpd::error::{DetectedIssue, FaultCode, Malformation, XcpdError};
 use secrecy::ExposeSecret;

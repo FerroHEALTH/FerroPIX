@@ -6,7 +6,7 @@
 //! `PRPA_IN201305UV02` wrappers (Appendix O, Table 3.55.4.1.2.3-1), and the
 //! query by the shared identifier alone (§3.55.1, §3.55.4.1.2.1).
 
-use ihe_iti::user::OnBehalfOf;
+use ihe_atna::user::OnBehalfOf;
 use ihe_iti::xcpd::error::InvalidInput;
 use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid};
 use ihe_iti::xcpd::request::RespondingGateway;

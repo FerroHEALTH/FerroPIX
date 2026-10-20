@@ -77,9 +77,9 @@ pub enum PdqmError {
     Unwritable(#[source] serde_json::Error),
     /// The audit recorder could not accept the request's audit record, so
     /// its answer is not used (feature `balp`, §2:3.78.5.1, §2:3.119.5.1.1).
-    #[cfg(feature = "balp")]
+    #[cfg(feature = "audit")]
     #[error("the PDQm audit record could not be recorded")]
-    Audit(#[source] crate::balp::AuditError),
+    Audit(#[source] ihe_atna::balp::AuditError),
 }
 
 /// How an answer departs from ITI-78 (§2:3.78.4.2.2, the Query Patient

@@ -7,11 +7,11 @@
 //! the test-scoped relaxations of `clippy.toml` reach their helpers too.
 
 #[cfg(test)]
-#[cfg(feature = "atna")]
-mod atna;
-#[cfg(test)]
-#[cfg(feature = "balp")]
-mod balp;
+#[cfg(all(
+    feature = "audit",
+    any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir")
+))]
+mod audit;
 #[cfg(test)]
 mod features;
 #[cfg(test)]
@@ -27,13 +27,7 @@ mod pixm;
 #[cfg(feature = "pmir")]
 mod pmir;
 #[cfg(test)]
-#[cfg(any(
-    feature = "atna",
-    feature = "mcsd",
-    feature = "pdqm",
-    feature = "pixm",
-    feature = "xcpd"
-))]
+#[cfg(any(feature = "mcsd", feature = "pdqm", feature = "pixm", feature = "xcpd"))]
 mod timing;
 #[cfg(test)]
 #[cfg(feature = "xcpd")]

@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ihe-iti"
-description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile, with each profile's audit record behind `audit`"
+description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile, with their audit records behind `balp` and `atna`"
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.39"
+version = "0.0.40"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -106,14 +106,15 @@ xcpd = [
   "dep:url",
   "dep:uuid",
 ]
-# The audit record each profile defines for its own transactions, written
-# for the audit trail of `ihe-atna`: with `pixm`, `pdqm`, `mcsd` or `pmir` the
-# BALP AuditEvent of that profile's transactions, recorded through an
-# `ihe_atna::balp::AuditRecorder`, and with `xcpd` the DICOM audit message of
-# ITI-55 (§3.55.5.1), which needs `ihe-atna`'s `atna`, part of its `balp`.
-# A record carries the time of its event, and the recorder's wait is bounded
-# by the exchange's own deadline.
-audit = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
+# BALP, the audit record each FHIR profile defines for its own transactions:
+# with `pixm`, `pdqm`, `mcsd` or `pmir` the BALP AuditEvent of that profile's
+# transactions, recorded through an `ihe_atna::balp::AuditRecorder`. A record
+# carries the time of its event, and the recorder's wait is bounded by the
+# exchange's own deadline.
+balp = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
+# ATNA, the audit record of XCPD: with `xcpd` the DICOM audit message of
+# ITI-55 (§3.55.5.1), written in `ihe-atna`'s ATNA model, with no FHIR model.
+atna = ["dep:ihe-atna", "ihe-atna/atna"]
 
 [dependencies]
 async-trait = { workspace = true, optional = true }

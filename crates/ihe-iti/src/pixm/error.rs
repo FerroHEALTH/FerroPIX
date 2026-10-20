@@ -70,7 +70,7 @@ pub enum PixmError {
     Unwritable(#[source] serde_json::Error),
     /// The audit recorder could not accept the exchange's audit record, so
     /// its answer is not used (feature `balp`, §2:3.83.5.1.1).
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     #[error("the ITI-83 audit record could not be recorded")]
     Audit(#[source] ihe_atna::balp::AuditError),
 }

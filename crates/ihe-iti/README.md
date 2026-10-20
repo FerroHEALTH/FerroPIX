@@ -15,7 +15,8 @@ Patient Index, which adds the server sides of the profiles as features.
 | `mcsd` | Mobile Care Services Discovery | ITI-90, ITI-91 |
 | `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
-| `audit` | The audit record each profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna) | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94, ITI-55 |
+| `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna) | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
+| `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
 
 The crate depends on no application, so a federation gateway, a master patient
 index or any other caller can use it as it is. Only the `xcpd` feature may carry
@@ -163,14 +164,14 @@ every exchange (§3.55.5.1.1) to an `AuditRecorder` you route to your ATNA
 audit repository; the client awaits `record` before it returns the answer.
 The message carries the query parameters, which name the patient, as a
 `SecretString`. A message the recorder refuses fails the discovery with
-`XcpdError::Audit`, so no answer is used without its audit. With `audit`,
+`XcpdError::Audit`, so no answer is used without its audit. With `atna`,
 `AuditEvent::message` writes it as the DICOM PS3.15 audit message the
 Initiating Gateway's table fills, in `ihe-atna`'s ATNA model.
 
 The XML is read and written with `quick-xml`, which the FHIR features
 compile already through `fhir-types`; `xcpd` adds only `uuid` for the
 message ids and `jiff` for the creation time, and no other feature but
-`audit`, which writes timestamps too, compiles either.
+`balp` and `atna`, which write timestamps too, compiles either.
 
 ## Whom an exchange is made for
 
@@ -180,16 +181,16 @@ the user model the audit trail shares:
 the `User` an OAuth 2.0 access token names (its `iss`, `sub`, `client_id`,
 `aud` and purposes of use), or `System` for an exchange the client's own
 system makes. An audited exchange's record names the user: the `AuditEvent`
-of the `audit` feature carries the BALP `agent:user` and an Application agent
+of the `balp` feature carries the BALP `agent:user` and an Application agent
 with the `client_id` (PIXm §2:3.83.5.2.1, BALP 1.1.4 §3:5.7.5.4), and the
 ITI-55 message carries the Human Requestor, with `UserName` written
 `aud<sub@iss>` (ITI TF-2 §3.55.5.1.1, IUA ITI TF-2 §3.72.5.1). A `System`
 exchange names no user. `User`'s `Debug` shows none of its values. The mCSD
 and PMIR exchanges are always the system's own.
 
-## Audit (`audit`)
+## BALP (`balp`)
 
-With `audit`, every PIXm, PDQm, mCSD and PMIR client takes an
+With `balp`, every PIXm, PDQm, mCSD and PMIR client takes an
 `ihe_atna::balp::AuditRecorder` through `.audited(…)` and records the BALP
 `AuditEvent` its profile defines for each transaction: the PIXm Query
 Consumer of ITI-83, the PDQm Query and Match Consumers of ITI-78 and

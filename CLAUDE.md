@@ -57,8 +57,9 @@ The build order is the milestones:
   `rustfmt.toml`: the workspace with the family lint set; `.config/nextest.toml`
   the test time limits.
 - `crates/ihe-iti`: the IHE identity profiles (PIXm, PDQm, PMIR, mCSD, XCPD,
-  with the IUA authorizer), a feature each, and `audit`, each profile's own
-  audit record on the `ihe-atna` audit trail; moved from FerroFED with its
+  with the IUA authorizer), a feature each, with each profile's own audit
+  record on the `ihe-atna` audit trail behind `balp` (the FHIR profiles) and
+  `atna` (the ITI-55 message of `xcpd`); moved from FerroFED with its
   history (FerroHEALTH/FerroFED#367). The user an exchange names is
   `ihe_atna::user`.
 - `crates/nl-generic-functions`: the Dutch Generic Functions (NVI, Mitz,

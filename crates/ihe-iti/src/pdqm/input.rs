@@ -99,7 +99,7 @@ impl MatchInput {
     /// The identifier the input names, when it names exactly one: the
     /// patient the audit record's patient entity identifies (the PDQm Match
     /// Consumer audit profile, `entity:patient`).
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     pub(super) fn sole_identifier(&self) -> Option<(&str, &SecretString)> {
         match self.identifiers.as_slice() {
             [(system, value)] => Some((system.as_str(), value)),

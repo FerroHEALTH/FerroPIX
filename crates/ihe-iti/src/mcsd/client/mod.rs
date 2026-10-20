@@ -265,7 +265,7 @@ pub struct McsdClient {
     endpoint: Interactions,
     http: reqwest::Client,
     authorizer: Option<Arc<dyn Authorizer>>,
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
@@ -308,7 +308,7 @@ impl McsdClient {
             base,
             http,
             authorizer: None,
-            #[cfg(feature = "audit")]
+            #[cfg(feature = "balp")]
             audit: None,
         })
     }
@@ -332,7 +332,7 @@ impl McsdClient {
     /// An audited client records each transaction before it returns,
     /// whatever its outcome; one whose record the recorder does not accept
     /// fails with [`McsdError::Audit`], and its answer is not used.
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     #[must_use]
     pub fn audited(mut self, recorder: Arc<dyn ihe_atna::balp::AuditRecorder>) -> Self {
         self.audit = Some(recorder);
@@ -341,7 +341,7 @@ impl McsdClient {
 
     /// Records the transaction of `kind` begun with `request`, when the
     /// client is audited, and returns `result` unless the record was refused.
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     async fn audit<T>(
         &self,
         kind: ihe_atna::balp::EventKind,
@@ -394,7 +394,7 @@ impl McsdClient {
             url.query_pairs_mut().extend_pairs(parameters);
         }
         let result = self.find_pages(url.clone(), kind, budget).await;
-        #[cfg(feature = "audit")]
+        #[cfg(feature = "balp")]
         let result = self.audit(super::audit::QUERY, &url, result).await;
         result
     }
@@ -447,7 +447,7 @@ impl McsdClient {
         let mut url = self.interactions(kind).history.clone();
         url.query_pairs_mut().append_pair("_since", since);
         let result = self.history_pages(url.clone(), kind, budget).await;
-        #[cfg(feature = "audit")]
+        #[cfg(feature = "balp")]
         let result = self.audit(super::audit::UPDATES, &url, result).await;
         result
     }

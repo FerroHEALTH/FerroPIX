@@ -68,7 +68,7 @@
 //! # }
 //! ```
 
-#[cfg(feature = "audit")]
+#[cfg(feature = "balp")]
 pub mod audit;
 pub mod error;
 pub mod identifier;
@@ -128,7 +128,7 @@ pub struct PixmClient {
     invocation: Invocation,
     http: reqwest::Client,
     authorizer: Option<Arc<dyn Authorizer>>,
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
@@ -154,7 +154,7 @@ impl PixmClient {
             invocation: Invocation::default(),
             http,
             authorizer: None,
-            #[cfg(feature = "audit")]
+            #[cfg(feature = "balp")]
             audit: None,
         })
     }
@@ -186,7 +186,7 @@ impl PixmClient {
 
     /// This client, recording the audit record of every exchange through
     /// `recorder` (§2:3.83.5.1.1, feature `balp`).
-    #[cfg(feature = "audit")]
+    #[cfg(feature = "balp")]
     #[must_use]
     pub fn audited(mut self, recorder: Arc<dyn ihe_atna::balp::AuditRecorder>) -> Self {
         self.audit = Some(recorder);
@@ -226,7 +226,7 @@ impl PixmClient {
         source: &SourceIdentifier,
         targets: &[TargetSystem],
         #[cfg_attr(
-            not(feature = "audit"),
+            not(feature = "balp"),
             expect(
                 unused_variables,
                 reason = "only an audited client names whom it acted for"
@@ -235,12 +235,12 @@ impl PixmClient {
         on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<CrossReference, PixmError> {
-        #[cfg(feature = "audit")]
+        #[cfg(feature = "balp")]
         let deadline = crate::recording::deadline(timeout);
         let request = request::request(&self.endpoint, self.invocation, source, targets)
             .map_err(PixmError::Unwritable)?;
         let result = self.ask(&request, source, targets, timeout).await;
-        #[cfg(feature = "audit")]
+        #[cfg(feature = "balp")]
         if let Some(recorder) = &self.audit {
             use crate::recording::{Late, Recorded, within};
             let exchange = audit::exchange(&self.endpoint, (&request, source), on_behalf, &result);

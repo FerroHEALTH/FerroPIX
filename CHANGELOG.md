@@ -11,6 +11,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Two version lines, the model FerroBRIDGE uses: the product version is the
+  workspace version and the release tag, and each published crate keeps its
+  own version, which never adopts the product version. The crate-version
+  guard holds both, and refuses a change to a crate's packaged content that
+  does not bump it unless the pull request carries `no-crate-bump`. The
+  release lane names each crate's files by the crate's own version (#23).
+
 ## [0.0.1] - 2026-10-20
 
 The repository setup: the working discipline, the tracker helpers and the

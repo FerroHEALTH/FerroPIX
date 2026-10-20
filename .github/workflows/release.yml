@@ -45,6 +45,7 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       is-prerelease: ${{ steps.tag.outputs.is_prerelease }}
       crates: ${{ steps.crates.outputs.crates }}
+      crate-files: ${{ steps.crates.outputs.files }}
     steps:
       - id: tag
         name: Resolve and validate the release tag
@@ -94,8 +95,18 @@ jobs:
         run: |
           set -euo pipefail
           crates="$(bash scripts/release/publish-crates.sh list | tr '\n' ' ' | sed 's/ *$//')"
-          echo "published crates: ${crates:-none}"
-          echo "crates=$crates" >> "$GITHUB_OUTPUT"
+          # Each crate is on its own version line, apart from the tag
+          # (.claude/rules/crates-publishing.md), so its files carry its own.
+          files=""
+          for crate in $crates; do
+            files="$files ${crate}-$(bash scripts/release/publish-crates.sh version "$crate")"
+          done
+          files="${files# }"
+          echo "published crates: ${crates:-none} (${files:-no files})"
+          {
+            echo "crates=$crates"
+            echo "files=$files"
+          } >> "$GITHUB_OUTPUT"
 
       - name: The tag matches the workspace version
         env:
@@ -185,7 +196,6 @@ jobs:
     uses: ./.github/workflows/release-crate.yml
     with:
       tag: ${{ needs.plan.outputs.tag }}
-      version: ${{ needs.plan.outputs.version }}
       crates: ${{ needs.plan.outputs.crates }}
 
   finalize-release:
@@ -202,17 +212,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.plan.outputs.tag }}
-          VERSION: ${{ needs.plan.outputs.version }}
-          CRATES: ${{ needs.plan.outputs.crates }}
+          CRATE_FILES: ${{ needs.plan.outputs.crate-files }}
         run: |
           set -euo pipefail
           assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
           printf '%s\n' "$assets"
           missing=""
-          for crate in $CRATES; do
+          for file in $CRATE_FILES; do
             for suffix in ".crate" ".crate.sha256sum" ".crate.sigstore.json"; do
-              printf '%s\n' "$assets" | grep -Fxq "${crate}-${VERSION}${suffix}" \
-                || missing="$missing ${crate}-${VERSION}${suffix}"
+              printf '%s\n' "$assets" | grep -Fxq "${file}${suffix}" \
+                || missing="$missing ${file}${suffix}"
             done
           done
           if [ -n "$missing" ]; then

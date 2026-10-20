@@ -12,27 +12,48 @@ specification it implements, never `ferropix-*`; FerroPIX's own server glue
 lives under `app/` with a hard `publish = false`. The crates are BUSL-1.1.
 Published versions are immutable, so version hygiene is a hard rule.
 
-## One version line
+## Two version lines
 
-The workspace `version` in the root `Cargo.toml` is the version of every
-published crate and the release tag `vX.Y.Z`. Each published crate inherits
-it (`version.workspace = true`), so the tag, the crates and the changelog
-section always agree. The first published version of each moved crate is
-above the one FerroFED published last (`ihe-iti` above 0.0.38,
-`nl-generic-functions` above 0.0.24).
+FerroPIX takes the model FerroBRIDGE uses (owner, 2026-10-20,
+FerroHEALTH/FerroFED#367; no specification governs it: our own design):
+
+- **The product version** is the workspace `version` in the root
+  `Cargo.toml`: the server glue under `app/`, the release tag `vX.Y.Z` and
+  the `CHANGELOG.md` section. `release.yml` refuses a tag that differs from
+  it.
+- **The crate line** is the `version` in each published crate's own
+  `crates/<name>/Cargo.toml`. It never adopts the product version
+  (`version.workspace = true` fails the guard); it is the crate's own SemVer
+  line. Each moved crate continues the line it had in FerroFED: `ihe-iti`
+  from 0.0.39 (FerroFED's last was 0.0.38), `nl-generic-functions` from
+  0.0.25 (FerroFED's last was 0.0.24), though crates.io holds only their
+  0.0.0 reservations.
 
 ## The bump rule
 
-- **A release bumps the workspace version, the changelog section and the
-  lock together** (`cargo update -w`), in the release pull request;
-  `scripts/checks/crate-version-guard.sh` holds the three together.
+- **A pull request that changes the packaged content of a published crate
+  moves that crate's own version in the same pull request.** Packaged
+  content is what the crate's `include` ships (`src/**`, `README.md`,
+  `LICENSE`, `Cargo.toml`), plus a root `[workspace.dependencies]` entry the
+  crate consumes, because `cargo package` renders the concrete requirement.
+  Tests and `CLAUDE.md` are not packaged and need no bump.
+- The crate's manifest and `Cargo.lock` move together (`cargo update -w`).
+  A crate's version never moves backwards.
+- **A release moves the product version and adds its changelog section** in
+  the release pull request; it moves no crate version by itself.
+- Escape: the `no-crate-bump` pull-request label, only when the diff
+  provably alters no packaged byte.
+- Not every bumped version is published; gaps in the published sequence are
+  normal. Publishing different content under an existing version is what is
+  forbidden, and crates.io refuses it.
+- `scripts/checks/crate-version-guard.sh` holds all of this, on every pull
+  request and in `scripts/gh/watch-prs.sh`.
 - Consumers pin each crate exactly (`ihe-iti = "=0.0.39"`): Cargo reads a
   `0.x` caret requirement as compatible across patches
   (<https://doc.rust-lang.org/cargo/reference/semver.html>), and a product
   moves its pin deliberately.
 - **A pull request that breaks a public API says so in its body and its
-  CHANGELOG entry**, naming what a product changes; while the line is `0.x`,
-  such a release moves the minor version.
+  CHANGELOG entry**, naming what a product changes.
 
 ## The publish lane is resumable and verified
 

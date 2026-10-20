@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-20
+
+The move from FerroFED (FerroHEALTH/FerroFED#367): `ihe-iti` 0.0.39 and
+`nl-generic-functions` 0.0.25 are published from FerroPIX, each copied with
+its history and with the corpora it reads re-vendored at FerroFED's pins.
+FerroFED pins both by exact version from crates.io.
+
 ### Added
 
 - `ihe-iti` 0.0.39, moved from FerroFED with its history: the IHE PIXm,

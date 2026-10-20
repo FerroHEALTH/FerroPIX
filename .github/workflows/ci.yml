@@ -456,6 +456,11 @@ jobs:
           - { package: ihe-iti, features: "mcsd,audit" }
           - { package: ihe-iti, features: "pmir,audit" }
           - { package: ihe-iti, features: "xcpd,audit" }
+          - { package: nl-generic-functions, features: authorizer }
+          - { package: nl-generic-functions, features: nvi }
+          - { package: nl-generic-functions, features: mitz }
+          - { package: nl-generic-functions, features: lrza }
+          - { package: nl-generic-functions, features: nuts-auth }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

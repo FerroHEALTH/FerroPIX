@@ -14,8 +14,8 @@
 //!   care provider identifier (URA) of an NL-GF `Organization`.
 //! - `nuts-auth`: GF-Authentication on the Nuts profile: a `DPoP`-bound
 //!   access token for a Verifiable Presentation of the holder's credentials
-//!   (Nuts RFC021), its authorization server held to the RFC 8414 checks of
-//!   the `oauth-server-metadata` crate.
+//!   (Nuts RFC021), its authorization server held to RFC 8414 on the issuer
+//!   rule and metadata location of `ferrohealth-smart`.
 //! - `authorizer`: the authorizer a data user supplies to authenticate each
 //!   request to a Generic Function (the IG's GFI-005), with no FHIR model;
 //!   `nvi` turns it on.
@@ -25,7 +25,9 @@
 //!
 //! The implementation guide is published at
 //! <https://build.fhir.org/ig/nuts-foundation/nl-generic-functions-ig/>. The
-//! crate depends on no application.
+//! crate depends on no application. Its home is FerroHEALTH/FerroPIX, the
+//! FerroHEALTH Master Patient Index, since identification and localization
+//! are a patient index's own functions in the Netherlands.
 #![doc(test(attr(deny(warnings))))]
 
 #[cfg(feature = "authorizer")]

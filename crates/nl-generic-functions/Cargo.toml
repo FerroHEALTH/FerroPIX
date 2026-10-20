@@ -3,9 +3,10 @@
 [package]
 name = "nl-generic-functions"
 description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
-# The crate line starts above the 0.0.0 name reservation on crates.io (no
+# The crate's own version line, continued from FerroFED's 0.0.24 and apart
+# from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.24"
+version = "0.0.25"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -16,15 +17,12 @@ documentation = "https://docs.rs/nl-generic-functions"
 readme = "README.md"
 keywords = ["health", "netherlands", "nuts", "fhir", "localization"]
 categories = ["api-bindings", "science"]
-# The workspace switch decides whether this crate is publishable
-# (no specification governs this: our own design); include is the packaged
-# content.
-publish.workspace = true
+# The packaged content.
 include = ["src/**", "README.md", "LICENSE"]
 
 # One crate for the Netherlands Generic Functions IG, one feature per function
-# (no specification governs this: our own design). The crate depends on nothing
-# in FerroFED.
+# (no specification governs this: our own design). The crate depends on no
+# application.
 [features]
 # The authorizer a data user supplies to authenticate each request to a
 # Generic Function (the IG's GFI-005), with no FHIR, so a crate that only
@@ -74,7 +72,7 @@ lrza = [
 # DPoP-bound token, the presentation signed with the holder's key and the
 # Presentation Submission written to Presentation Exchange 2.0.0.
 nuts-auth = [
-  "dep:oauth-server-metadata",
+  "dep:ferrohealth-smart",
   "dep:base64",
   "dep:http",
   "dep:jiff",
@@ -94,9 +92,9 @@ fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
-# The RFC 8414 issuer and metadata checks the Nuts grant holds its
+# The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to.
-oauth-server-metadata = { workspace = true, optional = true }
+ferrohealth-smart = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }
@@ -107,8 +105,10 @@ url = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+# The synthetic keys and the Nuts node the tests run against.
+aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
-ferrofed-testkit = { workspace = true }
+pem = { workspace = true }
 fhir-types = { workspace = true, features = ["r4", "resources"] }
 http = { workspace = true }
 jiff = { workspace = true }

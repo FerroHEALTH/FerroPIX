@@ -19,7 +19,7 @@
 //! An `Endpoint` of the GF directory carries `connectionType`
 //! `hl7-fhir-rest` in its examples, which does not denote an openEHR Query
 //! API; whoever reads openEHR endpoints from it applies its own
-//! `connectionType` rule (Federation Tier §15.2, N19, CP-20, Annex B §B.2).
+//! `connectionType` rule.
 //!
 //! # Examples
 //!

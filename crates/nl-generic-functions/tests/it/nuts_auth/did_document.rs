@@ -10,8 +10,8 @@
     reason = "the test seam: the written document and the presentation are read as values"
 )]
 
-use ferrofed_testkit::nuts;
-use ferrofed_testkit::oauth::{es384_pem, p256_pem};
+use crate::testkit::keys::{es384_pem, p256_pem};
+use crate::testkit::nuts;
 use jsonwebtoken::{DecodingKey, Validation};
 use nl_generic_functions::nuts_auth::did_document::{
     DID_CONTEXT, DidDocument, DocumentError, JSON_WEB_KEY_2020, JWS_2020_CONTEXT,

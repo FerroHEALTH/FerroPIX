@@ -4,9 +4,8 @@
 //! GF-Authentication on the Nuts profile (feature `nuts-auth`).
 //!
 //! The client side of the access token request with a Verifiable
-//! Presentation as the authorization grant, and a `DPoP`-bound token (Annex B
-//! §B.4 of the Federation Tier specification; the IG's GFI-004 and GFI-005;
-//! Nuts RFC021).
+//! Presentation as the authorization grant, and a `DPoP`-bound token (the
+//! IG's GFI-004 and GFI-005; Nuts RFC021).
 //!
 //! [`NutsClient::request_access_token`] runs the flow of Nuts RFC021 §1
 //! against one authorization server:
@@ -96,6 +95,7 @@
 pub mod did_document;
 pub mod error;
 pub mod holder;
+mod issuer;
 mod metadata;
 pub mod presentation;
 
@@ -114,7 +114,7 @@ use error::{InvalidInput, Malformation, NutsAuthError, Step, bounded};
 use holder::Holder;
 use presentation::PresentationDefinition;
 
-use oauth_server_metadata::Issuer;
+use crate::nuts_auth::issuer::{Issuer, repeats_no_name};
 
 /// The `grant_type` of the VP Token Grant Type (Nuts RFC021 §3).
 pub const GRANT_TYPE: &str = "vp_token-bearer";
@@ -185,16 +185,16 @@ impl Grant {
     /// The grant of `scope` at the authorization server whose issuer
     /// identifier is `authorization_server` (RFC 8414 §2).
     ///
-    /// The issuer is an `https` URL (RFC 8414 §2, Nuts RFC021 §7); `http` is
-    /// accepted for a test or development setup, and the caller decides
-    /// whether a deployment may use it.
+    /// The issuer is an `https` URL (RFC 8414 §2, Nuts RFC021 §7); plain
+    /// `http` is accepted on a loopback host only, for a test or development
+    /// setup, as `ferrohealth_smart::metadata::issuer_url` rules.
     ///
     /// # Errors
     ///
     /// Returns [`InvalidInput::AuthorizationServer`] for an issuer that is no
-    /// `http` or `https` URL, carries userinfo, a query or a fragment, or is
-    /// not written in the canonical form the URL parser gives it (a lower-case
-    /// host, no default port), and
+    /// `https` URL (or `http` on a loopback host), carries userinfo, a query
+    /// or a fragment, or is not written in the canonical form the URL parser
+    /// gives it (a lower-case host, no default port), and
     /// [`InvalidInput::Scope`] for a scope that is empty or holds a character
     /// outside RFC 6749 §3.3.
     pub fn new(authorization_server: &str, scope: &str) -> Result<Self, InvalidInput> {
@@ -519,7 +519,7 @@ fn json<T: DeserializeOwned>(answer: &Answer, step: Step) -> Result<T, NutsAuthE
     if !answer.json {
         return Err(malformed(Malformation::MediaType));
     }
-    oauth_server_metadata::repeats_no_name(&answer.body).map_err(|error| {
+    repeats_no_name(&answer.body).map_err(|error| {
         malformed(if error.is_data() {
             Malformation::RepeatedName {
                 line: error.line(),

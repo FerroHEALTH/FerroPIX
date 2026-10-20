@@ -5,7 +5,10 @@
 
 The Netherlands Generic Functions for health data exchange (the Nuts
 `nl-generic-functions-ig`, package `fhir.nl.gf` 0.3.0) in Rust: one crate for
-the implementation guide, with a feature per function.
+the implementation guide, with a feature per function. It is published from
+[FerroPIX](https://github.com/FerroHEALTH/FerroPIX), the FerroHEALTH Master
+Patient Index, since identification and localization are a patient index's
+own functions in the Netherlands.
 
 | Feature | Generic Function | Service | What the crate holds |
 |---|---|---|---|
@@ -29,7 +32,12 @@ query, so the pseudonym never reaches it.
 
 The Nuts client never puts a credential, the presentation, a key, a proof or
 the token in an error or a `Debug` rendering, and sends no credential before
-the authorization server's Presentation Definition says they answer it.
+the authorization server's Presentation Definition says they answer it. The
+authorization server's issuer is an `https` URL, or plain `http` on a
+loopback host for a test, as the metadata module of
+[`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) rules
+(RFC 8414 §2); its metadata is read from the RFC 8414 §3.1 location and must
+name that issuer exactly (§3.3).
 
 The Mitz client follows the VZVZ *Implementatiehandleiding Open en gesloten
 autorisatievraag* 3.8.2: a SOAP 1.2 request carrying one XACML 3.0

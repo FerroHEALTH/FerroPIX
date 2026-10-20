@@ -4,8 +4,8 @@
 //! The authorization server metadata the grant reads (RFC 8414; Nuts RFC021
 //! §3.1 and §5; RFC 9449 §5.1).
 //!
-//! The issuer and endpoint checks both Annex B tracks share are
-//! [`oauth_server_metadata`]'s; the members only the Nuts profile reads are
+//! The issuer and endpoint checks are the [`Issuer`]'s, on the URL rule of
+//! `ferrohealth_smart::metadata`; the members only the Nuts profile reads are
 //! checked here.
 
 use std::collections::BTreeMap;
@@ -14,8 +14,8 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::nuts_auth::error::MetadataError;
+use crate::nuts_auth::issuer::{EndpointError, Issuer};
 use crate::nuts_auth::presentation::JWT_VP;
-use oauth_server_metadata::{EndpointError, Issuer};
 
 /// The metadata members the grant reads.
 #[derive(Deserialize)]
@@ -101,7 +101,7 @@ fn endpoint(text: Option<&str>, issuer: &Issuer) -> Result<Url, Option<MetadataE
         .map_err(|refused| match refused {
             EndpointError::OtherOrigin => Some(MetadataError::OtherOrigin),
             EndpointError::Insecure => Some(MetadataError::InsecureEndpoint),
-            _ => None,
+            EndpointError::NotAUrl => None,
         })
 }
 

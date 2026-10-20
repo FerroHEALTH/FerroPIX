@@ -15,8 +15,8 @@ mod refusals;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use ferrofed_testkit::nuts::{self, NutsNode};
-use ferrofed_testkit::oauth::p256_pem;
+use crate::testkit::keys::p256_pem;
+use crate::testkit::nuts::{self, NutsNode};
 use jsonwebtoken::jwk::Jwk;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use nl_generic_functions::nuts_auth::error::ProofError;

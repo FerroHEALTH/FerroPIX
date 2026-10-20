@@ -21,6 +21,12 @@ and this project adheres to
   `=0.1.0`. A product changes `ihe_iti::user` to `ihe_atna::user`,
   `ihe_iti::balp` and `ihe_iti::atna` to `ihe_atna::balp` and
   `ihe_atna::atna`, and the features `balp` and `atna` to `audit` (#25).
+- `nl-generic-functions` 0.0.25, moved from FerroFED with its history: NVI
+  localization, the Mitz closed authorization question, LRZa addressing and
+  the Nuts access token request, a feature each. `nuts-auth` no longer
+  depends on `oauth-server-metadata`, which is retired: it takes the RFC
+  8414 issuer rule and metadata location from `ferrohealth-smart` `=0.3.1`.
+  A plain `http` issuer is now accepted on a loopback host only (#26).
 - The IHE citation guard, `scripts/checks/ihe-citations.sh`, and the corpora
   its audit citations read at FerroFED's pins: the BALP package and
   narrative pages and the ITI-20 page with the RESTful ATNA supplement

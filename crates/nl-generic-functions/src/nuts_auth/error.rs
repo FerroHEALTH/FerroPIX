@@ -21,11 +21,11 @@ pub const TEXT_LIMIT: usize = 256;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum InvalidInput {
-    /// The authorization server's issuer identifier is not an `http` or
-    /// `https` URL without userinfo, query or fragment (RFC 8414 §2), written
-    /// in its canonical form.
+    /// The authorization server's issuer identifier is not an `https` URL
+    /// (or `http` on a loopback host) without userinfo, query or fragment
+    /// (RFC 8414 §2), written in its canonical form.
     #[error(
-        "the authorization server is not an http(s) URL without userinfo, query or fragment (RFC 8414 §2), in canonical form"
+        "the authorization server is not an https URL (or http on a loopback host) without userinfo, query or fragment (RFC 8414 §2), in canonical form"
     )]
     AuthorizationServer,
     /// The scope is empty, or a scope token holds a character RFC 6749 §3.3

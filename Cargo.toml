@@ -23,15 +23,24 @@ authors = ["Ruben Talstra"]
 # each.
 [workspace.dependencies]
 async-trait = "0.1.92"
+# The synthetic test keys of the Nuts tests, at the version FerroFED pins.
+aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 # The generated FHIR model of FerroBRIDGE, at the version FerroFED and
 # ihe-atna pin.
 fhir-types = { version = "0.1.113", default-features = false }
+# The SMART and OAuth 2.0 crate of FerroHEALTH/FerroSMART: the RFC 8414
+# issuer rule and metadata location of the Nuts grant, without its HTTP
+# fetchers; pinned exactly, as every family crate.
+ferrohealth-smart = { version = "=0.3.1", default-features = false }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share; pinned exactly, as every family crate.
 ihe-atna = { version = "=0.1.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
+jsonschema = { version = "0.58.3", default-features = false }
+jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+pem = { version = "3.0.6", default-features = false, features = ["std"] }
 quick-xml = { version = "0.42.0", default-features = false }
 reqwest = { version = "0.13.5", default-features = false }
 secrecy = "0.10.3"

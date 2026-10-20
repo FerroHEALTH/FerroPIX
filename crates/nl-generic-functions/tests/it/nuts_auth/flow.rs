@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use ferrofed_testkit::nuts::{self, Verdict};
+use crate::testkit::nuts::{self, Verdict};
 use nl_generic_functions::nuts_auth::{
     CREDENTIALS_CONTEXT, GRANT_TYPE, PRESENTATION_LIFETIME, PRESENTATION_TYPE,
 };

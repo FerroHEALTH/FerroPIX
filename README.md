@@ -8,6 +8,44 @@ A Master Patient Index for the openEHR platform, in pure Rust: who the patient i
 
 Every organisation issues its own identifiers for the same person, and records move. FerroPIX holds the cross-reference between those identifiers and the location of each record, and answers the question every other component starts with: who is this patient, and where is their record. It exposes that over the IHE profiles integrators already expect, PIX and PDQ, in their FHIR forms PIXm and PDQm, and it keeps identifying data outside the clinical record, which is where the openEHR Platform Service Model puts the EHR Index.
 
+## What it does
+
+FerroPIX holds the patient identity cross-reference and mints the
+pseudonymous identifiers the clinical domain uses, so a clinical record
+carries a pseudonym and never a directly identifying identifier. FerroEHR
+resolves its `ehr_id` through it, and FerroFED's identity binding points at
+it. It serves FHIR and HL7 v2 together:
+
+- **PIXm and PIX:** the identifier cross-reference query (ITI-83 by GET and
+  POST, with several target systems) and the FHIR identity feed (ITI-104),
+  with the HL7 v2 PIX transactions (ITI-8, ITI-9) beside them.
+- **PDQm and PDQ:** the demographics query and match (ITI-78, ITI-119), with
+  the HL7 v2 PDQ transactions (ITI-21, ITI-22).
+- **PMIR:** the patient master identity feed and subscription (ITI-93,
+  ITI-94).
+- **The cross-reference:** identifier domains, one source per domain,
+  linking and merge, persisted.
+- **Pseudonyms:** one per patient and pseudonymisation domain.
+
+It also publishes the libraries of the identity specifications it
+implements, for every product to use: `ihe-iti` (the IHE identity profiles,
+a feature each) and `nl-generic-functions` (the Dutch Generic Functions).
+
+## Status
+
+The build order is the milestones. v0.0.1 sets up the repository; v0.0.2
+moves `ihe-iti` and `nl-generic-functions` here from FerroFED, where they
+were built first; v0.0.3 is the server. The specifications are the
+authority: the IHE ITI Technical Framework, the IHE PIXm, PDQm and PMIR
+implementation guides, HL7 FHIR R4 and HL7 v2.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and
+[SUPPORT.md](SUPPORT.md).
+
+## The family
+
 FerroPIX is one of the [FerroHEALTH](https://ferrohealth.eu/) family. The family
 page shows where it sits among the eight and what calls what, and this
 repository is where the design and the build happen; the tracker is the

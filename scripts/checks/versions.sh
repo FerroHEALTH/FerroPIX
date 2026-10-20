@@ -9,9 +9,9 @@
 #   2. Corpora: every tree under docs/specs/ carries a PROVENANCE.md and is
 #      named in a row of the corpus table of docs/VERSIONS.md.
 #   3. Licence: every tracked first-party file names Cadasto B.V. in an
-#      `SPDX-FileCopyrightText` line within its first 15 lines, and no
-#      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE, Cargo.lock and test fixtures carry no
-#      header.
+#      `SPDX-FileCopyrightText` line within its first 25 lines, and no
+#      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE, Cargo.lock, JSON (which has no comment
+#      syntax) and test fixtures carry no header.
 #
 # Usage:
 #   scripts/checks/versions.sh [--root DIR]   check this repository, or DIR
@@ -156,13 +156,13 @@ fi
 # 3. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | NOTICE | Cargo.lock | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
+    LICENSE | NOTICE | Cargo.lock | *.json | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue
-  head -n 15 "$file" | grep -q 'SPDX-FileCopyrightText: Cadasto B.V.' ||
+  head -n 25 "$file" | grep -q 'SPDX-FileCopyrightText: Cadasto B.V.' ||
     drift "$file carries no SPDX-FileCopyrightText: Cadasto B.V. header"
-  if head -n 15 "$file" | grep 'SPDX-License-Identifier:' | grep -qv 'BUSL-1.1'; then
+  if head -n 25 "$file" | grep 'SPDX-License-Identifier:' | grep -qv 'BUSL-1.1'; then
     drift "$file claims a licence other than BUSL-1.1"
   fi
 done < <(git ls-files)

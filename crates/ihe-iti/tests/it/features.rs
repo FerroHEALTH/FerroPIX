@@ -1,0 +1,165 @@
+// SPDX-FileCopyrightText: Cadasto B.V.
+// SPDX-License-Identifier: BUSL-1.1
+
+//! The feature boundaries, read from the crate graph one feature at a time
+//! (no specification governs them: our own design).
+//!
+//! Only `xcpd` carries the SOAP 1.2, HL7 v3 and XUA stack: a build of any
+//! other feature compiles none of the crates `xcpd` adds and names none of
+//! them as a dependency of its own. `quick-xml` itself is in every FHIR
+//! feature's graph already, through `fhir-types`, which depends on it
+//! unconditionally; what `xcpd` adds is the crate's own use of it, its
+//! message and query ids, and its clock. `audit` stamps each record with its
+//! time, so it shares the clock, and never the message ids. No feature
+//! reaches another member of this workspace or an application of the
+//! family, so any caller can use the crate as it is.
+
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// Every feature of the crate.
+const FEATURES: &[&str] = &["audit", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
+
+/// The crates only `xcpd` compiles.
+const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
+
+/// The crates `xcpd` names as dependencies of its own for its stack.
+const XCPD_DIRECT: &[&str] = &["jiff", "quick-xml", "uuid"];
+
+/// The workspace root, two levels above this crate's manifest.
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+
+/// A cargo home of its own for a child cargo, in a temporary directory whose
+/// `registry` and `git` link to the real home's.
+///
+/// The child resolves offline from the lockfile and the registry already on
+/// disk (`--frozen`), which only reads those caches, yet cargo still takes
+/// the package cache lock of its home, and a cargo building elsewhere on the
+/// machine holds that lock for its whole build. No other cargo takes the lock
+/// of this home (the Cargo book, "Cargo Home"). The engine's architecture
+/// tests do the same; this crate keeps its own copy because the testkit
+/// depends on it, and a dev-dependency back on the testkit would unify the
+/// testkit's features of this crate into every test build of it.
+fn private_cargo_home() -> tempfile::TempDir {
+    let home = tempfile::tempdir().expect("a temporary cargo home");
+    let shared = std::env::var_os("CARGO_HOME").map_or_else(
+        || {
+            std::env::home_dir()
+                .expect("CARGO_HOME or a home directory names the cargo home")
+                .join(".cargo")
+        },
+        PathBuf::from,
+    );
+    for cache in ["registry", "git"] {
+        let source = shared.join(cache);
+        if source.exists() {
+            std::os::unix::fs::symlink(&source, home.path().join(cache))
+                .expect("the shared cache links into the private home");
+        }
+    }
+    home
+}
+
+/// The package names `cargo tree` lists for this crate with only `feature`
+/// on, through normal dependencies, down to `depth` when given.
+fn tree(feature: &str, depth: Option<&str>) -> BTreeSet<String> {
+    let home = private_cargo_home();
+    let mut command = Command::new(env!("CARGO"));
+    command
+        .env("CARGO_HOME", home.path())
+        .env("CARGO_CACHE_AUTO_CLEAN_FREQUENCY", "never")
+        .arg("tree")
+        .arg("--manifest-path")
+        .arg(Path::new(ROOT).join("Cargo.toml"))
+        .args(["--package", "ihe-iti"])
+        .args(["--edges", "normal"])
+        .args(["--prefix", "none", "--format", "{p}"])
+        .args(["--no-default-features", "--features", feature, "--frozen"]);
+    if let Some(depth) = depth {
+        command.args(["--depth", depth]);
+    }
+    let output = command.output().expect("cargo tree runs");
+    assert!(
+        output.status.success(),
+        "cargo tree failed for {feature}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let names: BTreeSet<String> = String::from_utf8(output.stdout)
+        .expect("UTF-8 output")
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect();
+    assert!(
+        names.contains("ihe-iti"),
+        "cargo tree for {feature} did not list the crate itself, so its output was not read"
+    );
+    names
+}
+
+/// The package names of the members under one workspace directory.
+fn members(directory: &str) -> BTreeSet<String> {
+    std::fs::read_dir(Path::new(ROOT).join(directory))
+        .expect("a workspace directory")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().join("Cargo.toml").is_file())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect()
+}
+
+#[test]
+fn only_xcpd_compiles_the_soap_and_xua_stack() {
+    let xcpd = tree("xcpd", None);
+    for name in XCPD_ONLY {
+        assert!(xcpd.contains(*name), "xcpd lost {name}: {xcpd:?}");
+    }
+    let xcpd_direct = tree("xcpd", Some("1"));
+    for name in XCPD_DIRECT {
+        assert!(xcpd_direct.contains(*name), "xcpd names {name}");
+    }
+    let audit = tree("audit", None);
+    assert!(
+        !audit.contains("uuid"),
+        "audit compiles the message ids: {audit:?}"
+    );
+    for feature in FEATURES
+        .iter()
+        .filter(|feature| !["xcpd", "audit"].contains(*feature))
+    {
+        let closure = tree(feature, None);
+        let leaked: Vec<&&str> = XCPD_ONLY
+            .iter()
+            .filter(|name| closure.contains(**name))
+            .collect();
+        assert!(leaked.is_empty(), "{feature} compiles {leaked:?}");
+        let direct = tree(feature, Some("1"));
+        let named: Vec<&&str> = XCPD_DIRECT
+            .iter()
+            .filter(|name| direct.contains(**name))
+            .collect();
+        assert!(named.is_empty(), "{feature} names {named:?} itself");
+    }
+}
+
+#[test]
+fn no_feature_depends_on_another_member_or_an_application() {
+    let mut internal = members("crates");
+    if Path::new(ROOT).join("app").is_dir() {
+        internal.extend(members("app"));
+    }
+    assert!(internal.remove("ihe-iti"), "the crate map lost ihe-iti");
+    for feature in FEATURES {
+        let closure = tree(feature, None);
+        let reached: Vec<&String> = closure
+            .iter()
+            .filter(|name| {
+                internal.contains(*name)
+                    || ["ferropix-", "ferrofed-", "ferroehr-"]
+                        .iter()
+                        .any(|application| name.starts_with(application))
+            })
+            .collect();
+        assert!(reached.is_empty(), "{feature} depends on {reached:?}");
+    }
+}

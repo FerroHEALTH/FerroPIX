@@ -14,6 +14,8 @@
 - [Corpora move with the crates](corpora-move-with-crates.md): every corpus
   the moved crates read comes here with its script and provenance; each
   FerroFED swap PR removes the copies nothing there reads; owner 2026-10-20
+- [ihe-iti audit feature](ihe-iti-audit-feature.md): each profile's audit
+  record stays in ihe-iti behind `audit`, on ihe-atna's trail and user model
 - [Licence: BUSL 1.1](license-busl.md): the FerroHEALTH terms, Cadasto B.V.
   the Licensor, Apache 2.0 four years after each version
 - [No AI attribution](no-ai-attribution.md): never, anywhere; the hook

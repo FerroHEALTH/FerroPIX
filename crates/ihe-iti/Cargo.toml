@@ -1,0 +1,145 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ihe-iti"
+description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile, with each profile's audit record behind `audit`"
+# The crate's own version line, continued from FerroFED's 0.0.38 and apart
+# from the product version (.claude/rules/crates-publishing.md; no
+# specification governs this: our own design).
+version = "0.0.39"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+documentation = "https://docs.rs/ihe-iti"
+readme = "README.md"
+keywords = ["ihe", "fhir", "pixm", "mcsd", "health"]
+categories = ["api-bindings", "science"]
+# The packaged content.
+include = ["src/**", "README.md", "LICENSE"]
+
+# One crate for the IHE ITI Technical Framework, one feature per profile
+# (no specification governs this: our own design). The crate depends on no
+# application, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
+# XUA stack. The user an exchange is made for is `ihe-atna`'s model, so an
+# audit record and the exchange share one type.
+[features]
+# PIXm, the patient identifier cross-reference (ITI-83): the HTTP client,
+# the FHIR R4 `terminology` root set for Parameters and OperationOutcome, and
+# the redacting secret type the identifiers travel in.
+pixm = [
+  "dep:fhir-types",
+  "dep:ihe-atna",
+  "fhir-types/r4",
+  "fhir-types/terminology",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
+# PDQm, the patient demographics query and match (ITI-78, ITI-119):
+# the HTTP client, the FHIR R4 `resources` root set for the Patient resources
+# a search or a match answers with and the Parameters a match posts, and the
+# redacting secret type the demographics travel in.
+pdqm = [
+  "dep:fhir-types",
+  "dep:ihe-atna",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
+# mCSD, the care services directory (ITI-90, ITI-91): the FHIR R4 `resources`
+# root set for the Organization and Endpoint resources a directory publishes,
+# and the HTTP client of the ITI-90 searches and the ITI-91 history.
+mcsd = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
+# PMIR, the patient master identity registry (ITI-93, ITI-94): the HTTP
+# client of the ITI-94 subscription, the FHIR R4 `resources` root set for the
+# Subscription, the message Bundle, its MessageHeader and the Patient resources
+# an ITI-93 feed carries, and the redacting secret type the identifiers travel
+# in.
+pmir = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
+# XCPD, cross-community patient discovery (ITI-55): the HTTP client the
+# SOAP 1.2 envelope travels on, the XML reader and writer of the envelope and
+# the HL7 v3 messages, the message and query ids, the creation time, the
+# redacting secret type the identifiers travel in, and the timer that bounds
+# an exchange's audit record by the exchange's timeout. The SAML XUA assertion is
+# supplied by the caller and embedded as written, so no signing crate is
+# compiled.
+xcpd = [
+  "dep:async-trait",
+  "dep:http",
+  "dep:ihe-atna",
+  "dep:jiff",
+  "dep:quick-xml",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:thiserror",
+  "dep:tokio",
+  "dep:url",
+  "dep:uuid",
+]
+# The audit record each profile defines for its own transactions, written
+# for the audit trail of `ihe-atna`: with `pixm`, `pdqm`, `mcsd` or `pmir` the
+# BALP AuditEvent of that profile's transactions, recorded through an
+# `ihe_atna::balp::AuditRecorder`, and with `xcpd` the DICOM audit message of
+# ITI-55 (§3.55.5.1), which needs `ihe-atna`'s `atna`, part of its `balp`.
+# A record carries the time of its event, and the recorder's wait is bounded
+# by the exchange's own deadline.
+audit = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
+
+[dependencies]
+async-trait = { workspace = true, optional = true }
+fhir-types = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+ihe-atna = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["rustls"] }
+secrecy = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["fs", "io-util", "net", "rt", "sync", "time"] }
+url = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+async-trait = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util"] }
+tracing-subscriber = { workspace = true }
+wiremock = { workspace = true }
+
+[lints]
+workspace = true

@@ -156,7 +156,7 @@ fi
 # 3. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | NOTICE | Cargo.lock | *.json | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | *.json | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

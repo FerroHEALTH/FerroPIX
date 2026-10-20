@@ -1,0 +1,341 @@
+{
+  "index-version" : 2,
+  "files" : [
+    {
+      "filename" : "ImplementationGuide-ihe.iti.balp.json",
+      "resourceType" : "ImplementationGuide",
+      "id" : "ihe.iti.balp",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ImplementationGuide/ihe.iti.balp",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "CapabilityStatement-IHE.BALP.ATNA.AuditRecordRepository.json",
+      "resourceType" : "CapabilityStatement",
+      "id" : "IHE.BALP.ATNA.AuditRecordRepository",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CapabilityStatement/IHE.BALP.ATNA.AuditRecordRepository",
+      "version" : "1.1.4",
+      "kind" : "requirements"
+    },
+    {
+      "filename" : "CapabilityStatement-IHE.BALP.AuditConsumer.json",
+      "resourceType" : "CapabilityStatement",
+      "id" : "IHE.BALP.AuditConsumer",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CapabilityStatement/IHE.BALP.AuditConsumer",
+      "version" : "1.1.4",
+      "kind" : "requirements"
+    },
+    {
+      "filename" : "CapabilityStatement-IHE.BALP.AuditCreator.json",
+      "resourceType" : "CapabilityStatement",
+      "id" : "IHE.BALP.AuditCreator",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CapabilityStatement/IHE.BALP.AuditCreator",
+      "version" : "1.1.4",
+      "kind" : "requirements"
+    },
+    {
+      "filename" : "CodeSystem-AuthZsubType.json",
+      "resourceType" : "CodeSystem",
+      "id" : "AuthZsubType",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CodeSystem/AuthZsubType",
+      "version" : "1.1.4",
+      "content" : "complete"
+    },
+    {
+      "filename" : "CodeSystem-BasicAuditEntityType.json",
+      "resourceType" : "CodeSystem",
+      "id" : "BasicAuditEntityType",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CodeSystem/BasicAuditEntityType",
+      "version" : "1.1.4",
+      "content" : "complete"
+    },
+    {
+      "filename" : "CodeSystem-OtherIdentifierTypes.json",
+      "resourceType" : "CodeSystem",
+      "id" : "OtherIdentifierTypes",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CodeSystem/OtherIdentifierTypes",
+      "version" : "1.1.4",
+      "content" : "complete"
+    },
+    {
+      "filename" : "CodeSystem-UserAgentTypes.json",
+      "resourceType" : "CodeSystem",
+      "id" : "UserAgentTypes",
+      "url" : "https://profiles.ihe.net/ITI/BALP/CodeSystem/UserAgentTypes",
+      "version" : "1.1.4",
+      "content" : "complete"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.AuthZconsent.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.AuthZconsent",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.AuthZconsent",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.Create.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.Create",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Create",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.Delete.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.Delete",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Delete",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.OAUTHaccessTokenUse.Comprehensive.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.OAUTHaccessTokenUse.Comprehensive",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.OAUTHaccessTokenUse.Comprehensive",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.OAUTHaccessTokenUse.Minimal.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.OAUTHaccessTokenUse.Minimal",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.OAUTHaccessTokenUse.Minimal",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.OAUTHaccessTokenUse.Opaque.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.OAUTHaccessTokenUse.Opaque",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.OAUTHaccessTokenUse.Opaque",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PatientCreate.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PatientCreate",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PatientCreate",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PatientDelete.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PatientDelete",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PatientDelete",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PatientQuery.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PatientQuery",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PatientQuery",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PatientRead.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PatientRead",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PatientRead",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PatientUpdate.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PatientUpdate",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PatientUpdate",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PrivacyDisclosure.Recipient.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PrivacyDisclosure.Recipient",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PrivacyDisclosure.Recipient",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.PrivacyDisclosure.Source.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.PrivacyDisclosure.Source",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PrivacyDisclosure.Source",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.Query.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.Query",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Query",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.Read.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.Read",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Read",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.SAMLaccessTokenUse.Comprehensive.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.SAMLaccessTokenUse.Comprehensive",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.SAMLaccessTokenUse.Comprehensive",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.SAMLaccessTokenUse.Minimal.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.SAMLaccessTokenUse.Minimal",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.SAMLaccessTokenUse.Minimal",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.BasicAudit.Update.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.BasicAudit.Update",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Update",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-IHE.IUA.71.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "IHE.IUA.71",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.IUA.71",
+      "version" : "1.1.4",
+      "kind" : "resource",
+      "type" : "AuditEvent",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-ihe-assuranceLevel.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "ihe-assuranceLevel",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/ihe-assuranceLevel",
+      "version" : "1.1.4",
+      "kind" : "complex-type",
+      "type" : "Extension",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "StructureDefinition-ihe-otherId.json",
+      "resourceType" : "StructureDefinition",
+      "id" : "ihe-otherId",
+      "url" : "https://profiles.ihe.net/ITI/BALP/StructureDefinition/ihe-otherId",
+      "version" : "1.1.4",
+      "kind" : "complex-type",
+      "type" : "Extension",
+      "derivation" : "constraint"
+    },
+    {
+      "filename" : "ValueSet-AllReadVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "AllReadVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/AllReadVS",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-AllSearchVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "AllSearchVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/AllSearchVS",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-AllUpdateVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "AllUpdateVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/AllUpdateVS",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-AuthZsubTypeVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "AuthZsubTypeVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/AuthZsubTypeVS",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-BasicAuditEntityTypesVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "BasicAuditEntityTypesVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/BasicAuditEntityTypesVS",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-DataSources.json",
+      "resourceType" : "ValueSet",
+      "id" : "DataSources",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/DataSources",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-OtherIdentifierTypesVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "OtherIdentifierTypesVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/OtherIdentifierTypesVS",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-RestObjectRoles.json",
+      "resourceType" : "ValueSet",
+      "id" : "RestObjectRoles",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/RestObjectRoles",
+      "version" : "1.1.4"
+    },
+    {
+      "filename" : "ValueSet-UserAgentTypesVS.json",
+      "resourceType" : "ValueSet",
+      "id" : "UserAgentTypesVS",
+      "url" : "https://profiles.ihe.net/ITI/BALP/ValueSet/UserAgentTypesVS",
+      "version" : "1.1.4"
+    }
+  ]
+}

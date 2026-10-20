@@ -16,10 +16,19 @@ avoid-breaking-exported-api = false
 # Compile-time API bans. A legitimate exception site carries a scoped
 # #[expect(clippy::disallowed_methods, reason = "...")].
 disallowed-methods = [
+  { path = "std::time::SystemTime::now", reason = "wall-clock time comes from jiff; std::time::Instant stays fine for latency" },
   { path = "core::option::Option::as_slice", reason = "on an Option<Vec<T>> this yields a slice of zero or one vectors, never &[T]; spell it .as_deref().unwrap_or_default() or match" },
   { path = "core::option::Option::as_mut_slice", reason = "on an Option<Vec<T>> this yields a slice of zero or one vectors, never &mut [T]; match instead" },
 ]
 
+disallowed-types = [
+  { path = "serde_json::Value", reason = "typed carriers only; a Value lives only at a wire seam or a test, behind a scoped #[expect] naming its seam" },
+  { path = "chrono::DateTime", reason = "jiff is the one time library" },
+  { path = "chrono::NaiveDate", reason = "jiff is the one time library" },
+  { path = "chrono::NaiveDateTime", reason = "jiff is the one time library" },
+  { path = "chrono::NaiveTime", reason = "jiff is the one time library" },
+]
+
 # Product, specification and organisation names are words, not code, in
 # documentation.
-doc-valid-idents = ["FerroPIX", "FerroHEALTH", "FerroEHR", "FerroFED", "FerroBRIDGE", "FerroTERM", "FerroSMART", "FerroAUDIT", "FerroUI", "openEHR", "PIXm", "PDQm", "PMIR", "mCSD", "XCPD", "IUA", "BALP", "ATNA", "HL7", "FHIR", "MLLP", "BSN", "BSNk", ".."]
+doc-valid-idents = ["FerroPIX", "FerroHEALTH", "FerroEHR", "FerroFED", "FerroBRIDGE", "FerroTERM", "FerroSMART", "FerroAUDIT", "FerroUI", "openEHR", "PIXm", "PDQm", "PMIR", "mCSD", "XCPD", "IUA", "BALP", "ATNA", "HL7", "FHIR", "MLLP", "BSN", "BSNk", "LRZa", "OAuth", "OpenID", ".."]

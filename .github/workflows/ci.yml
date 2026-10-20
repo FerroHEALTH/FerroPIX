@@ -429,6 +429,77 @@ jobs:
             cargo publish -p "$crate" --dry-run --locked
           done <<< "$crates"
 
+  # Each published crate is one specification with a feature per profile, so
+  # every feature, and every profile with the `audit` feature, must lint and
+  # test on its own as well as in the workspace union (the Cargo reference,
+  # Features; no specification governs the layout: our own design).
+  features:
+    name: features (${{ matrix.package }} ${{ matrix.features }})
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { package: ihe-iti, features: pixm }
+          - { package: ihe-iti, features: pdqm }
+          - { package: ihe-iti, features: mcsd }
+          - { package: ihe-iti, features: pmir }
+          - { package: ihe-iti, features: xcpd }
+          - { package: ihe-iti, features: audit }
+          - { package: ihe-iti, features: "pixm,audit" }
+          - { package: ihe-iti, features: "pdqm,audit" }
+          - { package: ihe-iti, features: "mcsd,audit" }
+          - { package: ihe-iti, features: "pmir,audit" }
+          - { package: ihe-iti, features: "xcpd,audit" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-nextest
+      - name: Lint the feature set on its own
+        env:
+          PACKAGE: ${{ matrix.package }}
+          FEATURES: ${{ matrix.features }}
+        run: cargo clippy -p "$PACKAGE" --all-targets --no-default-features --features "$FEATURES" --locked -- -D warnings
+      - name: Test the feature set on its own
+        env:
+          PACKAGE: ${{ matrix.package }}
+          FEATURES: ${{ matrix.features }}
+        run: cargo nextest run -p "$PACKAGE" --no-default-features --features "$FEATURES" --locked --no-tests=warn
+
+  # Every IHE section a tracked file cites exists in the vendored text of that
+  # profile and version. The RESTful ATNA supplement is a PDF, read with
+  # pdftotext, so poppler-utils comes from the runner's own archive.
+  ihe-citations:
+    name: ihe-citations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pdftotext
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends poppler-utils
+      - run: |
+          set -euo pipefail
+          bash scripts/checks/ihe-citations.sh --self-test
+          bash scripts/checks/ihe-citations.sh
+
   dependency-review:
     name: dependency-review
     needs: detect
@@ -472,6 +543,8 @@ jobs:
       - doc
       - cargo-deny
       - publish-dry-run
+      - features
+      - ihe-citations
       - dependency-review
     if: always()
     runs-on: ubuntu-latest

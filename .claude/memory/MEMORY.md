@@ -26,6 +26,8 @@
   `gh pr merge <n> --auto`
 - [PR licence box](pr-licence-box.md): tick the contribution-licence box in
   every pull request body; the owner's standing consent
+- [Two version lines](two-version-lines.md): the product version is the
+  workspace and the tag; each published crate keeps its own line
 - [Release tag](release-tag.md): signed on the merge commit, pushed from the
   session; the crates-io environment waits for the owner
 - [Release closes milestone](release-closes-milestone.md): release.yml

@@ -16,10 +16,6 @@ on:
         description: The vX.Y.Z tag being released.
         required: true
         type: string
-      version:
-        description: The version the tag names.
-        required: true
-        type: string
       crates:
         description: The published crates, space-separated, in dependency order.
         required: true
@@ -43,19 +39,21 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache: "false"
+      # Each crate is on its own version line, apart from the tag
+      # (.claude/rules/crates-publishing.md), so its files carry its own.
       - name: Package the crates
         env:
-          VERSION: ${{ inputs.version }}
           CRATES: ${{ inputs.crates }}
         run: |
           set -euo pipefail
           mkdir dist
           for crate in $CRATES; do
+            version="$(bash scripts/release/publish-crates.sh version "$crate")"
             cargo package -p "$crate" --locked
-            file="target/package/${crate}-${VERSION}.crate"
+            file="target/package/${crate}-${version}.crate"
             test -s "$file"
             cp "$file" dist/
-            (cd dist && sha256sum "${crate}-${VERSION}.crate" > "${crate}-${VERSION}.crate.sha256sum")
+            (cd dist && sha256sum "${crate}-${version}.crate" > "${crate}-${version}.crate.sha256sum")
           done
       - id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -65,15 +63,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-          VERSION: ${{ inputs.version }}
           CRATES: ${{ inputs.crates }}
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
           for crate in $CRATES; do
-            cp "$BUNDLE" "dist/${crate}-${VERSION}.crate.sigstore.json"
+            version="$(bash scripts/release/publish-crates.sh version "$crate")"
+            cp "$BUNDLE" "dist/${crate}-${version}.crate.sigstore.json"
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              "dist/${crate}-${VERSION}.crate" \
-              "dist/${crate}-${VERSION}.crate.sha256sum" \
-              "dist/${crate}-${VERSION}.crate.sigstore.json"
+              "dist/${crate}-${version}.crate" \
+              "dist/${crate}-${version}.crate.sha256sum" \
+              "dist/${crate}-${version}.crate.sigstore.json"
           done

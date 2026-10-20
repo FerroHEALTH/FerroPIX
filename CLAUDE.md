@@ -21,6 +21,10 @@ FerroPIX in prose, `ferropix` in identifiers.
   pseudonyms, NVI localization, Mitz and Nuts). FerroFED pins both by exact
   version. FerroPIX's own server glue lives under `app/` as `ferropix-*` with
   `publish = false`.
+- Two version lines, as FerroBRIDGE has: the product version is the
+  workspace version and the release tag; each published crate keeps its own
+  version line, bumped by the change that alters it
+  (`.claude/rules/crates-publishing.md`).
 - It serves FHIR and HL7 v2 together, on FerroBRIDGE's v2 parsing
   (`hl7v2-types` and its MLLP codec and parser), never a second parser.
 - The ATNA and BALP audit senders live in FerroHEALTH/FerroAUDIT as the crate

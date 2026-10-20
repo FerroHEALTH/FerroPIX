@@ -232,8 +232,9 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: bash scripts/checks/contribution-licence.sh
 
-  # The version, the lock and the changelog agree; the guard says so itself
-  # while there is no workspace.
+  # The product version and each published crate's own version agree with the
+  # lock and the changelog; the guard says so itself while there is no
+  # workspace.
   crate-version-guard:
     name: crate-version-guard
     if: github.event_name == 'pull_request'
@@ -246,10 +247,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: The version, the lock and the changelog agree
+      - name: The product line, the crate lines, the lock and the changelog agree
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          NO_CRATE_BUMP: ${{ contains(github.event.pull_request.labels.*.name, 'no-crate-bump') }}
         run: bash scripts/checks/crate-version-guard.sh "$BASE" "$HEAD"
 
   detect:

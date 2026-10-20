@@ -19,7 +19,7 @@ milestone stayed open, and the owner asked that this be impossible in every
 product.
 
 **How to apply:** the workflow enforces it. A release is cut when its
-milestone holds no open item: a release pull request moves the version and
+milestone holds no open item: a release pull request moves the product version and
 the changelog, it merges, and the session signs and pushes the tag
 (`git tag -s vX.Y.Z -m vX.Y.Z`, `git push origin vX.Y.Z`) on the merge
 commit; the tag is never handed to the owner. After any manual or recovery

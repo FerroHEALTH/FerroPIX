@@ -11,6 +11,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-10-20
+
+The repository setup: the working discipline, the tracker helpers and the
+guards, CI and the release lane, the workspace skeleton and the GitHub
+settings. No crate is published in this release; the first crates arrive
+with the move from FerroFED in 0.0.2.
+
 ### Added
 
 - The tracker helpers under `scripts/gh/` (`fields.sh`, `rel.sh`,

@@ -1,0 +1,128 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "nl-generic-functions"
+description = "The Dutch Generic Functions for health data exchange: GF-Localization (NVI), GF-Consent (Mitz), GF-Addressing (LRZa) and GF-Authentication (Nuts), one feature per function"
+# The crate line starts above the 0.0.0 name reservation on crates.io (no
+# specification governs this: our own design).
+version = "0.0.24"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+documentation = "https://docs.rs/nl-generic-functions"
+readme = "README.md"
+keywords = ["health", "netherlands", "nuts", "fhir", "localization"]
+categories = ["api-bindings", "science"]
+# The workspace switch decides whether this crate is publishable
+# (no specification governs this: our own design); include is the packaged
+# content.
+publish.workspace = true
+include = ["src/**", "README.md", "LICENSE"]
+
+# One crate for the Netherlands Generic Functions IG, one feature per function
+# (no specification governs this: our own design). The crate depends on nothing
+# in FerroFED.
+[features]
+# The authorizer a data user supplies to authenticate each request to a
+# Generic Function (the IG's GFI-005), with no FHIR, so a crate that only
+# implements it, such as the source of a `DPoP`-bound token, compiles no FHIR
+# model.
+authorizer = ["dep:http", "dep:thiserror", "dep:url"]
+# GF-Localization through the national index (NVI): the HTTP client of the
+# Localization Service search, the FHIR R4 `resources` root set for the
+# Bundle of DocumentReference records it answers with, and the redacting
+# secret type the pseudonymised patient identifier travels in.
+nvi = [
+  "authorizer",
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:http",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+]
+# GF-Consent through Mitz, the optional Step-1 pre-filter (Annex B §B.6): the
+# closed authorization question of the Mitz afsprakenstelsel, a SOAP 1.2
+# request with an XACML 3.0 decision query, written and read with the XML
+# crate, sent over HTTP with a request id, and the redacting secret type the
+# BSN travels in.
+mitz = [
+  "dep:http",
+  "dep:quick-xml",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:thiserror",
+  "dep:url",
+  "dep:uuid",
+]
+# GF-Addressing through the national address book (LRZa): the URA of an
+# NL-GF Organization, over the FHIR R4 `resources` root set.
+lrza = [
+  "dep:fhir-types",
+  "fhir-types/r4",
+  "fhir-types/resources",
+  "dep:thiserror",
+]
+# GF-Authentication on the Nuts profile: the client side of the access token
+# request with a Verifiable Presentation as the grant (Nuts RFC021) and a
+# DPoP-bound token, the presentation signed with the holder's key and the
+# Presentation Submission written to Presentation Exchange 2.0.0.
+nuts-auth = [
+  "dep:oauth-server-metadata",
+  "dep:base64",
+  "dep:http",
+  "dep:jiff",
+  "dep:jsonwebtoken",
+  "dep:reqwest",
+  "dep:secrecy",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:url",
+  "dep:uuid",
+]
+
+[dependencies]
+base64 = { workspace = true, optional = true }
+fhir-types = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+jiff = { workspace = true, optional = true }
+jsonwebtoken = { workspace = true, optional = true }
+# The RFC 8414 issuer and metadata checks the Nuts grant holds its
+# authorization server to.
+oauth-server-metadata = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["rustls"] }
+secrecy = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+ferrofed-testkit = { workspace = true }
+fhir-types = { workspace = true, features = ["r4", "resources"] }
+http = { workspace = true }
+jiff = { workspace = true }
+jsonschema = { workspace = true }
+jsonwebtoken = { workspace = true }
+reqwest = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
+url = { workspace = true }
+uuid = { workspace = true }
+wiremock = { workspace = true }
+
+[lints]
+workspace = true

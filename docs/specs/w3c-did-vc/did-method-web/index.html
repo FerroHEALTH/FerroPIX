@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>did:web Method Specification</title>
+  <script src="https://www.w3.org/Tools/respec/respec-w3c" async
+    class="remove"></script>
+  <script class="remove">
+    var respecConfig = {
+      "specStatus": "unofficial",
+      "shortName": "did-method-web",
+      "subtitle": "did:web Method Specification",
+      "github": "https://github.com/w3c-ccg/did-method-web/",
+      "edDraftURI": "https://w3c-ccg.github.io/did-method-web/",
+      "doJsonLd": true,
+      "includePermalinks": false,
+      latestVersion: null,
+      editors: [{
+        name: "Michael Prorock",
+        url: "https://www.linkedin.com/in/mprorock/",
+        email: "mprorock@mesur.io",
+        company: "mesur.io",
+        companyURL: "https://mesur.io/"
+      },
+      {
+        name: "Oliver Terbu",
+        email: "oliver.terbu@mattr.global",
+        company: "MATTR",
+        companyURL: "https://mattr.global"
+      }],
+      authors: [
+        {
+          name: "Christian Gribneau",
+          email: "christian@gribneau.net",
+          company: "Ology Newswire, Inc.",
+          companyURL: "https://ology.com"
+        },
+        {
+          name: "Michael Prorock",
+          email: "mprorock@mesur.io",
+          company: "mesur.io",
+          companyURL: "https://mesur.io/"
+        },
+        {
+          name: "Orie Steele",
+          url: "https://www.linkedin.com/in/or13b/",
+          company: "Transmute",
+          companyURL: "https://www.transmute.industries/",
+          w3cid: 109171
+        },
+        {
+          name: "Oliver Terbu",
+          email: "oliver.terbu@consensys.net",
+          company: "Consensys",
+          companyURL: "https://consensys.net"
+        },
+        {
+          name: "Mike Xu",
+          email: "mike.xu@consensy.net",
+          company: "Consensys",
+          companyURL: "https://consensys.net"
+        },
+        {
+          name: "Dmitri Zagidulin",
+          email: "dzagidulin@gmail.com",
+          company: "Digital Bazaar",
+          companyURL: "https://digitalbazaar.com/"
+        }],
+
+      localBiblio: {
+        "DID-PRIMER": {
+          title: "DID Primer",
+          href: "https://github.com/WebOfTrustInfo/rebooting-the-web-of-trust-fall2017/blob/master/topics-and-advance-readings/did-primer.md",
+          authors: [
+            "Drummond Reed",
+            "Manu Sporny",
+          ],
+          publisher: "Rebooting the Web of Trust 2017"
+        },
+        "OWASP-TRANSPORT": {
+          title: "Transport Layer Protection Cheatsheet",
+          href: "https://www.owasp.org/index.php/Transport_Layer_Protection_Cheat_Sheet",
+        }
+      },
+    };
+  </script>
+</head>
+
+<body>
+  <section id="abstract">
+    <p>
+      DIDs that target a distributed ledger face significant practical
+      challenges in bootstrapping enough meaningful trusted data around
+      identities to incentivize mass adoption.
+      We propose a new DID method using a web domain's existing reputation.
+    </p>
+  </section>
+  <section id="sotd">
+  </section>
+  <section>
+    <h1>
+      Introduction
+    </h1>
+    <section>
+      <h2>
+        Preface
+      </h2>
+      <p>
+        The Web DID method specification conforms to the requirements specified
+        in the Decentralized Identifiers v1.0 Specification [[DID-CORE]]. For
+        more information about DIDs and DID method specifications, please also
+        see the [[?DID-PRIMER]]
+      </p>
+    </section>
+    <section id="conformance">
+      <!-- This section is filled automatically by ReSpec. -->
+    </section>
+    <section>
+      <h2>
+        Examples
+      </h2>
+
+      <pre class="example"
+        title="Example did:web DID document using JSON Web Keys">
+{
+  "@context": [
+    "https://www.w3.org/ns/did/v1",
+    "https://w3id.org/security/suites/jws-2020/v1"
+  ],
+  "id": "did:web:example.com",
+  "verificationMethod": [
+    {
+      "id": "did:web:example.com#key-0",
+      "type": "JsonWebKey2020",
+      "controller": "did:web:example.com",
+      "publicKeyJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "0-e2i2_Ua1S5HbTYnVB0lj2Z2ytXu2-tYmDFf8f5NjU"
+      }
+    },
+    {
+      "id": "did:web:example.com#key-1",
+      "type": "JsonWebKey2020",
+      "controller": "did:web:example.com",
+      "publicKeyJwk": {
+        "kty": "OKP",
+        "crv": "X25519",
+        "x": "9GXjPGGvmRq9F6Ng5dQQ_s31mfhxrcNZxRGONrmH30k"
+      }
+    },
+    {
+      "id": "did:web:example.com#key-2",
+      "type": "JsonWebKey2020",
+      "controller": "did:web:example.com",
+      "publicKeyJwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "38M1FDts7Oea7urmseiugGW7tWc3mLpJh6rKe7xINZ8",
+        "y": "nDQW6XZ7b_u2Sy9slofYLlG03sOEoug3I0aAPQ0exs4"
+      }
+    },
+  ],
+  "authentication": [
+    "did:web:example.com#key-0",
+    "did:web:example.com#key-2"
+  ],
+  "assertionMethod": [
+    "did:web:example.com#key-0",
+    "did:web:example.com#key-2"
+  ],
+  "keyAgreement": [
+    "did:web:example.com#key-1", 
+    "did:web:example.com#key-2"
+  ]
+}
+        </pre>
+
+      <pre class="example"
+        title="Example did:web DID document using an ethereum address">
+{
+  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/secp256k1recovery-2020/v2"],
+  "id": "did:web:example.com",
+  "verificationMethod": [{
+      "id": "did:web:example.com#address-0",
+      "type": "EcdsaSecp256k1RecoveryMethod2020",
+      "controller": "did:web:example.com",
+      "blockchainAccountId": "eip155:1:0x89a932207c485f85226d86f7cd486a89a24fcc12"
+  }],
+  "authentication": [
+      "did:web:example.com#address-0"
+  ]
+}
+        </pre>
+
+    </section>
+  </section>
+
+  <section>
+    <h1>
+      Web DID Method Specification
+    </h1>
+
+    <section>
+      <h2>
+        Target system
+      </h2>
+      <p>
+        The target system of the Web DID method is the host (or domain if the
+        host
+        is not specified) name when the domain specified by the DID is resolved
+        through the Domain Name System (DNS).
+      </p>
+
+    </section>
+
+    <section>
+      <h2>
+        Method name
+      </h2>
+      <p>
+        The namestring that shall identify this DID method is: <code>web</code>.
+
+        A DID that uses this method MUST begin with the following prefix:
+        <code>did:web</code>. Per the DID specification, this string MUST be in
+        lowercase. The remainder of the DID, after the prefix, is specified
+        below.
+      </p>
+    </section>
+
+    <section>
+      <h2>
+        Method-specific identifier
+      </h2>
+      <p>
+        The method specific identifier is a fully qualified domain name that is
+        secured by a TLS/SSL certificate with an optional path to the DID
+        document. The formal rules describing valid domain name syntax are
+        described in [[RFC1035]], [[RFC1123]], and [[RFC2181]].
+      </p>
+      <p>
+        The method specific identifier MUST match the common name used in the
+        SSL/TLS certificate, and it MUST NOT include IP addresses. A port MAY be
+        included and the colon MUST be percent encoded to prevent a conflict
+        with paths. Directories and subdirectories MAY optionally be included,
+        delimited by colons rather than slashes.
+      </p>
+
+      <pre class="nohighlight">
+web-did = "did:web:" domain-name
+web-did = "did:web:" domain-name * (":" path)
+        </pre>
+
+      <pre class="example nohighlight" title="Example Web Method DIDs">
+did:web:w3c-ccg.github.io
+
+did:web:w3c-ccg.github.io:user:alice
+
+did:web:example.com%3A3000
+        </pre>
+    </section>
+    <section>
+      <h2>
+        Key Material and Document Handling
+      </h2>
+      <p>
+        Due to the way most web servers present content, it is likely that a
+        particular `did:web` document will be served with a media type of
+      `application/json`. If a document is retrieved and it is named
+      `did.json`, a few processing rules should apply:
+      <ul>
+        <li>
+          If an
+          `@context` is present at the root of the JSON document,
+          the document should be processed according to the JSON-LD rules.
+          If this is not possible, or if the document fails processing, the
+          document should be rejected from consideration as a `did:web` doc.
+        </li>
+        <li>
+          If an
+          `@context` is present at the root of the JSON document,
+          and it passes JSON-LD processing, and it contains the context
+          `https://www.w3.org/ns/did/v1`, it may be further processed
+          as a
+          DID document as specified by section
+          <a href="https://www.w3.org/TR/did-core/#consumption-0">6.3.2</a> of
+          the
+          [[did-core]] specification.
+        </li>
+        <li>
+          If no
+          `@context` is present, it should be processed via normal
+          JSON rules for DID processing as specified in section
+          <a href="https://www.w3.org/TR/did-core/#consumption">6.2.2</a> of the
+          [[did-core]] specification.
+        </li>
+      </ul>
+      </p>
+      <p>
+        Whenever a DID URL is present within a `did:web` document, it must
+        be an absolute URL.
+      <p class="note">
+        This includes URLs inside of embedded key material and other metadata, and
+        prevents
+        key confusion attacks.
+      </p>
+      </p>
+    </section>
+
+    <section>
+      <h2>
+        DID method operations
+      </h2>
+      <section>
+        <p>
+          There is intentionally no HTTP API specified for did:web method
+          operations leaving programmatic registrations and management to be
+          defined by each implementation, or based on their own requirements in
+          their web environment.
+        </p>
+        </p>
+        <h3>
+          Create (Register)
+        </h3>
+        <p>
+          Creating a DID is done by:
+        </p>
+        <ol>
+          <li>
+            applying at a domain name registrar for use of a domain name and
+          </li>
+          <li>
+            storing the location of a hosting service, the IP address at a DNS
+            lookup service
+          </li>
+          <li>
+            creating the DID document JSON-LD file including a suitable keypair,
+            e.g. using the Koblitz Curve, and storing the <code>did.json</code>
+            file under the well-known URL to represent the entire domain, or
+            under the specified path if many DIDs will be resolved in this
+            domain.
+          </li>
+        </ol>
+
+        <p>
+          For example, for the domain name `w3c-ccg.github.io`, the `did.json`
+          will be available under the following URL:
+        </p>
+
+        <pre class="example nohighlight" title="Creating the DID">
+did:web:w3c-ccg.github.io
+ -> https://w3c-ccg.github.io/.well-known/did.json
+          </pre>
+
+        <p>
+          If an optional path is specified rather the bare domain, the
+          <code>did.json</code> will be available under the specified path:
+        </p>
+
+        <pre class="example nohighlight"
+          title="Creating the DID with optional path">
+did:web:w3c-ccg.github.io:user:alice
+ -> https://w3c-ccg.github.io/user/alice/did.json
+          </pre>
+
+        <p>
+          If an optional port is specified on the domain, the port colon
+          splitting the host and the port MUST be percent encoded to prevent
+          collision with the path.
+        </p>
+
+        <pre class="example nohighlight"
+          title="Creating the DID with optional path and port">
+did:web:example.com%3A3000:user:alice
+ -> https://example.com:3000/user/alice/did.json
+          </pre>
+      </section>
+
+      <section>
+        <h3>
+          Read (Resolve)
+        </h3>
+        <p>
+          The following steps MUST be executed to resolve the DID document from
+          a Web DID:
+        </p>
+
+        <ol>
+          <li>
+            Replace ":" with "/" in the method specific identifier to obtain the
+            fully qualified domain name and optional path.
+          </li>
+          <li>
+            If the domain contains a port percent decode the colon.
+          </li>
+          <li>
+            Generate an HTTPS URL to the expected location of the DID document
+            by prepending <code>https://</code>.
+          </li>
+          <li>
+            If no path has been specified in the URL, append
+            <code>/.well-known</code>.
+          </li>
+          <li>
+            Append <code>/did.json</code> to complete the URL.
+          </li>
+          <li>
+            Perform an HTTP <code>GET</code> request to the URL using an agent
+            that can successfully negotiate a secure HTTPS connection, which
+            enforces the security requirements as described in <a
+              href="#security-and-privacy-considerations"></a>.
+          </li>
+          <li>
+            Verify that the ID of the resolved DID document matches the Web DID being resolved.
+          </li>
+          <li>
+            When performing the DNS resolution during the HTTP <code>GET</code>
+            request, the client SHOULD utilize [[RFC8484]] in order to prevent
+            tracking of the identity being resolved.
+          </li>
+        </ol>
+
+      </section>
+
+      <section>
+        <h3>
+          Update
+        </h3>
+        <p>
+          To update the DID document, the <code>did.json</code> has to be
+          updated. Please note that the DID will remain the same, but the
+          contents of the DID document could change, e.g., by including a new
+          verification key or adding service endpoints.
+        </p>
+
+        <p class="note">
+          Managing updates to the DID Document using a version control system
+          such as git and continious integration system such as GitHub Actions
+          can provide support for authentication and audit history.
+        </p>
+
+        <p class="note" title="HTTP API">
+          There is no HTTP API specified for the update process leaving
+          programmatic registrations and management to be defined by each
+          implementation.
+        </p>
+      </section>
+
+      <section>
+        <h3>
+          Deactivate (Revoke)
+        </h3>
+        <p>
+          To delete the DID document, the <code>did.json</code> has to be
+          removed or has to be no longer publicly available due to any other
+          means.
+        </p>
+      </section>
+    </section>
+
+    <section class="informative">
+      <h2>
+        Security and privacy considerations
+      </h2>
+
+      <section>
+        <h3>
+          Authentication and Authorization
+        </h3>
+        <p>
+          This DID method does not specify any authentication or authorization
+          mechanism for writing to, removing or creating the DID Document,
+          leaving it up to implementations to protect did:web documents as with
+          any other web resource.
+        </p>
+        <p>
+          It is up to implementer to secure their web environments according to
+          industry best practices for updating or otherwise managing web content
+          based on the specific needs of their threat environment.
+        </p>
+      </section>
+      <section>
+        <h3>
+          DNS Considerations
+        </h3>
+        <h4>
+          DNS Security Considerations
+        </h4>
+        <p>
+          DNS presents many of the attack vectors that enable active security
+          and privacy attacks on the did:web method and it's important that
+          implementors address these concerns via proper configuration of DNS.
+          For example, without proper security of the DNS resolution via <a
+            href="https://tools.ietf.org/html/rfc8484">DNS over HTTPS</a> it's
+          possible for active attackers to intercept the result of the DNS
+          resolution via a Man in the Middle attack which would point at a
+          malicious server with the incorrect DID Document.
+        </p>
+        <p>
+          Additionally, implementors should be aware of issues presented by a
+          Spoofed DNS records where the record returned by a malicious DNS
+          Server is inauthentic and allows the record to be pointed at a
+          malicious server which contains a different DID Document. To prevent
+          this type of issue, usage of DNSSEC which is
+          <a href="https://tools.ietf.org/html/rfc4033">RFC4033</a>,
+          <a href="https://tools.ietf.org/html/rfc4034">RFC4034</a>, and
+          <a href="https://tools.ietf.org/html/rfc4035">RFC4035</a>.
+        </p>
+
+        <h4>
+          DNS Privacy Considerations
+        </h4>
+        <p>
+          Due to the nature of the did:web method relying upon a DNS in order to
+          resolve the web server, all resolutions of a did:web identifier have
+          the potential to be tracked by a DNS provider. Additionally, due to
+          the DID Document being stored on a web server, each time the DID
+          Document resource is retrieved, the web server has the ability to
+          track the resolution of the DID Document. To mitigate the issue of the
+          relying party being tracked when resolving the DID Document the
+          relying party should look to either use a trusted universal resolver
+          service to gain herd privacy, utilize a VPN service or perform a
+          resolution over the TOR network. Another emerging solution that will
+          be useful to address this is <a
+            href="https://tools.ietf.org/html/draft-pauly-dprive-oblivious-doh-03">
+            draft-pauly-dprive-oblivious-doh-03</a>
+        </p>
+      </section>
+
+      <section>
+        <h3>
+          DID Document Integrity Verification
+        </h3>
+
+        <p>
+          Additional mechanisms such as <a
+            href="https://tools.ietf.org/html/draft-sporny-hashlink">Hashlinks</a>
+          MAY be utilized to aid in integrity protection and verification of the
+          DID document.
+          <br />
+          Under such a scenario the hash of the DID document could be recorded
+          to a trusted or distributed store and the retriever of the DID
+          document would generate a hash of the DID document in their posession
+          with the hash retrieved to ensure that no tampering with the DID
+          document had occurred.
+        </p>
+
+      </section>
+      <section>
+        <h3>
+          In-transit Security
+        </h3>
+
+        <p>
+          Guidance from <a
+            href="https://csrc.nist.gov/publications/detail/sp/800-52/rev-2/final">
+            NIST SP 800-52 Rev. 2
+          </a> or superceding, MUST be followed for delivery of a `did:web`
+          document.
+        </p>
+
+        <p>
+          It is additionally recommended to adhere to the latest recommendations
+          from OWASP's Transport Layer Protection Cheat Sheet [[OWASP-TRANSPORT]]
+          for hardening TLS configurations.
+        </p>
+
+        <p>
+          Consult <a href="https://csrc.nist.gov/publications/detail/sp/800-57-part-1/rev-5/final">
+            NIST SP 800-57
+          </a> for guidance on cryptoperiod, which is the time span during which
+          a specific key is authorized for use or in which the keys for a given
+          system or application may remain in effect.
+        </p>
+
+        <p>
+          TLS configuration MUST use at least SHA256, and SHOULD use SHA384,
+          POLY1305, or stronger, depending on the needs of your
+          operating environment.
+        </p>
+
+        <p>
+          Delete action MAY be performed by domain name registrars or DNS lookup
+          services.
+        </p>
+
+        <p>
+          As of this writing, TLS 1.2 or higher SHOULD be configured to use
+          only strong ciphers suites and to use sufficiently large key sizes.
+          As recommendations may be volatile these days, only the very latest
+          recommendations should be used. However, as a rule of thumb,
+          the following set of suites is a reasonable starting point:
+        </p>
+
+        <ul>
+          <li>
+            ECDHE with one of the strong curves {X25519, brainpoolP384r1, NIST
+            P-384, brainpoolP256r1, NIST P-256} shall be used as key exchange.
+          </li>
+          <li>
+            AESGCM or ChaCha20 with 256 bit large keys shall be used for bulk
+            encryption
+          </li>
+          <li>
+            ECDSA with one of the strong curves {brainpoolP384r1, NIST P-384,
+            brainpoolP256r1, NIST P-256} or RSA (at least 3072) shall be used.
+          </li>
+          <li>
+            Authenticated Encryption with Associated Data (AEAD) shall be used
+            as Mac.
+          </li>
+        </ul>
+
+        <p>
+          Examples of strong SSL/TLS configurations for now are:
+        </p>
+        <ul>
+          <li>
+            <code>ECDHE-ECDSA-AES256-GCM-SHA384, TLSv1.2, Kx=ECDH, Au=ECDSA, Enc=AESGCM(256), Mac=AEAD</code>
+          </li>
+          <li>
+            <code>ECDHE-RSA-AES256-GCM-SHA384, TLSv1.2, Kx=ECDH, Au=RSA Enc=AESGCM(256), Mac=AEAD</code>
+          </li>
+          <li>
+            <code>ECDHE-ECDSA-CHACHA20-POLY1305, TLSv1.2, Kx=ECDH, Au=ECDSA, Enc=ChaCha20-Poly1305, Mac=AEAD</code>
+          </li>
+          <li>
+            <code>ECDHE-RSA-CHACHA20-POLY1305, TLSv1.2, Kx=ECDH, Au=RSA, Enc=ChaCha20-Poly1305, Mac=AEAD</code>
+          </li>
+          <li>
+            <code>ECDHE-RSA-AES256-GCM-SHA384, TLSv1.2, Kx=ECDH, Au=RSA, Enc=AESGCM(256), Mac=AEAD</code>
+          </li>
+          <li>
+            <code>ECDHE-ECDSA-AES256-GCM-SHA384, TLSv1.2, Kx=ECDH, Au=ECDSA, Enc=AESGCM(256), Mac=AEAD</code>
+          </li>
+        </ul>
+
+
+
+      </section>
+
+      <section>
+        <h3>
+          International Domain Names
+        </h3>
+        <p>
+          [[DID-CORE]] identifier syntax does not 
+          allow Unicode in method name nor method specific identifiers.
+        </p>
+        <p>
+          Implementers should be cautious when implementing 
+          support for DID URLs that rely on domain names 
+          or path components that contain Unicode characters.
+        </p>
+        <p>
+          See also:
+        </p>
+        <ul>
+          <li>
+            <a href="https://unicode.org/reports/tr46/">UTS-46</a>
+          </li>
+          <li>
+            <a href="https://www.rfc-editor.org/rfc/rfc5895">IDNA 2008</a>
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h3>
+          Optional Path Considerations
+        </h3>
+        <p>
+          When optional paths to DID documents are used to resolve documents
+          rather than bare domains, verification with signed data proves that
+          the entity in control of the file indicated in the path has the
+          private keys. It does not prove that the domain operator has the
+          private keys.
+        </p>
+
+        <p>
+          This example:
+        </p>
+
+        <pre class="nohighlight">
+did:web:example.com:u:bob
+          </pre>
+        <p>
+          resolves to the DID document at:
+        </p>
+        <pre class="nohighlight">
+https://example.com/u/bob/did.json
+        </pre>
+        <p>
+          In this scenario, it is probable that example.com has given user Bob
+          control over the DID in question, and proofs of control refer to Bob
+          rather than all of example.com.
+        </p>
+      </section>
+
+      <section>
+        <h3>
+          Cross-Origin Resource Sharing (CORS) Policy Considerations
+        </h3>
+        <p>
+          To support scenarios where DID resolution is performed by client
+          applications running in a web browser, the file served for the DID
+          document should be accessible by any origin. To enable this,
+          the DID document HTTP response can be set to include the
+          following header:
+        </p>
+        <pre class="nohighlight">
+Access-Control-Allow-Origin: *
+        </pre>
+      </section>
+    </section>
+  </section>
+
+  <section class="appendix informative">
+    <h1>
+      Reference implementations
+    </h1>
+    <p>
+      The code at <a
+        href="https://github.com/uport-project/https-did-resolver">uport-project/https-did-resolver</a>
+      is intended to present a reference implementation of this DID method. Any
+      other implementations should ensure that they pass the test suite
+      described in <code>/src/__tests__</code> before claiming compatibility.
+    </p>
+
+    <p>
+      The code at <a
+        href="https://github.com/transmute-industries/restricted-resolver">transmute-industries/restricted-resolver</a>
+      implements this specification.
+    </p>
+
+    <p>
+      The code at <a
+            href="https://github.com/reinkrul/java-did-resolvers">reinkrul/java-did-resolvers</a>
+      implements this specification as a Java library.
+    </p>
+  </section>
+</body>
+
+</html>

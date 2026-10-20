@@ -57,7 +57,10 @@ The build order is the milestones:
   `rustfmt.toml`: the workspace skeleton with the family lint set. The
   workspace has no member until the move.
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.
-  `docs/specs/` will hold the vendored corpora, each with a `PROVENANCE.md`.
+  `docs/specs/` holds the vendored corpora the identity crates read, each
+  with a `PROVENANCE.md`, fetched by `scripts/vendor/*.sh` (with the shared
+  `scripts/vendor/lib/`) at FerroFED's pins; a text whose licence keeps it
+  out of the tree is fetched into the ignored `.vendor-cache/`.
 - `scripts/gh/`: the tracker helpers (`fields.sh`, `rel.sh`, `labels.sh`,
   `watch-prs.sh`, `changelog-merge.sh`, and `project.sh`, a stub: there is no
   roadmap board). `scripts/checks/`: the guards (comment style, versions and

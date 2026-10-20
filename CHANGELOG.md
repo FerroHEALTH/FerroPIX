@@ -11,6 +11,18 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- The corpora `ihe-iti` and `nl-generic-functions` read, vendored under
+  `docs/specs/` by FerroFED's scripts at FerroFED's pins and byte-identical
+  to FerroFED's copies: the IHE PIXm, PDQm, PMIR and mCSD packages and
+  narrative pages, the ITI Technical Framework pages, the IUA supplement,
+  the Swiss pins of PIXm, PDQm and IUA, the Netherlands Generic Functions IG
+  source, the Mitz documents (cache only), the Nuts RFCs, the IETF OAuth
+  RFCs, the W3C DID and VC texts and DIF Presentation Exchange, each with
+  its `scripts/vendor/*.sh`, its `PROVENANCE.md` and its row in
+  `docs/VERSIONS.md` (#24).
+
 ### Changed
 
 - Two version lines, the model FerroBRIDGE uses: the product version is the

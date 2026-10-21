@@ -38,13 +38,16 @@ cargo add tokio --features macros,rt-multi-thread
 ## Ask a PIXm Manager for a patient's other identifiers
 
 This is the example of the `ihe_iti::pixm` module documentation, which CI
-compiles with every change. It asks a PIX Manager which identifier one other
-domain holds for the patient a source identifier names (ITI-83):
+compiles with every change, with one line added: the client posts its
+parameters, as every FerroHEALTH client does, so the identifier is in no URL
+([why](../crates/ihe-iti.md#lookups-by-a-patient-identifier-use-post)). It
+asks a PIX Manager which identifier one other domain holds for the patient a
+source identifier names (ITI-83):
 
 ```rust,ignore
 use std::time::Duration;
 
-use ihe_iti::pixm::PixmClient;
+use ihe_iti::pixm::{Invocation, PixmClient};
 use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier, TargetSystem};
 use ihe_atna::user::OnBehalfOf;
 use secrecy::{ExposeSecret, SecretString};
@@ -54,7 +57,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
-    let client = PixmClient::new(Url::parse("https://pix.example.org/fhir/")?, http)?;
+    let client = PixmClient::new(Url::parse("https://pix.example.org/fhir/")?, http)?
+        .invoked_by(Invocation::Post);
     let source = SourceIdentifier::new(
         "urn:oid:1.3.6.1.4.1.21367.13.20.1000",
         SecretString::from("IHERED-994"),

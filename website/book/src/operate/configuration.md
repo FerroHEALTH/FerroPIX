@@ -32,5 +32,5 @@ reference on docs.rs has each constructor and builder method.
 | A timeout per exchange | each call, as a `Duration` | The bound of the whole exchange; with an audit feature it bounds the audit record as well. |
 | Access tokens | `.with_authorizer(…)` | An authorizer that makes the headers of each request (IUA ITI-72); see [Security and audit](security-and-audit.md#access-tokens). |
 | The audit recorder | `.audited(…)`, with `balp` or `atna` | The recorder that routes each record to your audit repository; see [Security and audit](security-and-audit.md#audit). |
-| The PIXm invocation | `.invoked_by(Invocation::Post)` | Only for a Manager that accepts the `POST` form of `$ihe-pix`. |
+| The PIXm invocation | `.invoked_by(Invocation::Post)` | `POST`, as every FerroHEALTH client calls a Manager, so the identifier stays out of the URL; leave the `GET` default only for a Manager that refuses the `POST` form ([Lookups use POST](../crates/ihe-iti.md#lookups-by-a-patient-identifier-use-post)). |
 | The mCSD budget | `budget::Budget` | The deadline and the caps on pages, bytes and entries of one walk; by default 200 pages, 64 MiB and 50,000 entries. |

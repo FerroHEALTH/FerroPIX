@@ -31,9 +31,24 @@ generates from the HL7 packages.
 domains hold for a patient (ITI-83, PIXm 3.1.0): `GET
 [base]/Patient/$ihe-pix` with one `sourceIdentifier` and any number of
 `targetSystem` domains. Built with `.invoked_by(Invocation::Post)`, it posts
-the same parameters in a `Parameters` body instead, so the source
-identifier is in no request URL; ITI-83 prescribes the `GET`, so post only to
-a Manager that accepts it.
+the same parameters in a `Parameters` body to `[base]/Patient/$ihe-pix`
+instead (FHIR R4 Operations §3.2.0.1), so the source identifier is in no
+request URL.
+
+### Lookups by a patient identifier use POST
+
+ITI-83 prescribes the `GET`, which puts the patient identifier, a BSN for a
+Dutch patient, in the query string. FerroHEALTH therefore settles it this
+way:
+
+- **The FerroPIX PIX Manager, planned,** is to accept `$ihe-pix` by `GET`
+  (ITI-83) and by `POST` with a `Parameters` body (FHIR R4 Operations
+  §3.2.0.1), and to keep no URL query in a request log ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)).
+- **FerroHEALTH clients call it by `POST`**
+  (`ihe_iti::pixm::Invocation::Post`), so a BSN never appears in a URL.
+  Against another Manager, post only when it accepts the `POST` form.
+- **A proxy in front of a Manager must not log query strings,** since a
+  client that uses the `GET` puts the identifier there.
 
 Every answer is held to the `$ihe-pix` `OperationDefinition`: the two out
 parameters, an assigning authority on each identifier, identifiers only
@@ -54,7 +69,11 @@ from the domains asked about, and never the source identifier itself. A
   to `[base]/Patient/$match` and reads the matched Patients, most likely
   first, each with its score between 0 and 1 and its `match-grade`.
 
-The criteria travel in the request body, never the URL. An answer that
+The criteria travel in the request body, never the URL, so a PDQm search
+needs no choice of invocation: like a PIXm lookup from a FerroHEALTH client,
+it keeps every identifier and demographic out of the URL. The planned PDQm
+Supplier of FerroPIX answers the same `POST` ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52) covers its request
+log). An answer that
 departs from the profile, such as a match entry without its score or grade,
 is refused.
 

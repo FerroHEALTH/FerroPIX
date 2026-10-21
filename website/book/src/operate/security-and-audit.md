@@ -21,8 +21,14 @@ are planned in the
   credential.
 - Build each `reqwest::Client` you pass in with `redirect::Policy::none()`:
   the request carries the identifier, and a redirect would send it on.
-- A PDQm query sends its criteria in the request body, and a PIXm client
-  built for `POST` keeps the source identifier out of the URL too.
+- **Lookups by a patient identifier use `POST`.** A PDQm query sends its
+  criteria in the request body. FerroHEALTH clients call a PIXm Manager by
+  `POST` with a `Parameters` body (`ihe_iti::pixm::Invocation::Post`, FHIR
+  R4 Operations §3.2.0.1), so a BSN never appears in a URL. FerroPIX's
+  planned PIX Manager is to accept `$ihe-pix` by `GET` (ITI-83) and by
+  `POST`, and to keep no URL query in a request log
+  ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)). A proxy in front of any Manager must not log query strings,
+  because a client that uses the `GET` puts the identifier there.
 - The PMIR feed drops every demographic as it reads an ITI-93 message.
 
 ## Access tokens

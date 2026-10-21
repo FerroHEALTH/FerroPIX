@@ -58,7 +58,10 @@ The [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
 names what the server will do. Until it lands, none of
 this runs, and this book describes it only as planned:
 
-- **The PIXm Manager:** ITI-83 by `GET` and by `POST`, with several
+- **The PIXm Manager:** ITI-83 by `GET` and by `POST` with a `Parameters`
+  body, FerroHEALTH clients calling it by `POST` so a BSN never appears in a
+  URL, and no URL query in a request log
+  ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)), with several
   `targetSystem` domains in one query, and the ITI-104 identity feed.
 - **The PDQm Supplier:** ITI-78 and the ITI-119 match.
 - **The PMIR Registry:** ITI-93 and ITI-94.

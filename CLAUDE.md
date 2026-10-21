@@ -31,6 +31,27 @@ FerroPIX in prose, `ferropix` in identifiers.
   `ihe-atna`; FerroPIX audits the Manager side through it.
   `oauth-server-metadata` is retired; authorization comes from
   `ferrohealth-smart` (FerroSMART).
+- **The server and the console (owner, 2026-10-21):** FerroPIX is a
+  standalone server with its cross-reference in PostgreSQL, and it ships
+  two OCI images, the server (`ghcr.io/ferrohealth/ferropix`) and the
+  operator console (`ghcr.io/ferrohealth/ferropix-viewer`), the fifth
+  FerroUI console beside FerroBRIDGE, FerroEHR, FerroFED and FerroTERM.
+  Both images are released at SLSA Build Level 3 through reusable release
+  workflows, as FerroFED's are. A component FerroUI lacks is filed and
+  built in FerroUI, never drawn by hand here. An identifier lookup uses
+  `POST`, so a BSN never sits in a URL (#52).
+
+## The design is recorded in `docs/architecture.md`
+
+Read it first. It is the design of record from the pass of 2026-10-21: the
+server's process and configuration, the PostgreSQL store with its history
+and its transaction boundaries, the matching in three tiers with the steward
+in the middle, the FHIR face (PIXm, PDQm, PMIR) and the HL7 v2 face,
+pseudonyms, authorization and audit, the two images and the release, the CI
+lanes, and the console: its information architecture, every screen with its
+states, the wireframes, and the FerroUI component inventory with the gaps
+filed on FerroUI. Every decision names its ground or says "no specification
+governs this: our own design"; keep that labelling in code and docs.
 
 The build order is the milestones:
 
@@ -42,14 +63,28 @@ The build order is the milestones:
   copied with its history and its corpora re-vendored by FerroFED's scripts
   at FerroFED's pins, published from here above FerroFED's versions
   (`ihe-iti` 0.0.39 or later, `nl-generic-functions` 0.0.25 or later).
-- **v0.0.3, the server:** the PIXm Manager (ITI-83 by GET and POST with
-  several `targetSystem`, ITI-104), the PDQm Supplier (ITI-78, ITI-119), the
-  PMIR Registry (ITI-93, ITI-94), the persisted cross-reference (identifier
-  domains, one Source per domain, linking and merge), pseudonym minting (a
-  UUID per pseudonymisation domain, for FerroEHR's `subject_namespaces`), the
-  HL7 v2 PIX and PDQ transactions (ITI-8, 9, 21 and 22, with 44, 45, 46 and
-  47 as the ITI TF-2 texts decide, once vendored), Manager-side BALP auditing
-  through `ihe-atna`, and a published container image pinned by digest.
+- **v0.0.3, the server on PostgreSQL with PIXm and PDQm:** the server
+  under `app/ferropix-server`, its configuration tree, the cross-reference
+  store and its migrations (identifier domains, one Source per domain, the
+  source records with their history, persons and links), the deterministic
+  match and the scorer, the PIXm Manager (ITI-83 by GET and POST with
+  several `targetSystem`, ITI-104, #52), the PDQm Supplier (ITI-78,
+  ITI-119), authorization through `ferrohealth-smart`, Manager-side BALP
+  auditing through `ihe-atna`, the health family and the request log, the
+  server image pinned by digest with the compose quickstart, the SLSA Build
+  Level 3 release lanes, and the CI lanes FerroFED has and FerroPIX lacked
+  (`docs/architecture.md` §14).
+- **v0.0.4, HL7 v2 and the console:** the ITI TF-2 texts vendored, the
+  MLLP listener with ITI-8, ITI-9 and ITI-21 on FerroBRIDGE's parser, the
+  operator console under `app/ferropix-viewer` (sign-in, dashboard, search,
+  the patient record, domains, the audit trail, settings) on FerroUI with
+  the components filed there, its image and release lane, and the Helm
+  chart.
+- **v0.0.5, PMIR, review and pseudonyms:** the PMIR Registry (ITI-93,
+  ITI-94) with the feed sender, the review queue with the compare and
+  decide screen, merge and unmerge with their previews, pseudonym minting
+  (a UUID per pseudonymisation domain, for FerroEHR's `subject_namespaces`),
+  and ITI-10.
 
 ## Repo map
 
@@ -67,6 +102,8 @@ The build order is the milestones:
   moved from FerroFED with its history; the Nuts grant holds its
   authorization server to RFC 8414 on `ferrohealth-smart`'s metadata module.
   Its Nuts tests run against the test devices under `tests/it/testkit/`.
+- `docs/architecture.md`: the design of record (the server, the store,
+  the matching, the three faces, the images and the release, the console).
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.
   `docs/specs/` holds the vendored corpora the identity crates read, each
   with a `PROVENANCE.md`, fetched by `scripts/vendor/*.sh` (with the shared
@@ -240,8 +277,10 @@ pull request under their own `CLAUDE.md`.
 - **FerroSMART** (`../FerroSMART`): the shared SMART and OAuth 2.0 crate,
   `ferrohealth-smart`.
 - **FerroAUDIT**: the shared audit crate, `ihe-atna` (ATNA and BALP).
-- **FerroUI** (`../FerroUI`): the shared console component library, should
-  FerroPIX ever get a console.
+- **FerroUI** (`../FerroUI`): the shared console component library,
+  `ferrohealth-ui`, which the operator console draws with, pinned exactly
+  and moved in lockstep with the other consoles; a component it lacks is
+  filed and built there (`.claude/memory/ferroui-lockstep.md`).
 
 ## References
 

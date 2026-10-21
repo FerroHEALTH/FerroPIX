@@ -44,6 +44,8 @@ and this project adheres to
 - `ihe-iti` 0.0.42 takes `ihe-atna = "=0.2.2"`, which changes only the
   declared MSRV, raising it to 1.98; a product that takes `ihe-iti` moves to `ihe-atna
   =0.2.2` with it (#39).
+- `ihe-iti` 0.0.43 takes `ihe-atna = "=0.2.3"`, the only supported release;
+  0.0.42 was not published (#41).
 
 ## [0.0.2] - 2026-10-20
 

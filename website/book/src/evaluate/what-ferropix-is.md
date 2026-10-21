@@ -47,7 +47,8 @@ the server side, where FerroPIX answers the transaction itself, is the
 | Dutch Generic Functions: addressing (LRZa) | the URA of an organisation | In `nl-generic-functions` (`lrza`). |
 | Dutch Generic Functions: authentication (Nuts) | the Nuts RFC021 access token request | Client, in `nl-generic-functions` (`nuts-auth`). |
 | BSN and the pseudonymised BSN | the identifier systems the functions share | The naming systems and a redacting pseudonym type, in `nl-generic-functions`. |
-| A container image | | Planned, pinned by digest. |
+| The server's container image | | Planned, pinned by digest, with a compose quickstart beside PostgreSQL. |
+| The operator console and its image | the data steward's tool: search, the patient record, the review queue, merge and unmerge, the audit trail | Planned, in the milestone after the server, on the FerroHEALTH component library. |
 
 The BSNk polymorphic pseudonyms are in the scope of `nl-generic-functions`
 and are not built: the crate does not call the BSNk pseudonym service today.
@@ -66,14 +67,17 @@ this runs, and this book describes it only as planned:
 - **The PDQm Supplier:** ITI-78 and the ITI-119 match.
 - **The PMIR Registry:** ITI-93 and ITI-94.
 - **The cross-reference:** identifier domains, one Patient Identity Source
-  per domain, linking and merge, persisted.
+  per domain, linking and merge with their full history, persisted in
+  PostgreSQL.
 - **Pseudonyms:** a UUID per patient and pseudonymisation domain, for
   FerroEHR's subject namespaces.
 - **HL7 v2:** the PIX and PDQ transactions on the HL7 v2 parsing FerroBRIDGE
   publishes, so the family has one parser.
 - **Audit:** the Manager side's BALP records through `ihe-atna`, the audit
   crate of FerroAUDIT.
-- **A container image**, published and pinned by digest.
+- **The server's container image**, published and pinned by digest, with
+  a compose quickstart beside PostgreSQL; the operator console and its own
+  image follow in the milestone after it.
 
 ## What FerroPIX is not
 

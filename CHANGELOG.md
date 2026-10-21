@@ -14,6 +14,15 @@ and this project adheres to
 
 ### Added
 
+- `docs/architecture.md`, the design of record for the server and the
+  operator console: the process and its configuration, the PostgreSQL
+  cross-reference store with its history and transaction boundaries, the
+  matching in three tiers with the steward in the middle, the PIXm, PDQm
+  and PMIR faces and the HL7 v2 listener, pseudonyms, authorization and
+  audit, the two images released at SLSA Build Level 3, the CI lanes, and
+  the console's information architecture, screens, wireframes and FerroUI
+  component inventory. `CLAUDE.md` and the book name the console, the
+  PostgreSQL store and the two images as planned, by milestone.
 - The documentation site at <https://ferropix.eu/>: a landing page in the
   FerroHEALTH design with the FerroPIX brand, and the book under `/docs/`
   (what FerroPIX is and what is built or planned, getting started, the

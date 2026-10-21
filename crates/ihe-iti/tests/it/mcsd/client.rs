@@ -113,7 +113,7 @@ async fn a_search_sends_its_parameters() {
         )
         .await
         .expect("an empty searchset");
-    assert!(found.matches().is_empty());
+    assert_eq!(found.matches(), []);
 }
 
 #[tokio::test]

@@ -13,6 +13,10 @@ and this project adheres to
 
 ### Changed
 
+- The repository builds with Rust 1.99.1 in place of 1.98.1, and the MSRV
+  stays at 1.98: the FerroHEALTH family builds with the latest stable
+  toolchain and declares the release before it as its MSRV. No published
+  crate changes.
 - `ihe-iti` 0.0.40 splits the `audit` feature in two: `balp`, the BALP
   `AuditEvent` of the PIXm, PDQm, mCSD and PMIR transactions on
   `ihe-atna/balp`, and `atna`, the ITI-55 audit message of `xcpd` on

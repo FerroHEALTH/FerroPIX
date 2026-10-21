@@ -192,7 +192,7 @@ async fn one_certain_match_is_read_with_its_score_and_grade() {
     };
     assert_eq!(matched.grade(), Some(MatchGrade::Certain));
     assert_eq!(matched.score(), Some(0.9));
-    assert!(found.warnings().is_empty());
+    assert_eq!(found.warnings(), []);
 }
 
 #[tokio::test]

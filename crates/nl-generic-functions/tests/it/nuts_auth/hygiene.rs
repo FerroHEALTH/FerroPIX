@@ -80,7 +80,7 @@ async fn no_error_carries_the_presentation_or_a_credential() {
                 .map(|(_, value)| value.clone())
         })
         .collect();
-    assert!(!assertions.is_empty());
+    assert_ne!(assertions, Vec::<String>::new());
     for error in [&refused, &timed_out] {
         let text = rendered(error);
         for part in parts(&fixture.credential) {

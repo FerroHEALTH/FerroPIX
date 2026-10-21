@@ -16,7 +16,7 @@ No specification governs this file; it is FerroPIX's own design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| Rust toolchain | `1.98.1` | `rust-toolchain.toml` |
+| Rust toolchain | `1.99.1` | `rust-toolchain.toml` |
 | Minimum supported Rust version | `1.98` | `Cargo.toml` `[workspace.package] rust-version` |
 | Edition | `2024` | `Cargo.toml` `[workspace.package] edition`, `rustfmt.toml` |
 

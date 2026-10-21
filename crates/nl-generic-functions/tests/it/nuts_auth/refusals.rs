@@ -106,7 +106,7 @@ async fn an_unanswered_descriptor_is_never_sent() {
         matches!(&error, NutsAuthError::Definition(Mismatch::Unanswered { descriptor }) if descriptor == "employee_credential"),
         "{error:?}"
     );
-    assert!(fixture.node.forms().is_empty());
+    assert_eq!(fixture.node.forms(), Vec::<Vec<(String, String)>>::new());
 }
 
 #[tokio::test]
@@ -126,7 +126,7 @@ async fn a_credential_for_a_descriptor_the_definition_lacks_is_never_sent() {
         ),
         "{error:?}"
     );
-    assert!(fixture.node.forms().is_empty());
+    assert_eq!(fixture.node.forms(), Vec::<Vec<(String, String)>>::new());
 }
 
 #[tokio::test]
@@ -174,7 +174,7 @@ async fn an_unmet_requirement_is_never_sent() {
         ),
         "{error:?}"
     );
-    assert!(fixture.node.forms().is_empty());
+    assert_eq!(fixture.node.forms(), Vec::<Vec<(String, String)>>::new());
 }
 
 /// A stub authorization server whose metadata is `metadata`, at the issuer

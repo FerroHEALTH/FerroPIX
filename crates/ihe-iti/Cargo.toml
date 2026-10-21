@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.41"
+version = "0.0.42"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

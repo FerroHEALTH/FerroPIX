@@ -41,6 +41,9 @@ and this project adheres to
   the RFC 8414 issuer rule (the exact canonical issuer text, every endpoint
   on the issuer's origin, and a refusal of JSON that repeats a name) stay
   private in `nuts_auth`, as 0.4.0 does not carry them (#36).
+- `ihe-iti` 0.0.42 takes `ihe-atna = "=0.2.2"`, which changes only the
+  declared MSRV, raising it to 1.98; a product that takes `ihe-iti` moves to `ihe-atna
+  =0.2.2` with it (#39).
 
 ## [0.0.2] - 2026-10-20
 

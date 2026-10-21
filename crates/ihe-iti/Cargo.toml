@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.40"
+version = "0.0.41"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -32,6 +32,7 @@ include = ["src/**", "README.md", "LICENSE"]
 pixm = [
   "dep:fhir-types",
   "dep:ihe-atna",
+  "ihe-atna/redact",
   "fhir-types/r4",
   "fhir-types/terminology",
   "dep:http",
@@ -48,6 +49,7 @@ pixm = [
 pdqm = [
   "dep:fhir-types",
   "dep:ihe-atna",
+  "ihe-atna/redact",
   "fhir-types/r4",
   "fhir-types/resources",
   "dep:http",
@@ -65,6 +67,8 @@ mcsd = [
   "fhir-types/r4",
   "fhir-types/resources",
   "dep:http",
+  "dep:ihe-atna",
+  "ihe-atna/redact",
   "dep:reqwest",
   "dep:serde_json",
   "dep:thiserror",
@@ -80,6 +84,8 @@ pmir = [
   "fhir-types/r4",
   "fhir-types/resources",
   "dep:http",
+  "dep:ihe-atna",
+  "ihe-atna/redact",
   "dep:reqwest",
   "dep:secrecy",
   "dep:serde_json",
@@ -97,6 +103,8 @@ xcpd = [
   "dep:async-trait",
   "dep:http",
   "dep:ihe-atna",
+  "ihe-atna/recording",
+  "ihe-atna/redact",
   "dep:jiff",
   "dep:quick-xml",
   "dep:reqwest",

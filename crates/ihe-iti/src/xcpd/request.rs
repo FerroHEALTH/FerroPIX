@@ -18,7 +18,7 @@ use super::error::{InvalidInput, XcpdError};
 use super::identifier::{HomeCommunityId, Oid, PatientIdentifier};
 use super::security::XuaAssertion;
 use super::{ACTION, HL7, SOAP, WSA, WSSE};
-use crate::redact::RedactedUrl;
+use ihe_atna::redact::RedactedUrl;
 
 /// The OID of the HL7 interaction and trigger event identifiers
 /// (Table 3.55.4.1.2.3-1).

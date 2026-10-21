@@ -15,7 +15,7 @@ use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
 use super::error::InvalidInput;
-use crate::redact::REDACTED;
+use ihe_atna::redact::REDACTED;
 
 /// The patient identifier the Consumer asks about: the Patient Identifier
 /// Domain (assigning authority) and the identifier value of the
@@ -214,7 +214,7 @@ mod tests {
         CrossReferences, InvalidInput, PatientReference, SourceIdentifier, TargetIdentifier,
         TargetSystem,
     };
-    use crate::redact::REDACTED;
+    use ihe_atna::redact::REDACTED;
 
     const SENTINEL: &str = "SENTINEL-4711";
 

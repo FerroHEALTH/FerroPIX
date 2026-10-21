@@ -197,7 +197,7 @@ Consumer of ITI-83, the PDQm Query and Match Consumers of ITI-78 and
 ITI-119, the mCSD Query and Updates Clients of ITI-90 and ITI-91, and the
 PMIR Feed Consumer and Subscriber of ITI-93 and ITI-94. The client awaits
 the recorder before it returns, its `timeout` bounds the record too
-(`recording::Late`), and a record the recorder refuses fails the exchange
+(`ihe_atna::balp::recording::Late`), and a record the recorder refuses fails the exchange
 as an audit failure, so no answer is used without its audit. The audit
 trail itself, ATNA ITI-20 with its syslog sender, spool and forwarder and
 the ATX: FHIR Feed, is the [`ihe-atna`](https://crates.io/crates/ihe-atna)

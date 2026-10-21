@@ -32,11 +32,11 @@ fhir-types = { version = "0.1.113", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroSMART: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers; pinned exactly, as every family crate.
-ferrohealth-smart = { version = "=0.3.1", default-features = false }
+ferrohealth-smart = { version = "=0.4.0", default-features = false }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share; pinned exactly, as every family crate.
-ihe-atna = { version = "=0.1.0", default-features = false }
+ihe-atna = { version = "=0.2.1", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.58.3", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

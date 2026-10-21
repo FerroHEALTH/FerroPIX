@@ -15,7 +15,7 @@ use secrecy::SecretString;
 use url::Url;
 
 use crate::outcome::IssueType;
-use crate::redact::REDACTED;
+use ihe_atna::redact::REDACTED;
 
 /// One page of an ITI-78 result set.
 #[derive(Debug, Clone)]

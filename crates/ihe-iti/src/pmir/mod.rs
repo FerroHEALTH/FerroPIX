@@ -72,8 +72,8 @@ use url::Url;
 
 use crate::authorizer::{self, Authorizer};
 use crate::outcome;
-use crate::redact::RedactedUrl;
 use error::{InvalidInput, SubscribeError, SubscriptionMalformation};
+use ihe_atna::redact::RedactedUrl;
 use subscription::{FHIR_JSON, Subscribed, SubscriptionRequest, SubscriptionStatus};
 
 /// The longest answer the subscriber reads: a `Subscription` or an
@@ -106,7 +106,8 @@ impl PmirSubscriber {
     /// [`InvalidInput::Base`] when `base` is not an `http` or `https` URL
     /// without a query or a fragment.
     pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
-        let endpoint = crate::search::under_base(base, "Subscription").ok_or(InvalidInput::Base)?;
+        let endpoint =
+            ihe_atna::fhir_base::under_base(base, "Subscription").ok_or(InvalidInput::Base)?;
         Ok(Self {
             endpoint,
             http,
@@ -266,7 +267,7 @@ impl PmirSubscriber {
                         audit::subscription_reference(subscribed.location())
                     });
                     audit::subscription(
-                        audit::SUBSCRIPTION_CREATE,
+                        audit::subscription_create(),
                         &self.endpoint,
                         reference,
                         Some(request.criteria().text()),
@@ -329,7 +330,7 @@ impl PmirSubscriber {
             .audit(
                 |result| {
                     audit::subscription(
-                        audit::SUBSCRIPTION_READ,
+                        audit::subscription_read(),
                         &self.endpoint,
                         audit::subscription_reference(subscribed.location()),
                         None,
@@ -385,7 +386,7 @@ impl PmirSubscriber {
             .audit(
                 |result| {
                     audit::subscription(
-                        audit::SUBSCRIPTION_DELETE,
+                        audit::subscription_delete(),
                         &self.endpoint,
                         audit::subscription_reference(subscribed.location()),
                         None,

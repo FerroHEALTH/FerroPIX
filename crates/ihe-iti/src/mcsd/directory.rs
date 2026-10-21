@@ -17,7 +17,7 @@ use fhir_types::r4::reference::Reference;
 use fhir_types::r4::resource::Resource;
 
 use super::error::DirectoryError;
-use crate::redact::RedactedUrl;
+use ihe_atna::redact::RedactedUrl;
 
 /// The `Organization` and `Endpoint` resources of one Bundle, in entry order.
 ///

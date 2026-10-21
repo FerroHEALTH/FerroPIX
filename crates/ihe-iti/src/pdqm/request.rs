@@ -8,8 +8,6 @@
 
 use url::Url;
 
-use crate::search;
-
 use super::error::InvalidInput;
 
 /// The search on the Supplier's `Patient` type, relative to the FHIR base
@@ -25,17 +23,17 @@ pub(super) const FORM: &str = "application/x-www-form-urlencoded";
 
 /// The FHIR base `base`, with the trailing `/` a relative link resolves under.
 pub(super) fn base(base: Url) -> Result<Url, InvalidInput> {
-    search::under_base(base, "").ok_or(InvalidInput::Base)
+    ihe_atna::fhir_base::under_base(base, "").ok_or(InvalidInput::Base)
 }
 
 /// The `[base]/Patient/_search` URL for the FHIR base `base`.
 pub(super) fn endpoint(base: Url) -> Result<Url, InvalidInput> {
-    search::under_base(base, SEARCH).ok_or(InvalidInput::Base)
+    ihe_atna::fhir_base::under_base(base, SEARCH).ok_or(InvalidInput::Base)
 }
 
 /// The `[base]/Patient/$match` URL for the FHIR base `base`.
 pub(super) fn match_endpoint(base: Url) -> Result<Url, InvalidInput> {
-    search::under_base(base, MATCH).ok_or(InvalidInput::Base)
+    ihe_atna::fhir_base::under_base(base, MATCH).ok_or(InvalidInput::Base)
 }
 
 #[cfg(test)]

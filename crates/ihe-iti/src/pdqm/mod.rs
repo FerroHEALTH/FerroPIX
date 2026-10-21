@@ -86,8 +86,8 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
 use crate::authorizer::{self, Authorizer};
-use crate::redact::RedactedUrl;
 use error::{InvalidInput, PdqmError};
+use ihe_atna::redact::RedactedUrl;
 use ihe_atna::user::OnBehalfOf;
 use input::MatchInput;
 use matches::{MatchResult, Page, SearchResult};
@@ -175,7 +175,7 @@ impl PdqmClient {
         result: Result<SearchResult, PdqmError>,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<SearchResult, PdqmError> {
-        use crate::recording::{Late, Recorded, within};
+        use ihe_atna::balp::recording::{Late, Recorded, within};
         if let Some(recorder) = &self.audit {
             let exchange = audit::exchange(&self.base, request(), on_behalf, &result);
             // NOTE: PDQm §2:3.78.5.1 makes the audit record part of the query, so
@@ -183,7 +183,9 @@ impl PdqmClient {
             match within(deadline, recorder.record(exchange)).await {
                 Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
                 Recorded::Late if result.is_ok() => {
-                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(Late))));
+                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(
+                        Late::new(),
+                    ))));
                 }
                 Recorded::Accepted | Recorded::Late => {}
             }
@@ -229,7 +231,7 @@ impl PdqmClient {
         timeout: Duration,
     ) -> Result<MatchResult, PdqmError> {
         #[cfg(feature = "balp")]
-        let deadline = crate::recording::deadline(timeout);
+        let deadline = ihe_atna::balp::recording::deadline(timeout);
         let body = secrecy::SecretString::from(
             serde_json::to_string(&input.parameters()).map_err(PdqmError::Unwritable)?,
         );
@@ -253,7 +255,7 @@ impl PdqmClient {
         result: Result<MatchResult, PdqmError>,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<MatchResult, PdqmError> {
-        use crate::recording::{Late, Recorded, within};
+        use ihe_atna::balp::recording::{Late, Recorded, within};
         use secrecy::ExposeSecret as _;
         if let Some(recorder) = &self.audit {
             // NOTE: BALP Query records the raw request; a POST operation is its
@@ -274,7 +276,9 @@ impl PdqmClient {
             match within(deadline, recorder.record(exchange)).await {
                 Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
                 Recorded::Late if result.is_ok() => {
-                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(Late))));
+                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(
+                        Late::new(),
+                    ))));
                 }
                 Recorded::Accepted | Recorded::Late => {}
             }
@@ -331,7 +335,7 @@ impl PdqmClient {
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
         #[cfg(feature = "balp")]
-        let deadline = crate::recording::deadline(timeout);
+        let deadline = ihe_atna::balp::recording::deadline(timeout);
         let result = self.post(query, timeout).await;
         #[cfg(feature = "balp")]
         let result = self
@@ -399,7 +403,7 @@ impl PdqmClient {
             return Err(PdqmError::ForeignPage);
         }
         #[cfg(feature = "balp")]
-        let deadline = crate::recording::deadline(timeout);
+        let deadline = ihe_atna::balp::recording::deadline(timeout);
         let result = self.get(page, timeout).await;
         #[cfg(feature = "balp")]
         let result = self

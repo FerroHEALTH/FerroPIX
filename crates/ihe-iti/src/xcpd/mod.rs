@@ -90,10 +90,10 @@ use std::time::Duration;
 
 use http::header::{ACCEPT, CONTENT_TYPE};
 
-use crate::recording::{Late, Recorded, within};
 use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
 use error::{Malformation, XcpdError};
+use ihe_atna::balp::recording::{Late, Recorded, within};
 use ihe_atna::user::OnBehalfOf;
 use request::{DiscoveryQuery, Ids, RespondingGateway};
 use security::XuaAssertion;
@@ -178,7 +178,7 @@ impl XcpdClient {
         on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
-        let deadline = crate::recording::deadline(timeout);
+        let deadline = ihe_atna::balp::recording::deadline(timeout);
         let ids = Ids::fresh();
         let written = request::envelope(query, gateway, &ids, assertion)?;
         let answer = self.exchange(gateway, written.body, &ids, timeout).await;
@@ -202,7 +202,7 @@ impl XcpdClient {
             match within(deadline, recorder.record(event)).await {
                 Recorded::Refused(error) => return Err(XcpdError::Audit(error)),
                 Recorded::Late if answer.is_ok() => {
-                    return Err(XcpdError::Audit(audit::AuditError(Box::new(Late))));
+                    return Err(XcpdError::Audit(audit::AuditError(Box::new(Late::new()))));
                 }
                 Recorded::Accepted | Recorded::Late => {}
             }

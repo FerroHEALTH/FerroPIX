@@ -81,7 +81,7 @@ async fn a_match_whose_event_is_not_stored_within_the_exchange_s_time_is_not_use
     assert!(asked.elapsed() < budget + slack, "{:?}", asked.elapsed());
     match answer {
         Err(XcpdError::Audit(AuditError(source))) => {
-            assert!(source.is::<ihe_iti::recording::Late>(), "{source:?}");
+            assert!(source.is::<ihe_atna::balp::recording::Late>(), "{source:?}");
         }
         other => panic!("a match not audited in time is not used (§3.55.5.1): {other:?}"),
     }
@@ -270,6 +270,7 @@ async fn the_dicom_message_fills_the_initiating_gateway_table() {
     let source = AuditSource {
         id: "gateway.example.org".to_owned(),
         enterprise_site: Some("2.999.40".to_owned()),
+        type_codes: Vec::new(),
     };
     let host = AccessPoint {
         type_code: "1",
@@ -364,6 +365,7 @@ async fn message_for(on_behalf: &OnBehalfOf) -> (String, AuditEvent) {
     let source = AuditSource {
         id: "gateway.example.org".to_owned(),
         enterprise_site: None,
+        type_codes: Vec::new(),
     };
     let host = AccessPoint {
         type_code: "1",

@@ -10,7 +10,7 @@ use std::fmt;
 use secrecy::SecretString;
 
 use super::error::InvalidInput;
-use crate::redact::REDACTED;
+use ihe_atna::redact::REDACTED;
 
 /// The URN prefix of an ISO object identifier (RFC 3061).
 const URN_OID: &str = "urn:oid:";

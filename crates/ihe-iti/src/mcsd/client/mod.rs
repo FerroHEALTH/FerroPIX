@@ -28,8 +28,8 @@ use url::Url;
 use super::budget::Budget;
 use super::error::{InvalidBase, McsdError};
 use crate::authorizer::{self, Authorizer};
-use crate::redact::RedactedUrl;
-use crate::search;
+
+use ihe_atna::redact::RedactedUrl;
 
 /// The media type ITI-90 and ITI-91 ask for and read (ITI TF-2 Appendix Z.6).
 const FHIR_JSON: &str = "application/fhir+json";
@@ -281,10 +281,13 @@ struct Interactions {
 impl Interactions {
     /// The interactions on `kind` under the FHIR base `base`.
     fn of(base: &Url, kind: CareService) -> Result<Self, InvalidBase> {
-        let search = search::under_base(base.clone(), kind.resource_type()).ok_or(InvalidBase)?;
-        let history =
-            search::under_base(base.clone(), &format!("{}/_history", kind.resource_type()))
-                .ok_or(InvalidBase)?;
+        let search = ihe_atna::fhir_base::under_base(base.clone(), kind.resource_type())
+            .ok_or(InvalidBase)?;
+        let history = ihe_atna::fhir_base::under_base(
+            base.clone(),
+            &format!("{}/_history", kind.resource_type()),
+        )
+        .ok_or(InvalidBase)?;
         Ok(Self { search, history })
     }
 }
@@ -301,7 +304,7 @@ impl McsdClient {
     /// [`InvalidBase`] when `base` is not an `http` or `https` URL without a
     /// query or a fragment.
     pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidBase> {
-        let base = search::under_base(base, "").ok_or(InvalidBase)?;
+        let base = ihe_atna::fhir_base::under_base(base, "").ok_or(InvalidBase)?;
         Ok(Self {
             organization: Interactions::of(&base, CareService::Organization)?,
             endpoint: Interactions::of(&base, CareService::Endpoint)?,
@@ -395,7 +398,7 @@ impl McsdClient {
         }
         let result = self.find_pages(url.clone(), kind, budget).await;
         #[cfg(feature = "balp")]
-        let result = self.audit(super::audit::QUERY, &url, result).await;
+        let result = self.audit(super::audit::query(), &url, result).await;
         result
     }
 
@@ -448,7 +451,7 @@ impl McsdClient {
         url.query_pairs_mut().append_pair("_since", since);
         let result = self.history_pages(url.clone(), kind, budget).await;
         #[cfg(feature = "balp")]
-        let result = self.audit(super::audit::UPDATES, &url, result).await;
+        let result = self.audit(super::audit::updates(), &url, result).await;
         result
     }
 

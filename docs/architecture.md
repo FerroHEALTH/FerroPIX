@@ -1072,7 +1072,7 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ ◆ FerroPIX   [ / Find a patient: identifier, name or birth date… ]  ● Serving │
-│                                                      ☾ theme   Ruben ▾       │
+│                                                      ☾ theme   Sam Q ▾       │
 ├────────────┬─────────────────────────────────────────────────────────────────┤
 │ WORK       │ Dashboard                                                        │
 │ ▸ Dashboard│                                                                  │
@@ -1096,7 +1096,7 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 
 ```text
 ┌──────────────────────────┐
-│ ☰  ◆ FerroPIX     Ruben ▾│
+│ ☰  ◆ FerroPIX     Sam Q ▾│
 │ [ / Find a patient…     ]│
 ├──────────────────────────┤
 │ Dashboard                │
@@ -1145,9 +1145,9 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 │ │ Given        │ Alice            │ Alice         ✓  │ Alice           ✓  │   │
 │ │ Birth date   │ 1958-01-30       │ 1958-01-30    ✓  │ 1958-01-30      ✓  │   │
 │ │ Gender       │ female           │ female        ✓  │ –               –  │   │
-│ │ Postal code  │ 1817 MS          │ 1817 MS       ✓  │ 1812 AB         ≠  │   │
+│ │ Postal code  │ 9999 XX          │ 9999 XX       ✓  │ 9998 XY         ≠  │   │
 │ │ Fed          │ 2026-10-20 09:41 │ 2026-10-19       │ 2026-09-02         │   │
-│ │ Linked by    │ feed             │ deterministic    │ steward: R. T.     │   │
+│ │ Linked by    │ feed             │ deterministic    │ steward: S. Q.     │   │
 │ └────────────────────────────────────────────────────────────────────────┘   │
 ```
 
@@ -1165,7 +1165,7 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 │ │ Given    Alice     ✓ │ │
 │ │ Born     1958-01-30✓ │ │
 │ │ Gender   –         – │ │
-│ │ Postal   1812 AB   ≠ │ │
+│ │ Postal   9998 XY   ≠ │ │
 │ └──────────────────────┘ │
 ```
 
@@ -1188,7 +1188,7 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 │ Mohr, Alice (BSN)  vs  Maiden, Alice (Laboratory)        blocked on 1958+MR │
 │ ┌ Fields ────────────────────────────────┐ ┌ Score 0.91, probable ───────┐  │
 │ │ Family name  Mohr        Maiden      ≠ │ │ Family   JW 0.71    ▬▬ -3.1 │  │
-│ │ Postal code  1817 MS     1812 AB     ≠ │ │ Postal   prefix     ▬  -0.8 │  │
+│ │ Postal code  9999 XX     9998 XY     ≠ │ │ Postal   prefix     ▬  -0.8 │  │
 │ │ Given        Alice       Alice       ✓ │ │ Given    exact    ▬▬▬▬ +4.2 │  │
 │ │ Birth date   1958-01-30  1958-01-30  ✓ │ │ Born     exact   ▬▬▬▬▬ +6.0 │  │
 │ │ Gender       female      –           – │ │ Gender   absent          0  │  │
@@ -1210,7 +1210,7 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 │ ( A )( B )               │
 │ ┌ Maiden, Alice (LAB) ─┐ │
 │ │ Family  Maiden     ≠ │ │
-│ │ Postal  1812 AB    ≠ │ │
+│ │ Postal  9998 XY    ≠ │ │
 │ │ Given   Alice      ✓ │ │
 │ │ Born    1958-01-30 ✓ │ │
 │ └──────────────────────┘ │
@@ -1260,8 +1260,8 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 ```text
 │ Audit trail   [ actor ▾ ] [ kind ▾ ] [ from ] [ to ]            [ Export ]  │
 │ Time              Actor    Kind       Patient         Reason                │
-│ 10-21 09:42:10    R. T.    link       Mohr, Alice     Maiden name; same …   │
-│ 10-21 09:41:55    R. T.    reveal     Mohr, Alice     Phone call with lab   │
+│ 10-21 09:42:10    S. Q.    link       Mohr, Alice     Maiden name; same …   │
+│ 10-21 09:41:55    S. Q.    reveal     Mohr, Alice     Phone call with lab   │
 │ 10-21 09:40:02    system   auto-link  Jansen, Piet    BSN agreed            │
 ```
 

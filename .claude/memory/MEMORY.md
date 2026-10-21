@@ -44,3 +44,6 @@
   poll at most every 60 seconds
 - [FerroUI lockstep](ferroui-lockstep.md): a console, if one is ever added,
   is built on FerroUI and moves in lockstep with the others
+- [The book stays current](book-same-pr.md): ferropix.eu documents only what
+  the code does, changes in the same PR, links the tracker for the planned,
+  never types a moving version; owner 2026-10-21

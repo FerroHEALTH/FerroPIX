@@ -12,8 +12,8 @@ FerroPIX for the others, or finds a patient by their demographics.
 Two siblings are planned to resolve patients through the FerroPIX server once
 it runs: FerroEHR, as the provider of its EHR index
 ([FerroHEALTH/FerroEHR#3380](https://github.com/FerroHEALTH/FerroEHR/issues/3380)),
-and FerroFED, whose identity binding uses a PIX Manager of its own test
-harness until then
+and FerroFED, whose identity binding uses a PIX Manager fake from its own
+tests until then
 ([FerroHEALTH/FerroFED#367](https://github.com/FerroHEALTH/FerroFED/issues/367)).
 FerroFED already takes both published crates from crates.io.
 
@@ -54,10 +54,14 @@ and are not built: the crate does not call the BSNk pseudonym service today.
 
 ## The server, as planned
 
-The v0.0.3 milestone names what the server will do. Until it lands, none of
+The [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
+names what the server will do. Until it lands, none of
 this runs, and this book describes it only as planned:
 
-- **The PIXm Manager:** ITI-83 by `GET` and by `POST`, with several
+- **The PIXm Manager:** ITI-83 by `GET` and by `POST` with a `Parameters`
+  body, FerroHEALTH clients calling it by `POST` so a BSN never appears in a
+  URL, and no URL query in a request log
+  ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)), with several
   `targetSystem` domains in one query, and the ITI-104 identity feed.
 - **The PDQm Supplier:** ITI-78 and the ITI-119 match.
 - **The PMIR Registry:** ITI-93 and ITI-94.
@@ -74,7 +78,8 @@ this runs, and this book describes it only as planned:
 ## What FerroPIX is not
 
 These are the limits of its scope, for the crates today and for the server
-as planned.
+as the [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
+plans it.
 
 - It holds no clinical data. Compositions, observations and documents stay
   in the clinical repository; FerroPIX holds identifiers, the demographics a

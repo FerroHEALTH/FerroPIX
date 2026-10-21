@@ -22,6 +22,14 @@ and this project adheres to
   changelog), built and link-checked on every pull request and deployed
   from `main` by the Docs workflow. The brand gains a favicon set and a mark
   for a dark ground (#45, #46, #47, #49).
+- The guards that keep the book in step with the code, in CI's required
+  `conclusion`: `book-guard.sh` refuses a change to a crate's source or
+  features, the server or a deployment file that does not update the book
+  (the `no-book` label is the escape), `docs-claims.sh` holds each crate's
+  Features table to its `Cargo.toml`, refuses a typed crate version and a
+  planned item without its tracker link, and `writing-style.sh` refuses an
+  em dash, a banned word or AI attribution in the published prose. Each has
+  a `--self-test` (#48).
 
 ### Changed
 

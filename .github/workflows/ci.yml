@@ -21,7 +21,8 @@ on:
   pull_request:
     branches: [main]
     # `edited` re-runs the contribution-licence guard when the box is ticked;
-    # `labeled` and `unlabeled` re-run the changelog guard for `no-changelog`.
+    # `labeled` and `unlabeled` re-run the changelog guard for `no-changelog`
+    # and the book guard for `no-book`.
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   merge_group:
   workflow_dispatch:
@@ -112,7 +113,7 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released contribution-licence; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released contribution-licence docs-claims book-guard writing-style; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
@@ -261,6 +262,46 @@ jobs:
   # because the Docs workflow's build is no required check. --offline sends no
   # request: an external link is skipped. Its self-test proves a broken anchor
   # and a missing page fail.
+  # The claims of the book that have a machine authority (every feature of
+  # each published crate has its row, no page types a crate version, every
+  # planned item links the tracker), and the mechanical half of the writing
+  # style over the published prose.
+  docs-claims:
+    name: docs-claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          set -euo pipefail
+          bash scripts/checks/docs-claims.sh
+          bash scripts/checks/writing-style.sh
+
+  # A pull request that changes a user-visible surface (a crate's source or
+  # features, the server, a deployment file) updates the book in the same
+  # pull request, or carries the `no-book` label.
+  book-guard:
+    name: book-guard
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'no-book')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: The change updates the book with its surfaces
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/checks/book-guard.sh "$BASE" "$HEAD"
+
   site-links:
     name: site-links
     runs-on: ubuntu-latest
@@ -576,6 +617,8 @@ jobs:
       - ihe-citations
       - dependency-review
       - site-links
+      - docs-claims
+      - book-guard
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

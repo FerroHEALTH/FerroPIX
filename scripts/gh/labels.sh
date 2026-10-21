@@ -261,5 +261,6 @@ label blocked-upstream 6f42c1 "Waiting on an upstream specification or tool rele
 label upstream-report  990000 "An outbound report of a defect in a published specification."
 label no-changelog     bfdadc "PR escape hatch: the change has no user-visible effect."
 label no-crate-bump    bfdadc "PR escape hatch: the diff provably does not alter packaged crate bytes."
+label no-book          bfdadc "PR escape hatch: the change alters nothing the book under website/book says."
 
 echo "done."

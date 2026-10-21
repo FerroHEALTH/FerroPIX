@@ -18,6 +18,7 @@ Closes #NNN
 - [ ] Every refusal the change adds has an asserted negative test, and no test was weakened to pass.
 - [ ] Shell and workflow files are clean: `shellcheck --severity=style`, `actionlint`, `zizmor --min-severity=low .github/`, and the self-test of every script the change touches.
 - [ ] `CHANGELOG.md` has an `[Unreleased]` entry, or the change carries the `no-changelog` label.
+- [ ] The book under `website/book/src` is updated for every user-visible change, or the change carries the `no-book` label.
 - [ ] No patient data, real identifier, key, token or password in a fixture, test or example.
 - [ ] Every commit is signed.
 - [ ] No AI or assistant attribution anywhere in the commits or this PR.

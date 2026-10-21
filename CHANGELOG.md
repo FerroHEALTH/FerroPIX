@@ -2,6 +2,7 @@
 <!-- SPDX-License-Identifier: BUSL-1.1 -->
 
 # Changelog
+<!-- ANCHOR: book -->
 
 All notable changes to this project are documented in this file.
 
@@ -10,6 +11,17 @@ and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- The documentation site at <https://ferropix.eu/>: a landing page in the
+  FerroHEALTH design with the FerroPIX brand, and the book under `/docs/`
+  (what FerroPIX is and what is built or planned, getting started, the
+  published crates with every feature, configuration, deployment, security
+  and audit, operations, the specification pins, contributing and this
+  changelog), built and link-checked on every pull request and deployed
+  from `main` by the Docs workflow. The brand gains a favicon set and a mark
+  for a dark ground (#45, #46, #47, #49).
 
 ### Changed
 

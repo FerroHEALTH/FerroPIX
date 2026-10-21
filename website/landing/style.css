@@ -1,0 +1,342 @@
+/* SPDX-FileCopyrightText: Cadasto B.V. */
+/* SPDX-License-Identifier: BUSL-1.1 */
+
+/* FerroPIX landing page: tokens and layout. Self-contained: a system font
+   stack, no external asset, and light and dark through prefers-color-scheme.
+   Relative URLs only. The accent is the "Plum & Iron" palette of
+   assets/brand/tokens.css. */
+
+:root {
+  /* accent: plum, with darker and lighter steps for hover and fills */
+  --fp-accent: #6b21a8;
+  --fp-accent-600: #581c87;
+  --fp-accent-050: #faf5ff;
+  --fp-on-accent: #ffffff;
+  /* light theme: surface and ink from the brand tokens */
+  --fp-bg: #ffffff;
+  --fp-surface: #f8fafc;
+  --fp-text: #0f172a;
+  --fp-muted: #526070;
+  --fp-border: #dbe3ec;
+  --fp-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+  /* fonts */
+  --fp-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --fp-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* layout */
+  --fp-max: 1080px;
+  --fp-radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* dark theme: the tile ground and mist text, plum-light as the voice */
+    --fp-bg: #0b1020;
+    --fp-surface: #121a2e;
+    --fp-text: #f1f5f9;
+    --fp-muted: #a3b0c2;
+    --fp-border: #24304a;
+    --fp-accent: #c084fc;
+    --fp-accent-600: #d8b4fe;
+    --fp-accent-050: #1a1030;
+    /* plum-light is a light fill, so text on it takes the tile ground */
+    --fp-on-accent: #0b1020;
+    --fp-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: var(--fp-sans);
+  color: var(--fp-text);
+  background: var(--fp-bg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--fp-accent); text-decoration: none; }
+a:hover { color: var(--fp-accent-600); text-decoration: underline; }
+
+img, svg { max-width: 100%; height: auto; }
+
+code {
+  font-family: var(--fp-mono);
+  font-size: 0.88em;
+  background: var(--fp-accent-050);
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--fp-max);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* Nav */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: saturate(180%) blur(12px);
+  background: color-mix(in srgb, var(--fp-bg) 82%, transparent);
+  border-bottom: 1px solid var(--fp-border);
+}
+.nav .wrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: 60px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  color: var(--fp-text);
+}
+.brand:hover { text-decoration: none; color: var(--fp-accent); }
+.brand img { width: 28px; height: 28px; }
+.nav-links {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.nav-links a { color: var(--fp-muted); }
+.nav-links a:hover { color: var(--fp-accent); text-decoration: none; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.7rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  border: 1.5px solid transparent;
+  transition: transform 0.06s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+.btn-primary { background: var(--fp-accent); color: var(--fp-on-accent); }
+.btn-primary:hover { background: var(--fp-accent-600); color: var(--fp-on-accent); }
+.btn-ghost { border-color: var(--fp-border); color: var(--fp-text); background: var(--fp-surface); }
+.btn-ghost:hover { border-color: var(--fp-accent); color: var(--fp-accent); }
+
+/* Hero */
+.hero {
+  position: relative;
+  padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2.5rem, 6vw, 4rem);
+  text-align: center;
+  overflow: hidden;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 55% at 50% 0%, color-mix(in srgb, var(--fp-accent) 16%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--fp-accent-050), transparent 42%);
+  pointer-events: none;
+}
+.hero > * { position: relative; }
+/* The mark is the brand SVG as shipped on the light ground; the page swaps
+   in ferropix-icon-dark.svg through <picture> on the dark one, where the full
+   plum would sink into the tile. */
+.hero-logo { width: 88px; height: 88px; margin: 0 auto 1.25rem; display: block; }
+.status {
+  display: inline-block;
+  margin: 0 auto 1.25rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: var(--fp-accent-050);
+  border: 1px solid var(--fp-border);
+  color: var(--fp-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.hero h1 {
+  font-size: clamp(1.6rem, 3.6vw, 2.5rem);
+  line-height: 1.2;
+  margin: 0 auto 1rem;
+  max-width: 24ch;
+  letter-spacing: -0.01em;
+}
+.hero .sub {
+  color: var(--fp-muted);
+  font-size: clamp(1rem, 1.6vw, 1.18rem);
+  max-width: 62ch;
+  margin: 0 auto 2rem;
+}
+.hero-cta { display: flex; gap: 0.85rem; justify-content: center; flex-wrap: wrap; }
+.hero .note {
+  margin: 1.5rem auto 0;
+  max-width: 60ch;
+  color: var(--fp-muted);
+  font-size: 0.86rem;
+}
+
+/* Section scaffolding */
+section { padding: clamp(3rem, 7vw, 4.5rem) 0; }
+.surface { background: var(--fp-surface); border-block: 1px solid var(--fp-border); }
+.section-head { text-align: center; max-width: 62ch; margin: 0 auto 2.5rem; }
+.section-head h2 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  margin: 0 0 0.6rem;
+  letter-spacing: -0.01em;
+}
+.section-head p { color: var(--fp-muted); margin: 0; font-size: 1.05rem; }
+.eyebrow {
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--fp-accent);
+  margin-bottom: 0.5rem;
+}
+
+.tag {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--fp-muted);
+  margin-bottom: 0.5rem;
+}
+
+/* Cards */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 1.1rem;
+}
+.card {
+  background: var(--fp-bg);
+  border: 1px solid var(--fp-border);
+  border-radius: var(--fp-radius);
+  padding: 1.5rem;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--fp-shadow);
+  border-color: color-mix(in srgb, var(--fp-accent) 40%, var(--fp-border));
+}
+.card h3 { margin: 0 0 0.4rem; font-size: 1.08rem; }
+.card p { margin: 0; color: var(--fp-muted); font-size: 0.94rem; }
+.card code { font-size: 0.85em; }
+
+.audiences { grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
+.audience ul {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* A shell transcript: scrolls inside its own box, so a long line never widens
+   the page. */
+.cmd {
+  max-width: 760px;
+  margin: 0 auto;
+  background: var(--fp-bg);
+  border: 1px solid var(--fp-border);
+  border-radius: var(--fp-radius);
+  padding: 1.1rem 1.25rem;
+  overflow-x: auto;
+  font-family: var(--fp-mono);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.cmd code { background: none; padding: 0; font-size: inherit; }
+
+.prose { max-width: 68ch; margin: 1.75rem auto 0; color: var(--fp-muted); }
+.prose p { margin: 0 0 0.9rem; }
+
+/* Status panel */
+.status-panel {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+  background: var(--fp-bg);
+  border: 1px solid var(--fp-border);
+  border-radius: var(--fp-radius);
+  padding: clamp(1.75rem, 5vw, 2.75rem);
+}
+.status-panel h2 { margin: 0 0 0.75rem; font-size: clamp(1.3rem, 3vw, 1.8rem); }
+.status-panel p { color: var(--fp-muted); margin: 0 auto 1rem; max-width: 60ch; }
+.status-panel .hero-cta { margin-top: 1.5rem; }
+
+/* The roadmap rendered from the open milestones by scripts/site/assemble.sh */
+.roadmap {
+  margin: 1.25rem 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+.roadmap li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  align-items: baseline;
+  justify-content: center;
+}
+.roadmap .tag { margin: 0; }
+.roadmap .due { color: var(--fp-muted); font-size: 0.9rem; }
+
+/* Footer */
+.footer {
+  border-top: 1px solid var(--fp-border);
+  background: var(--fp-surface);
+  padding: 3rem 0 2.5rem;
+  font-size: 0.92rem;
+}
+.footer-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.footer-brand { max-width: 46ch; }
+.footer-brand .brand { margin-bottom: 0.75rem; }
+.footer-brand p { color: var(--fp-muted); margin: 0.35rem 0; }
+.footer-links { display: flex; gap: 2.5rem; flex-wrap: wrap; }
+.footer-links ul { list-style: none; margin: 0; padding: 0; }
+.footer-links h4 { margin: 0 0 0.6rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fp-text); }
+.footer-links li { margin: 0.35rem 0; }
+.footer-links a { color: var(--fp-muted); }
+.footer-links a:hover { color: var(--fp-accent); }
+.footer-note {
+  margin-top: 2.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--fp-border);
+  color: var(--fp-muted);
+  font-size: 0.85rem;
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .nav-links { gap: 1rem; font-size: 0.9rem; }
+  .nav-links .hide-sm { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto; transition: none !important; }
+}

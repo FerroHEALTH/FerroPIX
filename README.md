@@ -3,6 +3,9 @@
 # <img src="assets/brand/ferropix-icon.svg" alt="" width="40" height="40" align="top"> FerroPIX
 
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8.svg)](https://ferropix.eu/docs/)
+
+**Website:** <https://ferropix.eu/> · **Documentation:** <https://ferropix.eu/docs/>
 
 A Master Patient Index for the openEHR platform, in pure Rust: who the patient is.
 
@@ -30,6 +33,10 @@ it. It serves FHIR and HL7 v2 together:
 It also publishes the libraries of the identity specifications it
 implements, for every product to use: `ihe-iti` (the IHE identity profiles,
 a feature each) and `nl-generic-functions` (the Dutch Generic Functions).
+The book's [crates page](https://ferropix.eu/docs/crates/index.html) lists
+every feature with its API reference on docs.rs, and
+[getting started](https://ferropix.eu/docs/integrate/getting-started.html)
+walks through a first PIXm query.
 
 ## Status
 
@@ -37,19 +44,24 @@ The build order is the milestones. v0.0.1 sets up the repository; v0.0.2
 moves `ihe-iti` and `nl-generic-functions` here from FerroFED, where they
 were built first; v0.0.3 is the server. The specifications are the
 authority: the IHE ITI Technical Framework, the IHE PIXm, PDQm and PMIR
-implementation guides, HL7 FHIR R4 and HL7 v2.
+implementation guides, HL7 FHIR R4 and HL7 v2. The book's
+[status table](https://ferropix.eu/docs/evaluate/what-ferropix-is.html)
+says which capabilities are built and which are planned.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and
-[SUPPORT.md](SUPPORT.md).
+[SUPPORT.md](SUPPORT.md). The site is built from `website/`: the landing page
+under `website/landing/` and the book under `website/book/`, assembled by
+`scripts/site/assemble.sh` and published by the Docs workflow.
 
 ## The family
 
 FerroPIX is one of the [FerroHEALTH](https://ferrohealth.eu/) family. The family
 page shows where it sits among the eight and what calls what, and this
 repository is where the design and the build happen; the tracker is the
-record of both. Its site will be <https://ferropix.eu/>.
+record of both. Its site is <https://ferropix.eu/>, and what every product
+shares is in the [family book](https://ferrohealth.eu/docs/).
 
 ## Licence
 

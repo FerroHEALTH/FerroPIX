@@ -1,0 +1,111 @@
+/* SPDX-FileCopyrightText: Cadasto B.V. */
+/* SPDX-License-Identifier: BUSL-1.1 */
+/* The FerroPIX recolour of mdBook's "light" and "navy" themes, the two the
+   book opens in. The values are the "Plum & Iron" palette of
+   assets/brand/tokens.css and the landing page's surfaces, written in because
+   mdBook switches theme by class, not by prefers-color-scheme. The other
+   themes stay mdBook's own. */
+
+:root {
+  /* The landing page's stacks. No web font: theme/fonts/fonts.css replaces
+     mdBook's bundled Open Sans so nothing is fetched for type. */
+  --mono-font: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.light {
+  --bg: #ffffff;
+  --fg: #0f172a;
+  --sidebar-bg: #f8fafc;
+  --sidebar-fg: #0f172a;
+  --sidebar-non-existant: #64748b;
+  --sidebar-active: #6b21a8;
+  --sidebar-spacer: #dbe3ec;
+  --sidebar-header-border-color: #6b21a8;
+  --scrollbar: #64748b;
+  --icons: #526070;
+  --icons-hover: #581c87;
+  --links: #6b21a8;
+  --inline-code-color: #581c87;
+  --theme-popup-bg: #ffffff;
+  --theme-popup-border: #dbe3ec;
+  --theme-hover: #f5f0fa;
+  --quote-bg: #faf5ff;
+  --quote-border: #e9d5ff;
+  --table-border-color: #dbe3ec;
+  --table-header-bg: #f3e8ff;
+  --table-alternate-bg: #f8fafc;
+  --searchbar-border-color: #dbe3ec;
+  --searchbar-bg: #ffffff;
+  --searchbar-fg: #0f172a;
+  --searchresults-header-fg: #526070;
+  --search-mark-bg: #e9d5ff;
+  --footnote-highlight: #6b21a8;
+}
+
+.navy {
+  --bg: #0b1020;
+  --fg: #f1f5f9;
+  --sidebar-bg: #121a2e;
+  --sidebar-fg: #cbd5e1;
+  --sidebar-non-existant: #64748b;
+  --sidebar-active: #c084fc;
+  --sidebar-spacer: #24304a;
+  --sidebar-header-border-color: #c084fc;
+  --scrollbar: #a3b0c2;
+  --icons: #a3b0c2;
+  --icons-hover: #f1f5f9;
+  --links: #c084fc;
+  --inline-code-color: #e9d5ff;
+  --theme-popup-bg: #121a2e;
+  --theme-popup-border: #24304a;
+  --theme-hover: #1b2440;
+  --quote-bg: #160f2a;
+  --quote-border: #3b2a5c;
+  --table-border-color: #24304a;
+  --table-header-bg: #1e1636;
+  --table-alternate-bg: #0f1626;
+  --searchbar-border-color: #24304a;
+  --searchbar-bg: #121a2e;
+  --searchbar-fg: #f1f5f9;
+  --searchresults-header-fg: #a3b0c2;
+  --searchresults-li-bg: #121a2e;
+  --search-mark-bg: #6b21a8;
+  --footnote-highlight: #c084fc;
+}
+
+/* The mark beside the book title. It sits on the site root, beside the
+   landing page, so the book carries no second copy of the artwork. */
+.menu-title::before {
+  content: "";
+  display: inline-block;
+  width: 1.5em;
+  height: 1.5em;
+  margin-right: 0.45em;
+  vertical-align: -0.35em;
+  background: url("../../assets/brand/ferropix-icon.svg") center / contain no-repeat;
+}
+
+.navy .menu-title::before,
+.coal .menu-title::before,
+.ayu .menu-title::before {
+  background-image: url("../../assets/brand/ferropix-icon-dark.svg");
+}
+
+.content h1,
+.content h2 {
+  border-bottom: 2px solid var(--sidebar-active);
+  padding-bottom: 0.2em;
+}
+
+.content a,
+.content a:visited {
+  color: var(--links);
+}
+
+.content a:hover {
+  color: var(--fg);
+}

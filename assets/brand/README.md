@@ -35,7 +35,33 @@ values from `tokens.css` here verbatim.
 | File | What it is |
 |---|---|
 | `ferropix-icon.svg` | primary icon, full colour, transparent background, 64-unit viewBox at a 512 intrinsic size |
+| `ferropix-icon-dark.svg` | the icon for a dark ground: the card and the tab in plum-light (`#C084FC`), the person and the identifiers in `#F3E8FF` |
+| `favicon.svg` | the tightened mark on a plum tile, for browser tabs; intrinsic size 64 |
+| `favicon-32.png`, `favicon-16.png`, `favicon.ico` | raster favicons |
 | `tokens.css` | the palette as CSS custom properties |
 
-The lockups, the favicon set and the social card follow when the product has a
-site to carry them.
+The lockups and the social card follow when the product needs them.
+
+## Where the palette applies
+
+The landing page reads these values through its own `--fp-*` tokens in
+`website/landing/style.css`, and the book recolours mdBook's `light` and
+`navy` themes with them in `website/book/theme/ferropix.css`, so the site,
+the book and the mark agree. The book shows `ferropix-icon.svg` beside its
+title in the light theme and `ferropix-icon-dark.svg` in the dark one.
+
+The book has no copy of the favicon: `scripts/site/assemble.sh` builds it
+from a staged copy that adds `favicon.svg` and `favicon-32.png` from here to
+the theme directory mdBook reads, so the repository keeps one copy of the
+artwork, and copies this directory to `assets/brand/` of the assembled site.
+
+## Regenerating the rasters
+
+The PNG and ICO files derive from `favicon.svg`. Run these from the
+repository root after any change to it:
+
+```bash
+rsvg-convert -w 32 -h 32 assets/brand/favicon.svg -o assets/brand/favicon-32.png
+rsvg-convert -w 16 -h 16 assets/brand/favicon.svg -o assets/brand/favicon-16.png
+magick assets/brand/favicon-32.png assets/brand/favicon-16.png assets/brand/favicon.ico
+```

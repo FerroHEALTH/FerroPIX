@@ -3,6 +3,6 @@
 # The pinned toolchain, the one the FerroHEALTH products build with
 # (docs/VERSIONS.md).
 [toolchain]
-channel = "1.98.1"
+channel = "1.99.1"
 components = ["rustfmt", "clippy"]
 profile = "minimal"

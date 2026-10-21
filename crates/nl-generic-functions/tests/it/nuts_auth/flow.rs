@@ -46,7 +46,7 @@ async fn a_valid_presentation_gets_a_dpop_bound_token() {
         .await
         .expect("a token");
     assert_eq!(fixture.node.verdicts(), vec![Verdict::Issued]);
-    assert!(!token.token().expose_secret().is_empty());
+    assert_ne!(token.token().expose_secret(), "");
     assert_eq!(
         token.expires_in(),
         Some(std::time::Duration::from_secs(3600))

@@ -76,8 +76,10 @@ The build order is the milestones:
   `watch-prs.sh`, `changelog-merge.sh`, and `project.sh`, a stub: there is no
   roadmap board). `scripts/checks/`: the guards (comment style, versions and
   licence headers, file length, `TODO` pointers, the crate version, the
-  changelog, the contribution licence, and `ihe-citations.sh`, every IHE
-  section the tree cites held to the vendored text). `scripts/release/`: the
+  changelog, the contribution licence, `ihe-citations.sh`, every IHE
+  section the tree cites held to the vendored text, and the documentation
+  guards `site-links.sh`, `docs-claims.sh`, `book-guard.sh` and
+  `writing-style.sh`). `scripts/release/`: the
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor
   script is proven by re-running it against its pin.
@@ -89,8 +91,9 @@ The build order is the milestones:
   from the manifests, a hashed CSP per page by `book-csp.sh`, the roadmap
   from the open milestones), and `toolchain.sh` reads the documentation
   toolchain from `docs/VERSIONS.md`. `.github/workflows/docs.yml` builds it
-  on every pull request and deploys it from `main`; the offline link check
-  is `scripts/checks/site-links.sh`, in CI's `conclusion`.
+  on every pull request and deploys it from `main`; the guards that keep
+  the book in step with the code run in CI's `conclusion`
+  (`.claude/rules/docs-website.md`).
 - `assets/brand/`: the mark, the favicon set and the "Plum & Iron" tokens.
 - `.github/`: CI with the single required `conclusion` check, CodeQL,
   Scorecard, Dependabot, the Docs workflow, the release lane (`release.yml`,
@@ -180,6 +183,13 @@ Discipline is unchanged for subagents: they obey the hard rules below.
 - **Keep the changelog.** `CHANGELOG.md` follows Keep a Changelog 1.1.0:
   every change with user-visible effect adds an entry under `[Unreleased]`
   in the same PR (`scripts/checks/changelog-guard.sh`).
+- **Keep the book current.** A change a user of FerroPIX sees (a published
+  crate's behaviour or features, the server, a deployment file) updates the
+  matching page under `website/book/src` in the same PR
+  (`scripts/checks/book-guard.sh`, the `no-book` label for a change that
+  alters nothing the book says). The book says what is built and what is
+  planned, links the tracker for the planned, and never types a version
+  that moves (`.claude/rules/docs-website.md`).
 - **Never weaken, skip, or delete a test** to make a build pass
   (`.claude/rules/testing.md`).
 - **Record progress on the tracker and commit before ending a session.**
@@ -203,11 +213,13 @@ beside each tree.
 - Rules: `writing-style`, `rust-style`, `reliability`, `comments`, `testing`,
   `spec-adherence`, `vendored-inputs`, `codegen`, `ci-cd`,
   `crates-publishing`, `issue-workflow`, `issue-relationships`,
-  `project-board`.
+  `project-board`, `docs-website` (path-scoped to the site).
 - Agents: `spec-researcher`, `implementer` (both on Opus 5).
 - Skills: `/spec-lookup`, `/next-task`, `/phase-done`, `/phase-status`.
 - Hooks: `no_attribution_guard.sh`, `block_dangerous.sh` (with
-  `--self-test`), `rust_fmt_clippy.sh`, `session_start_issues.sh`.
+  `--self-test`), `rust_fmt_clippy.sh`, `docs_style.sh` (the writing-style
+  guard over an edited page of the published prose),
+  `session_start_issues.sh`.
 - Memory: `.claude/memory/MEMORY.md` is the index; every learning is a
   tracked file there.
 

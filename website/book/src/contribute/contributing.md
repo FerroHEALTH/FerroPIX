@@ -38,7 +38,8 @@ scripts/checks/site-links.sh
   says so.
 - **A changelog entry** under `[Unreleased]` in `CHANGELOG.md` for every
   change a user can see.
-- **The book page it changes,** in the same pull request
+- **The book page it changes,** in the same pull request, or the `no-book`
+  label when it alters nothing the book says
   ([Keeping this book current](keeping-the-book-current.md)).
 - **A crate version bump** when it changes what a published crate ships.
 - **Signed commits** on a conventional branch (`feat/`, `fix/`, `docs/` and

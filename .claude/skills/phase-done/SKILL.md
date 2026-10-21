@@ -55,6 +55,12 @@ records, and it does not decide the work is done on your behalf.
    results you saw, never a green you assumed.
 7. **Changelog check:** a change with user-visible effect has an entry under
    `[Unreleased]` in `CHANGELOG.md`. Add it if it is missing.
+   **Book check:** the same change updates the matching page under
+   `website/book/src` (`.claude/rules/docs-website.md` §The same-PR rule): a
+   crate's behaviour or features, the server, a deployment file. A planned
+   item the change builds moves from "planned" to what it does, and its
+   tracker link goes. The `no-book` label is only for a change that alters
+   nothing the book says.
 8. **Write the close narrative into the PR description:** what shipped, the key
    decisions with their citations, the gate results, and what was deliberately
    left out (with follow-up issue numbers). The PR description plus the issue

@@ -20,8 +20,8 @@ identifiers the clinical domain uses, so a clinical record carries a
 pseudonym and never a directly identifying identifier. FerroEHR is planned
 to resolve its `ehr_id` through it
 ([FerroHEALTH/FerroEHR#3380](https://github.com/FerroHEALTH/FerroEHR/issues/3380)),
-and FerroFED's identity binding to point at it in place of its test
-harness's PIX Manager
+and FerroFED's identity binding to point at it in place of the PIX Manager
+fake its tests run against
 ([FerroHEALTH/FerroFED#367](https://github.com/FerroHEALTH/FerroFED/issues/367)).
 It is to serve FHIR and HL7 v2 together:
 

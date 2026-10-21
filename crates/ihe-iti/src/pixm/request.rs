@@ -10,7 +10,7 @@ use fhir_types::r4::parameters::{Parameters, ParametersParameter, ParametersPara
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
-use crate::search::{self, escape};
+use crate::search::escape;
 
 use super::Invocation;
 use super::error::InvalidInput;
@@ -22,7 +22,7 @@ const OPERATION: &str = "Patient/$ihe-pix";
 
 /// The `[base]/Patient/$ihe-pix` URL for the FHIR base `base`.
 pub(super) fn endpoint(base: Url) -> Result<Url, InvalidInput> {
-    search::under_base(base, OPERATION).ok_or(InvalidInput::Base)
+    ihe_atna::fhir_base::under_base(base, OPERATION).ok_or(InvalidInput::Base)
 }
 
 /// One ITI-83 request as the client sends it.

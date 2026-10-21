@@ -17,7 +17,7 @@ use std::fmt;
 
 use secrecy::SecretString;
 
-use crate::redact::REDACTED;
+use ihe_atna::redact::REDACTED;
 
 use super::error::{FeedError, InvalidInput};
 use super::message;

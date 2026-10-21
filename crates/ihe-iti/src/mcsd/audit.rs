@@ -6,8 +6,8 @@
 //!
 //! [`McsdClient::audited`](super::client::McsdClient::audited) gives the
 //! client a [`AuditRecorder`](ihe_atna::balp::AuditRecorder); it records one
-//! [`Exchange`] per search ([`QUERY`], on the BALP Query pattern) and per
-//! history ([`UPDATES`]), with the first request as sent in the query
+//! [`Exchange`] per search ([`query()`], on the BALP Query pattern) and per
+//! history ([`updates()`]), with the first request as sent in the query
 //! entity. A care services search names no patient, so no patient entity is
 //! written. The client is told of no user, so each record is the client's
 //! own system's ([`OnBehalfOf::System`]) and names no user agent.
@@ -23,38 +23,44 @@ use ihe_atna::balp::{
 use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-90` subtype.
-pub const ITI_90: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-90",
-    display: "Find Matching Care Services",
-};
+pub const ITI_90: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-90",
+    "Find Matching Care Services",
+);
 
 /// The `ITI-91` subtype.
-pub const ITI_91: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-91",
-    display: "Request Care Services Updates",
-};
+pub const ITI_91: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-91",
+    "Request Care Services Updates",
+);
 
 /// What the Find Matching Care Services for Query audit profile fixes.
-pub const QUERY: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Audit.CareServices.Query",
-    event_type: REST,
-    subtypes: &[ITI_90, SEARCH],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn query() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Audit.CareServices.Query",
+        event_type: REST,
+        subtypes: vec![ITI_90, SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// What the Request Care Services Updates audit profile fixes.
-pub const UPDATES: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Audit.CareServices.Updates",
-    event_type: REST,
-    subtypes: &[HISTORY_TYPE, ITI_91],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn updates() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Audit.CareServices.Updates",
+        event_type: REST,
+        subtypes: vec![HISTORY_TYPE, ITI_91],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// The audit record of one search or history of `kind` that asked the
 /// directory at `base` with the first request `request`, and ended in
@@ -78,6 +84,7 @@ pub(super) fn exchange<T>(
         kind,
         recorded: Timestamp::now(),
         outcome,
+        outcome_description: None,
         direction: Direction::Sent {
             server: Peer::server(base),
         },

@@ -84,9 +84,9 @@ use secrecy::ExposeSecret;
 use url::Url;
 
 use crate::authorizer::{self, Authorizer};
-use crate::redact::RedactedUrl;
 use error::{InvalidInput, PixmError};
 use identifier::{CrossReference, SourceIdentifier, TargetSystem};
+use ihe_atna::redact::RedactedUrl;
 use ihe_atna::user::OnBehalfOf;
 use request::Request;
 
@@ -212,7 +212,7 @@ impl PixmClient {
     /// (§2:3.83.5.2.1); an exchange whose record the recorder does not accept
     /// fails, and its answer is not used (§2:3.83.5.1.1). So does an
     /// exchange that succeeded and whose record is not accepted within
-    /// `timeout` ([`crate::recording`]).
+    /// `timeout` ([`ihe_atna::balp::recording`]).
     ///
     /// # Errors
     /// [`PixmError::Unwritable`] before anything is sent when the
@@ -236,20 +236,22 @@ impl PixmClient {
         timeout: Duration,
     ) -> Result<CrossReference, PixmError> {
         #[cfg(feature = "balp")]
-        let deadline = crate::recording::deadline(timeout);
+        let deadline = ihe_atna::balp::recording::deadline(timeout);
         let request = request::request(&self.endpoint, self.invocation, source, targets)
             .map_err(PixmError::Unwritable)?;
         let result = self.ask(&request, source, targets, timeout).await;
         #[cfg(feature = "balp")]
         if let Some(recorder) = &self.audit {
-            use crate::recording::{Late, Recorded, within};
+            use ihe_atna::balp::recording::{Late, Recorded, within};
             let exchange = audit::exchange(&self.endpoint, (&request, source), on_behalf, &result);
             // NOTE: PIXm §2:3.83.5.1.1 makes the audit record part of the exchange,
             // so an answer whose record was not accepted is not used.
             match within(deadline, recorder.record(exchange)).await {
                 Recorded::Refused(error) => return Err(PixmError::Audit(error)),
                 Recorded::Late if result.is_ok() => {
-                    return Err(PixmError::Audit(ihe_atna::balp::AuditError(Box::new(Late))));
+                    return Err(PixmError::Audit(ihe_atna::balp::AuditError(Box::new(
+                        Late::new(),
+                    ))));
                 }
                 Recorded::Accepted | Recorded::Late => {}
             }

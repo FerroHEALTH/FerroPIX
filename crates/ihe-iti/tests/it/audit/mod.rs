@@ -23,5 +23,6 @@ pub(crate) fn observer() -> Observer {
         source_id: "gateway.example.org".to_owned(),
         site: Some("example site".to_owned()),
         host: NetworkAddress::host("gateway.example.org"),
+        source_types: Vec::new(),
     }
 }

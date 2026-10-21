@@ -20,7 +20,7 @@ use quick_xml::events::{BytesRef, BytesStart, Event};
 use quick_xml::name::{NamespaceResolver, ResolveResult};
 
 use super::error::InvalidInput;
-use crate::redact::REDACTED;
+use ihe_atna::redact::REDACTED;
 
 /// The SAML 2.0 assertion namespace (OASIS SAML 2.0 Core §2.3.3).
 const SAML2: &str = "urn:oasis:names:tc:SAML:2.0:assertion";

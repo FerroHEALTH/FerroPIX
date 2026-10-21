@@ -18,6 +18,25 @@ and this project adheres to
   `ihe-atna/balp`, and `atna`, the ITI-55 audit message of `xcpd` on
   `ihe-atna/atna`, which compiles no FHIR model. A product that enabled
   `audit` enables `balp`, `atna` or both. Published between releases (#32).
+- `ihe-iti` 0.0.41 takes `ihe-atna = "=0.2.1"` and drops its own copies of
+  the record bound, the URL redaction and the FHIR base join: they are
+  `ihe-atna`'s `balp::recording`, `redact` and `fhir_base` (FerroHEALTH/FerroAUDIT#8,
+  #9, #61), taken through `ihe-atna`'s `recording` and `redact` features, so
+  a profile without `balp` or `atna` takes no audit stack. **API breaks:**
+  `ihe_iti::recording` is gone (use `ihe_atna::balp::recording`, whose `Late`
+  is made with `Late::new()`); the `EventKind` constants of the audit modules
+  are functions, since `ihe-atna` 0.2's `EventKind` holds a `Vec`
+  (`pixm::audit::query_consumer()`, `pdqm::audit::query_consumer()` and
+  `match_consumer()`, `mcsd::audit::query()` and `updates()`,
+  `pmir::audit::feed_kind()`, `subscription_create()`, `subscription_read()`,
+  `subscription_delete()` and `subscription_search()`). A product that
+  implements `ihe_atna::balp::AuditRecorder` for `ihe-iti`'s clients moves
+  to `ihe-atna = "=0.2.1"` with it (#35).
+- `nl-generic-functions` 0.0.26 takes `ferrohealth-smart = "=0.4.0"`, so a
+  product resolves one copy of it. The three checks the Nuts grant adds to
+  the RFC 8414 issuer rule (the exact canonical issuer text, every endpoint
+  on the issuer's origin, and a refusal of JSON that repeats a name) stay
+  private in `nuts_auth`, as 0.4.0 does not carry them (#36).
 
 ## [0.0.2] - 2026-10-20
 

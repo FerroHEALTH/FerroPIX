@@ -9,10 +9,10 @@
 use std::sync::Arc;
 
 use ihe_atna::balp::Outcome;
+use ihe_atna::balp::recording::Late;
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::error::PdqmError;
 use ihe_iti::pdqm::input::MatchInput;
-use ihe_iti::recording::Late;
 use secrecy::SecretString;
 
 use super::profile::{

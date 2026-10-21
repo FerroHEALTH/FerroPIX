@@ -34,39 +34,45 @@ use ihe_atna::balp::{
 use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-78` subtype.
-pub const ITI_78: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-78",
-    display: "Mobile Patient Demographics Query",
-};
+pub const ITI_78: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-78",
+    "Mobile Patient Demographics Query",
+);
 
 /// The `ITI-119` subtype.
-pub const ITI_119: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-119",
-    display: "Patient Demographics Match",
-};
+pub const ITI_119: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-119",
+    "Patient Demographics Match",
+);
 
 /// What the PDQm Query Consumer audit profile fixes.
-pub const QUERY_CONSUMER: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Query.Audit.Consumer",
-    event_type: REST,
-    subtypes: &[ITI_78, SEARCH],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn query_consumer() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Query.Audit.Consumer",
+        event_type: REST,
+        subtypes: vec![ITI_78, SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// What the PDQm Match Consumer audit profile fixes; the `search` subtype
 /// beside `ITI-119` is the profile's own example's.
-pub const MATCH_CONSUMER: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Match.Audit.Consumer",
-    event_type: REST,
-    subtypes: &[ITI_119, SEARCH],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn match_consumer() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Match.Audit.Consumer",
+        event_type: REST,
+        subtypes: vec![ITI_119, SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// The audit record of one ITI-78 request `request` to the Supplier at
 /// `base`, made for `on_behalf`, which ended in `result`.
@@ -77,7 +83,7 @@ pub(super) fn exchange<T>(
     result: &Result<T, PdqmError>,
 ) -> Exchange {
     recorded(
-        (QUERY_CONSUMER, base),
+        (query_consumer(), base),
         vec![Entity::Query(request)],
         on_behalf,
         result,
@@ -96,11 +102,12 @@ pub(super) fn match_exchange<T>(
     let mut entities = vec![Entity::Query(request)];
     if let Some((system, value)) = patient {
         entities.push(Entity::Patient {
-            system: system.to_owned(),
+            system: Some(system.to_owned()),
+            namespace: None,
             value: value.clone(),
         });
     }
-    recorded((MATCH_CONSUMER, base), entities, on_behalf, result)
+    recorded((match_consumer(), base), entities, on_behalf, result)
 }
 
 /// The record of `kind` for an exchange with the Supplier at `base` over
@@ -120,6 +127,7 @@ fn recorded<T>(
         kind,
         recorded: Timestamp::now(),
         outcome,
+        outcome_description: None,
         direction: Direction::Sent {
             server: Peer::server(base),
         },

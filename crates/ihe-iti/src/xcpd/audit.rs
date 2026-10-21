@@ -30,7 +30,7 @@ use secrecy::SecretString;
 use url::Url;
 
 use super::identifier::HomeCommunityId;
-use crate::redact::{REDACTED, RedactedUrl};
+use ihe_atna::redact::{REDACTED, RedactedUrl};
 use ihe_atna::user::OnBehalfOf;
 
 /// The DICOM `EventID` of the message: `EV(110112, DCM, "Query")`.
@@ -269,6 +269,7 @@ impl AuditEvent {
                 date_time: self.date_time,
                 outcome: self.outcome.code(),
                 type_codes: vec![transaction.clone()],
+                outcome_description: None,
             },
             participants,
             source: source.clone(),
@@ -278,6 +279,7 @@ impl AuditEvent {
                 id: SecretString::from(String::new()),
                 type_code: Some("2"),
                 type_code_role: Some("24"),
+                data_life_cycle: None,
                 id_type_code: transaction,
                 query: Some(self.query.clone()),
                 details: self

@@ -6,12 +6,12 @@
 //!
 //! - [`PmirSubscriber::audited`](super::PmirSubscriber::audited) records
 //!   each subscription create, read and delete as the Subscriber's
-//!   [`SUBSCRIPTION_CREATE`], [`SUBSCRIPTION_READ`] and
-//!   [`SUBSCRIPTION_DELETE`] audit profiles fix them, and the search by
+//!   [`subscription_create()`], [`subscription_read()`] and
+//!   [`subscription_delete()`] audit profiles fix them, and the search by
 //!   channel endpoint, which ITI-94 does not define, on the BALP Query
-//!   pattern ([`SUBSCRIPTION_SEARCH`]).
+//!   pattern ([`subscription_search()`]).
 //! - [`received`] writes the audit record of one ITI-93 message a Patient
-//!   Identity Consumer received, as the [`FEED`] audit profile fixes it: the
+//!   Identity Consumer received, as the [`feed_kind()`] audit profile fixes it: the
 //!   Registry as the source, the Consumer's channel endpoint as the
 //!   destination, one patient entity per Patient Master Identity the
 //!   message names, and the message's `MessageHeader`.
@@ -32,92 +32,107 @@ use super::error::SubscribeError;
 use super::feed::{Event, Feed, PatientIdentity};
 use ihe_atna::balp::{
     APPLICATION, CREATE, CUSTODIAN, Coded, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE, Direction,
-    Entity, EventKind, Exchange, Outcome, Peer, READ, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT,
-    request_text,
+    Entity, EventKind, Exchange, NetworkAddress, Outcome, Peer, READ, REST, SEARCH, SOURCE_ROLE,
+    SYSTEM_OBJECT, request_text,
 };
 use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-93` subtype.
-pub const ITI_93: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-93",
-    display: "Mobile Patient Identity Feed",
-};
+pub const ITI_93: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-93",
+    "Mobile Patient Identity Feed",
+);
 
 /// The `ITI-94` subtype.
-pub const ITI_94: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-94",
-    display: "Subscribe to Patient Updates",
-};
+pub const ITI_94: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-94",
+    "Subscribe to Patient Updates",
+);
 
 /// The `type` of the Feed audit profile: DICOM `110110`.
-pub const PATIENT_RECORD: Coded = Coded {
-    system: "http://dicom.nema.org/resources/ontology/DCM",
-    code: "110110",
-    display: "Patient Record",
-};
+pub const PATIENT_RECORD: Coded = Coded::fixed(
+    "http://dicom.nema.org/resources/ontology/DCM",
+    "110110",
+    "Patient Record",
+);
 
 /// The `type` of the Feed audit profile's message entity.
-pub const MESSAGE_HEADER: Coded = Coded {
-    system: "http://hl7.org/fhir/resource-types",
-    code: "MessageHeader",
-    display: "MessageHeader",
-};
+pub const MESSAGE_HEADER: Coded = Coded::fixed(
+    "http://hl7.org/fhir/resource-types",
+    "MessageHeader",
+    "MessageHeader",
+);
 
 /// What the Feed audit profile fixes.
-pub const FEED: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Feed.Audit",
-    event_type: PATIENT_RECORD,
-    subtypes: &[ITI_93],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn feed_kind() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Feed.Audit",
+        event_type: PATIENT_RECORD,
+        subtypes: vec![ITI_93],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// What the Subscription Create audit profile fixes (BALP Create).
-pub const SUBSCRIPTION_CREATE: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Create",
-    event_type: REST,
-    subtypes: &[CREATE, ITI_94],
-    action: "C",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn subscription_create() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Create",
+        event_type: REST,
+        subtypes: vec![CREATE, ITI_94],
+        action: "C",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// What the Subscription Read audit profile fixes (BALP Read, whose data
 /// flows from the server to the client).
-pub const SUBSCRIPTION_READ: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Read",
-    event_type: REST,
-    subtypes: &[ITI_94, READ],
-    action: "R",
-    client: DESTINATION_ROLE,
-    server: SOURCE_ROLE,
-};
+#[must_use]
+pub fn subscription_read() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Read",
+        event_type: REST,
+        subtypes: vec![ITI_94, READ],
+        action: "R",
+        client: DESTINATION_ROLE,
+        server: SOURCE_ROLE,
+    }
+}
 
 /// What the Subscription Delete audit profile fixes (BALP Delete).
-pub const SUBSCRIPTION_DELETE: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Delete",
-    event_type: REST,
-    subtypes: &[DELETE, ITI_94],
-    action: "D",
-    client: APPLICATION,
-    server: CUSTODIAN,
-};
+#[must_use]
+pub fn subscription_delete() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Delete",
+        event_type: REST,
+        subtypes: vec![DELETE, ITI_94],
+        action: "D",
+        client: APPLICATION,
+        server: CUSTODIAN,
+    }
+}
 
 /// What the BALP Query pattern fixes, for the search of subscriptions.
 ///
 /// The search by channel endpoint is no ITI-94 interaction, and BALP's
 /// basic patterns are for an event no more specific audit event defines.
-pub const SUBSCRIPTION_SEARCH: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Query",
-    event_type: REST,
-    subtypes: &[SEARCH],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn subscription_search() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Query",
+        event_type: REST,
+        subtypes: vec![SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// How an ITI-94 exchange that ended in `result` is recorded.
 fn outcome<T>(result: &Result<T, SubscribeError>) -> Outcome {
@@ -161,6 +176,7 @@ pub(super) fn subscription<T>(
         kind,
         recorded: Timestamp::now(),
         outcome: outcome(result),
+        outcome_description: None,
         direction: Direction::Sent {
             server: registry(subscriptions),
         },
@@ -185,9 +201,10 @@ pub(super) fn search<T>(
     result: &Result<T, SubscribeError>,
 ) -> Exchange {
     Exchange {
-        kind: SUBSCRIPTION_SEARCH,
+        kind: subscription_search(),
         recorded: Timestamp::now(),
         outcome: outcome(result),
+        outcome_description: None,
         direction: Direction::Sent {
             server: registry(subscriptions),
         },
@@ -233,16 +250,17 @@ pub fn received(registry: &Url, endpoint: &Url, feed: Option<&Feed>) -> Exchange
         });
     }
     Exchange {
-        kind: FEED,
+        kind: feed_kind(),
         recorded: Timestamp::now(),
         outcome: if feed.is_some() {
             Outcome::Success
         } else {
             Outcome::MinorFailure
         },
+        outcome_description: None,
         direction: Direction::Received {
             client: Peer::server(registry),
-            endpoint: endpoint.clone(),
+            endpoint: NetworkAddress::uri(endpoint),
         },
         on_behalf: OnBehalfOf::System,
         entities,
@@ -261,7 +279,8 @@ fn patient(identity: &PatientIdentity) -> Option<Entity> {
     }
     identity.identifiers().iter().find_map(|identifier| {
         identifier.system().map(|system| Entity::Patient {
-            system: system.to_owned(),
+            system: Some(system.to_owned()),
+            namespace: None,
             value: identifier.value().clone(),
         })
     })

@@ -29,21 +29,24 @@ use ihe_atna::balp::{
 use ihe_atna::user::OnBehalfOf;
 
 /// The `ITI-83` subtype.
-pub const ITI_83: Coded = Coded {
-    system: ihe_atna::balp::IHE_TRANSACTIONS,
-    code: "ITI-83",
-    display: "Mobile Patient Identifier Cross-reference Query",
-};
+pub const ITI_83: Coded = Coded::fixed(
+    ihe_atna::balp::IHE_TRANSACTIONS,
+    "ITI-83",
+    "Mobile Patient Identifier Cross-reference Query",
+);
 
 /// What the PIXm Query Consumer audit profile fixes.
-pub const QUERY_CONSUMER: EventKind = EventKind {
-    profile: "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Audit.Consumer",
-    event_type: REST,
-    subtypes: &[ITI_83, SEARCH],
-    action: "E",
-    client: SOURCE_ROLE,
-    server: DESTINATION_ROLE,
-};
+#[must_use]
+pub fn query_consumer() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Audit.Consumer",
+        event_type: REST,
+        subtypes: vec![ITI_83, SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
 
 /// The audit record of one ITI-83 exchange that asked the Manager at its
 /// `operation` URL, `[base]/Patient/\$ihe-pix`, with the
@@ -56,9 +59,10 @@ pub(super) fn exchange<T>(
     result: &Result<T, PixmError>,
 ) -> Exchange {
     Exchange {
-        kind: QUERY_CONSUMER,
+        kind: query_consumer(),
         recorded: Timestamp::now(),
         outcome: outcome(result),
+        outcome_description: None,
         direction: Direction::Sent {
             server: Peer::server(&operation.join("..").unwrap_or_else(|_| operation.clone())),
         },
@@ -66,7 +70,8 @@ pub(super) fn exchange<T>(
         entities: vec![
             Entity::Query(query(operation, request)),
             Entity::Patient {
-                system: source.system().to_owned(),
+                system: Some(source.system().to_owned()),
+                namespace: None,
                 value: source.value().clone(),
             },
         ],

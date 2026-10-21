@@ -166,7 +166,7 @@ impl PdqmClient {
     /// Records the request `request`, when the client is audited, and
     /// returns `result` unless the record was refused, or was not accepted
     /// by `deadline` for an answer that would be used
-    /// ([`crate::recording`]).
+    /// ([`ihe_atna::balp::recording`]).
     #[cfg(feature = "balp")]
     async fn audit(
         &self,
@@ -246,7 +246,7 @@ impl PdqmClient {
     /// Records the match of `input`, sent as `body`, when the client is
     /// audited, and returns `result` unless the record was refused, or was
     /// not accepted by `deadline` for an answer that would be used
-    /// ([`crate::recording`]).
+    /// ([`ihe_atna::balp::recording`]).
     #[cfg(feature = "balp")]
     async fn audit_match(
         &self,

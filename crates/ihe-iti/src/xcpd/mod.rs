@@ -162,7 +162,7 @@ impl XcpdClient {
     /// Human Requestor (§3.55.5.1.1).
     ///
     /// `timeout` bounds the whole exchange, from connecting until the answer
-    /// is read, and an audited client's record of it ([`crate::recording`]).
+    /// is read, and an audited client's record of it ([`ihe_atna::balp::recording`]).
     ///
     /// # Errors
     /// An [`XcpdError`] for Case 5 of §3.55.4.2.3, a SOAP fault, an HTTP

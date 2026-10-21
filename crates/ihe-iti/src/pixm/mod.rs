@@ -212,7 +212,7 @@ impl PixmClient {
     /// (§2:3.83.5.2.1); an exchange whose record the recorder does not accept
     /// fails, and its answer is not used (§2:3.83.5.1.1). So does an
     /// exchange that succeeded and whose record is not accepted within
-    /// `timeout` ([`crate::recording`]).
+    /// `timeout` ([`ihe_atna::balp::recording`]).
     ///
     /// # Errors
     /// [`PixmError::Unwritable`] before anything is sent when the

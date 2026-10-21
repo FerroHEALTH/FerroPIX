@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+#
+# The FerroPIX book, served under /docs/ of the Pages site; the landing page
+# holds the root. Build it through scripts/site/assemble.sh, which stages a
+# copy with the favicon from assets/brand/, renders the version markers from
+# the manifests and gives every page a hashed Content-Security-Policy.
+
+[book]
+title = "FerroPIX"
+authors = ["Cadasto B.V."]
+description = "Documentation for FerroPIX, the FerroHEALTH Master Patient Index over IHE PIXm, PDQm, PMIR and HL7 v2 PIX and PDQ, and for the identity crates it publishes, ihe-iti and nl-generic-functions."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+# site-url makes the book's absolute asset, search and 404 links resolve under
+# /docs/ at the root of the domain the site is served on.
+site-url = "/docs/"
+# The two themes theme/ferropix.css recolours with the "Plum & Iron" palette.
+default-theme = "light"
+preferred-dark-theme = "navy"
+additional-css = ["theme/ferropix.css"]
+git-repository-url = "https://github.com/FerroHEALTH/FerroPIX"
+edit-url-template = "https://github.com/FerroHEALTH/FerroPIX/edit/main/website/book/{path}"
+smart-punctuation = true
+
+# The book carries no runnable code. The playground would fetch from
+# play.rust-lang.org, which the page's Content-Security-Policy forbids.
+[output.html.playground]
+runnable = false
+copyable = true
+
+[output.html.search]
+enable = true

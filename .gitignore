@@ -20,3 +20,8 @@
 # Vendored texts whose licence keeps them out of the tree, fetched by
 # scripts/vendor/*.sh for a local read (.claude/rules/vendored-inputs.md).
 /.vendor-cache/
+
+# The book's local build output and the assembled site
+# (scripts/site/assemble.sh).
+/website/book/book/
+/_site/

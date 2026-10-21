@@ -81,8 +81,19 @@ The build order is the milestones:
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor
   script is proven by re-running it against its pin.
+- `website/`: the public site at <https://ferropix.eu/>, the landing page
+  (`landing/`) at the root and the mdBook (`book/`) under `/docs/`, with the
+  "Plum & Iron" recolour of mdBook's `light` and `navy` themes.
+  `scripts/site/`: `assemble.sh` builds the site as Pages serves it (the
+  book from a staged copy with the favicon, its version markers rendered
+  from the manifests, a hashed CSP per page by `book-csp.sh`, the roadmap
+  from the open milestones), and `toolchain.sh` reads the documentation
+  toolchain from `docs/VERSIONS.md`. `.github/workflows/docs.yml` builds it
+  on every pull request and deploys it from `main`; the offline link check
+  is `scripts/checks/site-links.sh`, in CI's `conclusion`.
+- `assets/brand/`: the mark, the favicon set and the "Plum & Iron" tokens.
 - `.github/`: CI with the single required `conclusion` check, CodeQL,
-  Scorecard, Dependabot, the release lane (`release.yml`,
+  Scorecard, Dependabot, the Docs workflow, the release lane (`release.yml`,
   `release-crate.yml`) and `publish-crates.yml` through Trusted Publishing,
   the templates.
 - `.claude/`: the working discipline (rules, agents, skills, hooks, memory).

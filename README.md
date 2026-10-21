@@ -3,6 +3,9 @@
 # <img src="assets/brand/ferropix-icon.svg" alt="" width="40" height="40" align="top"> FerroPIX
 
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8.svg)](https://ferropix.eu/docs/)
+
+**Website:** <https://ferropix.eu/> · **Documentation:** <https://ferropix.eu/docs/>
 
 A Master Patient Index for the openEHR platform, in pure Rust: who the patient is.
 
@@ -10,11 +13,17 @@ Every organisation issues its own identifiers for the same person, and records m
 
 ## What it does
 
-FerroPIX holds the patient identity cross-reference and mints the
-pseudonymous identifiers the clinical domain uses, so a clinical record
-carries a pseudonym and never a directly identifying identifier. FerroEHR
-resolves its `ehr_id` through it, and FerroFED's identity binding points at
-it. It serves FHIR and HL7 v2 together:
+The FerroPIX server, planned in the
+[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3),
+holds the patient identity cross-reference and mints the pseudonymous
+identifiers the clinical domain uses, so a clinical record carries a
+pseudonym and never a directly identifying identifier. FerroEHR is planned
+to resolve its `ehr_id` through it
+([FerroHEALTH/FerroEHR#3380](https://github.com/FerroHEALTH/FerroEHR/issues/3380)),
+and FerroFED's identity binding to point at it in place of its test
+harness's PIX Manager
+([FerroHEALTH/FerroFED#367](https://github.com/FerroHEALTH/FerroFED/issues/367)).
+It is to serve FHIR and HL7 v2 together:
 
 - **PIXm and PIX:** the identifier cross-reference query (ITI-83 by GET and
   POST, with several target systems) and the FHIR identity feed (ITI-104),
@@ -27,9 +36,13 @@ it. It serves FHIR and HL7 v2 together:
   linking and merge, persisted.
 - **Pseudonyms:** one per patient and pseudonymisation domain.
 
-It also publishes the libraries of the identity specifications it
+FerroPIX already publishes the libraries of the identity specifications it
 implements, for every product to use: `ihe-iti` (the IHE identity profiles,
 a feature each) and `nl-generic-functions` (the Dutch Generic Functions).
+The book's [crates page](https://ferropix.eu/docs/crates/index.html) lists
+every feature with its API reference on docs.rs, and
+[getting started](https://ferropix.eu/docs/integrate/getting-started.html)
+walks through a first PIXm query.
 
 ## Status
 
@@ -37,19 +50,24 @@ The build order is the milestones. v0.0.1 sets up the repository; v0.0.2
 moves `ihe-iti` and `nl-generic-functions` here from FerroFED, where they
 were built first; v0.0.3 is the server. The specifications are the
 authority: the IHE ITI Technical Framework, the IHE PIXm, PDQm and PMIR
-implementation guides, HL7 FHIR R4 and HL7 v2.
+implementation guides, HL7 FHIR R4 and HL7 v2. The book's
+[status table](https://ferropix.eu/docs/evaluate/what-ferropix-is.html)
+says which capabilities are built and which are planned.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and
-[SUPPORT.md](SUPPORT.md).
+[SUPPORT.md](SUPPORT.md). The site is built from `website/`: the landing page
+under `website/landing/` and the book under `website/book/`, assembled by
+`scripts/site/assemble.sh` and published by the Docs workflow.
 
 ## The family
 
 FerroPIX is one of the [FerroHEALTH](https://ferrohealth.eu/) family. The family
 page shows where it sits among the eight and what calls what, and this
 repository is where the design and the build happen; the tracker is the
-record of both. Its site will be <https://ferropix.eu/>.
+record of both. Its site is <https://ferropix.eu/>, and what every product
+shares is in the [family book](https://ferrohealth.eu/docs/).
 
 ## Licence
 

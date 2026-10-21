@@ -11,7 +11,8 @@
 #   3. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
 #      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE, Cargo.lock, JSON (which has no comment
-#      syntax) and test fixtures carry no header.
+#      syntax), the raster images (PNG and ICO, which have none either) and
+#      test fixtures carry no header.
 #
 # Usage:
 #   scripts/checks/versions.sh [--root DIR]   check this repository, or DIR
@@ -156,7 +157,7 @@ fi
 # 3. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | */LICENSE | NOTICE | Cargo.lock | *.json | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | *.json | *.png | *.ico | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

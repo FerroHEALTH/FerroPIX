@@ -14,11 +14,27 @@ No specification governs this file; it is FerroPIX's own design.
 
 ## Toolchain
 
+<!-- ANCHOR: toolchain -->
 | Item | Pin | Repeated in |
 |---|---|---|
 | Rust toolchain | `1.99.1` | `rust-toolchain.toml` |
 | Minimum supported Rust version | `1.98` | `Cargo.toml` `[workspace.package] rust-version` |
 | Edition | `2024` | `Cargo.toml` `[workspace.package] edition`, `rustfmt.toml` |
+<!-- ANCHOR_END: toolchain -->
+
+## Documentation toolchain
+
+The tools that build and check the site under `website/`.
+`scripts/site/toolchain.sh` reads these rows, the Docs workflow and the CI
+link check install exactly these versions, and `scripts/site/assemble.sh`
+refuses another mdBook. They are the versions the FerroHEALTH family book
+pins, so every book in the family builds with the same tools.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| mdBook | `0.5.4` | `scripts/site/toolchain.sh` reads it |
+| mdbook-lint | `0.14.4` | `scripts/site/toolchain.sh` reads it |
+| lychee | `0.24.2` | `scripts/site/toolchain.sh` reads it |
 
 ## Specifications
 
@@ -26,6 +42,7 @@ These are the specification versions the identity crates implement, at
 FerroFED's pins (FerroFED's `docs/VERSIONS.md`, read on 2026-10-20). Each
 vendored text is a row of the corpus table below.
 
+<!-- ANCHOR: specifications -->
 | Item | Version | Transactions |
 |---|---|---|
 | IHE PIXm | `ihe.iti.pixm` 3.1.0 | ITI-83 Mobile Patient Identifier Cross-reference Query, ITI-104 Patient Identity Feed FHIR |
@@ -38,6 +55,7 @@ vendored text is a row of the corpus table below.
 | IHE ITI Technical Framework | Volumes 1 and 2, the revision the move pins | PIX and PDQ: ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22, and ITI-44 to ITI-47 as the TF-2 texts decide, with the actors and options of each |
 | HL7 FHIR | R4, 4.0.1 | the resources and the RESTful API PIXm and PDQm are profiled on |
 | HL7 v2 | the version each PIX or PDQ transaction names in ITI TF-2 | the HL7 v2 PIX and PDQ transactions, where in scope |
+<!-- ANCHOR_END: specifications -->
 
 ## Corpora
 

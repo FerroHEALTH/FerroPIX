@@ -1,0 +1,14 @@
+<!-- SPDX-FileCopyrightText: Cadasto B.V. -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- Favicon master: a tightened cut of the mark on a plum tile. The card is
+     wider, the tab shorter and the identifiers two plain bars, because the
+     full detail blurs below 24 px. Intrinsic size stays 64: a favicon wants a
+     small natural size. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="FerroPIX">
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#6B21A8"/>
+  <rect x="9" y="17" width="46" height="37" rx="5" fill="none" stroke="#F1F5F9" stroke-width="5"/>
+  <path d="M9 22 V15 a5 5 0 0 1 5 -5 h13 v12 Z" fill="#F1F5F9"/>
+  <circle cx="22" cy="33" r="5" fill="#F1F5F9"/>
+  <path d="M15 47 a7 7 0 0 1 14 0" fill="none" stroke="#F1F5F9" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M36 31 H47 M36 41 H47" fill="none" stroke="#F1F5F9" stroke-width="4.5" stroke-linecap="round"/>
+</svg>

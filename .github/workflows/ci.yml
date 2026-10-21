@@ -254,6 +254,29 @@ jobs:
           NO_CRATE_BUMP: ${{ contains(github.event.pull_request.labels.*.name, 'no-crate-bump') }}
         run: bash scripts/checks/crate-version-guard.sh "$BASE" "$HEAD"
 
+  # The site link guard: the book's sources linted, and the site assembled as
+  # the Docs workflow publishes it, the landing page at the root and the book
+  # under /docs/, with every internal link and anchor resolved offline, and
+  # README.md against the tree. It sits here, in the required conclusion,
+  # because the Docs workflow's build is no required check. --offline sends no
+  # request: an external link is skipped. Its self-test proves a broken anchor
+  # and a missing page fail.
+  site-links:
+    name: site-links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/docs-toolchain
+      - run: |
+          set -euo pipefail
+          bash scripts/checks/site-links.sh --self-test
+          bash scripts/checks/site-links.sh
+
   detect:
     name: detect
     runs-on: ubuntu-latest
@@ -552,6 +575,7 @@ jobs:
       - features
       - ihe-citations
       - dependency-review
+      - site-links
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -100,16 +100,17 @@ render() {
   done < <(grep -o -E '\{\{(version|dep):[A-Za-z0-9_-]+\}\}' "$file" | sort -u)
 }
 
-# The open milestones as list items, oldest due date first. Every field that
+# The open milestones as list items, oldest due date first: the name and a
+# link to the milestone, never its issue counts, which go stale the moment an
+# issue moves and the site is only redeployed from main. Every field that
 # reaches the page is HTML-escaped, because a milestone title is text somebody
 # typed.
 roadmap() {
   gh api "repos/$REPO/milestones?state=open&sort=due_on&direction=asc" --jq '
     def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
     ["<ul class=\"roadmap\">"]
-    + map("  <li><span class=\"tag\">" + (.title | esc) + "</span>"
-          + "<a href=\"" + .html_url + "\" rel=\"noopener\">" + (.open_issues | tostring) + " open, " + (.closed_issues | tostring) + " closed</a>"
-          + (if .due_on == null then "" else "<span class=\"due\">due " + .due_on[0:10] + "</span>" end)
+    + map("  <li><a href=\"" + .html_url + "\" rel=\"noopener\">" + (.title | esc) + "</a>"
+          + (if .description == null or .description == "" then "" else "<span class=\"theme\">" + (.description | split(":")[0] | esc) + "</span>" end)
           + "</li>")
     + ["</ul>"] | .[]'
 }

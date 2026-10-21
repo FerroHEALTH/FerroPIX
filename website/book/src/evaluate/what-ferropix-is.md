@@ -7,9 +7,15 @@ FerroPIX is a Master Patient Index. It holds the patient identity
 cross-reference of a group of systems: which identifier each identifier
 domain (a hospital's patient number, a national number, a regional index)
 uses for one person. A system that knows a patient by one identifier asks
-FerroPIX for the others, or finds a patient by their demographics, and every
-other FerroHEALTH component starts from that answer. FerroEHR resolves its
-`ehr_id` through it, and FerroFED's identity binding points at it.
+FerroPIX for the others, or finds a patient by their demographics.
+
+Two siblings are planned to resolve patients through the FerroPIX server once
+it runs: FerroEHR, as the provider of its EHR index
+([FerroHEALTH/FerroEHR#3380](https://github.com/FerroHEALTH/FerroEHR/issues/3380)),
+and FerroFED, whose identity binding uses a PIX Manager of its own test
+harness until then
+([FerroHEALTH/FerroFED#367](https://github.com/FerroHEALTH/FerroFED/issues/367)).
+FerroFED already takes both published crates from crates.io.
 
 A patient index keeps identifying data outside the clinical record, which is
 where the openEHR Platform Service Model puts the EHR Index. FerroPIX adds

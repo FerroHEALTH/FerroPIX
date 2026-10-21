@@ -19,8 +19,9 @@ and need nothing at run time beyond the servers they call.
 
 As the milestone plans it, a FerroPIX deployment sits beside:
 
-- **the clinical systems that ask it,** FerroEHR among them, which resolves
-  its `ehr_id` through PIXm and PDQm;
+- **the clinical systems that ask it,** FerroEHR among them, which is
+  planned to resolve its `ehr_id` through PIXm and PDQm
+  ([FerroHEALTH/FerroEHR#3380](https://github.com/FerroHEALTH/FerroEHR/issues/3380));
 - **an authorization server** whose access tokens it reads;
 - **an ATNA audit repository** that receives its BALP records.
 

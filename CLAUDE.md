@@ -41,6 +41,16 @@ FerroPIX in prose, `ferropix` in identifiers.
   built in FerroUI, never drawn by hand here. An identifier lookup uses
   `POST`, so a BSN never sits in a URL (#52).
 
+The console will be built on `ferrohealth-ui`, and FerroUI leads its UI:
+the FerroUI repository holds the components, the design (`design/`, the
+only design source) and the component rules, and its consumer guide
+[`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/main/docs/consoles.md)
+says how a console uses them. The parts this console needs (record compare,
+timeline, masked identifier, work-list, score breakdown) arrive in FerroUI
+v0.3.1. No UI rules, agents or skills are written here until the console
+work starts; they will then point at FerroUI and keep only what is
+particular to this console.
+
 ## The design is recorded in `docs/architecture.md`
 
 Read it first. It is the design of record from the pass of 2026-10-21: the

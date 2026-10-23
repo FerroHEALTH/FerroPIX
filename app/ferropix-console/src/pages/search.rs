@@ -6,8 +6,8 @@
 //!
 //! Both forms post, so nothing typed reaches a URL or the browser history
 //! (`docs/architecture.md` §12.1, #52); the identifier is masked as it is
-//! typed, and the design's hold-to-show eye inside the field waits on
-//! FerroUI's R10 (FerroHEALTH/FerroUI#323). The server's search is #90, so until it exists the post sends
+//! typed, with FerroUI's hold-to-show eye inside the field (R10). The
+//! server's search is #90, so until it exists the post sends
 //! nothing on and the page says that nothing was searched, under the state
 //! the server is in. The domain list is the server's too, so the domain is
 //! a disabled choice that says the domains are not known.
@@ -15,9 +15,10 @@
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::view::action::ActionGroup;
 use ferrohealth_ui::view::button::{Variant, label};
-use ferrohealth_ui::view::form::{Field, INPUT, SELECT, check_field, help_id};
+use ferrohealth_ui::view::form::{Field, INPUT, Inner, SELECT, check_field, help_id, masked_input};
 use ferrohealth_ui::view::segmented::segmented_links;
 use ferrohealth_ui::view::surface::{card, page_header, stack};
+use ferrohealth_ui::widget::masked::HoldWords;
 use leptos::prelude::*;
 
 use ferrohealth_ui::calendar::{Bounds, Day, Weekday};
@@ -47,18 +48,15 @@ fn by_identifier() -> AnyView {
             <option value="">{tr(Msg::DomainsNotKnown)}</option>
         </select>
     });
-    let identifier = Field::new("identifier", tr(Msg::Identifier)).view(view! {
-        <input
-            id="identifier"
-            name="identifier"
-            type="password"
-            class=INPUT
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            aria-describedby=help_id("identifier")
-        />
-    });
+    let identifier = Field::new("identifier", tr(Msg::Identifier))
+        .trailing(Inner::HoldToShow(
+            HoldWords::of_page().named(tr(Msg::IdentifierHold)),
+        ))
+        .view(masked_input(
+            "identifier",
+            "identifier",
+            Some(help_id("identifier")),
+        ));
     view! {
         <form method="post" action=SEARCH class="fui-form">
             <input type="hidden" name="segment" value="identifier" />

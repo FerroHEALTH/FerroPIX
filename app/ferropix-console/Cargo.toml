@@ -27,8 +27,11 @@ path = "src/main.rs"
 
 [dependencies]
 # Every island the console draws is FerroUI's, so the browser half links the
-# library for its islands and nothing of the console's own.
-ferrohealth-ui.workspace = true
+# library for its islands and nothing of the console's own. `split` keeps the
+# lazy islands (the date picker) in chunks of their own, which only a site
+# built with `cargo leptos build --split` may turn on (FerroUI
+# `docs/consoles.md`, "How a console builds").
+ferrohealth-ui = { workspace = true, features = ["split"] }
 leptos = { workspace = true, features = ["islands"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

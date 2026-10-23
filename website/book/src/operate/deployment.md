@@ -7,8 +7,10 @@ FerroPIX publishes no binary and no container image yet. The server, on
 PostgreSQL, its container image pinned by digest and a compose quickstart
 that runs it beside PostgreSQL are planned in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
-A second image, the operator console, and a Helm chart are planned for the
-milestone after it.
+A second image, the operator console's, and a Helm chart are planned for the
+milestone after it ([#99](https://github.com/FerroHEALTH/FerroPIX/issues/99),
+[#100](https://github.com/FerroHEALTH/FerroPIX/issues/100)); the console
+itself runs from source today ([The operator console](console.md)).
 
 What deploys today is the two crates, inside your own application: they
 build with the Rust toolchain your application uses, at or above the

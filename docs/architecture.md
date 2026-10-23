@@ -113,7 +113,7 @@ our own design, after the siblings.
                    ▲
                    │  /operator, with the steward's token
    ┌───────────────┴──────────────────────────────────────────┐
-   │ ferropix-viewer (the console): server-rendered Leptos     │
+   │ ferropix-console (the console): server-rendered Leptos     │
    │   OIDC sign-in, session on the console's server           │
    └──────────────────────────────────────────────────────────┘
 ```
@@ -123,8 +123,8 @@ our own design, after the siblings.
   `{base}/fhir`, the MLLP listener on its own port, the operator API under
   `{base}/operator`, the health family, the audit sender and the PMIR feed
   sender.
-- **`app/ferropix-viewer`**, binary `ferropix-viewer`, image
-  `ghcr.io/ferrohealth/ferropix-viewer`. A pure HTTP client of the operator
+- **`app/ferropix-console`**, binary `ferropix-console`, image
+  `ghcr.io/ferrohealth/ferropix-console`. A pure HTTP client of the operator
   API. It links `ferropix-operator-api` (the serde types of every operator
   document, so a field renamed on one side fails the other's build, the
   shape FerroBRIDGE #777 fixed) and `ferrohealth-ui`, and no other workspace
@@ -710,11 +710,11 @@ and the server's report counts the operator API's routes.
 
 No specification governs packaging: our own design, after FerroFED.
 
-**The images.** `docker/Dockerfile` and `docker/viewer/Dockerfile`, each one
+**The images.** `docker/Dockerfile` and `docker/console/Dockerfile`, each one
 stage on `gcr.io/distroless/static-debian13:nonroot` pinned by digest,
 copying the static binary the release lane stages under
 `dist/<os>_<arch>/` (and, for the console, the site bundle under
-`dist/viewer/site/`), compiling nothing, running as `65532:65532`, with the
+`dist/console/site/`), compiling nothing, running as `65532:65532`, with the
 `HEALTHCHECK` on the binary's own `healthcheck` subcommand, the OCI labels
 (title, description, url, documentation, source, vendor, authors, the
 manufacturer, licence `BUSL-1.1`, base name). The server image exposes
@@ -725,7 +725,7 @@ spool directory is created in the image, `0700`, owned by the runtime user.
 image with the hardening set (`read_only`, `cap_drop: [ALL]`,
 `no-new-privileges`, `tmpfs` for `/tmp`), the official `postgres:18` image
 pinned by digest with its data on a volume, every secret as a file secret
-(`FERROPIX__DB__URL_FILE`), the `viewer` profile that runs the console
+(`FERROPIX__DB__URL_FILE`), the `console` profile that runs the console
 beside the server, and a `dev` issuer for the sign-in. FerroBRIDGE's
 `compose.yaml` is the model; the `cdm` profiles are not needed here.
 
@@ -742,9 +742,9 @@ auditable`), which attests each tarball; `build-image` calls
 `release-image.yml`, which verifies the tarballs against `release-build.yml`'s
 signer identity before it extracts them, pushes the multi-platform index,
 and attests the index and each manifest with SLSA provenance and an SPDX
-SBOM as OCI referrers; `build-viewer` calls `release-viewer.yml`, whose
+SBOM as OCI referrers; `build-console` calls `release-console.yml`, whose
 `binary` and `site` jobs attest the console's binary and bundle and whose
-`image` job packs and attests `ferropix-viewer`; `finalize-release`
+`image` job packs and attests `ferropix-console`; `finalize-release`
 publishes; `crates` publishes `ihe-iti` and `nl-generic-functions` when they
 moved; `milestone` closes the milestone. A reusable workflow runs on a VM a
 caller cannot add steps to, which is what keeps the signing identity out of
@@ -754,7 +754,7 @@ to achieve SLSA v1 Build Level 3"). A consumer verifies with `gh attestation
 verify oci://ghcr.io/ferrohealth/ferropix:<version> --repo
 FerroHEALTH/FerroPIX --signer-workflow
 FerroHEALTH/FerroPIX/.github/workflows/release-image.yml`, and the same
-for the console against `release-viewer.yml`.
+for the console against `release-console.yml`.
 
 ## 11. The CI lanes
 
@@ -769,7 +769,7 @@ each added as its own issue (section 14):
 | `pin-freshness.yml` | reads the newest upstream release of every pin no Dependabot ecosystem watches (the FHIR packages, the IHE pages' digests, the container images, the distroless digest, Chrome for Testing) and opens one issue when one is behind | the corpora and the images are pinned by digest and nothing else watches them |
 | `contribution-licence.yml` | the licence box of the pull request body, re-run on `edited`, skipped for a bot | the `ci.yml` job runs on `synchronize` only, so a body edited after the push is not re-read |
 | `label-guards.yml` | re-runs `changelog-guard` and `crate-version-guard` when `no-changelog` or `no-crate-bump` is added or removed | `ci.yml` does not run on `labeled`, so a label added after the run leaves `conclusion` red |
-| `viewer` (in `ci.yml`) | clippy on `wasm32-unknown-unknown`, the site bundle against its byte budget | the console's browser half |
+| `console` (in `ci.yml`) | clippy on `wasm32-unknown-unknown`, the site bundle against its byte budget | the console's browser half |
 | `journeys` (in `ci.yml`) | the console's browser journeys and the painted-contrast battery behind `FERROPIX_JOURNEYS` | section 12.5 |
 
 ## 12. The operator console
@@ -817,9 +817,11 @@ looked.
 ### 12.2 Information architecture
 
 The shell is the library's: a top bar with the global search field, the
-server's status pill, the theme toggle and the steward's menu; a grouped
-navigation beside the page from 64 rem, a drawer below it; the footer with
-the product, its version and the manufacturer. The groups:
+server's status pill and the steward's menu, which holds the theme (the top
+bar carries no theme toggle, FerroUI family rule 5); a grouped navigation
+beside the page from 64 rem, a drawer below it; the footer with the product,
+its version and the manufacturer. The groups, as the reviewed design in
+FerroUI's `design/consoles/ferropix/` draws them:
 
 | Group | Entry | Route | For |
 |---|---|---|---|
@@ -827,13 +829,14 @@ the product, its version and the manufacturer. The groups:
 | Work | Review queue | `/queue`, `/queue/{candidate}` | the possible duplicates, oldest and likeliest first, and the comparison of one pair |
 | Patients | Search | `/search` | by identifier (posted) or by demographics |
 | Patients | Patient | `/patients/{person}` | every identifier per domain, the source records side by side, the history, the pseudonyms; the merge and unmerge from here |
+| Registry | Sources | `/sources`, `/sources/{source}` | every system allowed to feed, its channel and how it is admitted (#120) |
 | Registry | Identifier domains | `/domains`, `/domains/{domain}` | the assigning authorities, each with its one Source and its feed activity |
 | Registry | Pseudonymisation domains | `/pseudonym-domains` | the namespaces and their counts |
-| Registry | Matching | `/matching` | the thresholds and weights in effect, read-only with the configuration's values |
 | Trail | Audit trail | `/audit` | every steward action, filtered by actor, kind, person and time |
-| Console | Settings | `/settings` | theme, density, locale, the reveal duration |
+| Console | Configuration | `/configuration` | the thresholds, weights, blocking keys and rules in effect (#121) |
 | Console | About | `/about` | the server's `CapabilityStatement`, versions, the manufacturer |
-| | Sign in | `/login` | |
+| | Your preferences | `/preferences` | behind the steward's name: FerroUI's three tabs, with the reveal duration and hide on leave in Appearance |
+| | Sign in | `/sign-in` | the provider's action starts the sign-in at `GET /login` |
 
 The global search field takes one thing: an identifier, a name, or a birth
 date. The console reads its shape (an eleven-proof number is a BSN, two
@@ -982,11 +985,12 @@ the reason, the request id. A row's `disclosure` shows the action's detail
 answers CSV for the filter, audited itself. Empty, loading and error as the
 queue. Phone: cards.
 
-**Settings** (`/settings`). The `theme_switch` (light, dark, system), the
-`density_switch` (comfortable, compact), the `locale_switch` (the catalogs
-present), and the reveal duration (15, 30, 60 seconds) as a `choice_group`,
-each a plain form post into a cookie, drawn on the server so the first paint
-is right.
+**Your preferences** (`/preferences`, `/preferences/language`,
+`/preferences/keyboard`). FerroUI's three tabs (Appearance, Language and
+region, Keyboard), with the console's own rows, the reveal duration (10, 15
+or 30 seconds, the server capping every reveal at 30) and hide on leave,
+inside Appearance; each preference its own cookie, a plain form post drawn
+on the server so the first paint is right (FerroUI family rule 9).
 
 ### 12.4 The operator API the console reads
 
@@ -1040,7 +1044,7 @@ in the body or the session; every answer is `no-store`.
   captures are read before a merge, the family's rule.
 - **Density for a steward who works a queue all day:** the queue and the
   compare default to the compact density; the stat cards, the forms and
-  the audit trail default to comfortable; the switch is in Settings and
+  the audit trail default to comfortable; the switch is in Your preferences and
   the choice is a cookie drawn on the server.
 - **Identifiers are masked by default**, shown as the domain, a mask and
   the last three characters (`BSN ••••••123`), with a *Reveal* control that
@@ -1051,7 +1055,7 @@ in the body or the session; every answer is `no-store`.
   not reveal never reaches the page. The search field's value is masked as
   typed and sent by `POST`. A copy copies the revealed value only.
 - **Plain language, ready for i18n.** Every string the console draws is a
-  message of `app/ferropix-viewer/locales/en/ferropix-viewer.ftl` (Fluent),
+  message of `app/ferropix-console/locales/en/ferropix-console.ftl` (Fluent),
   written in plain words ("These two records look like the same patient",
   never "candidate pair grade probable"); a pseudo-locale journey stretches
   every string to catch truncation; a Dutch catalog is one file with no
@@ -1284,7 +1288,7 @@ view and widget, the stylesheet's classes, and the gallery.
 | Merge and unmerge | `view::change::{change_table, Change}`, `view::segmented::choice_group`, `view::form::field`, `view::dialog::danger_dialog`, `view::surface::well` |
 | Domains, pseudonymisation domains | `table::view::data_table`, `view::surface::{page_heading, editor_heading, Mode, definitions, card}`, `view::form::{field, check_field, fieldset}`, `widget::help::{provide_help, help_switch, help_line}`, `view::chart::activity_chart` |
 | Audit trail | `table::view::data_table`, `widget::pager::session_pager`, `view::status::badge`, `view::time::timestamp`, `view::surface::disclosure`, `view::form::field` (the filters) |
-| Settings | `view::theme_switch::{theme_switch, density_switch, locale_switch}`, `view::segmented::choice_group` |
+| Your preferences | `view::preferences::{preferences_page, preference_row, select_preference, switch_preference}` |
 | About | `view::surface::{definitions, card}`, `view::code::code_panel` (the `CapabilityStatement`) |
 | Every screen | `view::empty::{empty_state, skeleton, busy}`, `view::refusal::{refusal, fault}`, `i18n::{Locale, Message, provide_locale}` |
 
@@ -1438,7 +1442,7 @@ repository edge is no native relationship.
 | `crates/nl-generic-functions` | the Dutch functions | `ihe-iti` is not needed |
 | `app/ferropix-operator-api` | the serde types of the health and operator documents | |
 | `app/ferropix-server` | the server: configuration, store, matching, the three faces, audit, health, the operator API | `ihe-iti`, `nl-generic-functions`, `ferropix-operator-api` |
-| `app/ferropix-viewer` | the console | `ferropix-operator-api` only |
+| `app/ferropix-console` | the console | `ferropix-operator-api` only |
 | `tools/ferropix-testkit` | the PostgreSQL and stub-provider containers behind `FERROPIX_E2E`, the MLLP sender, the synthetic fixtures (no real identifier, ever), the browser journeys behind `FERROPIX_JOURNEYS` and the screenshots behind `FERROPIX_SCREENSHOTS` | path-only dev-dependency |
 | `fuzz/` | the fuzz targets of section 11 | |
 
@@ -1464,7 +1468,7 @@ The milestones carry the order; every issue cites the section it builds.
   MLLP listener with ITI-8, ITI-9 and ITI-21 (section 7), the console with
   its sign-in, shell, dashboard, search, patient record, domains, audit
   trail and settings (section 12), the FerroUI components it needs
-  (section 12.7), its image and release lane, the viewer and journeys CI
+  (section 12.7), its image and release lane, the console and journeys CI
   lanes, and the Helm chart.
 - **v0.0.5, PMIR, review and pseudonyms:** the PMIR Registry with the feed
   sender and ITI-94 (section 6.3), the review queue, the compare and decide

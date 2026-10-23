@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 
-# The published crates under `crates/`; the server glue under `app/` joins
-# with its own glob in the change that adds it.
+# The published crates under `crates/` and the applications under `app/`,
+# which are never published.
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "app/*"]
 
 [workspace.package]
 version = "0.0.2"
@@ -23,6 +23,30 @@ authors = ["Ruben Talstra"]
 # each.
 [workspace.dependencies]
 async-trait = "0.1.92"
+# The operator console's HTTP service (app/ferropix-console): axum under
+# leptos_axum, with tower's middleware and tower-http's headers and
+# compression, at the versions FerroBRIDGE's and FerroUI's consoles resolve.
+# Verified against crates.io on 2026-10-23.
+axum = "0.8.9"
+tower = "0.5.3"
+tower-http = { version = "0.7.1", default-features = false }
+tracing = "0.1.44"
+clap = { version = "4.6.7", features = ["derive"] }
+cookie = { version = "0.18.2", default-features = false }
+toml = { version = "1.1.6", default-features = false, features = ["std", "parse", "display", "serde"] }
+# The console's UI: Leptos 0.8 in islands mode, the FerroUI components pinned
+# exactly and moved in lockstep with every console (.claude/rules/leptos-ui.md),
+# and the console's own Fluent catalog. The browser half's glue is the
+# wasm-bindgen the site build's CLI must equal. Verified against crates.io on
+# 2026-10-23.
+leptos = { version = "0.8.22", default-features = false }
+leptos_axum = "0.8.10"
+leptos_meta = { version = "0.8.7", default-features = false }
+leptos_router = { version = "0.8.17", default-features = false }
+ferrohealth-ui = "=0.3.2"
+fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
+wasm-bindgen = "0.2.129"
+console_error_panic_hook = "0.1.7"
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
@@ -157,6 +181,25 @@ mem_forget = "deny"
 pointer_format = "deny"
 empty_drop = "warn"
 deref_by_slicing = "warn"
+
+# The operator console's WebAssembly bundle (app/ferropix-console), built by
+# cargo-leptos: optimized for size, since the browser downloads it (the Cargo
+# reference, profiles; no specification governs this: our own design). It
+# keeps the inherited overflow checks and drops the line tables, which
+# wasm-bindgen strips from the bundle anyway.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+debug = false
+
+# The console's development bundle, cargo-leptos's `lib-profile-dev`.
+[profile.wasm-dev]
+inherits = "release"
+opt-level = 1
+lto = false
+codegen-units = 256
 
 # A clean 500 relies on catch_unwind, which only catches unwinding panics, and
 # tests ignore the panic setting, so abort would be untestable

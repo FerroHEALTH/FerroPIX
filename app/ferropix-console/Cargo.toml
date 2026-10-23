@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ferropix-console"
+description = "The FerroPIX Console, the data steward's operator console: a Leptos islands app rendered on the server, with a backend-for-frontend over the FerroPIX server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+# The application is never published.
+publish = false
+
+# One crate, two halves (the Leptos book, "Guide: Islands"): the rlib feeds
+# the server binary and the cdylib is the WebAssembly bundle the browser
+# hydrates the islands with. The target chooses the half, never a Cargo
+# feature, so `--all-features` over the workspace never turns both on.
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ferropix-console"
+path = "src/main.rs"
+
+[dependencies]
+# Every island the console draws is FerroUI's, so the browser half links the
+# library for its islands and nothing of the console's own.
+ferrohealth-ui.workspace = true
+leptos = { workspace = true, features = ["islands"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+leptos = { workspace = true, features = ["islands", "hydrate"] }
+wasm-bindgen.workspace = true
+console_error_panic_hook.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The per-request script nonce of the Content-Security-Policy rides `nonce`.
+leptos = { workspace = true, features = ["islands", "ssr", "nonce"] }
+leptos_axum.workspace = true
+leptos_meta = { workspace = true, features = ["ssr"] }
+leptos_router = { workspace = true, features = ["ssr"] }
+# The random session ids, PKCE verifiers and states, and the SHA-256 of the
+# PKCE challenge (RFC 7636 §4.2).
+aws-lc-rs.workspace = true
+axum.workspace = true
+base64.workspace = true
+clap.workspace = true
+cookie.workspace = true
+# The console's own string catalog under locales/.
+fluent-templates.workspace = true
+http.workspace = true
+# The time of a call to the server, shown beside its outcome.
+jiff.workspace = true
+# The ID Token of a sign-in, verified against the provider's JWK Set
+# (OpenID Connect Core 1.0 §3.1.3.7).
+jsonwebtoken.workspace = true
+# The calls to the FerroPIX server and to the OpenID Provider.
+reqwest = { workspace = true, features = ["rustls", "json"] }
+secrecy = { workspace = true, features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+toml.workspace = true
+# The site bundle is served brotli- or gzip-compressed, as the request's
+# Accept-Encoding chooses.
+tower-http = { workspace = true, features = ["set-header", "compression-br", "compression-gzip"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+# The request id the console sends with each call to the server.
+uuid.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+jiff.workspace = true
+jsonwebtoken.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "test-util"] }
+tower.workspace = true
+tracing-subscriber.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true
+
+# cargo-leptos: the site bundle (the WebAssembly and its JavaScript glue)
+# under target/site. The console has no stylesheet of its own: it serves the
+# library's stylesheet and the FerroPIX theme from the library's constants.
+[package.metadata.leptos]
+output-name = "ferropix-console"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+lib-profile-release = "wasm-release"
+lib-profile-dev = "wasm-dev"
+# A dev build keeps its component types, as the server half does, so the
+# bundle hydrates the islands the server rendered.
+disable-erase-components = true

@@ -8,10 +8,11 @@ metadata:
 <!-- SPDX-FileCopyrightText: Cadasto B.V. -->
 <!-- SPDX-License-Identifier: BUSL-1.1 -->
 
-FerroPIX gets an operator console (owner, 2026-10-21): `app/ferropix-viewer`,
-its own binary and image, the fifth FerroUI console beside FerroBRIDGE,
-FerroEHR, FerroFED and FerroTERM, designed in `docs/architecture.md` §12 and
-built in v0.0.4. Every FerroHEALTH operator console is built on one shared
+FerroPIX gets an operator console (owner, 2026-10-21): `app/ferropix-console`
+(named so by the family rollout, FerroHEALTH/FerroUI#161), its own binary and
+image, the fifth FerroUI console beside FerroBRIDGE, FerroEHR, FerroFED and
+FerroTERM, designed in `docs/architecture.md` §12 and built new on FerroUI
+0.3.2 in v0.0.3 (#119). Every FerroHEALTH operator console is built on one shared
 component library, FerroHEALTH/FerroUI (the crate `ferrohealth-ui`), pinned
 exactly as a Cargo dependency (owner, 2026-10-18: "i want to have an uniform
 ui compoanats libary for all the different UI's so all the products look and
@@ -20,7 +21,7 @@ and experience in the family.
 
 **How to apply:**
 
-- It is server rendered and hydrated like the other consoles, takes every
+- It is server rendered in Leptos islands mode like the other consoles, takes every
   component from FerroUI, and draws in the library's FerroPIX brand theme
   (Plum & Iron, `Brand::Pix`, filed on FerroUI), never by forking a
   component or keeping a theme of its own.

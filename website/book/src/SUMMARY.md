@@ -22,6 +22,7 @@
 
 - [Configuration](operate/configuration.md)
 - [Deployment](operate/deployment.md)
+- [The operator console](operate/console.md)
 - [Security and audit](operate/security-and-audit.md)
 - [Operations](operate/operations.md)
 

@@ -14,6 +14,25 @@ and this project adheres to
 
 ### Added
 
+- `ferropix-console`, FerroPIX's first operator console (#119), built new on
+  FerroUI 0.3.2 (`ferrohealth-ui = "=0.3.2"`) in its FerroPIX brand as part
+  of the family console rollout (FerroHEALTH/FerroUI#161): a Leptos islands
+  app the server renders whole, with every island FerroUI's and every page
+  working without its WebAssembly. It has the OpenID Connect sign-in
+  (authorization code with PKCE) and the server-side session behind one
+  `__Host-` cookie with refresh and sign-out, the `FERROPIX_CONSOLE__`
+  configuration with `_file` secrets, the nonce Content-Security-Policy and
+  the other browser security headers, Your preferences on FerroUI's three
+  tabs with the reveal duration and hide on leave, About with the server's
+  `CapabilityStatement`, and every page of the reviewed design (dashboard,
+  review queue and compare, search, patient with merge and unmerge, sources,
+  identifier domains, pseudonymisation domains, configuration, audit trail).
+  The FerroPIX server and its operator API are not built yet (#57, #90), so
+  each page that reads them draws the design's refused state: the server
+  refused the connection, did not answer, refused the console, or serves no
+  operator API yet. The planned name `ferropix-viewer` is `ferropix-console`
+  throughout; nothing was published under the old name. The book gains
+  [The operator console](https://ferropix.eu/docs/operate/console.html).
 - `docs/architecture.md`, the design of record for the server and the
   operator console: the process and its configuration, the PostgreSQL
   cross-reference store with its history and transaction boundaries, the

@@ -42,8 +42,9 @@
   in every family repository
 - [Worker wait loops](worker-wait-loops.md): no self-matching `pgrep -f`;
   poll at most every 60 seconds
-- [FerroUI lockstep](ferroui-lockstep.md): the operator console (owner
-  2026-10-21, v0.0.4) is built on FerroUI in the library's FerroPIX brand,
+- [FerroUI lockstep](ferroui-lockstep.md): the operator console
+  `ferropix-console` (owner 2026-10-21, built on FerroUI 0.3.2 in v0.0.3) is
+  in the library's FerroPIX brand,
   moves in lockstep with the others, and every gap is filed and built in
   FerroUI
 - [The book stays current](book-same-pr.md): ferropix.eu documents only what

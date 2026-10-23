@@ -34,22 +34,23 @@ FerroPIX in prose, `ferropix` in identifiers.
 - **The server and the console (owner, 2026-10-21):** FerroPIX is a
   standalone server with its cross-reference in PostgreSQL, and it ships
   two OCI images, the server (`ghcr.io/ferrohealth/ferropix`) and the
-  operator console (`ghcr.io/ferrohealth/ferropix-viewer`), the fifth
+  operator console (`ghcr.io/ferrohealth/ferropix-console`), the fifth
   FerroUI console beside FerroBRIDGE, FerroEHR, FerroFED and FerroTERM.
   Both images are released at SLSA Build Level 3 through reusable release
   workflows, as FerroFED's are. A component FerroUI lacks is filed and
   built in FerroUI, never drawn by hand here. An identifier lookup uses
   `POST`, so a BSN never sits in a URL (#52).
 
-The console will be built on `ferrohealth-ui`, and FerroUI leads its UI:
-the FerroUI repository holds the components, the design (`design/`, the
-only design source) and the component rules, and its consumer guide
-[`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/main/docs/consoles.md)
-says how a console uses them. The parts this console needs (record compare,
-timeline, masked identifier, work-list, score breakdown) arrive in FerroUI
-v0.3.1. No UI rules, agents or skills are written here until the console
-work starts; they will then point at FerroUI and keep only what is
-particular to this console.
+The console, `app/ferropix-console`, is built on `ferrohealth-ui`
+(pinned exactly, today `=0.3.2`), and FerroUI leads its UI: the FerroUI
+repository holds the components, the design (`design/`, the only design
+source, with this console's pages under `design/consoles/ferropix/`) and the
+component rules, and its consumer guide
+[`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.2/docs/consoles.md)
+says how a console uses them. `.claude/rules/leptos-ui.md` points at them
+and keeps only what is particular to this console: its routes, its session
+and server boundary, its client of the FerroPIX server, its configuration
+and headers, its bundle budget, its captures and its words.
 
 ## The design is recorded in `docs/architecture.md`
 
@@ -86,10 +87,12 @@ The build order is the milestones:
   (`docs/architecture.md` §14).
 - **v0.0.4, HL7 v2 and the console:** the ITI TF-2 texts vendored, the
   MLLP listener with ITI-8, ITI-9 and ITI-21 on FerroBRIDGE's parser, the
-  operator console under `app/ferropix-viewer` (sign-in, dashboard, search,
-  the patient record, domains, the audit trail, settings) on FerroUI with
-  the components filed there, its image and release lane, and the Helm
-  chart.
+  operator console's screens filled from the operator API (dashboard,
+  search, the patient record, domains, the audit trail), its image and
+  release lane, and the Helm chart. The console itself, `app/ferropix-console`
+  on FerroUI 0.3.2, landed in v0.0.3 with the family rollout
+  (FerroHEALTH/FerroUI#161, #119), each page drawing its refused state until
+  the server serves it.
 - **v0.0.5, PMIR, review and pseudonyms:** the PMIR Registry (ITI-93,
   ITI-94) with the feed sender, the review queue with the compare and
   decide screen, merge and unmerge with their previews, pseudonym minting
@@ -112,6 +115,13 @@ The build order is the milestones:
   moved from FerroFED with its history; the Nuts grant holds its
   authorization server to RFC 8414 on `ferrohealth-smart`'s metadata module.
   Its Nuts tests run against the test devices under `tests/it/testkit/`.
+- `app/ferropix-console`: the operator console (#119), its own binary
+  `ferropix-console`, `publish = false`: a Leptos islands app rendered on the
+  server and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC
+  sign-in and the server-side session, the `FERROPIX_CONSOLE__`
+  configuration with `_file` secrets, the security headers, the client of
+  the FerroPIX server (`src/pix.rs`), every page of the design with its
+  refused state, and the boundary test (`tests/it/boundary.rs`).
 - `docs/architecture.md`: the design of record (the server, the store,
   the matching, the three faces, the images and the release, the console).
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.
@@ -260,7 +270,8 @@ beside each tree.
 - Rules: `writing-style`, `rust-style`, `reliability`, `comments`, `testing`,
   `spec-adherence`, `vendored-inputs`, `codegen`, `ci-cd`,
   `crates-publishing`, `issue-workflow`, `issue-relationships`,
-  `project-board`, `docs-website` (path-scoped to the site).
+  `project-board`, `docs-website` (path-scoped to the site), `leptos-ui`
+  (path-scoped to the console, leading with FerroUI).
 - Agents: `spec-researcher`, `implementer` (both on Opus 5).
 - Skills: `/spec-lookup`, `/next-task`, `/phase-done`, `/phase-status`.
 - Hooks: `no_attribution_guard.sh`, `block_dangerous.sh` (with

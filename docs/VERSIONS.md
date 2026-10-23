@@ -36,6 +36,16 @@ pins, so every book in the family builds with the same tools.
 | mdbook-lint | `0.14.4` | `scripts/site/toolchain.sh` reads it |
 | lychee | `0.24.2` | `scripts/site/toolchain.sh` reads it |
 
+## The console's component library
+
+The operator console draws with FerroUI, pinned exactly and moved in
+lockstep with every FerroHEALTH console on each release
+(`.claude/rules/leptos-ui.md`).
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| FerroUI (`ferrohealth-ui`) | `=0.3.2` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.3.2` |
+
 ## Specifications
 
 These are the specification versions the identity crates implement, at

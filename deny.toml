@@ -11,7 +11,13 @@
 version = 2
 yanked = "deny"
 # An exception is dated and names the event that deletes it.
-ignore = []
+ignore = [
+  # 2026-10-23 (#119): paste is unmaintained, a compile-time proc-macro under
+  # the Leptos 0.8 family of the operator console with no runtime surface.
+  # Deleted when no Leptos crate in the lock depends on paste.
+  # https://rustsec.org/advisories/RUSTSEC-2024-0436
+  { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; a compile-time proc-macro under the Leptos 0.8 family of the operator console, with no runtime surface" },
+]
 
 [licenses]
 version = 2
@@ -48,6 +54,10 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ihe-atna" },
   { allow = ["BUSL-1.1"], crate = "nl-generic-functions" },
   { allow = ["BUSL-1.1"], crate = "ferrohealth-smart" },
+  # The FerroUI components the operator console draws with, and the console
+  # itself, which is never published.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-ui" },
+  { allow = ["BUSL-1.1"], crate = "ferropix-console" },
 ]
 
 [bans]

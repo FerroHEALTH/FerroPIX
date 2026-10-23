@@ -403,6 +403,29 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+  # The operator console's browser half compiles for WebAssembly alone, so
+  # the host clippy above never reads it; this lints the islands entry on its
+  # own target (.claude/rules/leptos-ui.md). The site bundle against its byte
+  # budget joins it with #99.
+  console-wasm:
+    name: console-wasm
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
+          target: wasm32-unknown-unknown
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy -p ferropix-console --lib --target wasm32-unknown-unknown --locked -- -D warnings
+
   test:
     name: nextest
     needs: detect
@@ -609,6 +632,7 @@ jobs:
       - manifest
       - fmt
       - clippy
+      - console-wasm
       - test
       - doc
       - cargo-deny

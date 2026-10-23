@@ -113,11 +113,13 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released contribution-licence docs-claims book-guard writing-style; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
         run: bash scripts/release/milestone.sh --self-test
+      - name: The release plan orders tags by version and counts the support period
+        run: bash scripts/release/plan.sh --self-test
       - name: The destructive-command hook
         run: |
           set -euo pipefail
@@ -180,7 +182,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: bash scripts/checks/todo-issues.sh
 
-  # Every released section of CHANGELOG.md reads as it did at its tag.
+  # Every released section of CHANGELOG.md reads as it did at its tag, every
+  # section holds Keep a Changelog types each once, and [Unreleased] keeps
+  # the Security rules the release plan checks on the section it cuts.
   changelog-released:
     name: changelog-released
     runs-on: ubuntu-latest
@@ -193,6 +197,11 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - run: bash scripts/checks/changelog-released.sh
+      - run: bash scripts/checks/changelog-structure.sh
+      # Regulation (EU) 2024/2847 Annex I Part II(2), (4) and (8): every
+      # Security entry names its GHSA advisory or VEX statement, and a
+      # Security section beside other changes opens with its reason.
+      - run: bash scripts/checks/changelog-security.sh --section Unreleased
 
   # A pull request records its user-visible effect under [Unreleased], or
   # carries the `no-changelog` label.
@@ -486,6 +495,45 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny check
+      # An `ignore` entry that outlived its finding: cargo-deny reports it as a
+      # warning, so the step above stays green on one; this promotes it to an
+      # error. Here because cargo-deny and the toolchain are installed.
+      - name: No exception for an advisory that no longer fires
+        run: bash scripts/checks/advisory-exceptions.sh
+      # A VEX statement whose published argument names the wrong dependency
+      # path: compared with the graph cargo resolves, in both directions.
+      - name: Every VEX statement names the real dependency path
+        run: bash scripts/checks/vex-reachability.sh
+
+  # The published Rust advisory VEX is exactly what deny.toml and
+  # security/vex/rust-advisories.toml generate, and every hand-written
+  # OpenVEX document is well formed. No specification governs the gate: our
+  # own design, the one FerroEHR, FerroFED and FerroUI run.
+  vex:
+    name: vex
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # deny.toml and the prose file are TOML, which jq cannot read. Pinned by
+      # version and verified by checksum: this binary decides whether the gate
+      # passes.
+      - name: Install yq
+        env:
+          YQ_VERSION: v4.53.3
+          YQ_SHA256: fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o "$RUNNER_TEMP/yq" "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  $RUNNER_TEMP/yq" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/yq" /usr/local/bin/yq
+          yq --version
+      - name: Every accepted advisory has a published VEX justification
+        run: bash scripts/checks/vex-advisories.sh
 
   # No cache: the dry run checks the bytes a publish would upload. The
   # published set is the list scripts/release/publish-crates.sh holds.
@@ -636,6 +684,7 @@ jobs:
       - test
       - doc
       - cargo-deny
+      - vex
       - publish-dry-run
       - features
       - ihe-citations

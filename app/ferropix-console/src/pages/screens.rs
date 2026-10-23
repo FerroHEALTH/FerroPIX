@@ -92,6 +92,7 @@ impl Screen {
             Header {
                 title: self.title.clone().into(),
                 subtitle: Some(self.subtitle.into()),
+                subtitle_view: None,
                 crumbs: self.crumbs,
                 mono: self.mono,
                 badge: None,

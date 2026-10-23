@@ -59,8 +59,12 @@ async fn every_page_says_the_server_refused_the_connection_with_the_way_on()
         assert_eq!(StatusCode::OK, response.status(), "{route}");
         assert!(page.contains(words), "{route} draws its header");
         assert!(
-            page.contains("No answer: the FerroPIX server refused the connection"),
+            page.contains("The FerroPIX server refused the connection"),
             "{route} names the true failure"
+        );
+        assert!(
+            page.contains(r#"<span class="fui-sr-only">No answer:</span>"#),
+            "{route} tells assistive technology no answer came"
         );
         assert!(page.contains("Try again"), "{route} offers Try again");
         assert!(
@@ -188,7 +192,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("FerroPIX 0.0.3"), "the server's version");
     assert!(page.contains("4.0.1"), "the FHIR version");
-    assert!(page.contains("ferrohealth-ui 0.3.2"), "the library");
+    assert!(page.contains("ferrohealth-ui 0.3.3"), "the library");
     assert!(page.contains("Cadasto B.V."), "the maker");
     assert!(page.contains("The CapabilityStatement"), "the card");
     assert!(

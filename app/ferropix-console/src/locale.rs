@@ -243,6 +243,8 @@ messages! {
     Identifier = "identifier",
     /// The identifier field's help line.
     IdentifierHelp = "identifier-help",
+    /// The name of the identifier field's hold-to-show eye.
+    IdentifierHold = "identifier-hold",
     /// Family name.
     FamilyName = "family-name",
     /// Given names.

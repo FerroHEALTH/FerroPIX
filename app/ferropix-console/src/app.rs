@@ -291,7 +291,7 @@ fn navigation() -> Vec<Group> {
         Group {
             id: "nav-patients",
             title: tr(Msg::NavPatients).into(),
-            entries: vec![entry(SEARCH, Msg::Search, Glyph::SEARCH, false)],
+            entries: vec![entry(SEARCH, Msg::Search, Glyph::USER_ROUND_SEARCH, false)],
         },
         Group {
             id: "nav-registry",
@@ -413,6 +413,7 @@ pub fn framed(content: AnyView) -> AnyView {
             back: path,
         },
         choices: Vec::new(),
+        links: Vec::new(),
         shortcuts: None,
         sign_out: Some(String::from(SIGN_OUT)),
     });

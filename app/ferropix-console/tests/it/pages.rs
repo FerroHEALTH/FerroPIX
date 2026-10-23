@@ -8,6 +8,7 @@
 
 use std::error::Error;
 
+use ferrohealth_ui::icon::Glyph;
 use http::StatusCode;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -192,7 +193,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("FerroPIX 0.0.3"), "the server's version");
     assert!(page.contains("4.0.1"), "the FHIR version");
-    assert!(page.contains("ferrohealth-ui 0.3.3"), "the library");
+    assert!(page.contains("ferrohealth-ui 0.3.4"), "the library");
     assert!(page.contains("Cadasto B.V."), "the maker");
     assert!(page.contains("The CapabilityStatement"), "the card");
     assert!(
@@ -300,6 +301,30 @@ async fn the_shell_draws_the_navigation_the_search_and_the_menu_with_no_theme_to
     assert!(
         page.contains("action=\"/logout\""),
         "Sign out is a form post"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_search_entry_of_the_navigation_draws_user_round_search() -> Result<(), Box<dyn Error>>
+{
+    let (state, service) = console(&offline(NOWHERE))?;
+    let cookie = steward_session(&state);
+    let (_, page) = send(&service, get_with("/queue", &cookie)?).await?;
+    let start = page
+        .find("href=\"/search\"")
+        .ok_or("the navigation links Search")?;
+    let entry = page
+        .get(start..)
+        .and_then(|rest| rest.split("</a>").next())
+        .ok_or("the Search entry ends")?;
+    assert!(
+        entry.contains(Glyph::USER_ROUND_SEARCH.markup()),
+        "the Search entry draws user-round-search: {entry}"
+    );
+    assert!(
+        !entry.contains(Glyph::SEARCH.markup()),
+        "the stand-in search glyph is gone: {entry}"
     );
     Ok(())
 }

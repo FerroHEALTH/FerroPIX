@@ -3,8 +3,11 @@
 
 # Security Policy
 
-This document says which versions receive security fixes and how to report a
-vulnerability privately.
+This document says which versions receive security fixes, how to report a
+vulnerability privately, and how a fixed vulnerability is published. The
+vulnerability-handling policy every FerroHEALTH product shares is on one page
+of the family book, written by the manufacturer, Cadasto B.V.:
+<https://ferrohealth.eu/docs/security.html>.
 
 ## Supported versions
 
@@ -20,12 +23,68 @@ newest release (Art 13(10)).
 | --- | --- | --- |
 | Every published FerroPIX artifact | the newest published release | the newest release |
 
-`main` is unreleased and best effort.
+- **Where fixes ship:** a security fix ships in a new release. Where it is
+  technically feasible, that release is a patch with the fix alone, so the
+  update is provided separately from functionality updates (Annex I Part
+  II(2)); when a functional change has to ship with it, the release's
+  `### Security` section opens with "Shipped with functional changes
+  because:" and the reason, and the release notes carry it
+  ([`docs/release.md`](docs/release.md#security-entries)).
+- **The end month:** the release notes of each release state the month its
+  five years end (Art 13(19)), counted from the date of its changelog
+  heading.
+- **Updates stay available:** a published release, its tag and each crate
+  version on crates.io are never deleted.
+
+A pre-release (a tag with a suffix, such as `v0.0.4-rc.1`) rehearses the
+release lane and has no support period. `main` is unreleased and best
+effort.
 
 ## Reporting a vulnerability
 
 **Do not open a public issue for a security vulnerability.** Report it
-privately through GitHub's private vulnerability reporting:
-<https://github.com/FerroHEALTH/FerroPIX/security/advisories/new>. You will get
-an acknowledgement within seven days. If that window passes with no response,
+privately, through either route:
+
+- [GitHub private vulnerability reporting](https://github.com/FerroHEALTH/FerroPIX/security/advisories/new)
+  ("Report a vulnerability" on the repository's Security tab), which needs a
+  GitHub account; or
+- email to [info@cadasto.com](mailto:info@cadasto.com), the single point of
+  contact of Cadasto B.V., the manufacturer (CRA Art 13(17)), with "FerroPIX
+  vulnerability" in the subject. No account is needed. The address has no
+  published encryption key, so send the details you are comfortable sending
+  by email and say that more is available; a channel for the rest is agreed
+  with you.
+
+Both routes reach the same people and the same procedure. You will get an
+acknowledgement within seven days. If that window passes with no response,
 public disclosure to protect other users is your call.
+
+**Never include patient data in a report.** FerroPIX cross-references
+patient identifiers, so a reproduction is easy to build from real ones by
+accident. Redact them, or synthesize an equivalent case.
+
+## Security advisories
+
+A reported vulnerability gets a private draft of a GitHub security advisory
+on this repository the day it is confirmed, and the draft is the record
+until the fix ships. Every fixed vulnerability is published as that
+advisory, in the same hour as the release that fixes it: one in FerroPIX's
+own code, and one for a dependency fix that changes what a published crate
+builds into. The `### Security` entry for the fix in
+[`CHANGELOG.md`](CHANGELOG.md) carries the advisory's `GHSA-` identifier,
+and the release notes repeat it (CRA Annex I Part II(4), (8)). A dependency
+finding that an OpenVEX statement under `security/vex/` shows does not
+affect FerroPIX gets no advisory; the changelog entry names that statement
+instead. CI and the release check both rules
+(`scripts/checks/changelog-security.sh`). The advisories are
+machine-readable through the GitHub REST API
+(`GET /repos/FerroHEALTH/FerroPIX/security-advisories`).
+
+## Vulnerability exploitability (VEX)
+
+A scanner can report a finding in the dependency graph that does not affect
+what FerroPIX publishes, such as an unmaintained crate that only runs inside
+the compiler. Such findings are judged in OpenVEX documents under
+[`security/vex/`](security/vex/README.md), which a scanner reads with
+`trivy --vex`. The document is generated from the advisories `deny.toml`
+accepts, and CI fails when the two disagree.

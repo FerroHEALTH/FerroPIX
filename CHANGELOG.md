@@ -58,6 +58,19 @@ and this project adheres to
   planned item without its tracker link, and `writing-style.sh` refuses an
   em dash, a banned word or AI attribution in the published prose. Each has
   a `--self-test` (#48).
+- The release checks the family's Security changelog rules: every
+  `### Security` entry names a GHSA advisory or an OpenVEX statement under
+  `security/vex/`, and a Security section beside other changes opens with
+  "Shipped with functional changes because:" and its reason (Regulation (EU)
+  2024/2847 Annex I Part II(2), (4), (8)). CI checks `[Unreleased]`, and the
+  release `plan` job the section it cuts, through `scripts/release/plan.sh`,
+  which `scripts/release/preflight.sh` replays before the tag
+  (`docs/release.md`). The release notes state the month the five years of
+  security fixes end (Art 13(19)). The accepted `paste` advisory
+  (RUSTSEC-2024-0436) is published as a generated OpenVEX statement,
+  `security/vex/rust-advisories.openvex.json`, and `SECURITY.md` names the
+  `info@cadasto.com` reporting route and the advisory each fixed
+  vulnerability is published as (#123).
 
 ### Changed
 

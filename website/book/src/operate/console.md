@@ -91,7 +91,9 @@ steward out there too.
 
 - It puts no identifier other than the person id FerroPIX minted in an
   address: a search posts what was typed, and the identifier field is masked
-  as it is typed.
+  as it is typed. The eye inside the field shows the identifier only while
+  you hold it (pointer, touch, Space or Enter); without the page's
+  WebAssembly the eye is disabled and the field stays masked.
 - It keeps nothing in browser storage, and every page is `Cache-Control:
   no-store`.
 - It runs no script but its own WebAssembly bundle: every response carries a

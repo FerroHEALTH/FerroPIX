@@ -29,7 +29,8 @@ over every Dockerfile) and the Rust
   every listed crate; `dependency-review-action` on pull requests; the
 `quickstart` job, which builds the server for the musl target, builds the
 image from the staged tree and runs `docker compose up --wait` to
-readiness with the usage report off). The
+readiness with the usage report off, and builds the console image from a
+placeholder tree). The
   `manifest` job reads the root manifest under the pinned toolchain even
   while the workspace is empty. The `conclusion` job is the single required
   status check on `main`.
@@ -69,14 +70,16 @@ readiness with the usage report off). The
 - `.github/workflows/release.yml`: dormant until a `v*` tag is pushed. It
   validates the tag against the workspace version, takes the notes from the
   matching `CHANGELOG.md` section, creates the release as a draft, and calls
-  three reusable workflows, so the signing identity stays out of reach of
+  four reusable workflows, so the signing identity stays out of reach of
   caller steps (SLSA v1.2 Build Level 3): `release-build.yml` builds the
   musl server binary per architecture with `cargo auditable` and attests the
   tarball and its two SBOMs; `release-image.yml` verifies those tarballs
   against `release-build.yml`, pushes `ghcr.io/ferrohealth/ferropix` for
   both platforms by digest and attests the index and both manifests as OCI
-  referrers; `release-crate.yml` packages, attests and attaches each
-  `.crate`. Its `vulnerability-record` job scans the image and the tarballs
+  referrers; `release-console.yml` builds and attests the console's musl
+  binary and site bundle, verifies both and pushes and attests
+  `ghcr.io/ferrohealth/ferropix-console` the same way; `release-crate.yml`
+  packages, attests and attaches each `.crate`. Its `vulnerability-record` job scans the image and the tarballs
   at every severity and refuses the release while a finding lacks an
   OpenVEX judgement (`scripts/checks/vex-coverage.sh`), and `scan-and-tag.yml`
   gates the digest on fixable HIGH and CRITICAL findings before it applies
@@ -84,8 +87,8 @@ readiness with the usage report off). The
   `crates` leg uploads the crates through Trusted Publishing behind the
   `crates-io` environment (`crates-publishing.md`). `docs/release.md` is the
   lane.
-- `.github/workflows/image-scan.yml`: each Monday, Trivy over the published
-  image at `latest` with every OpenVEX document applied; a finding files or
+- `.github/workflows/image-scan.yml`: each Monday, Trivy over both published
+  images at `latest` with every OpenVEX document applied; a finding files or
   comments on one tracking issue, and an image not yet published is skipped.
   Its `plan` job refuses a tag when no milestone is titled exactly as the tag
   or that milestone still holds an open issue or pull request, naming each

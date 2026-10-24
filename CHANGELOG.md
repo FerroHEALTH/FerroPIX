@@ -14,6 +14,20 @@ and this project adheres to
 
 ### Added
 
+- The operator console's image and release lane (#99).
+  `docker/console/Dockerfile` puts the static console binary and its site
+  bundle on the same distroless base, compiling nothing: user `65532`, port
+  `3000`, the bundle under `/site`, and a `HEALTHCHECK` on
+  `ferropix-console healthcheck`. A `v*` tag now builds, attests and
+  attaches the console's musl binaries and site bundle and pushes
+  `ghcr.io/ferrohealth/ferropix-console` for both platforms with SLSA
+  provenance and SPDX SBOMs (`release-console.yml`), checked with
+  `gh attestation verify`; the vulnerability record, the tag gate and the
+  weekly scan cover it beside the server image. `compose.yaml` gains the
+  `console` profile, signed in through the development issuer with the
+  client secret as a file secret. CI builds the console image from a
+  placeholder tree. The book's console page documents the image, its port
+  and its verification.
 - The PDQm Patient Demographics Supplier with the Match Operation Option
   (#70, #72, #73, `ferropix_server::pdqm`). ITI-78 answers
   `GET /fhir/Patient` and `POST /fhir/Patient/_search` alike with every

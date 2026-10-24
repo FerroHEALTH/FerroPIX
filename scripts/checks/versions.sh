@@ -10,7 +10,7 @@
 #      named in a row of the corpus table of docs/VERSIONS.md.
 #   3. Tool pins: each row REPEATED_ROWS names is carried word for word by
 #      every file its "Repeated in" cell names.
-#   4. The quickstart: the server image tag compose.yaml defaults to is the
+#   4. The quickstart: the image tags compose.yaml defaults to are the
 #      [workspace.package] version of the root Cargo.toml.
 #   5. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
@@ -224,9 +224,9 @@ done
 #    so the quickstart of a release pulls the image that release published.
 if [[ -f compose.yaml && -f Cargo.toml ]]; then
   want="$(toml_value Cargo.toml version)"
-  got="$(sed -nE 's|^[[:space:]]*image:[[:space:]]*ghcr\.io/ferrohealth/ferropix:\$\{FERROPIX_VERSION:-([^}]+)\}[[:space:]]*$|\1|p' compose.yaml | sort -u)"
+  got="$(sed -nE 's|^[[:space:]]*image:[[:space:]]*ghcr\.io/ferrohealth/ferropix(-console)?:\$\{FERROPIX_VERSION:-([^}]+)\}[[:space:]]*$|\2|p' compose.yaml | sort -u)"
   [[ -n "$got" ]] || drift "compose.yaml names no ghcr.io/ferrohealth/ferropix:\${FERROPIX_VERSION:-<version>} image"
-  [[ -z "$got" || "$got" == "$want" ]] || drift "compose.yaml defaults the server image to $(tr '\n' ' ' <<< "$got")but Cargo.toml says $want"
+  [[ -z "$got" || "$got" == "$want" ]] || drift "compose.yaml defaults its images to $(tr '\n' ' ' <<< "$got")but Cargo.toml says $want"
 fi
 
 # 5. Licence.

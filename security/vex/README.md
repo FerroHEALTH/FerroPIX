@@ -7,8 +7,9 @@ Vulnerability Exploitability eXchange documents, in
 [OpenVEX](https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md) format,
 stating whether a finding affects what FerroPIX publishes: the crates the
 release uploads to crates.io (`pkg:cargo/ihe-iti`,
-`pkg:cargo/nl-generic-functions`), the server image (`pkg:oci/ferropix`)
-and the server binary (`pkg:cargo/ferropix-server`).
+`pkg:cargo/nl-generic-functions`), the server image (`pkg:oci/ferropix`),
+the console image (`pkg:oci/ferropix-console`) and the server binary
+(`pkg:cargo/ferropix-server`).
 
 A VEX document is the machine-readable form of an argument. Each statement
 names the vulnerability, the product, a `status`, a `justification` from the

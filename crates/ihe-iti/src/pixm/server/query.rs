@@ -191,6 +191,11 @@ impl Reader {
         if self.format.is_some() {
             return Err(QueryError::SecondFormat);
         }
+        // NOTE: FHIR R4 datatypes.html#primitive, a string holds at least one
+        // character, so an empty `_format` has no posted twin and is refused.
+        if value.is_empty() {
+            return Err(QueryError::EmptyFormat);
+        }
         self.format = Some(value.to_owned());
         Ok(())
     }
@@ -239,6 +244,9 @@ pub enum QueryError {
     /// The request names `_format` twice.
     #[error("the request names _format more than once")]
     SecondFormat,
+    /// The request's `_format` is empty.
+    #[error("the request names an empty _format")]
+    EmptyFormat,
     /// A value of the query holds a character no FHIR `string` holds, the
     /// vertical tab or the form feed, so the same request could not be
     /// posted as `Parameters` (FHIR R4 datatypes.html#primitive).
@@ -292,6 +300,7 @@ impl QueryError {
             ),
             Self::EmptyTargetSystem => bad(IssueType::Invalid, "targetSystem is empty"),
             Self::SecondFormat => bad(IssueType::Invalid, "_format is allowed once"),
+            Self::EmptyFormat => bad(IssueType::Invalid, "_format is empty"),
             Self::NotAString => bad(IssueType::Value, "a parameter value is not a FHIR string"),
             Self::UnknownParameter => bad(
                 IssueType::NotSupported,
@@ -396,6 +405,12 @@ mod tests {
                 StatusCode::BAD_REQUEST,
                 IssueType::Value,
             ),
+            (
+                "sourceIdentifier=urn:oid:2.999.1%7C1&_format=",
+                QueryError::EmptyFormat,
+                StatusCode::BAD_REQUEST,
+                IssueType::Invalid,
+            ),
         ] {
             let refused = PixQuery::from_query(query).expect_err(query);
             assert_eq!(refused, error, "{query}");
@@ -403,5 +418,16 @@ mod tests {
             assert_eq!(answer.status(), status, "{query}");
             assert_eq!(answer.issue_type(), code, "{query}");
         }
+    }
+
+    #[test]
+    fn the_fuzz_input_with_an_empty_format_is_refused() {
+        let query = "sourceIdentifier=urn%3Aod%i3A1.3.6.1.4.1.21#67.13.20.1000%7CIHERED-994\
+            &targetSystem=urn%3Aoid%3A1.6.1.4.1.21367.13.20.3000\
+            &targetSystem=urn%3Aoid%3A1.;.6.1.4.1.213+67.13.20.2000&_format=";
+        assert_eq!(
+            PixQuery::from_query(query).err(),
+            Some(QueryError::EmptyFormat)
+        );
     }
 }

@@ -16,8 +16,8 @@ are planned in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3):
 the store and its migrations
 ([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the audit trail
-([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)), readiness and the
-usage report ([#64](https://github.com/FerroHEALTH/FerroPIX/issues/64)), and
+([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)), the usage
+report ([#153](https://github.com/FerroHEALTH/FerroPIX/issues/153)), and
 the PIXm and PDQm faces
 ([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
 [#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)). A key whose
@@ -30,7 +30,7 @@ keeps working when the service lands.
 |---|---|
 | `ferropix serve` | Reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, and exits 0 when the server would start on it. Otherwise it prints the first error on one line and exits 78. |
-| `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`. Use it as the container health check. |
+| `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down exits 1. Use it as the container health check. |
 | `ferropix db migrate` | Applies the pending migrations. Planned with the store ([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)); today it exits 2 and names the issue. |
 
 Every command takes `--config <PATH>`. A refused configuration exits 78

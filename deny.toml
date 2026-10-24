@@ -59,8 +59,9 @@ exceptions = [
   # itself, which is never published.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-ui" },
   { allow = ["BUSL-1.1"], crate = "ferropix-console" },
-  # The server, which is never published.
+  # The server and its wire types, which are never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-server" },
+  { allow = ["BUSL-1.1"], crate = "ferropix-operator-api" },
   # The test support, a path-only dev-dependency, never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-testkit" },
 ]

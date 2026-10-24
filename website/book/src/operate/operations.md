@@ -3,10 +3,55 @@
 
 # Operations
 
-The server's health checks, metrics, logs and upgrade path are planned with
-the server in the
+This page covers the server's health checks and request log, and what
+operating the crates involves. The server's metrics, upgrade path and
+installation report are planned in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
-This page covers what operating the crates involves today.
+
+## Health checks
+
+| Route | Token | Answers |
+|---|---|---|
+| `GET {base}/health` | none | `200` while the process is up. |
+| `GET {base}/health/readiness` | none | `200` while every readiness indicator is up, `503` while one is down, with a JSON document naming each indicator, its state and, when it is down, why. |
+| `GET {base}/operator/dependencies` | `auth.steward_scope` | `200` with the readiness document and the last outcome of every upstream the server sends to. |
+
+The readiness indicators are added with the subsystems they check: the
+database with the store
+([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the audit
+spool's headroom with the audit trail
+([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)), the MLLP
+listener ([#85](https://github.com/FerroHEALTH/FerroPIX/issues/85)) and the
+PMIR feed sender's backlog
+([#104](https://github.com/FerroHEALTH/FerroPIX/issues/104)). Each check
+gets two seconds; one that takes longer counts as down. The dependency
+report sits behind the steward scope so an anonymous reader learns no
+endpoint. `ferropix healthcheck` asks the readiness route of the server on
+the same host and exits 1 on anything but `200`: use it as the container
+health check.
+
+## The request log
+
+The server writes one line per request under the `tracing` target
+`ferropix_server::request`, with these fields:
+
+| Field | What it holds |
+|---|---|
+| `request_id` | The `X-Request-Id` the client sent, or the one the server minted. |
+| `method` | The HTTP method. |
+| `route` | The matched route template, such as `/fhir/Patient/$ihe-pix`, or `<unmatched>`. |
+| `status` | The status answered. |
+| `latency_ms` | The time to the response, in milliseconds. |
+| `caller` | The token's `client_id`, or its subject when it names none, or `-` when no credential held. |
+| `domain` | The identifier domains a feed wrote to, or `-`. |
+
+The line never holds the path as sent, a query string, a body or a header
+value. A PIXm Consumer that calls `$ihe-pix` by `GET` puts the patient's
+identifier in the query, and the line still names only the route template.
+A proxy in front of the server must keep query strings out of its own logs
+for the same reason. The gate of `ferrohealth-smart` writes its own audit
+line per guarded request under the target `ferrohealth_smart::audit`, with
+the same discipline.
 
 ## Releases and support
 

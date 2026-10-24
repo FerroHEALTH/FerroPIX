@@ -25,6 +25,7 @@ use ferropix_server::auth::table::{Need, ROUTES, Route};
 use ferropix_server::config::Config;
 use ferropix_server::config::settings::Settings;
 use ferropix_server::fhir::{self, Mounts};
+use ferropix_server::health::Registry;
 use ferropix_server::http::router;
 use http::{Method, Request, StatusCode, header};
 use jsonwebtoken::jwk::Jwk;
@@ -40,14 +41,18 @@ const AUDIENCE: &str = "http://localhost:8080/fhir";
 
 /// The domain every Source case writes to, under the OID arc ITU-T X.660
 /// reserves for examples.
-const DOMAIN: &str = "urn:oid:2.999.1.1";
+pub(crate) const DOMAIN: &str = "urn:oid:2.999.1.1";
 
 /// A made-up identifier value no real person carries, which no log line or
 /// refusal may show.
 const IDENTIFIER: &str = "SYNTHETIC-ID-4711";
 
+/// The guarded routes served today; every other one answers `501` until its
+/// issue lands.
+const SERVED: [&str; 1] = ["operator-dependencies"];
+
 /// The scopes that admit every route of the table.
-const EVERY_SCOPE: &str =
+pub(crate) const EVERY_SCOPE: &str =
     "system/Patient.cruds system/Subscription.cruds __ferropix.steward __ferropix.admin";
 
 /// One generated signing key and its public JWK.
@@ -72,14 +77,14 @@ fn signing_key() -> SigningKey {
 }
 
 /// The stub authorization server with its key.
-struct Issuer {
+pub(crate) struct Issuer {
     server: MockServer,
     key: SigningKey,
 }
 
 impl Issuer {
     /// Starts an issuer serving its RFC 8414 metadata and its key set.
-    async fn start() -> Self {
+    pub(crate) async fn start() -> Self {
         let server = MockServer::start().await;
         let key = signing_key();
         let uri = server.uri();
@@ -106,7 +111,7 @@ impl Issuer {
     }
 
     /// Returns a valid token of `client` granting `scope`.
-    fn token(&self, client: &str, scope: &str) -> String {
+    pub(crate) fn token(&self, client: &str, scope: &str) -> String {
         let now = jiff::Timestamp::now().as_second();
         let claims = serde_json::json!({
             "iss": self.server.uri(),
@@ -126,7 +131,7 @@ impl Issuer {
 }
 
 /// Returns the settings of a server trusting `issuer`, every switch on.
-fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
+pub(crate) fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
     let text = format!(
         r#"
 [server]
@@ -164,31 +169,33 @@ enabled = true
 }
 
 /// Returns the application of `settings` with every route mounted.
-async fn application(settings: Settings) -> (Router, Arc<Smart>) {
+pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>) {
     let smart = Arc::new(
         Smart::discover(settings.auth, &settings.domains)
             .await
             .expect("the authorization server is read"),
     );
+    let health = Registry::default();
     let guarded = fhir::routes(
         &settings.server.base_path,
         &settings.server.public_base_url,
         Mounts::all(),
         &smart,
+        &health,
     );
-    (router(&settings.server, Some(guarded)), smart)
+    (router(&settings.server, &health, Some(guarded)), smart)
 }
 
 /// What one request answered.
-struct Answer {
-    status: StatusCode,
-    challenge: Option<String>,
-    body: String,
+pub(crate) struct Answer {
+    pub(crate) status: StatusCode,
+    pub(crate) challenge: Option<String>,
+    pub(crate) body: String,
 }
 
 impl Answer {
     /// Returns the body as JSON.
-    fn json(&self) -> serde_json::Value {
+    pub(crate) fn json(&self) -> serde_json::Value {
         serde_json::from_str(&self.body).expect("a JSON body")
     }
 
@@ -210,7 +217,12 @@ impl Answer {
 }
 
 /// Sends `method` on `uri` with `authorization`, and reads the answer.
-async fn send(app: &Router, method: Method, uri: &str, authorization: Option<&str>) -> Answer {
+pub(crate) async fn send(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    authorization: Option<&str>,
+) -> Answer {
     let mut request = Request::builder().method(method).uri(uri);
     if let Some(authorization) = authorization {
         request = request.header(header::AUTHORIZATION, authorization);
@@ -255,7 +267,7 @@ fn guarded() -> impl Iterator<Item = &'static Route> {
     ROUTES.iter().filter(|route| route.need != Need::Public)
 }
 
-fn bearer(token: &str) -> String {
+pub(crate) fn bearer(token: &str) -> String {
     format!("Bearer {token}")
 }
 
@@ -302,14 +314,17 @@ async fn every_guarded_route_admits_the_domains_source_holding_every_scope() {
     let token = bearer(&issuer.token("east-lab", EVERY_SCOPE));
     for route in guarded() {
         let answer = send(&app, route.method.clone(), &uri_of(route), Some(&token)).await;
+        let label = format!("{} {}", route.method, route.path);
+        if SERVED.contains(&route.interaction) {
+            assert_eq!(StatusCode::OK, answer.status, "{label}: served");
+            continue;
+        }
         assert_eq!(
             StatusCode::NOT_IMPLEMENTED,
             answer.status,
-            "{} {}: the guard admits it and the pending handler answers",
-            route.method,
-            route.path
+            "{label}: the guard admits it and the pending handler answers"
         );
-        assert_eq!("not-supported", answer.issue());
+        assert_eq!("not-supported", answer.issue(), "{label}");
     }
 }
 
@@ -444,7 +459,7 @@ async fn the_discovery_document_and_the_capability_statement_name_the_token_endp
 
 /// A `tracing` writer into a shared buffer.
 #[derive(Clone, Default)]
-struct Captured(Arc<Mutex<Vec<u8>>>);
+pub(crate) struct Captured(pub(crate) Arc<Mutex<Vec<u8>>>);
 
 impl std::io::Write for Captured {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {

@@ -18,12 +18,14 @@ use std::sync::Arc;
 use axum::Router;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{MethodFilter, on};
+use ferropix_operator_api::health::Dependencies;
 use http::StatusCode;
 
 use crate::auth::guard::{self, Confine};
 use crate::auth::table::{self, Mount};
 use crate::auth::{Discovery, Smart};
 use crate::fhir::outcome::{FHIR_JSON, IssueType, body, respond};
+use crate::health::Registry;
 
 /// Which switches of the configuration are on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +83,7 @@ pub fn routes(
     public_base_url: &url::Url,
     mounts: Mounts,
     smart: &Arc<Smart>,
+    health: &Registry,
 ) -> Router {
     let statement = Arc::new(capability::statement(public_base_url, smart));
     let configuration = smart.configuration().map(Arc::new);
@@ -107,6 +110,10 @@ pub fn routes(
                     async move { discovery(configuration.as_deref()) }
                 })
             }
+            "operator-dependencies" => {
+                let health = health.clone();
+                on(filter, move || dependencies(health.clone()))
+            }
             _ if route.mount == Mount::Operator => on(filter, pending_operator),
             _ => on(filter, pending_fhir),
         };
@@ -129,6 +136,20 @@ fn discovery(configuration: Option<&Discovery>) -> Response {
         Some(document) => body(StatusCode::OK, document, "application/json"),
         None => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+/// `GET {base}/operator/dependencies`: the readiness report with the last
+/// outcome of every upstream, behind the steward scope so an anonymous
+/// reader learns no endpoint (FerroFED's decision A83; no specification
+/// governs this: our own design).
+// TODO(#63): name the audit repository with its last outcome.
+// TODO(#104): name every PMIR subscriber with its last outcome.
+async fn dependencies(health: Registry) -> Response {
+    let report = Dependencies {
+        readiness: health.evaluate().await,
+        upstreams: Vec::new(),
+    };
+    body(StatusCode::OK, &report, "application/json")
 }
 
 /// A transaction of the FHIR face that is not served yet.

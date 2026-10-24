@@ -28,6 +28,7 @@ use crate::auth::Smart;
 use crate::auth::source::{Verdict, domains_of};
 use crate::auth::table::{self, Need, Route};
 use crate::fhir::outcome::{IssueType, respond};
+use crate::http::request_log::{Caller, Written};
 
 /// The diagnostics of a request that carries no valid credential.
 pub const UNAUTHENTICATED: &str = "the request carries no valid access token for this server";
@@ -174,8 +175,36 @@ pub async fn confine(
     let Some(access) = request.extensions().get::<Access>().cloned() else {
         return next.run(request).await;
     };
+    let caller = Caller(caller_of(&access));
+    let mut response = match check(&confine, &access, &request) {
+        Checked::Refused(response) => response,
+        Checked::Pass => next.run(request).await,
+        Checked::Feed(systems) => {
+            let mut response = next.run(request).await;
+            if response.status().is_success() {
+                response.extensions_mut().insert(Written(systems));
+            }
+            response
+        }
+    };
+    response.extensions_mut().insert(caller);
+    response
+}
+
+/// What the check behind the gate decided.
+enum Checked {
+    /// The request passes.
+    Pass,
+    /// The request passes, writing to these domains.
+    Feed(Vec<String>),
+    /// The request is refused with this response.
+    Refused(Response),
+}
+
+/// Returns what the check behind the gate decides for `request` of `access`.
+fn check(confine: &Confine, access: &Access, request: &Request) -> Checked {
     let Some(route) = route_of(&confine.base, request.method(), request.extensions()) else {
-        return next.run(request).await;
+        return Checked::Pass;
     };
     let Need::Fhir {
         permissions,
@@ -184,7 +213,7 @@ pub async fn confine(
         source,
     } = route.need
     else {
-        return next.run(request).await;
+        return Checked::Pass;
     };
     let by_transaction = transaction.is_some_and(|scope| access.has_scope(scope));
     let system_wide = permissions.iter().any(|permission| {
@@ -194,24 +223,37 @@ pub async fn confine(
         )
     });
     if !(by_transaction || system_wide) {
-        return Outcome {
-            realm: confine.smart.gate().realm().map(str::to_owned),
-        }
-        .respond(&Refusal::Forbidden);
+        return Checked::Refused(
+            Outcome {
+                realm: confine.smart.gate().realm().map(str::to_owned),
+            }
+            .respond(&Refusal::Forbidden),
+        );
     }
-    if source {
-        let sources = confine.smart.sources();
-        let foreign = domains_of(request.uri().query())
-            .iter()
-            .any(|system| sources.verdict(&access, system) == Verdict::Forbidden);
-        if foreign {
-            return respond(
-                StatusCode::FORBIDDEN,
-                IssueType::Forbidden,
-                NOT_THE_SOURCE,
-                None,
-            );
-        }
+    if !source {
+        return Checked::Pass;
     }
-    next.run(request).await
+    let sources = confine.smart.sources();
+    let systems = domains_of(request.uri().query());
+    if systems
+        .iter()
+        .any(|system| sources.verdict(access, system) == Verdict::Forbidden)
+    {
+        return Checked::Refused(respond(
+            StatusCode::FORBIDDEN,
+            IssueType::Forbidden,
+            NOT_THE_SOURCE,
+            None,
+        ));
+    }
+    Checked::Feed(systems)
+}
+
+/// Returns the caller the request log names for `access`: the token's
+/// `client_id`, or its subject or the Basic user-id when it names none.
+fn caller_of(access: &Access) -> String {
+    access.caller().map_or_else(
+        || String::from("-"),
+        |caller| caller.client_id().unwrap_or(caller.subject()).to_owned(),
+    )
 }

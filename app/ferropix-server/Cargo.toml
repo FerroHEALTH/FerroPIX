@@ -28,6 +28,9 @@ clap.workspace = true
 # The R4 OperationOutcome and CapabilityStatement the FHIR face answers
 # with, from the generated model.
 fhir-types = { workspace = true, features = ["r4", "terminology"] }
+# The readiness document and the dependency report, shared with the
+# operator console.
+ferropix-operator-api = { path = "../ferropix-operator-api" }
 # The `[auth]` section is resolved by the family's resource-server crate: the
 # issuer URL rule of RFC 8414, the audiences, the algorithms and the Basic
 # users of the development profile. `axum` adds the layer that guards every
@@ -58,10 +61,12 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+# The synthetic BSN the request-log test sends, from the reserved range.
+ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 # The signing keys of the authorization tests, generated when a case runs.
 aws-lc-rs.workspace = true
 tempfile.workspace = true
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "process"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "process", "test-util"] }
 tower = { workspace = true, features = ["util"] }
 # The authorization server the authorization tests stand up.
 wiremock.workspace = true

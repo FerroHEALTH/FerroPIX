@@ -187,6 +187,12 @@ pub enum StoreError {
         /// The key the reseal moves them to.
         pending: KeyId,
     },
+    /// A stored domain names a kind the schema does not admit.
+    #[error("the stored domain {system} names a kind the schema does not admit")]
+    UnknownDomainKind {
+        /// The domain's system.
+        system: String,
+    },
     /// `db reseal` was given an old key the store is not written under.
     #[error("the store is written under key {stored}, and the old key is key {old}")]
     OldKeyUnknown {

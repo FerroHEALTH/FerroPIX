@@ -85,3 +85,35 @@ pub async fn apply(store: &Store, seeds: &[DomainSeed]) -> Result<SeedReport, St
     );
     Ok(report)
 }
+
+/// Reads every domain the store holds and has not retired, by system: the
+/// record the seed defers to, which names each domain's Source.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails, and
+/// [`StoreError::UnknownDomainKind`] for a kind the schema does not admit.
+pub async fn stored(store: &Store) -> Result<Vec<DomainSeed>, StoreError> {
+    let rows: Vec<(String, String, String, String, bool)> = sqlx::query_as(
+        "SELECT system, name, kind, source_client_id, sensitive
+         FROM pix.identifier_domain WHERE retired_at IS NULL ORDER BY system",
+    )
+    .fetch_all(store.pool())
+    .await?;
+    rows.into_iter()
+        .map(|(system, name, kind, source_client_id, sensitive)| {
+            let kind = match kind.as_str() {
+                "local" => DomainKind::Local,
+                "authoritative" => DomainKind::Authoritative,
+                "master" => DomainKind::Master,
+                _ => return Err(StoreError::UnknownDomainKind { system }),
+            };
+            Ok(DomainSeed {
+                system,
+                name,
+                kind,
+                source_client_id,
+                sensitive,
+            })
+        })
+        .collect()
+}

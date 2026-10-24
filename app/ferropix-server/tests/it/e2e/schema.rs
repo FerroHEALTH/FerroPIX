@@ -121,6 +121,27 @@ async fn the_migrations_apply_on_an_empty_store_and_again_without_change() {
         seeded,
         "the seed is applied once"
     );
+    assert_eq!(
+        seeds(),
+        ferropix_server::store::seed::stored(&again).await.unwrap(),
+        "the stored domains read back as seeded"
+    );
+    sqlx::query("UPDATE pix.identifier_domain SET retired_at = now() WHERE system = $1")
+        .bind(HOSPITAL_DOMAIN)
+        .execute(again.pool())
+        .await
+        .unwrap();
+    let active: Vec<String> = ferropix_server::store::seed::stored(&again)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|domain| domain.system)
+        .collect();
+    assert_eq!(
+        vec![BSN_SYSTEM.to_owned()],
+        active,
+        "a retired domain has no Source"
+    );
     again.close().await;
 }
 

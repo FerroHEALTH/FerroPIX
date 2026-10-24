@@ -257,7 +257,8 @@ pub enum ServeError {
 ///
 /// The store passes the boot gate, applies the pending migrations unless
 /// `[db] migrate = false`, checks the sealing key and applies the domain
-/// seed before anything else starts.
+/// seed before anything else starts; the Sources the guard admits are the
+/// domains the store then holds.
 ///
 /// # Errors
 /// Returns [`ServeError::Store`] when the store refuses to start,
@@ -269,10 +270,12 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
         .await
         .map_err(ServeError::Store)?;
+    let domains = store::seed::stored(&store)
+        .await
+        .map_err(ServeError::Store)?;
     let Settings {
         server,
         auth,
-        domains,
         pixm,
         pdqm,
         pmir,

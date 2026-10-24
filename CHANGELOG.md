@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-10-24
+
 ### Added
 
 - The span export of `[telemetry] otlp_endpoint` (#143): `serve` sends one

@@ -1,0 +1,137 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# SonarQube Cloud analysis: the machine opinion beside CodeQL. Findings are
+# ADVISORY. They never outrank the specifications, the project rules, or the
+# local gates, and they gate no merge: `conclusion` in ci.yml does not need
+# this workflow (.claude/rules/ai-code-review.md; no specification governs
+# this: our own design, after FerroFED's and FerroBRIDGE's lanes). The
+# quality gate is the built-in "Sonar way" default.
+#
+# The multi-language sweep over shell, YAML, JSON and the other config
+# surfaces the Rust gates never see runs on every scan, beside the Rust
+# analysis with the lcov report of an instrumented run. hashFiles() is the
+# correct primitive in a step-level `if:` here: the checkout has already
+# populated the workspace when it is evaluated.
+#
+# Scan SCOPE lives in sonar-project.properties; do not restate it here.
+# SONAR_HOST_URL is not needed for SonarQube Cloud (SonarSource/
+# sonarqube-scan-action README, v8.2.1).
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# A new push to a pull request supersedes its running analysis, so that run is
+# cancelled. A run on main keeps going: each analyzes a distinct commit whose
+# result the dashboard keeps.
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  scan:
+    name: analyze
+    # Pull-request analysis authenticates with SONAR_TOKEN, which a fork pull
+    # request cannot read, and neither can a DEPENDABOT one: a dependabot-actor
+    # run reads Dependabot secrets rather than Actions secrets, so the scan
+    # would die on "Not authorized". A dependency bump has nothing to decorate
+    # anyway, and the post-merge push to main analyzes the merged result.
+    if: github.event_name == 'push' || (github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read # PR decoration reads the pull-request metadata
+    steps:
+      # A repository without the SONAR_TOKEN secret skips the analysis and
+      # says so, so the lane stays green until the token is provisioned.
+      - name: Is the SonarQube Cloud token provisioned
+        id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::SONAR_TOKEN is not set; the SonarQube Cloud analysis is skipped."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.token.outputs.present == 'true'
+        with:
+          # Full history: Sonar assigns issues and new-code status by blame.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the Rust toolchain
+        if: steps.token.outputs.present == 'true' && hashFiles('Cargo.toml') != ''
+        uses: ./.github/actions/setup-rust
+        with:
+          # llvm-tools-preview carries the profdata reader cargo-llvm-cov needs.
+          components: llvm-tools-preview
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install cargo-llvm-cov and cargo-nextest
+        if: steps.token.outputs.present == 'true' && hashFiles('Cargo.toml') != ''
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+
+      # The lcov file sonar.rust.lcov.reportPaths names. One package at a time,
+      # so the instrumented build stays inside the hosted runner's memory as
+      # the workspace grows, each with every feature, so every profile of
+      # ihe-iti and nl-generic-functions is measured. --no-report accumulates
+      # the profiles, the report step merges them into the single file Sonar
+      # imports. --no-tests=pass keeps a member with no tests from failing the
+      # run. FERROPIX_E2E is unset, so the gated end-to-end tests skip, and
+      # sonar-project.properties leaves them out of coverage.
+      - name: Instrumented tests to lcov, one package at a time
+        if: steps.token.outputs.present == 'true' && hashFiles('Cargo.toml') != ''
+        env:
+          CARGO_BUILD_JOBS: "2"
+        run: |
+          set -euo pipefail
+          cargo llvm-cov clean --workspace
+          cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[].name' \
+            | sort \
+            | while read -r package; do
+                echo "::group::${package}"
+                cargo llvm-cov nextest --locked --all-features --no-report --no-tests=pass -p "${package}"
+                echo "::endgroup::"
+              done
+          cargo llvm-cov report --lcov --output-path lcov.info
+          lines="$(grep -c '^DA:' lcov.info || true)"
+          echo "lcov.info carries ${lines} line records"
+          if [ "${lines}" = "0" ]; then
+            echo "the coverage report is empty" >&2
+            exit 1
+          fi
+
+      # sonar.projectVersion anchors the "Previous version" New Code window: the
+      # workspace version bumps at every release cut, so "new code" means "since
+      # the last release". Read from the root Cargo.toml at scan time, never a
+      # second hand-maintained copy, and appended to the properties file, so no
+      # context value reaches a shell or the action arguments.
+      - name: Derive sonar.projectVersion from the workspace version
+        if: steps.token.outputs.present == 'true' && hashFiles('Cargo.toml') != ''
+        run: |
+          set -euo pipefail
+          v="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2 || true)"
+          if [ -z "$v" ]; then
+            echo "Cargo.toml has no [workspace.package] version" >&2
+            exit 1
+          fi
+          echo "sonar.projectVersion=$v" >> sonar-project.properties
+
+      - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        if: steps.token.outputs.present == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -1,0 +1,132 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The image vulnerability gate and the tag application, as a reusable
+# workflow release.yml calls once the server image is pushed and the
+# vulnerability record has passed.
+#
+# The ORDER is the point: release-image.yml pushes by digest and applies no
+# tag, this workflow scans that digest, and only a passing scan makes it
+# referencable. A HIGH or CRITICAL finding with a fix therefore never becomes
+# `latest`. No specification governs this: our own design (docs/release.md),
+# the scan-before-tag gate FerroEHR runs.
+#
+# The gate reads trivy.yaml (HIGH and CRITICAL, fixed findings only,
+# .trivyignore.yaml). VEX is not passed here: Trivy matches a `pkg:oci/<image>`
+# product only against a published reference, and these digests carry no tag
+# yet. The release record (release.yml `vulnerability-record`) judges every
+# finding against the VEX documents before this runs.
+name: Scan and tag images (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      server-digest:
+        description: The ferropix image's pushed index digest.
+        required: true
+        type: string
+      server-tags:
+        description: The newline-separated tag list to apply to the server digest.
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  # The one Trivy version of the release and the weekly scan, pinned in
+  # docs/VERSIONS.md and read back by scripts/checks/versions.sh.
+  TRIVY_VERSION: "0.76.1"
+
+jobs:
+  image-scan:
+    name: image vulnerability scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read # pull the digests the caller pushed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      # No cache: this job decides whether published artifacts are safe.
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v${{ env.TRIVY_VERSION }}
+          cache: false
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The index is dual-arch and trivy reads one variant per invocation
+      # (`--platform`), so each variant is scanned.
+      - name: Scan every image on both platforms
+        env:
+          SERVER_DIGEST: ${{ inputs.server-digest }}
+        run: |
+          set -euo pipefail
+          fail=0
+          entries=("ferropix|$SERVER_DIGEST")
+          for entry in "${entries[@]}"; do
+            image="${entry%%|*}"
+            digest="${entry#*|}"
+            case "$digest" in
+              sha256:*) ;;
+              *) echo "::error::no pushed digest for ${image}" >&2; exit 1 ;;
+            esac
+            for platform in linux/amd64 linux/arm64; do
+              echo "::group::${image} ${platform} (${digest})"
+              if ! trivy image --config trivy.yaml --scanners vuln --exit-code 1 \
+                --platform "$platform" "ghcr.io/ferrohealth/${image}@${digest}"; then
+                echo "::error::${image} ${platform} carries a fixable HIGH or CRITICAL finding" >&2
+                fail=1
+              fi
+              echo "::endgroup::"
+            done
+          done
+          exit "$fail"
+
+  # `imagetools create` over a single source re-tags the SAME digest, so the
+  # attestations bound to it stay valid.
+  apply-tags:
+    name: apply image tags (after the scan gate)
+    needs: image-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # the attestations API, to verify the tagged images
+      packages: write # tag the digests the caller pushed
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Tag every image and verify each tag as a consumer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVER_DIGEST: ${{ inputs.server-digest }}
+          SERVER_TAGS: ${{ inputs.server-tags }}
+        run: |
+          set -euo pipefail
+          tag_image() {
+            local image="$1" digest="$2" tags="$3" signer="$4" t
+            local -a args=()
+            while IFS= read -r t; do [ -n "$t" ] && args+=(-t "$t"); done <<< "$tags"
+            [ "${#args[@]}" -gt 0 ] || { echo "::error::no tags for ${image}" >&2; exit 1; }
+            docker buildx imagetools create "${args[@]}" "${image}@${digest}"
+            while IFS= read -r t; do
+              [ -n "$t" ] || continue
+              gh attestation verify "oci://${t}" --repo "$GITHUB_REPOSITORY" \
+                --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/${signer}"
+              echo "tagged ${t} -> ${digest}" >> "$GITHUB_STEP_SUMMARY"
+            done <<< "$tags"
+          }
+          tag_image ghcr.io/ferrohealth/ferropix "$SERVER_DIGEST" "$SERVER_TAGS" release-image.yml

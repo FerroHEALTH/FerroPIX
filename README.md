@@ -6,10 +6,12 @@
 [![CI](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml/badge.svg)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml/badge.svg)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/FerroHEALTH/FerroPIX/badge)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)
+[![SLSA Build L3](https://slsa.dev/images/gh-badge-level3.svg)](docs/release.md#the-build-legs)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=FerroHEALTH_FerroPIX&metric=alert_status)](https://sonarcloud.io/summary/overall?id=FerroHEALTH_FerroPIX)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=FerroHEALTH_FerroPIX&metric=coverage)](https://sonarcloud.io/summary/new_code?id=FerroHEALTH_FerroPIX)
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/FerroHEALTH/FerroPIX?sort=semver)](https://github.com/FerroHEALTH/FerroPIX/releases/latest)
+[![Image pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FFerroHEALTH%2FFerroPIX%2Fferropix&query=downloadCount&label=image%20pulls&logo=github)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)
 [![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8.svg)](https://ferropix.eu/docs/)
 [![ihe-iti on crates.io](https://img.shields.io/crates/v/ihe-iti.svg?label=ihe-iti)](https://crates.io/crates/ihe-iti)
 [![ihe-iti on docs.rs](https://img.shields.io/docsrs/ihe-iti?label=docs.rs%20ihe-iti)](https://docs.rs/ihe-iti)
@@ -23,10 +25,10 @@
 [![PMIR 1.6.0 examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpmir.json)](conformance/pmir/pass-list.txt)
 [![Audit record examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Faudit.json)](conformance/audit/pass-list.txt)
 <!-- badges:end -->
-<!-- Not shown yet: SLSA Build Level 3 and the image pulls wait on the release
-     lanes (#75, #76); OpenSSF Best Practices waits on the project's
-     registration on bestpractices.dev. scripts/checks/conformance.sh writes the
-     block above. -->
+<!-- Not shown yet: OpenSSF Best Practices waits on the project's
+     registration on bestpractices.dev. The image pulls read nothing until the
+     first release publishes the image. scripts/checks/conformance.sh writes
+     the block above. -->
 
 **Website:** <https://ferropix.eu/> · **Documentation:** <https://ferropix.eu/docs/>
 

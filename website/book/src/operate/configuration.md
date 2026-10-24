@@ -75,9 +75,11 @@ information and its query replaced by `***`.
 
 `app/ferropix-server/quickstart.toml` is the smallest production
 configuration: the loopback base, one issuer, one identifier domain, and
-both `[db]` secrets read from files under `/run/secrets/`. The compose
-quickstart that mounts it beside PostgreSQL is planned
-([#75](https://github.com/FerroHEALTH/FerroPIX/issues/75)).
+both `[db]` secrets read from files under `/run/secrets/`. Its issuer is
+the development OpenID Provider of the compose quickstart, which signs plain
+JWT bearer tokens, so the entry sets `token_profile = "jwt"`. The compose
+quickstart mounts it beside PostgreSQL
+([Deployment](deployment.md#the-compose-quickstart)).
 
 ### The top level
 

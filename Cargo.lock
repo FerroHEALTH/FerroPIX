@@ -1304,6 +1304,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferropix-operator-api"
+version = "0.0.2"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ferropix-server"
 version = "0.0.2"
 dependencies = [
@@ -1311,6 +1319,8 @@ dependencies = [
  "axum",
  "clap",
  "ferrohealth-smart",
+ "ferropix-operator-api",
+ "ferropix-testkit",
  "fhir-types",
  "http",
  "jiff",

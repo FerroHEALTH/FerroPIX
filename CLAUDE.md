@@ -124,7 +124,11 @@ The build order is the milestones:
   the bounded drain (`src/http/`), the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it
-  (`src/fhir/`), and `quickstart.toml`.
+  (`src/fhir/`), the readiness registry (`src/health.rs`), the request log
+  (`src/http/request_log.rs`), and `quickstart.toml`.
+- `app/ferropix-operator-api`: the health and operator documents as serde
+  types (#64), which the server writes and the console reads, `publish =
+  false`.
 - `app/ferropix-console`: the operator console (#119), its own binary
   `ferropix-console`, `publish = false`: a Leptos islands app rendered on the
   server and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC

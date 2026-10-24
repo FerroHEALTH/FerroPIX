@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use axum::Router;
 use axum::routing::get;
 use ferropix_server::config::section::server::ServerSettings;
+use ferropix_server::health::Registry;
 use ferropix_server::http::{request_id, router, serve_until, with_middleware};
 use http::StatusCode;
 use tokio::net::TcpListener;
@@ -61,7 +62,11 @@ fn client() -> reqwest::Client {
 #[tokio::test]
 async fn the_health_routes_answer_under_the_base_path_and_nowhere_else() {
     let server = settings("/pix");
-    let running = start(router(&server, None), server.drain_timeout).await;
+    let running = start(
+        router(&server, &Registry::default(), None),
+        server.drain_timeout,
+    )
+    .await;
     let base = format!("http://{}", running.address);
     for (path, status) in [
         ("/pix/health", StatusCode::OK),
@@ -86,7 +91,11 @@ async fn the_health_routes_answer_under_the_base_path_and_nowhere_else() {
 #[tokio::test]
 async fn a_legal_request_id_is_echoed_and_an_illegal_one_replaced() {
     let server = settings("");
-    let running = start(router(&server, None), server.drain_timeout).await;
+    let running = start(
+        router(&server, &Registry::default(), None),
+        server.drain_timeout,
+    )
+    .await;
     let url = format!("http://{}/health", running.address);
     let echoed = client()
         .get(&url)

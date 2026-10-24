@@ -14,6 +14,7 @@ pub mod auth;
 pub mod cli;
 pub mod config;
 pub mod fhir;
+pub mod health;
 pub mod healthcheck;
 pub mod http;
 pub mod telemetry;
@@ -195,7 +196,14 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         pmir: pmir.enabled,
         operator: operator.enabled,
     };
-    let guarded = fhir::routes(&server.base_path, &server.public_base_url, mounts, &smart);
+    let health = health::Registry::default();
+    let guarded = fhir::routes(
+        &server.base_path,
+        &server.public_base_url,
+        mounts,
+        &smart,
+        &health,
+    );
     let listener = TcpListener::bind(server.listen)
         .await
         .map_err(ServeError::Io)?;
@@ -207,7 +215,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     );
     http::serve_until(
         listener,
-        http::router(&server, Some(guarded)),
+        http::router(&server, &health, Some(guarded)),
         server.drain_timeout,
         http::shutdown_signal(),
     )

@@ -9,12 +9,15 @@
 
 pub mod panic;
 pub mod request_id;
+pub mod request_log;
 
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
+use axum::extract::State;
+use axum::response::Response;
 use axum::routing::get;
 use http::StatusCode;
 use tokio::net::TcpListener;
@@ -24,6 +27,8 @@ use tower_http::request_id::{PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
 
 use crate::config::section::server::ServerSettings;
+use crate::fhir::outcome::body;
+use crate::health::{self, Registry};
 
 /// The path of the liveness route under `{base}`.
 pub const LIVENESS: &str = "/health";
@@ -32,15 +37,16 @@ pub const LIVENESS: &str = "/health";
 pub const READINESS: &str = "/health/readiness";
 
 /// Builds the HTTP application under `server`'s base path, with the shared
-/// middleware: the health routes, and the `guarded` routes of the FHIR face
-/// and the operator API when given.
+/// middleware: the health routes over `health`, and the `guarded` routes of
+/// the FHIR face and the operator API when given.
 ///
 /// `GET {base}/health` answers `200` while the process is up, and
-/// `GET {base}/health/readiness` answers `200` while it can serve.
-pub fn router(server: &ServerSettings, guarded: Option<Router>) -> Router {
+/// `GET {base}/health/readiness` answers `200` while every indicator of
+/// `health` is up and `503` naming each one that is down.
+pub fn router(server: &ServerSettings, health: &Registry, guarded: Option<Router>) -> Router {
     let mut routes = Router::new()
         .route(LIVENESS, get(liveness))
-        .route(READINESS, get(readiness));
+        .route(READINESS, get(readiness).with_state(health.clone()));
     if let Some(guarded) = guarded {
         routes = routes.merge(guarded);
     }
@@ -56,11 +62,13 @@ pub fn router(server: &ServerSettings, guarded: Option<Router>) -> Router {
 ///
 /// Outermost first: the request-id normalizer, the layer that mints one, the
 /// panic renderer, the layer that propagates the id onto the response, the
-/// panic catcher, the request timeout and the body ceiling. The renderer sits
-/// outside the propagate layer because it reads the id from the response that
-/// layer has just stamped.
+/// panic catcher, the request timeout, the body ceiling and the request log.
+/// The renderer sits outside the propagate layer because it reads the id
+/// from the response that layer has just stamped; the request log runs after
+/// routing, so it reads the matched route template.
 pub fn with_middleware(router: Router, server: &ServerSettings) -> Router {
     router
+        .layer(axum::middleware::from_fn(request_log::log))
         .layer(RequestBodyLimitLayer::new(server.body_limit))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
@@ -78,10 +86,11 @@ async fn liveness() -> StatusCode {
     StatusCode::OK
 }
 
-/// `GET {base}/health/readiness`: `200` while the server can serve.
-async fn readiness() -> StatusCode {
-    // TODO(#64): answer from the indicator registry, 503 naming each indicator that is down.
-    StatusCode::OK
+/// `GET {base}/health/readiness`: the readiness document of `health`, `200`
+/// while every indicator is up and `503` while one is down.
+async fn readiness(State(health): State<Registry>) -> Response {
+    let report = health.evaluate().await;
+    body(health::status(&report), &report, "application/json")
 }
 
 /// Serves `app` on an already-bound listener until `shutdown` completes, then

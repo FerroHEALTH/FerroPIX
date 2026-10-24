@@ -14,6 +14,21 @@ and this project adheres to
 
 ### Added
 
+- The server's health family and request log (#64). `GET {base}/health/readiness`
+  runs a registry of indicators, each bounded to two seconds, and answers
+  `503` with a readiness document naming each one that is down; the
+  indicators land with the subsystems they check (the store, the audit
+  spool, the MLLP listener, the feed sender). `ferropix healthcheck` exits 1
+  on that `503`. `GET {base}/operator/dependencies` answers the same report
+  with the upstreams' last outcomes behind the steward scope. One request
+  log line per request under the target `ferropix_server::request` records
+  the request id, the method, the matched route template, the status, the
+  latency, the caller and the domain a feed wrote to, and never the path as
+  sent, a query, a body or a header value, so a BSN sent by `GET` to
+  `$ihe-pix` stays out of the log. `ferropix-operator-api` is the new crate
+  of the documents the server writes and the console reads. The usage
+  report moves to #153, which waits on FerroPULSE taking the `ferropix`
+  product.
 - Authorization of the FerroPIX server through `ferrohealth-smart` (#62):
   `serve` reads the RFC 8414 metadata and key set of every
   `[[auth.issuer]]` at start, and every route of `{base}/fhir` and

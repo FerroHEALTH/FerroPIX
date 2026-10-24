@@ -731,15 +731,30 @@ ATNA repository's and each subscriber's last outcome, behind the steward
 scope, so an anonymous reader learns no endpoint, the ruling FerroFED made
 as its decision A83. The container `HEALTHCHECK` is `ferropix healthcheck`.
 
+The registry holds the indicators of the subsystems that exist, each added
+with its subsystem; each check is bounded to two seconds and a check past
+the bound is down, so a wedged subsystem cannot hang the probe, and the
+probe runs the checks on the request instead of reading a cache a
+background loop fills (our own design, after FerroBRIDGE's registry).
+
 **The request log** records, per request, the request id, the matched route
 template, the method, the status, the latency, the caller's client id or
 subject, and the domain a feed wrote to. It never records a query string,
 a body, a header value or an identifier: the ITI-83 `GET` form carries the
 identifier in the query, and the log records `/fhir/Patient/$ihe-pix` and
 nothing after it, which the test of #52 proves over a BSN sent by `GET`.
-`tracing` spans carry the same fields and no more.
+`tracing` spans carry the same fields and no more. The line is written
+under the target `ferropix_server::request` after routing, so it reads the
+matched template; a request no route matched is logged as `<unmatched>`
+with no part of its path. The guard leaves the caller (the token's
+`client_id`, or its subject when it names none) and the domains a
+successful feed wrote to on the response, where the log reads them; a
+request the gate refused names no caller (our own design).
 
-**The usage report.** FerroEHR, FerroTERM and FerroBRIDGE send an
+**The usage report** waits on FerroPULSE (#153): its envelope v2 takes
+`product` from a closed list that does not yet name `ferropix`.
+
+FerroEHR, FerroTERM and FerroBRIDGE send an
 installation report to FerroPULSE on its envelope v2; FerroPIX does the
 same under `[usage_report]`: on by default with a notice at every start,
 `enabled = false` or an unset `state_dir` keeps it off, one `start` and one

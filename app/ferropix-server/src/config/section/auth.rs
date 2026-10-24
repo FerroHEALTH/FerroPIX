@@ -45,8 +45,9 @@ pub struct Auth {
     pub jwks_file: String,
     /// How long one call to an authorization server may take.
     pub timeout_ms: u64,
-    /// The realm the challenges name; empty for the server's own.
-    pub realm: String,
+    /// The protection space the `WWW-Authenticate` challenges name (RFC 9110
+    /// §11.5); empty for the server's own.
+    pub challenge_realm: String,
     /// The scope of a data steward.
     pub steward_scope: String,
     /// The scope of an administrator.
@@ -69,7 +70,7 @@ impl Default for Auth {
             jwks_refresh_interval_seconds: family.jwks_refresh_interval_seconds,
             jwks_file: String::new(),
             timeout_ms: family.timeout_ms,
-            realm: String::new(),
+            challenge_realm: String::new(),
             steward_scope: String::from("__ferropix.steward"),
             admin_scope: String::from("__ferropix.admin"),
             basic: None,
@@ -244,7 +245,7 @@ impl Auth {
             jwks_refresh_interval_seconds: self.jwks_refresh_interval_seconds,
             jwks_file: self.jwks_file.clone(),
             timeout_ms: self.timeout_ms,
-            realm: self.realm.clone(),
+            realm: self.challenge_realm.clone(),
             basic: self.basic.clone(),
             ..AuthSection::default()
         }

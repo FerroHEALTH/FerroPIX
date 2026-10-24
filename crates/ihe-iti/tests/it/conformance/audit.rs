@@ -21,10 +21,8 @@ use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest};
 use secrecy::SecretString;
 use serde_json::Value;
 use url::Url;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{example, examples, is_audit, record, verdict};
+use super::{example, examples, is_audit, record, registry, verdict};
 use crate::audit::profile::{Kept, holds_to, like, written};
 
 /// The vendored packages whose audit examples the corpus reads.
@@ -129,15 +127,7 @@ async fn pdqm_query() -> Exchange {
 
 /// The record of an ITI-119 match of the PDQm client.
 async fn pdqm_match() -> Exchange {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/fhir/Patient/$match"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            crate::pdqm::vendored("example/Bundle-ex-match-output.json").into_bytes(),
-            FHIR_JSON,
-        ))
-        .mount(&server)
-        .await;
+    let server = super::pdqm::matcher(200, "example/Bundle-ex-match-output.json").await;
     let input = MatchInput::new(crate::pdqm::DOMAIN, &SecretString::from("12345"))
         .expect("an input")
         .only_certain_matches(true);
@@ -164,27 +154,10 @@ fn pmir_feed() -> Exchange {
 /// The record of the subscriber's `n`th interaction with a Registry: the
 /// create, the read of the status, then the delete.
 async fn pmir_subscription(n: usize) -> Exchange {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/fhir/Subscription"))
-        .respond_with(ResponseTemplate::new(201).insert_header("location", "Subscription/s-1"))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/fhir/Subscription/s-1"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            format!(
-                r#"{{"resourceType":"Subscription","id":"s-1","status":"active","reason":"x","criteria":"Patient","channel":{{"type":"message","endpoint":"{FEED_ENDPOINT}","payload":"application/fhir+json"}}}}"#
-            ),
-            FHIR_JSON,
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("DELETE"))
-        .and(path("/fhir/Subscription/s-1"))
-        .respond_with(ResponseTemplate::new(204))
-        .mount(&server)
-        .await;
+    let server = registry(format!(
+        r#"{{"resourceType":"Subscription","id":"s-1","status":"active","reason":"x","criteria":"Patient","channel":{{"type":"message","endpoint":"{FEED_ENDPOINT}","payload":"application/fhir+json"}}}}"#
+    ))
+    .await;
     let request = SubscriptionRequest::new(
         Criteria::identifier_system(crate::pmir::DOMAIN).expect("an absolute URI"),
         Url::parse(FEED_ENDPOINT).expect("a URL"),

@@ -13,10 +13,8 @@ use ihe_iti::pmir::feed::{EventKind, Feed, ResponseId};
 use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest, SubscriptionStatus};
 use serde_json::Value;
 use url::Url;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{example, examples, is_audit, record, verdict};
+use super::{example, examples, is_audit, record, registry, verdict};
 use crate::pmir::{FHIR_JSON, PROMPT, subscriber};
 
 /// The vendored package under `docs/specs/`.
@@ -136,19 +134,7 @@ fn subscription_request(id: &str) {
 /// A Subscription the Registry holds, read by the subscriber for its status.
 async fn subscription(id: &str) {
     let held = json(id);
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/fhir/Subscription"))
-        .respond_with(ResponseTemplate::new(201).insert_header("location", "Subscription/s-1"))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/fhir/Subscription/s-1"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(example(PACKAGE, id).into_bytes(), FHIR_JSON),
-        )
-        .mount(&server)
-        .await;
+    let server = registry(example(PACKAGE, id)).await;
     let client = subscriber(&server);
     let request = SubscriptionRequest::new(
         Criteria::AllPatients,

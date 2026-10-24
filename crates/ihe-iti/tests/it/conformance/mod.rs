@@ -29,6 +29,11 @@ use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
+use fhir_types::codec::Object;
+use ihe_iti::server::format::Format;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
 /// The workspace root, relative to this crate's manifest.
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
@@ -120,6 +125,45 @@ pub(crate) fn is_audit(id: &str) -> bool {
 pub(crate) fn example(corpus: &str, id: &str) -> String {
     let path: PathBuf = [ROOT, "docs/specs", corpus, "package", id].iter().collect();
     std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+}
+
+/// The vendored example `id` of the package `corpus` in `format`: as vendored
+/// for JSON, converted for XML.
+pub(crate) fn encoded(corpus: &str, id: &str, format: Format) -> Vec<u8> {
+    let text = example(corpus, id);
+    if format == Format::Xml {
+        let value: fhir_types::codec::Value = serde_json::from_str(&text).expect("JSON");
+        let object: &Object = value.as_object().expect("a resource");
+        return fhir_types::xml::to_xml(&fhir_types::r4::schema::SCHEMAS, object)
+            .expect("an XML form")
+            .into_bytes();
+    }
+    text.into_bytes()
+}
+
+/// A stub PMIR Registry that creates `Subscription/s-1`, answers its read
+/// with `subscription`, and deletes it.
+pub(crate) async fn registry(subscription: String) -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/fhir/Subscription"))
+        .respond_with(ResponseTemplate::new(201).insert_header("location", "Subscription/s-1"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/fhir/Subscription/s-1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(subscription.into_bytes(), "application/fhir+json"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/fhir/Subscription/s-1"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    server
 }
 
 /// The pass list of `cases` under the heading `title`.

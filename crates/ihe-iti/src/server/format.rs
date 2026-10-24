@@ -127,10 +127,10 @@ impl Format {
                     return Err(BodyError::NotAResource);
                 };
                 // NOTE: PIXm 3.1.0 §2:3.104.4.1.2, the server writes FHIR XML too, so a
-                // JSON body whose XML form does not read back (a narrative no XHTML) is refused.
+                // JSON body whose XML form does not read back as itself is refused.
                 let schemas = &fhir_types::r4::schema::SCHEMAS;
                 if let Ok(xml) = fhir_types::xml::to_xml(schemas, &object)
-                    && fhir_types::xml::from_xml(schemas, &xml).is_err()
+                    && fhir_types::xml::from_xml(schemas, &xml).ok().as_ref() != Some(&object)
                 {
                     return Err(BodyError::NoXmlForm);
                 }
@@ -339,5 +339,10 @@ mod tests {
         );
         let narrative = br#"{"resourceType":"Patient","text":{"status":"generated","div":"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>closed</p></div>"}}"#;
         assert!(Format::Json.decode(narrative).is_ok(), "an XHTML narrative");
+        let narrative = br#"{"resourceType":"Patient","text":{"status":"generated","div":"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p class=\"a\"%title=\"b\">x</p></div>"}}"#;
+        assert!(
+            matches!(Format::Json.decode(narrative), Err(BodyError::NoXmlForm)),
+            "a narrative whose XML form reads back changed"
+        );
     }
 }

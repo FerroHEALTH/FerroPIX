@@ -77,6 +77,8 @@ pub mod matches;
 pub mod query;
 mod request;
 mod response;
+#[cfg(feature = "pdqm-server")]
+pub mod server;
 
 use std::fmt;
 use std::sync::Arc;

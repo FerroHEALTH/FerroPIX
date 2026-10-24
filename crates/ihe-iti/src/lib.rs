@@ -14,6 +14,10 @@
 //!   ITI-91, ITI-93 and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`.
 //! - `atna`: the DICOM audit message of ITI-55 with `xcpd`, with no FHIR
 //!   model.
+//! - `pixm-server`: the Patient Identifier Cross-reference Manager side of
+//!   ITI-83 and ITI-104, typed and with no store and no HTTP server.
+//! - `pdqm-server`: the Patient Demographics Supplier side of ITI-78 and
+//!   ITI-119, typed and with no store and no HTTP server.
 //!
 //! The audit trail the records go to (ATNA ITI-20 and its FHIR Feed) is the
 //! `ihe-atna` crate.
@@ -29,7 +33,9 @@
 //! The profiles are published at <https://profiles.ihe.net/ITI/>. The crate
 //! depends on no application: it is the profiles' transactions as Rust, for
 //! any caller. Its home is FerroHEALTH/FerroPIX, the FerroHEALTH Master
-//! Patient Index, which adds the server sides as features.
+//! Patient Index, which adds the server sides as features: the readers of a
+//! request and the writers of an answer, which a server puts on its own HTTP
+//! stack and its own store (module `server`).
 #![doc(test(attr(deny(warnings))))]
 
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
@@ -46,5 +52,7 @@ pub mod pixm;
 pub mod pmir;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 mod search;
+#[cfg(any(feature = "pixm-server", feature = "pdqm-server"))]
+pub mod server;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

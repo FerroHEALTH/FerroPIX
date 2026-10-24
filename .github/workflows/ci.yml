@@ -634,6 +634,8 @@ jobs:
           - { package: ihe-iti, features: "mcsd,balp" }
           - { package: ihe-iti, features: "pmir,balp" }
           - { package: ihe-iti, features: "xcpd,atna" }
+          - { package: ihe-iti, features: pixm-server }
+          - { package: ihe-iti, features: pdqm-server }
           - { package: nl-generic-functions, features: authorizer }
           - { package: nl-generic-functions, features: nvi }
           - { package: nl-generic-functions, features: mitz }

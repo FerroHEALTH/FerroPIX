@@ -17,6 +17,8 @@ Patient Index, which adds the server sides of the profiles as features.
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
 | `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna) | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
+| `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |
+| `pdqm-server` | The Patient Demographics Supplier side of PDQm, typed, with no store and no HTTP server | ITI-78, ITI-119 |
 
 The crate depends on no application, so a federation gateway, a master patient
 index or any other caller can use it as it is. Only the `xcpd` feature may carry
@@ -131,6 +133,63 @@ newest version of each resource wins, a deletion or a version that leaves
 the scope removes it, and a refresh with no instant reads everything again.
 A refresh returns a new replica and leaves the old one as it was, and
 `directory` answers the content as a `Directory`.
+
+## PMIR (`pmir`)
+
+The Patient Identity Subscriber and Patient Identity Consumer sides of PMIR
+1.6.0. `ihe_iti::pmir::PmirSubscriber` is ITI-94, Subscribe to Patient
+Updates: it creates a `Subscription` at the Patient Identity Registry from a
+`SubscriptionRequest` (the criteria the Registry must accept, and your
+channel endpoint), reads its status and deletes it. `ihe_iti::pmir::feed::Feed::read`
+is the Consumer side of ITI-93, Mobile Patient Identity Feed: it reads a
+message the Registry sends to your channel into typed creates, updates,
+deletes and merges, refuses one that departs from the PMIR profiles, and
+`acknowledgement` writes the response message. The feed keeps the resource
+ids and the identifiers only, each value in a `secrecy::SecretString`, and
+drops every demographic as it reads; no type has `Display`, and no error
+carries a value, a URL or the Registry's text. PMIR leaves the
+authentication of the Registry to your channel to the two parties, so your
+code authenticates each message before it reads it. Build the
+`reqwest::Client` you pass in with `redirect::Policy::none()`.
+
+## The server sides (`pixm-server`, `pdqm-server`)
+
+Each server side is the profile's request readers and answer writers, with
+no store, no matching and no HTTP framework, so any server can put them on
+its own stack: you hand a reader the query string, the media type and the
+body, and send the `ihe_iti::server::answer::Answer` it or a writer returns,
+its status and its resource encoded by `encode`. Every server reads and
+writes FHIR JSON and FHIR XML, as the profiles require;
+`ihe_iti::server::format::Format` names the encoding of a body from its
+`Content-Type` and of the answer from `_format` and `Accept`. Every refusal
+is an `Answer<OperationOutcome>` whose diagnostics are fixed text, so no
+outcome quotes the request. Identifiers and demographics travel in the
+client sides' redacting types, and no type has `Display`.
+
+- **`pixm-server`, the PIX Manager:** `pixm::server::query::PixQuery` reads
+  `$ihe-pix` from the query of the `GET` ITI-83 prescribes or from the
+  posted `Parameters` (FHIR R4 Operations), refusing a second
+  `sourceIdentifier`, a token without a system and a parameter the
+  operation does not define; `pixm::server::answer::cross_references`
+  writes the `Parameters` answer, leaving out the source identifier and the
+  domains not asked for; `pixm::server::Refusal` writes the three failures
+  ITI-83 names. `pixm::server::feed::Feed` reads the ITI-104 conditional
+  update on `Patient?identifier=system|value`, held to the PDQm Patient
+  profile and to the identifier of the condition, as an add or revise or,
+  with a `replaced-by` link, a duplicate resolved; `feed::Removal` reads the
+  conditional delete.
+- **`pdqm-server`, the Patient Demographics Supplier:**
+  `pdqm::server::search::PatientSearch` reads every ITI-78 search parameter,
+  with `:exact`, AND and OR, and the domain filter, drops a parameter or a
+  modifier it does not support and says so, and writes the `self` link of
+  what it respected; `pdqm::server::searchset::searchset` writes the
+  `searchset` Bundle with its `total` and paging links, the identifiers
+  pruned to the domains asked for. `pdqm::server::matching::MatchRequest`
+  reads the `$match` input `Parameters` or a bare `Patient`, and
+  `matching::match_set` writes the Match Output Bundle, most likely first,
+  each entry with its `search.score` and `match-grade`, honouring
+  `onlyCertainMatches` and `count`. `pdqm::server::Refusal` writes the
+  unrecognised domain of Case 4 and the missing Patient of a retrieve.
 
 ## XCPD (`xcpd`)
 

@@ -13,6 +13,9 @@
 ))]
 mod audit;
 #[cfg(test)]
+#[cfg(any(feature = "pixm-server", feature = "pdqm-server"))]
+mod display;
+#[cfg(test)]
 mod features;
 #[cfg(test)]
 #[cfg(feature = "mcsd")]

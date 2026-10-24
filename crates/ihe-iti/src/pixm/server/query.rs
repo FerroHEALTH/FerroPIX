@@ -49,6 +49,11 @@ impl PixQuery {
     pub fn from_query(query: &str) -> Result<Self, QueryError> {
         let mut reader = Reader::default();
         for (name, value) in token::url_query(query) {
+            // NOTE: FHIR R4 datatypes.html#primitive, every value of the GET is the
+            // valueString of the same request posted, so one no FHIR string holds is refused.
+            if !token::fhir_string(&value) {
+                return Err(QueryError::NotAString);
+            }
             let value = SecretString::from(value);
             match name.as_str() {
                 "sourceIdentifier" => reader.source(&value)?,
@@ -234,6 +239,11 @@ pub enum QueryError {
     /// The request names `_format` twice.
     #[error("the request names _format more than once")]
     SecondFormat,
+    /// A value of the query holds a character no FHIR `string` holds, the
+    /// vertical tab or the form feed, so the same request could not be
+    /// posted as `Parameters` (FHIR R4 datatypes.html#primitive).
+    #[error("a parameter value is not a FHIR string")]
+    NotAString,
     /// The request names a parameter `$ihe-pix` does not define (the
     /// `$ihe-pix` `OperationDefinition`; FHIR R4 http.html for `_format` and
     /// `_pretty`).
@@ -282,6 +292,7 @@ impl QueryError {
             ),
             Self::EmptyTargetSystem => bad(IssueType::Invalid, "targetSystem is empty"),
             Self::SecondFormat => bad(IssueType::Invalid, "_format is allowed once"),
+            Self::NotAString => bad(IssueType::Value, "a parameter value is not a FHIR string"),
             Self::UnknownParameter => bad(
                 IssueType::NotSupported,
                 "a parameter $ihe-pix does not define",
@@ -372,6 +383,18 @@ mod tests {
                 QueryError::UnknownParameter,
                 StatusCode::BAD_REQUEST,
                 IssueType::NotSupported,
+            ),
+            (
+                "sourceIdentifier=urn:oid:2.999.1%7CIH%0BRED-994",
+                QueryError::NotAString,
+                StatusCode::BAD_REQUEST,
+                IssueType::Value,
+            ),
+            (
+                "sourceIdentifier=urn:oid:2.999.1%7C1&_format=json%0C",
+                QueryError::NotAString,
+                StatusCode::BAD_REQUEST,
+                IssueType::Value,
             ),
         ] {
             let refused = PixQuery::from_query(query).expect_err(query);

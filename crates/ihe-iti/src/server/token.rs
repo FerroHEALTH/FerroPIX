@@ -21,6 +21,15 @@ pub(crate) fn form(body: &[u8]) -> Vec<(String, String)> {
     url::form_urlencoded::parse(body).into_owned().collect()
 }
 
+/// Whether `text` holds only what a FHIR `string` may: the lexical form
+/// `[ \r\n\t\S]+` of FHIR R4 datatypes.html#primitive, read as an XML Schema
+/// pattern, so of the whitespace only the space, the tab, the carriage
+/// return and the line feed. Emptiness is the caller's to judge.
+#[cfg(feature = "pixm-server")]
+pub(crate) fn fhir_string(text: &str) -> bool {
+    !text.contains(['\u{b}', '\u{c}'])
+}
+
 /// The parts of `text` between each `separator` no backslash escapes, every
 /// escape kept for [`unescape`].
 pub(crate) fn split(text: &str, separator: char) -> Vec<&str> {
@@ -105,6 +114,17 @@ mod tests {
             r"x|1,2$3\4\n",
             "the four escapes"
         );
+    }
+
+    #[test]
+    #[cfg(feature = "pixm-server")]
+    fn a_fhir_string_holds_no_vertical_tab_or_form_feed() {
+        assert!(
+            super::fhir_string("van Dam\r\n\t\u{85}"),
+            "the four and non-ASCII"
+        );
+        assert!(!super::fhir_string("IH\u{b}RED"), "a vertical tab");
+        assert!(!super::fhir_string("IH\u{c}RED"), "a form feed");
     }
 
     #[test]

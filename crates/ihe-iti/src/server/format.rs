@@ -123,10 +123,18 @@ impl Format {
                         line: error.line(),
                         column: error.column(),
                     })?;
-                match value {
-                    Value::Object(object) => object,
-                    _ => return Err(BodyError::NotAResource),
+                let Value::Object(object) = value else {
+                    return Err(BodyError::NotAResource);
+                };
+                // NOTE: PIXm 3.1.0 §2:3.104.4.1.2, the server writes FHIR XML too, so a
+                // JSON body whose XML form does not read back (a narrative no XHTML) is refused.
+                let schemas = &fhir_types::r4::schema::SCHEMAS;
+                if let Ok(xml) = fhir_types::xml::to_xml(schemas, &object)
+                    && fhir_types::xml::from_xml(schemas, &xml).is_err()
+                {
+                    return Err(BodyError::NoXmlForm);
                 }
+                object
             }
             Self::Xml => {
                 let text = std::str::from_utf8(body).map_err(|_not_utf8| BodyError::NotXml)?;
@@ -218,6 +226,11 @@ pub enum BodyError {
     /// The body is not a resource with a `resourceType`.
     #[error("the body is not a FHIR resource")]
     NotAResource,
+    /// The body is FHIR JSON whose FHIR XML form does not read back, such as
+    /// one with a narrative `div` that is no XHTML, so the server could not
+    /// answer with it in XML.
+    #[error("the body has no FHIR XML form")]
+    NoXmlForm,
     /// The body does not decode as FHIR R4.
     #[error("the body does not decode as FHIR R4: {kind}")]
     Decode {
@@ -314,5 +327,17 @@ mod tests {
             Err(BodyError::NotXml),
             "truncated XML"
         );
+    }
+
+    #[test]
+    fn a_json_body_with_no_xml_form_is_refused() {
+        let narrative = br#"{"resourceType":"Patient","text":{"status":"generated","div":"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>open"}}"#;
+        assert_eq!(
+            Format::Json.decode(narrative),
+            Err(BodyError::NoXmlForm),
+            "a narrative that is no XHTML"
+        );
+        let narrative = br#"{"resourceType":"Patient","text":{"status":"generated","div":"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>closed</p></div>"}}"#;
+        assert!(Format::Json.decode(narrative).is_ok(), "an XHTML narrative");
     }
 }

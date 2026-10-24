@@ -14,10 +14,14 @@
 #   scripts/checks/pin-freshness.sh
 #
 # The lint and install pins of .github/workflows/ci.yml (zizmor, shellcheck,
-# the actionlint image, yq, cargo-leptos), the documentation toolchain and
-# the console's Binaryen of docs/VERSIONS.md are read against the upstream
-# project's newest GitHub release, and the Chrome for Testing release of the
-# browser journeys against the newest Stable one its JSON endpoints list. A corpus of docs/VERSIONS.md pinned by commit on a repository with
+# the actionlint image, yq, cargo-leptos), the documentation toolchain, the
+# console's Binaryen and the fuzz lane's cargo-fuzz of docs/VERSIONS.md are
+# read against the upstream project's newest GitHub release, and the Chrome
+# for Testing release of the browser journeys against the newest Stable one
+# its JSON endpoints list. The fuzz lane's nightly toolchain is read against
+# the date of the newest nightly the Rust project publishes, and is stale
+# once that is more than one six-week release cycle newer than the pin. A
+# corpus of docs/VERSIONS.md pinned by commit on a repository with
 # no releases is read against the newest commit of the branch it follows, a
 # corpus pinned by a release tag against the newest tag of that shape, a FHIR
 # package or implementation guide pinned by version against the versions its
@@ -61,6 +65,36 @@ yq	mikefarah/yq
 cargo-leptos	leptos-rs/cargo-leptos"
 # The most pages of one tag list the read follows before it gives up.
 readonly MAX_TAG_PAGES=200
+
+# The fuzz lane's nightly: its row of docs/VERSIONS.md, the manifest of the
+# newest nightly, and the age past which a dated nightly is stale, one Rust
+# release cycle of six weeks (The Rust Programming Language, appendix G,
+# "How Rust is Made and Nightly Rust").
+readonly NIGHTLY_ROW="Nightly toolchain (fuzz lane)"
+readonly NIGHTLY_MANIFEST=https://static.rust-lang.org/dist/channel-rust-nightly.toml
+readonly NIGHTLY_MAX_DAYS=42
+
+# day_number YYYY-MM-DD: the date as a count of days, so two dates subtract
+# to the days between them; nothing for text that is no date. The count is
+# that of days_from_civil (https://howardhinnant.github.io/date_algorithms.html).
+day_number() {
+  awk -v date="$1" '
+    BEGIN {
+      if (date !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) exit
+      split(date, part, "-"); y = part[1] + 0; m = part[2] + 0; d = part[3] + 0
+      if (m < 1 || m > 12 || d < 1 || d > 31) exit
+      if (m <= 2) y -= 1
+      era = int(y / 400); yoe = y - era * 400
+      doy = int((153 * (m > 2 ? m - 3 : m + 9) + 2) / 5) + d - 1
+      doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+      print era * 146097 + doe
+    }'
+}
+
+# manifest_date: the `date` of the nightly channel manifest read on stdin.
+manifest_date() {
+  sed -nE 's/^date = "([0-9]{4}-[0-9]{2}-[0-9]{2})"$/\1/p' | head -n 1
+}
 
 # One "matrix label<TAB>upstream repository<TAB>branch" record per line: a
 # corpus pinned by commit on a repository that publishes no releases, read
@@ -514,6 +548,15 @@ self_test() {
     *) expect "a four-part version" "$(chrome_pin)" "the Chrome for Testing row of $MATRIX" ;;
   esac
 
+  expect 1 "$(( $(day_number 2026-03-01) - $(day_number 2026-02-28) ))" "the day after the end of February"
+  expect 366 "$(( $(day_number 2025-01-01) - $(day_number 2024-01-01) ))" "a leap year"
+  expect 42 "$(( $(day_number 2026-11-30) - $(day_number 2026-10-19) ))" "one release cycle"
+  expect "" "$(day_number nightly)" "text that is no date"
+  got="$(printf '%s\n' 'manifest-version = "2"' 'date = "2026-10-24"' '[pkg.rustc]' | manifest_date)"
+  expect 2026-10-24 "$got" "the date of a channel manifest"
+  got="$(awk -F'|' -v want="$NIGHTLY_ROW" '{ l = $2; gsub(/^[ \t]+|[ \t]+$/, "", l) } l == want { v = $3; gsub(/[ `]/, "", v); print v; exit }' "$MATRIX")"
+  [[ "$got" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || expect "nightly-YYYY-MM-DD" "$got" "the nightly row of $MATRIX"
+
   [[ "$failed" -eq 0 ]] || exit 1
   echo "pin-freshness: self-test OK."
 }
@@ -560,7 +603,8 @@ matrix_pin() {
 # of docs/VERSIONS.md a script installs by its release tag, read against the
 # newest GitHub release of its project.
 readonly WATCHED_TOOLS="\
-Binaryen	WebAssembly/binaryen"
+Binaryen	WebAssembly/binaryen
+cargo-fuzz	rust-fuzz/cargo-fuzz"
 
 # release_pins: one "label<TAB>repository<TAB>pinned<TAB>hold" record per pin
 # read against a GitHub release, the CI tools first.
@@ -609,6 +653,26 @@ while IFS=$'\t' read -r label repo pinned hold; do
     stale=1
   fi
 done < <(release_pins)
+
+# The fuzz lane's nightly, against the date of the newest nightly.
+pinned="$(matrix_pin "$NIGHTLY_ROW")"
+if ! [[ "$pinned" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  printf 'UNREADABLE %s: no nightly-YYYY-MM-DD pin in %s\n' "$NIGHTLY_ROW" "$MATRIX"
+  unreadable=1
+elif ! newest="$(curl --fail --silent --show-error --user-agent "$REGISTRY_UA" "$NIGHTLY_MANIFEST" \
+  | manifest_date)" || [[ -z "$newest" ]]; then
+  printf 'UNREADABLE %s: could not read the date of %s\n' "$NIGHTLY_ROW" "$NIGHTLY_MANIFEST"
+  unreadable=1
+else
+  behind=$(( $(day_number "$newest") - $(day_number "${pinned#nightly-}") ))
+  if [[ "$behind" -le "$NIGHTLY_MAX_DAYS" ]]; then
+    printf 'current    %s %s (newest nightly-%s, %s days newer)\n' "$NIGHTLY_ROW" "$pinned" "$newest" "$behind"
+  else
+    printf 'STALE      %s: pinned %s, newest nightly-%s is %s days newer, past one release cycle\n' \
+      "$NIGHTLY_ROW" "$pinned" "$newest" "$behind"
+    stale=1
+  fi
+fi
 
 # The commit-pinned corpora, each against the head of its branch.
 while IFS=$'\t' read -r label repo branch; do

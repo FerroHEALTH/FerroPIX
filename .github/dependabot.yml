@@ -33,3 +33,21 @@ updates:
         update-types: ["minor", "patch"]
     commit-message:
       prefix: "deps"
+
+  # The fuzz crate is its own workspace with its own lockfile, which the
+  # entry at / does not reach (fuzz/Cargo.toml opens an empty [workspace]).
+  - package-ecosystem: "cargo"
+    directory: "/fuzz"
+    labels:
+      - "dependencies"
+      - "no-changelog"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      fuzz-all:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"

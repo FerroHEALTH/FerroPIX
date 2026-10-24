@@ -352,13 +352,14 @@ impl PatientSearch {
     #[must_use]
     pub fn self_link(&self, endpoint: &Url) -> SelfLink {
         let mut url = endpoint.clone();
-        url.set_query(None);
-        if !self.respected.is_empty() {
-            let mut pairs = url.query_pairs_mut();
-            for (name, value) in &self.respected {
-                pairs.append_pair(name, value.expose_secret());
-            }
-        }
+        // NOTE: RFC 3986 §2.1, a `+` in a URL is itself (as `from_query` reads it),
+        // so a space is written `%20` and never the form encoding's `+`.
+        let query: Vec<String> = self
+            .respected
+            .iter()
+            .map(|(name, value)| format!("{}={}", url_part(name), url_part(value.expose_secret())))
+            .collect();
+        url.set_query((!query.is_empty()).then(|| query.join("&")).as_deref());
         SelfLink(url)
     }
 }
@@ -393,6 +394,14 @@ impl fmt::Debug for SelfLink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SelfLink({REDACTED})")
     }
+}
+
+/// `text` percent-encoded for a URL query, every byte outside the form
+/// encoding's unreserved set escaped and a space as `%20`.
+fn url_part(text: &str) -> String {
+    url::form_urlencoded::byte_serialize(text.as_bytes())
+        .collect::<String>()
+        .replace('+', "%20")
 }
 
 /// The alternatives of one value, each read by `read`; an empty one is
@@ -655,5 +664,34 @@ mod tests {
             format!("{:?}", search.self_link(&endpoint)),
             "SelfLink(***)"
         );
+    }
+
+    #[test]
+    fn the_self_link_reads_back_as_the_same_search() {
+        let form =
+            PatientSearch::from_form(b"family=van+Dam&telecom=%2B31201234567&address-state=t%3D1+")
+                .expect("a POST search");
+        let endpoint = Url::parse("https://pdq.example.org/fhir/Patient").expect("a URL");
+        let link = form.self_link(&endpoint);
+        assert_eq!(
+            link.url().query(),
+            Some("family=van%20Dam&telecom=%2B31201234567&address-state=t%3D1%20"),
+            "a space is %20 and a + is %2B"
+        );
+        let again = PatientSearch::from_query(link.url().query().unwrap_or_default())
+            .expect("the self link reads");
+        let values = |search: &PatientSearch| -> Vec<String> {
+            search
+                .criteria()
+                .iter()
+                .map(|criterion| match criterion {
+                    Criterion::Text { values, .. } => values[0].expose_secret().to_owned(),
+                    Criterion::Telecom(tokens) => tokens[0].value().expose_secret().to_owned(),
+                    _ => panic!("a criterion this test does not send"),
+                })
+                .collect()
+        };
+        assert_eq!(values(&again), ["van Dam", "+31201234567", "t=1 "]);
+        assert_eq!(values(&again), values(&form), "the same values");
     }
 }

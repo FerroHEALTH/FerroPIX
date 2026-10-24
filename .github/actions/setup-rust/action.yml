@@ -14,6 +14,16 @@ inputs:
     description: Comma-separated target triples to install beside the host's, none by default.
     required: false
     default: ""
+  toolchain:
+    description: >-
+      A toolchain to install in place of the one rust-toolchain.toml pins,
+      none by default. Only the fuzz lane sets it, to the nightly
+      docs/VERSIONS.md pins: cargo-fuzz needs sanitizer flags the stable
+      toolchain does not carry, and nothing built there ships. The pinned
+      file still names the directory's toolchain, so the caller selects this
+      one with `cargo +<toolchain>`.
+    required: false
+    default: ""
   cache:
     description: >-
       Restore and save the Rust build cache, on by default. A publishing lane
@@ -32,6 +42,7 @@ runs:
       with:
         components: ${{ inputs.components }}
         target: ${{ inputs.target }}
+        toolchain: ${{ inputs.toolchain }}
         cache: ${{ inputs.cache }}
         cache-save-if: ${{ inputs.cache-save-if }}
         # An empty value keeps the action from exporting RUSTFLAGS=-D warnings

@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 
-# The published crates under `crates/` and the applications under `app/`,
-# which are never published.
+# The published crates under `crates/`, the applications under `app/` and
+# the test-support tools under `tools/`, which are never published.
 [workspace]
 resolver = "3"
-members = ["crates/*", "app/*"]
+members = ["crates/*", "app/*", "tools/*"]
 
 [workspace.package]
 version = "0.0.2"
@@ -77,6 +77,12 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 url = "2.5.8"
 uuid = { version = "1.26.1", default-features = false, features = ["v4", "std"] }
 wiremock = "0.6.5"
+# The testkit's container harness behind FERROPIX_E2E (tools/ferropix-testkit)
+# and the PostgreSQL client its end-to-end case connects with, at the
+# versions FerroFED and FerroBRIDGE pin. Verified against crates.io on
+# 2026-10-24.
+testcontainers = "0.28.0"
+sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio"] }
 
 # The reliability bar (no specification governs it: our own design), the
 # FerroHEALTH family's lint set as FerroSMART carries it.

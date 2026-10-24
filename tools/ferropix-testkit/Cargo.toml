@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ferropix-testkit"
+description = "Test support for the FerroPIX suites: the container harness behind FERROPIX_E2E, the synthetic fixtures and their guard; never shipped"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+# A tool crate is never published, whatever the workspace switch says; a
+# suite takes it as a path-only dev-dependency.
+publish = false
+
+[dependencies]
+# The FHIR R4 model every fixture decodes into, with the `resources` root
+# set for Patient, Bundle and MessageHeader.
+fhir-types = { workspace = true, features = ["r4", "resources"] }
+# The naming systems of the BSN the fixture guard holds to the synthetic
+# range (`identification`, built with `nvi`).
+nl-generic-functions = { path = "../../crates/nl-generic-functions", features = ["nvi"] }
+# The readiness probe of the stub provider and its token request, a form
+# post (RFC 6749 §4.4.2).
+reqwest = { workspace = true, features = ["form"] }
+serde.workspace = true
+serde_json.workspace = true
+testcontainers.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+# The end-to-end case reads the claims of a token the stub provider signed.
+base64.workspace = true
+# The end-to-end case connects to the started PostgreSQL and reads its
+# version.
+sqlx.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

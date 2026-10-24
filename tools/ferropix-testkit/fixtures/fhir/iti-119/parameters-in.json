@@ -1,0 +1,39 @@
+{
+  "resourceType": "Parameters",
+  "meta": {
+    "profile": [
+      "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchParametersIn"
+    ]
+  },
+  "parameter": [
+    {
+      "name": "resource",
+      "resource": {
+        "resourceType": "Patient",
+        "meta": {
+          "profile": [
+            "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchInputPatient"
+          ]
+        },
+        "name": [
+          {
+            "family": "Proefsma",
+            "given": [
+              "Ada"
+            ]
+          }
+        ],
+        "gender": "female",
+        "birthDate": "1961-04-12"
+      }
+    },
+    {
+      "name": "onlyCertainMatches",
+      "valueBoolean": false
+    },
+    {
+      "name": "count",
+      "valueInteger": 5
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "resourceType": "Parameters",
+  "meta": {
+    "profile": [
+      "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Parameters.In"
+    ]
+  },
+  "parameter": [
+    {
+      "name": "sourceIdentifier",
+      "valueString": "urn:oid:2.999.1.2|L-200001"
+    },
+    {
+      "name": "targetSystem",
+      "valueString": "urn:oid:2.999.1.1"
+    },
+    {
+      "name": "targetSystem",
+      "valueString": "http://fhir.nl/fhir/NamingSystem/bsn"
+    }
+  ]
+}

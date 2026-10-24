@@ -13,14 +13,48 @@
 //! time, so it shares the clock, and never the message ids; `atna` writes
 //! the ITI-55 message with `xcpd` and compiles no FHIR model. No feature
 //! reaches another member of this workspace or an application of the
-//! family, so any caller can use the crate as it is.
+//! family, so any caller can use the crate as it is, and the server sides
+//! compile no HTTP server, store or database.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Every feature of the crate.
-const FEATURES: &[&str] = &["atna", "balp", "pixm", "pdqm", "mcsd", "pmir", "xcpd"];
+const FEATURES: &[&str] = &[
+    "atna",
+    "balp",
+    "pixm",
+    "pdqm",
+    "mcsd",
+    "pmir",
+    "xcpd",
+    "pixm-server",
+    "pdqm-server",
+];
+
+/// The server sides are typed readers and writers: no HTTP server, store or
+/// database crate is in their graph, so any server can take them.
+const SERVER_FEATURES: &[&str] = &["pixm-server", "pdqm-server"];
+
+/// The HTTP server frameworks, stores and database clients a server side
+/// must not compile.
+const NO_SERVER_SIDE: &[&str] = &[
+    "actix-web",
+    "axum",
+    "axum-core",
+    "deadpool-postgres",
+    "diesel",
+    "hyper-server",
+    "poem",
+    "postgres",
+    "redb",
+    "rusqlite",
+    "sled",
+    "sqlx",
+    "tokio-postgres",
+    "warp",
+];
 
 /// The crates only `xcpd` compiles.
 const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
@@ -175,5 +209,17 @@ fn no_feature_depends_on_another_member_or_an_application() {
             })
             .collect();
         assert!(reached.is_empty(), "{feature} depends on {reached:?}");
+    }
+}
+
+#[test]
+fn the_server_sides_compile_no_http_server_store_or_database() {
+    for feature in SERVER_FEATURES {
+        let closure = tree(feature, None);
+        let reached: Vec<&&str> = NO_SERVER_SIDE
+            .iter()
+            .filter(|name| closure.contains(**name))
+            .collect();
+        assert!(reached.is_empty(), "{feature} compiles {reached:?}");
     }
 }

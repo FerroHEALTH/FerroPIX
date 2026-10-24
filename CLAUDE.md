@@ -132,6 +132,14 @@ The build order is the milestones:
   configuration with `_file` secrets, the security headers, the client of
   the FerroPIX server (`src/pix.rs`), every page of the design with its
   refused state, and the boundary test (`tests/it/boundary.rs`).
+- `tools/ferropix-testkit`: the test support, `publish = false`, taken as a
+  path-only dev-dependency (#65): PostgreSQL 18 and the stub OpenID
+  Provider behind `FERROPIX_E2E` (CI's `e2e` job sets it), each image
+  pinned by digest in `docs/VERSIONS.md` and held to its row by the suite;
+  the synthetic BSN range with its eleven-proof, the synthetic domains and
+  names; the `Patient`, `Parameters` and `Bundle` fixtures of each
+  transaction under `fixtures/fhir/`; and the guard that refuses a fixture
+  holding a value outside the synthetic set.
 - `docs/architecture.md`: the design of record (the server, the store,
   the matching, the three faces, the images and the release, the console).
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.

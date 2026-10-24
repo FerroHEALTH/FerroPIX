@@ -61,6 +61,8 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ferropix-console" },
   # The server, which is never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-server" },
+  # The test support, a path-only dev-dependency, never published.
+  { allow = ["BUSL-1.1"], crate = "ferropix-testkit" },
 ]
 
 [bans]

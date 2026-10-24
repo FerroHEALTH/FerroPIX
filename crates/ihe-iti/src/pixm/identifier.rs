@@ -95,7 +95,24 @@ pub struct TargetIdentifier {
 }
 
 impl TargetIdentifier {
-    pub(super) fn new(system: String, value: SecretString) -> Self {
+    /// Creates the identifier `value` in the domain whose assigning authority
+    /// is `system`, an absolute URI: one identifier a PIX Manager answers
+    /// with (ITI TF-2 Appendix E.3).
+    ///
+    /// # Errors
+    /// [`InvalidInput::System`] when `system` is not an absolute URI, and
+    /// [`InvalidInput::EmptyValue`] when `value` is empty.
+    pub fn new(system: impl Into<String>, value: SecretString) -> Result<Self, InvalidInput> {
+        let system = absolute_uri(system.into())?;
+        if value.expose_secret().is_empty() {
+            return Err(InvalidInput::EmptyValue);
+        }
+        Ok(Self { system, value })
+    }
+
+    /// The identifier as a Manager's answer carries it, already held to the
+    /// `$ihe-pix` out parameters.
+    pub(super) fn read(system: String, value: SecretString) -> Self {
         Self { system, value }
     }
 
@@ -130,7 +147,21 @@ impl fmt::Debug for TargetIdentifier {
 pub struct PatientReference(SecretString);
 
 impl PatientReference {
-    pub(super) fn new(reference: SecretString) -> Self {
+    /// Creates the reference `reference` to a Patient resource, such as
+    /// `Patient/123` (§2:3.83.4.2.2.1).
+    ///
+    /// # Errors
+    /// [`InvalidInput::EmptyValue`] when `reference` is empty.
+    pub fn new(reference: SecretString) -> Result<Self, InvalidInput> {
+        if reference.expose_secret().is_empty() {
+            return Err(InvalidInput::EmptyValue);
+        }
+        Ok(Self(reference))
+    }
+
+    /// The reference as a Manager's answer carries it, already held to the
+    /// `$ihe-pix` out parameters.
+    pub(super) fn read(reference: SecretString) -> Self {
         Self(reference)
     }
 
@@ -223,11 +254,11 @@ mod tests {
         let source = SourceIdentifier::new("urn:oid:2.999.1", SecretString::from(SENTINEL))
             .expect("a valid source identifier");
         let found = CrossReferences::new(
-            vec![TargetIdentifier::new(
+            vec![TargetIdentifier::read(
                 "urn:oid:2.999.2".into(),
                 SecretString::from(SENTINEL),
             )],
-            vec![PatientReference::new(SecretString::from(format!(
+            vec![PatientReference::read(SecretString::from(format!(
                 "Patient/{SENTINEL}"
             )))],
         );

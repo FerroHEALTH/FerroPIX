@@ -174,11 +174,11 @@ dbid() {
   printf '%s' "$id"
 }
 
-# Print a jq-formatted list from an endpoint, or "    —" when empty/absent.
+# Print a jq-formatted list from an endpoint, or "    none" when empty/absent.
 list_or_dash() {
   local out
   out="$(gh api "$1" --jq "$2" 2>/dev/null || true)"
-  if [[ -n "$out" ]]; then echo "$out"; else echo "    —"; fi
+  if [[ -n "$out" ]]; then echo "$out"; else echo "    none"; fi
 }
 
 cmd_parent() {
@@ -259,12 +259,12 @@ cmd_tree() {
   need_int "$n"
   local title parent
   title="$(gh api "repos/$REPO/issues/$n" --jq '"[\(.state)] \(.title)"' 2>/dev/null || true)"
-  echo "#$n ${title:-} — $REPO"
+  echo "#$n ${title:-} ($REPO)"
   # The parent endpoint 404s when there is no parent, and gh emits the error
   # body on stdout; capture only on a clean (2xx) call so it does not leak.
   parent="$(gh api "repos/$REPO/issues/$n/parent" --jq '"#\(.number) [\(.state)] \(.title)"' 2>/dev/null)" || parent=""
   echo "  parent:"
-  echo "    ${parent:-—}"
+  echo "    ${parent:-none}"
   echo "  sub-issues:"
   list_or_dash "repos/$REPO/issues/$n/sub_issues" '.[] | "    #\(.number) [\(.state)] \(.title)"'
   echo "  blocked by:"

@@ -49,6 +49,24 @@ and this project adheres to
   configuration, and the book's
   [Configuration](https://ferropix.eu/docs/operate/configuration.html) page
   lists every key, held by a test.
+- `ihe-iti` 0.0.45 adds the server sides of PIXm and PDQm, typed and with
+  no store and no HTTP server, so FerroPIX and FerroFED can each put them on
+  their own stack. `pixm-server` is the PIX Manager (#67): `$ihe-pix` read
+  from the `GET` query or the posted `Parameters` into one request, with the
+  `OperationOutcome` of a second `sourceIdentifier`, a token without a
+  system and an unknown parameter, the `Parameters` answer and the three
+  failures of ITI-83 written, and the ITI-104 conditional update and delete
+  on `Patient?identifier=` read, held to the PDQm Patient profile, the
+  condition's identifier and the `replaced-by` link. `pdqm-server` is the
+  Patient Demographics Supplier (#71): every ITI-78 search parameter read
+  with `:exact`, AND, OR and the domain filter, the parameters it drops
+  reported and left out of the `self` link, the `searchset` Bundle with its
+  `total` and paging links written, the `$match` input read as `Parameters`
+  or a bare `Patient`, and the Match Output Bundle written with each
+  entry's `search.score` and `match-grade`. Both read and write FHIR JSON
+  and FHIR XML (`ihe_iti::server::format::Format`). `TargetIdentifier::new`
+  and `PatientReference::new` of `ihe_iti::pixm::identifier` are public, for
+  the Manager's answer. The crate's README gains its PMIR section (#54).
 - `ferropix-console`, FerroPIX's first operator console (#119), built new on
   FerroUI 0.3.6 (`ferrohealth-ui = "=0.3.6"`, with its `split` feature for
   the `--split` site build, #127, #131, #137, #139) in its FerroPIX brand as part

@@ -46,6 +46,23 @@ lockstep with every FerroHEALTH console on each release
 |---|---|---|
 | FerroUI (`ferrohealth-ui`) | `=0.3.6` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.3.6` |
 
+## Container images
+
+The images the testkit (`tools/ferropix-testkit`) starts behind
+`FERROPIX_E2E`, each pinned by tag and by the digest of its image index,
+resolved on 2026-10-24. The suite holds each `PinnedImage` constant of
+`tools/ferropix-testkit/src/containers.rs` to its row here, and the
+pin-freshness lane reads each row against its registry. PostgreSQL is the
+official image at the store's major version; the stub OpenID Provider is
+NAV's `mock-oauth2-server`, published under the MIT licence, public and
+pulled with no credential. No specification governs the choice: our own
+design.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| PostgreSQL test image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
+| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.3@sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
+
 ## Specifications
 
 These are the specification versions the identity crates implement, at

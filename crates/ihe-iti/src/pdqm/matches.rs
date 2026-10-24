@@ -166,6 +166,17 @@ impl MatchGrade {
     /// The canonical URL of the extension.
     pub(super) const EXTENSION: &str = "http://hl7.org/fhir/StructureDefinition/match-grade";
 
+    /// The grade's code in the value set.
+    #[cfg(feature = "pdqm-server")]
+    pub(super) fn code(self) -> &'static str {
+        match self {
+            Self::Certain => "certain",
+            Self::Probable => "probable",
+            Self::Possible => "possible",
+            Self::CertainlyNot => "certainly-not",
+        }
+    }
+
     /// Returns the grade `code` names, or `None` for a code outside the value
     /// set.
     pub(super) fn from_code(code: &str) -> Option<Self> {

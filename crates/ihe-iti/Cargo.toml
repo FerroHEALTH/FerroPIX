@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.44"
+version = "0.0.45"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -59,6 +59,18 @@ pdqm = [
   "dep:thiserror",
   "dep:url",
 ]
+# The PIXm Manager side (ITI-83, ITI-104) with no store and no HTTP server:
+# the `$ihe-pix` request read from the query or the posted `Parameters`, its
+# answer and each refusal written, the conditional update and delete of a
+# Patient Identity Feed read, and the FHIR R4 `resources` root set for the
+# Patient those carry. The client of `pixm` comes with it, for the identifier
+# types the two sides share.
+pixm-server = ["pixm", "fhir-types/resources"]
+# The PDQm Supplier side (ITI-78, ITI-119) with no store and no HTTP server:
+# the search parameters and the `$match` input read, the search and the match
+# Bundles and each refusal written. The client of `pdqm` comes with it, for
+# the query types the two sides share.
+pdqm-server = ["pdqm"]
 # mCSD, the care services directory (ITI-90, ITI-91): the FHIR R4 `resources`
 # root set for the Organization and Endpoint resources a directory publishes,
 # and the HTTP client of the ITI-90 searches and the ITI-91 history.

@@ -1,0 +1,36 @@
+{
+  "resourceType": "Patient",
+  "meta": {
+    "profile": [
+      "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Patient"
+    ]
+  },
+  "identifier": [
+    {
+      "system": "urn:oid:2.999.1.1",
+      "value": "H-100099"
+    }
+  ],
+  "active": false,
+  "name": [
+    {
+      "family": "Proefsma",
+      "given": [
+        "Ada"
+      ]
+    }
+  ],
+  "gender": "female",
+  "birthDate": "1961-04-12",
+  "link": [
+    {
+      "other": {
+        "identifier": {
+          "system": "urn:oid:2.999.1.1",
+          "value": "H-100001"
+        }
+      },
+      "type": "replaced-by"
+    }
+  ]
+}

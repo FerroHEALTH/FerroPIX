@@ -1,0 +1,41 @@
+{
+  "resourceType": "Patient",
+  "meta": {
+    "profile": [
+      "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Patient"
+    ]
+  },
+  "identifier": [
+    {
+      "system": "urn:oid:2.999.1.1",
+      "value": "H-100001"
+    },
+    {
+      "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+      "value": "999990007"
+    }
+  ],
+  "active": true,
+  "name": [
+    {
+      "use": "official",
+      "family": "Proefsma",
+      "given": [
+        "Ada"
+      ]
+    }
+  ],
+  "gender": "female",
+  "birthDate": "1961-04-12",
+  "address": [
+    {
+      "use": "home",
+      "line": [
+        "Voorbeeldstraat 1"
+      ],
+      "city": "Teststad",
+      "postalCode": "0000 AA",
+      "country": "NL"
+    }
+  ]
+}

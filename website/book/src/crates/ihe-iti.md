@@ -19,6 +19,8 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway |
 | `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of the Initiating Gateway |
+| `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
+| `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
 
 Only `xcpd` carries the SOAP 1.2, HL7 v3 and SAML XUA stack; a build without
 it compiles none of it. The FHIR features decode FHIR R4 through
@@ -93,6 +95,38 @@ The Patient Identity Subscriber and Consumer sides of PMIR 1.6.0:
 The specification leaves the authentication of the Registry to your channel
 to the two parties, so your code authenticates each message before it reads
 it.
+
+## The server sides (`pixm-server`, `pdqm-server`)
+
+A server side is the profile's request readers and answer writers. It holds
+no store and no HTTP framework: your server hands a reader the query string,
+the media type and the body, and sends the `Answer` it or a writer returns,
+a status and a resource encoded as FHIR JSON or FHIR XML, both of which the
+profiles require of a server. Every refusal is an `OperationOutcome` whose
+text is fixed, so it never quotes the request.
+
+- **`pixm-server`** reads `$ihe-pix` from the `GET` query ITI-83 prescribes
+  or from a posted `Parameters` body into one request, and refuses a second
+  `sourceIdentifier`, a token without a system and a parameter the operation
+  does not define. It writes the `Parameters` answer, without the source
+  identifier and without the domains not asked for, and the three failures
+  of ITI-83. It reads the ITI-104 conditional update on
+  `Patient?identifier=system|value`, refusing a Patient that does not carry
+  that identifier, and tells an add or revise from a duplicate resolved by a
+  `replaced-by` link; it reads the conditional delete of a removal.
+- **`pdqm-server`** reads every ITI-78 search parameter, with `:exact`, AND,
+  OR and the `identifier=system|` domain filter. A parameter or modifier it
+  does not support is dropped, reported, and left out of the `self` link, as
+  PDQm allows. It writes the `searchset` Bundle with its `total` and paging
+  links, each Patient's identifiers pruned to the domains asked for. It
+  reads the `$match` input as `Parameters` or as a bare `Patient`, refusing
+  a bare `Patient` posted with `onlyCertainMatches` or `count`, and writes
+  the Match Output Bundle, most likely first, each entry with its score and
+  `match-grade`.
+
+The FerroPIX server that answers with them is planned
+([FerroHEALTH/FerroPIX#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
+[FerroHEALTH/FerroPIX#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)).
 
 ## mCSD (`mcsd`)
 

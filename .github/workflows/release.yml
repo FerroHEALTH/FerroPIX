@@ -5,7 +5,8 @@
 # is a `needs` edge:
 #
 #   plan ── github-release (draft) ─┬─ build-binaries ── build-image ─┬─ vulnerability-record ─┬─ finalize-release ── crates ── milestone
-#                                   └─ crate (reusable) ───────────────┘                        └─ scan-and-tag ──────────────────┘
+#                                   ├─ build-console ──────────────────┤                        └─ scan-and-tag ──────────────────┘
+#                                   └─ crate (reusable) ───────────────┘
 #
 # plan runs every release fact of scripts/release/plan.sh at the tagged
 # commit: it refuses a tag whose milestone (titled exactly as the tag) is
@@ -13,25 +14,27 @@
 # name no advisory. milestone closes the milestone once every leg succeeded
 # (scripts/release/milestone.sh).
 #
-# The release is created as a DRAFT, the server binaries with their SBOMs and
-# Sigstore bundles and the attested .crate files are attached to it, and it is
+# The release is created as a DRAFT, the server and console binaries with
+# their SBOMs and Sigstore bundles, the console's site bundle and the attested
+# .crate files are attached to it, and it is
 # published only once the asset set is complete. Publishing last means a
 # half-assembled release is never visible, and a published release is
 # immutable, so the draft is the only window the uploads have.
 #
-# build-binaries, build-image and crate are `uses:` calls AND NOTHING ELSE.
+# build-binaries, build-image, build-console and crate are `uses:` calls AND
+# NOTHING ELSE.
 # SLSA v1.2 Build Level 3 requires the signing material to be out of reach of
 # the user-defined build steps, and every step of one job shares one runner
 # VM; a reusable workflow's job cannot carry `steps:` from its caller, which
 # makes the regression unrepresentable
 # (https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-and-reusable-workflows-to-achieve-slsa-v1-build-level-3).
 #
-# The image is pushed by digest with no tag. vulnerability-record scans it
-# and the server tarballs with no severity floor and refuses the release
+# The images are pushed by digest with no tag. vulnerability-record scans
+# them and the server tarballs with no severity floor and refuses the release
 # while a finding lacks an OpenVEX judgement under security/vex/;
 # finalize-release and scan-and-tag both wait on it, so a refused release is
 # neither published nor tagged. scan-and-tag runs the HIGH/CRITICAL gate on
-# the digest and only then applies the tags.
+# each digest and only then applies the tags.
 #
 # The crates leg uploads the crates scripts/release/publish-crates.sh lists
 # through Trusted Publishing behind the `crates-io` environment's required
@@ -72,6 +75,7 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       is-prerelease: ${{ steps.tag.outputs.is_prerelease }}
       targets: ${{ steps.targets.outputs.targets }}
+      console-targets: ${{ steps.targets.outputs.console_targets }}
       crates: ${{ steps.crates.outputs.crates }}
       crate-files: ${{ steps.crates.outputs.files }}
     steps:
@@ -147,6 +151,13 @@ jobs:
             {"runner":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-musl"}
           ]}'
           echo "targets=$(printf '%s' "$targets" | tr -d '\n ')" >> "$GITHUB_OUTPUT"
+          # The operator console's binary, on the same two static targets,
+          # each named by the image platform it fills.
+          console_targets='{"include":[
+            {"runner":"ubuntu-24.04","target":"x86_64-unknown-linux-musl","arch":"amd64"},
+            {"runner":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-musl","arch":"arm64"}
+          ]}'
+          echo "console_targets=$(printf '%s' "$console_targets" | tr -d '\n ')" >> "$GITHUB_OUTPUT"
 
       # Every release fact, as ONE list: the milestone titled as the tag, the
       # workspace version, the changelog's structure and Security rules for
@@ -237,6 +248,23 @@ jobs:
       tag: ${{ needs.plan.outputs.tag }}
       version: ${{ needs.plan.outputs.version }}
 
+  # ---- build-console: the operator console's binaries, bundle and image ------
+  # A call and nothing else, for the same Build L3 reason. It attaches the
+  # console's assets to the draft, so it waits for the draft to exist.
+  build-console:
+    name: console (binaries, site bundle, image)
+    needs: [plan, github-release]
+    permissions:
+      contents: write # attach the console's assets to the draft release
+      packages: write # push the image and its attestations to GHCR
+      id-token: write # Sigstore, for the provenance and SBOM attestations
+      attestations: write # store them against this repository
+    uses: ./.github/workflows/release-console.yml
+    with:
+      tag: ${{ needs.plan.outputs.tag }}
+      version: ${{ needs.plan.outputs.version }}
+      targets: ${{ needs.plan.outputs.console-targets }}
+
   # ---- crate: package and attest each published crate -----------------------
   # A call and nothing else, for the same Build L3 reason.
   crate:
@@ -263,7 +291,7 @@ jobs:
   # its image stays untagged.
   vulnerability-record:
     name: vulnerability record
-    needs: [plan, github-release, build-binaries, build-image]
+    needs: [plan, github-release, build-binaries, build-image, build-console]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -295,6 +323,7 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag }}
           TARGETS: ${{ needs.plan.outputs.targets }}
           SERVER_DIGEST: ${{ needs.build-image.outputs.digest }}
+          CONSOLE_DIGEST: ${{ needs.build-console.outputs.digest }}
         run: |
           set -euo pipefail
           # An explicit empty config and ignore file: trivy reads ./trivy.yaml
@@ -307,7 +336,7 @@ jobs:
             --ignore-unfixed=false --format json --quiet)
           mkdir -p reports binaries
           targets=()
-          entries=("ferropix|$SERVER_DIGEST")
+          entries=("ferropix|$SERVER_DIGEST" "ferropix-console|$CONSOLE_DIGEST")
           for entry in "${entries[@]}"; do
             image="${entry%%|*}"
             digest="${entry#*|}"
@@ -366,19 +395,21 @@ jobs:
   # gets no image tags.
   scan-and-tag:
     name: scan + tag
-    needs: [build-image, vulnerability-record]
+    needs: [build-image, build-console, vulnerability-record]
     permissions:
       contents: read # check out trivy.yaml, verify the attestations
-      packages: write # pull the pushed digest, then tag it
+      packages: write # pull the pushed digests, then tag them
     uses: ./.github/workflows/scan-and-tag.yml
     with:
       server-digest: ${{ needs.build-image.outputs.digest }}
       server-tags: ${{ needs.build-image.outputs.tags }}
+      console-digest: ${{ needs.build-console.outputs.digest }}
+      console-tags: ${{ needs.build-console.outputs.tags }}
 
   # ---- finalize-release: verify the asset set, then PUBLISH -----------------
   finalize-release:
     name: github release (publish)
-    needs: [plan, github-release, build-binaries, build-image, crate, vulnerability-record]
+    needs: [plan, github-release, build-binaries, build-image, build-console, crate, vulnerability-record]
     # The crate leg is skipped when the release publishes no crate.
     if: always() && needs.vulnerability-record.result == 'success' && (needs.crate.result == 'success' || (needs.crate.result == 'skipped' && needs.plan.outputs.crates == ''))
     runs-on: ubuntu-24.04
@@ -391,6 +422,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.plan.outputs.tag }}
           TARGETS: ${{ needs.plan.outputs.targets }}
+          CONSOLE_TARGETS: ${{ needs.plan.outputs.console-targets }}
           CRATE_FILES: ${{ needs.plan.outputs.crate-files }}
         run: |
           set -euo pipefail
@@ -415,6 +447,24 @@ jobs:
                 || missing="$missing ferropix-${TAG}-${target}${suffix}"
             done
           done < <(printf '%s' "$TARGETS" | jq -r '.include[].target')
+          # Every suffix release-console.yml uploads: per console target, and
+          # once for the architecture-independent site bundle.
+          while IFS= read -r target; do
+            for suffix in \
+              ".tar.gz" \
+              ".tar.gz.sha256sum" \
+              ".tar.gz.sigstore.json" \
+              ".tar.gz.sbom.sigstore.json" \
+              ".tar.gz.intoto.jsonl" \
+              ".spdx.json"; do
+              printf '%s\n' "$assets" | grep -Fxq "ferropix-console-${TAG}-${target}${suffix}" \
+                || missing="$missing ferropix-console-${TAG}-${target}${suffix}"
+            done
+          done < <(printf '%s' "$CONSOLE_TARGETS" | jq -r '.include[].target')
+          for suffix in ".tar.gz" ".tar.gz.sha256sum" ".tar.gz.sigstore.json" ".tar.gz.intoto.jsonl"; do
+            printf '%s\n' "$assets" | grep -Fxq "ferropix-console-${TAG}-site${suffix}" \
+              || missing="$missing ferropix-console-${TAG}-site${suffix}"
+          done
           for file in $CRATE_FILES; do
             for suffix in ".crate" ".crate.sha256sum" ".crate.sigstore.json"; do
               printf '%s\n' "$assets" | grep -Fxq "${file}${suffix}" \
@@ -486,7 +536,7 @@ jobs:
   # already-closed milestone counts as done.
   milestone:
     name: close the milestone
-    needs: [plan, github-release, build-binaries, build-image, crate, vulnerability-record, scan-and-tag, finalize-release, crates]
+    needs: [plan, github-release, build-binaries, build-image, build-console, crate, vulnerability-record, scan-and-tag, finalize-release, crates]
     if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

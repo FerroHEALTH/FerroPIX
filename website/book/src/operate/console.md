@@ -17,8 +17,9 @@ its operator API in [#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
 so every page that reads the server says that it cannot be shown: the server
 refused the connection, did not answer in time, refused the console, or
 answers but serves no operator API yet. A page never shows a row the server
-did not send. The console's container image is planned in
-[#99](https://github.com/FerroHEALTH/FerroPIX/issues/99).
+did not send. The console ships as its own container image, published by
+the release lane from the first tagged release
+([The image](#the-image)).
 
 ## Build and run it
 
@@ -38,6 +39,42 @@ ferropix-console serve --config console.toml
 | `ferropix-console serve` | Serves the console until the process is asked to stop. |
 | `ferropix-console config check` | Reads and resolves the configuration, secrets included, and exits. |
 | `ferropix-console healthcheck` | Asks the console on this host whether it answers, for a container runtime. |
+
+## The image
+
+`ghcr.io/ferrohealth/ferropix-console`, for `linux/amd64` and
+`linux/arm64`, carries the static binary and the site bundle on
+`gcr.io/distroless/static-debian13:nonroot`, pinned by digest; nothing is
+compiled inside it.
+
+| Property | Value |
+|---|---|
+| Entrypoint | `/usr/local/bin/ferropix-console`, default job `serve` |
+| User | `65532:65532` |
+| Port | `3000/tcp` (`FERROPIX_CONSOLE__SERVER__LISTEN=0.0.0.0:3000`) |
+| Site bundle | `/site` (`FERROPIX_CONSOLE__SERVER__SITE_ROOT`), root-owned |
+| Health | `HEALTHCHECK` runs `ferropix-console healthcheck`, which asks `GET /health` over loopback |
+
+The console keeps its sessions in memory and writes no file, so run it with
+a read-only root filesystem. Its tags follow the server's: `<version>`, and
+`<major>.<minor>` and `latest` for a release that is not a pre-release,
+applied only after the image passed the release's vulnerability gate.
+Verify an image against the workflow that built it:
+
+```sh
+gh attestation verify oci://ghcr.io/ferrohealth/ferropix-console:<version> \
+  --repo FerroHEALTH/FerroPIX \
+  --signer-workflow FerroHEALTH/FerroPIX/.github/workflows/release-console.yml
+```
+
+The compose quickstart runs it beside the server under the `console`
+profile, signed in through the development issuer
+([Deployment](deployment.md#the-compose-quickstart)):
+
+```sh
+openssl rand -hex 16 > secrets/console-oidc-client-secret
+docker compose --profile console up --wait
+```
 
 ## Configuration
 

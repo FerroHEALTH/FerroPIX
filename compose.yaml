@@ -31,6 +31,15 @@
 # there, never from the environment. Never commit them (.gitignore keeps
 # ./secrets out).
 #
+# THE CONSOLE. The `console` profile runs the operator console
+# (ghcr.io/ferrohealth/ferropix-console) beside the server, signed in through
+# the same development issuer; it needs a fifth secret file, the console's
+# client secret, which the issuer accepts whatever it holds:
+#
+#   openssl rand -hex 16 > secrets/console-oidc-client-secret
+#   docker compose --profile console up --wait
+#   open http://localhost:3000/
+#
 # THE ISSUER. The server reads its authorization server's metadata at start and
 # accepts plain http only on loopback (RFC 8414 §2), so the development
 # provider, NAV's mock-oauth2-server, owns the network namespace and the server
@@ -47,8 +56,8 @@
 # published port is DNAT'd ahead of the host firewall's own chains, so a port on
 # 0.0.0.0 is reachable from the network even when the firewall says otherwise
 # (https://docs.docker.com/engine/network/packet-filtering-firewalls/). The
-# server's ports are published on the issuer service, whose network namespace
-# it shares.
+# server's and the console's ports are published on the issuer service, whose
+# network namespace both share.
 #
 # HEALTH. The image's HEALTHCHECK runs `ferropix healthcheck`, which asks
 # GET /health/readiness: 200 once the store and the audit spool answer.
@@ -70,6 +79,8 @@ services:
     ports:
       - "${FERROPIX_BIND_HOST:-127.0.0.1}:${FERROPIX_PORT:-8080}:8080"
       - "${FERROPIX_BIND_HOST:-127.0.0.1}:${FERROPIX_ISSUER_PORT:-8180}:8180"
+      # The console's port, which answers only under the `console` profile.
+      - "${FERROPIX_BIND_HOST:-127.0.0.1}:${FERROPIX_CONSOLE_PORT:-3000}:3000"
     environment:
       # The server listens on 8080 in this namespace, so the provider moves.
       SERVER_PORT: "8180"
@@ -131,6 +142,46 @@ services:
     # Longer than the 10-second drain window of [server] drain_timeout_ms.
     stop_grace_period: 20s
 
+  # The operator console, a client of the server's operator API that
+  # stewards sign in to with OpenID Connect. It joins the issuer's network
+  # namespace as the server does, because it too admits a plain `http`
+  # provider only on loopback, and reaches the server there. The image's own
+  # HEALTHCHECK runs `ferropix-console healthcheck`.
+  console:
+    image: ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION:-0.0.2}
+    profiles: [console]
+    restart: unless-stopped
+    network_mode: service:issuer
+    depends_on:
+      ferropix:
+        condition: service_healthy
+    environment:
+      # The image sets the same value; repeated so `docker compose config`
+      # shows the address the console binds.
+      FERROPIX_CONSOLE__SERVER__LISTEN: 0.0.0.0:3000
+      FERROPIX_CONSOLE__PIX__BASE_URL: http://localhost:8080/
+      FERROPIX_CONSOLE__OIDC__ISSUER: http://localhost:8180/ferropix
+      FERROPIX_CONSOLE__OIDC__AUTHORIZATION_ENDPOINT: http://localhost:8180/ferropix/authorize
+      FERROPIX_CONSOLE__OIDC__TOKEN_ENDPOINT: http://localhost:8180/ferropix/token
+      FERROPIX_CONSOLE__OIDC__JWKS_URI: http://localhost:8180/ferropix/jwks
+      FERROPIX_CONSOLE__OIDC__END_SESSION_ENDPOINT: http://localhost:8180/ferropix/endsession
+      FERROPIX_CONSOLE__OIDC__CLIENT_ID: ferropix-console
+      FERROPIX_CONSOLE__OIDC__CLIENT_SECRET_FILE: /run/secrets/console-oidc-client-secret
+      FERROPIX_CONSOLE__OIDC__REDIRECT_URI: http://localhost:3000/auth/callback
+      FERROPIX_CONSOLE__OIDC__POST_LOGOUT_REDIRECT_URI: http://localhost:3000/
+      # Plain http on loopback, which the console admits nowhere else; behind
+      # an https proxy, leave it unset so the session cookie carries Secure.
+      FERROPIX_CONSOLE__SESSION__SECURE_COOKIE: "false"
+    secrets:
+      - console-oidc-client-secret
+    # The console keeps its sessions in memory and writes no file.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
   # The cross-reference store. The server connects as the `ferropix` role
   # docker/postgres/10-ferropix-role.sh creates on the first start; the
   # superuser's password is the postgres-password secret.
@@ -172,6 +223,9 @@ secrets:
   # The ferropix role's password, read once by the init script.
   ferropix-db-password:
     file: ${FERROPIX_DB_PASSWORD_FILE:-./secrets/ferropix-db-password}
+  # The console's OIDC client secret at the issuer, read once at boot.
+  console-oidc-client-secret:
+    file: ${FERROPIX_CONSOLE_OIDC_CLIENT_SECRET_FILE:-./secrets/console-oidc-client-secret}
 
 volumes:
   ferropix-state:

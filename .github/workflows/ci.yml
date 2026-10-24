@@ -744,14 +744,40 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: compose.yaml resolves
+      - name: compose.yaml resolves, with and without the console
         run: |
           set -euo pipefail
           mkdir -p secrets
-          for secret in ferropix-db-url ferropix-data-key postgres-password ferropix-db-password; do
+          for secret in ferropix-db-url ferropix-data-key postgres-password ferropix-db-password console-oidc-client-secret; do
             : > "secrets/${secret}"
           done
           docker compose config --quiet
+          docker compose --profile console config --quiet
+      # The console image from placeholder files at the paths
+      # release-console.yml stages: a COPY path or a .dockerignore rule that
+      # misses the staged tree fails here, and the tree carries the owners and
+      # modes the Dockerfile promises. Its real binary and bundle are built
+      # by the release lane alone.
+      - name: docker/console/Dockerfile builds from a staged tree
+        run: |
+          set -euo pipefail
+          mkdir -p dist/console/linux_amd64 dist/console/site/pkg
+          : > dist/console/linux_amd64/ferropix-console
+          for file in ferropix-console.wasm ferropix-console.js; do
+            : > "dist/console/site/pkg/${file}"
+          done
+          docker buildx build --check -f docker/console/Dockerfile .
+          docker buildx build --platform linux/amd64 --load -t ferropix-console:dry-run -f docker/console/Dockerfile .
+          id="$(docker create ferropix-console:dry-run)"
+          listing="$(docker export "$id" | tar -tvf -)"
+          docker rm "$id" > /dev/null
+          grep -qE '^-r-xr-xr-x 0/0 .* usr/local/bin/ferropix-console$' <<< "$listing" \
+            || { echo "::error::the console image lacks its binary, root-owned 0555" >&2; exit 1; }
+          grep -qE ' site/pkg/ferropix-console\.wasm$' <<< "$listing" \
+            || { echo "::error::the console image lacks its site bundle under /site" >&2; exit 1; }
+          [ "$(docker image inspect --format '{{.Config.User}}' ferropix-console:dry-run)" = "65532:65532" ] \
+            || { echo "::error::the console image does not run as 65532:65532" >&2; exit 1; }
+          docker image rm ferropix-console:dry-run > /dev/null
       - uses: ./.github/actions/setup-rust
         with:
           target: x86_64-unknown-linux-musl

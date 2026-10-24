@@ -42,7 +42,7 @@ elif [[ $# -gt 0 ]]; then
   echo "unknown argument: $1 (only --candidate IMAGE... is accepted)" >&2
   exit 2
 else
-  images=(ferropix)
+  images=(ferropix ferropix-console)
   for image in "${images[@]}"; do
     for platform in linux/amd64 linux/arm64; do
       targets+=("ghcr.io/${OWNER}/${image}:${SCAN_TAG}|${platform}")

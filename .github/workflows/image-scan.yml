@@ -6,9 +6,9 @@
 # The release gate (scan-and-tag.yml) scans an image when it is built, which
 # catches what was known that day and nothing after. A CVE published the week
 # after a release applies to the image people run, so this lane scans
-# `ghcr.io/ferrohealth/ferropix` where a user pulls it, at `latest`, every
-# week. No specification governs this: our own design, FerroEHR's weekly
-# published-image scan.
+# `ghcr.io/ferrohealth/ferropix` and `ferropix-console` where a user pulls
+# them, at `latest`, every week. No specification governs this: our own
+# design, FerroEHR's weekly published-image scan.
 #
 # The adjudicated exceptions carry over: `trivy.yaml` brings
 # `.trivyignore.yaml`, `ignore-unfixed` and the HIGH/CRITICAL floor, and
@@ -19,7 +19,7 @@
 # a trivy crash, output jq cannot read. A finding files or comments on one
 # tracking issue and the run stays green: the issue is the alert, because a
 # red scheduled run is invisible to anyone not watching the Actions tab. An
-# image never yet published at `latest` (every image before the first
+# image never yet published at `latest` (each image before its first
 # release) is named in the summary and skipped.
 name: Published image scan
 
@@ -90,7 +90,7 @@ jobs:
 
           total=0
           : > findings.md
-          images=(ferropix)
+          images=(ferropix ferropix-console)
           for image in "${images[@]}"; do
             ref="ghcr.io/ferrohealth/${image}:${SCAN_TAG}"
             if ! digest="$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}' 2> inspect.err)"; then

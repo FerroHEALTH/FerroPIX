@@ -312,13 +312,13 @@ registry_auth() {
       [[ "$path" == */* ]] || path="library/$path"
       ;;
   esac
-  challenge="$(curl --silent --show-error --user-agent "$REGISTRY_UA" --output /dev/null \
+  challenge="$(curl --proto '=https' --silent --show-error --user-agent "$REGISTRY_UA" --output /dev/null \
     --dump-header - "https://$host/v2/" | tr -d '\r' \
     | awk 'tolower($1) == "www-authenticate:" { sub(/^[^:]*:[ \t]*/, ""); print; exit }')" || return 1
   realm="$(sed -nE 's/.*realm="([^"]+)".*/\1/p' <<< "$challenge")"
   service="$(sed -nE 's/.*service="([^"]+)".*/\1/p' <<< "$challenge")"
   [[ -n "$realm" ]] || return 1
-  token="$(curl --fail --silent --show-error --get --user-agent "$REGISTRY_UA" \
+  token="$(curl --proto '=https' --fail --silent --show-error --get --user-agent "$REGISTRY_UA" \
     --data-urlencode "service=$service" --data-urlencode "scope=repository:$path:pull" "$realm" \
     | jq --raw-output --exit-status '.token // .access_token')" || return 1
   printf '%s\t%s\t%s\n' "$host" "$path" "$token"
@@ -331,7 +331,7 @@ registry_digest() {
   local repository="$1" tag="$2" host path token auth digest
   auth="$(registry_auth "$repository")" || return 1
   IFS=$'\t' read -r host path token <<< "$auth"
-  digest="$(curl --fail --silent --show-error --head --user-agent "$REGISTRY_UA" \
+  digest="$(curl --proto '=https' --fail --silent --show-error --head --user-agent "$REGISTRY_UA" \
     --header "Authorization: Bearer $token" \
     --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "https://$host/v2/$path/manifests/$tag" | tr -d '\r' \
@@ -355,7 +355,7 @@ registry_tags() {
   while [[ -n "$url" ]]; do
     pages=$((pages + 1))
     [[ "$pages" -le "$MAX_TAG_PAGES" ]] || return 1
-    curl --fail --silent --show-error --user-agent "$REGISTRY_UA" --dump-header "$headers" \
+    curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" --dump-header "$headers" \
       --header "Authorization: Bearer $token" "$url" > "$registry_scratch/tags.json" || return 1
     jq --raw-output '.tags // [] | .[]' "$registry_scratch/tags.json" >> "$registry_scratch/tags.txt" \
       || return 1
@@ -676,7 +676,7 @@ newest_release_tag() {
     printf '%s\n' "$tag"
     return 0
   fi
-  location="$(curl --silent --show-error --head --user-agent "$REGISTRY_UA" \
+  location="$(curl --proto '=https' --silent --show-error --head --user-agent "$REGISTRY_UA" \
     "https://github.com/$repo/releases/latest" | tr -d '\r' \
     | awk 'tolower($1) == "location:" { print $2; exit }')" || {
     printf '%s\n' "$tag"
@@ -745,7 +745,7 @@ pinned="$(matrix_pin "$NIGHTLY_ROW")"
 if ! [[ "$pinned" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
   printf 'UNREADABLE %s: no nightly-YYYY-MM-DD pin in %s\n' "$NIGHTLY_ROW" "$MATRIX"
   unreadable=1
-elif ! newest="$(curl --fail --silent --show-error --user-agent "$REGISTRY_UA" "$NIGHTLY_MANIFEST" \
+elif ! newest="$(curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" "$NIGHTLY_MANIFEST" \
   | manifest_date)" || [[ -z "$newest" ]]; then
   printf 'UNREADABLE %s: could not read the date of %s\n' "$NIGHTLY_ROW" "$NIGHTLY_MANIFEST"
   unreadable=1
@@ -833,7 +833,7 @@ while IFS=$'\t' read -r label package hold; do
     continue
   fi
 
-  if ! versions="$(curl --fail --silent --show-error --user-agent "$REGISTRY_UA" "$FHIR_REGISTRY/$package" \
+  if ! versions="$(curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" "$FHIR_REGISTRY/$package" \
     | jq --raw-output --exit-status '.versions | keys[]' 2>&1)"; then
     printf 'UNREADABLE %s: could not read the registry entry of %s (%s)\n' "$label" "$package" "$versions"
     unreadable=1
@@ -866,7 +866,7 @@ while IFS=$'\t' read -r label url; do
     continue
   fi
 
-  if ! served="$(curl --fail --silent --show-error --location --user-agent "$REGISTRY_UA" "$url" \
+  if ! served="$(curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location --user-agent "$REGISTRY_UA" "$url" \
     | shasum -a 256 | cut -d' ' -f1)" || ! [[ "$served" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'UNREADABLE %s: could not read %s\n' "$label" "$url"
     unreadable=1
@@ -885,7 +885,7 @@ done <<< "$WATCHED_DOCUMENTS"
 while IFS=$'\t' read -r label _; do
   [[ "$label" =~ ^IETF\ RFC\ ([0-9]+)$ ]] || continue
   number="${BASH_REMATCH[1]}"
-  if ! obsoleted="$(curl --fail --silent --show-error --user-agent "$REGISTRY_UA" "$RFC_INDEX/rfc$number.json" \
+  if ! obsoleted="$(curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" "$RFC_INDEX/rfc$number.json" \
     | jq --raw-output --exit-status '.obsoleted_by | join(", ")' 2>&1)"; then
     printf 'UNREADABLE %s: could not read the RFC Editor record %s/rfc%s.json (%s)\n' \
       "$label" "$RFC_INDEX" "$number" "$obsoleted"
@@ -910,7 +910,7 @@ while IFS=$'\t' read -r label shortname hold; do
     continue
   fi
 
-  if ! latest="$(curl --fail --silent --show-error --location --user-agent "$REGISTRY_UA" \
+  if ! latest="$(curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location --user-agent "$REGISTRY_UA" \
     --header 'Accept: application/json' "$W3C_API/$shortname/versions/latest" \
     | jq --raw-output --exit-status '.uri' 2>&1)"; then
     printf 'UNREADABLE %s: could not read the newest version of %s from %s (%s)\n' \
@@ -994,7 +994,7 @@ pinned="$(chrome_pin)"
 if [[ -z "$pinned" ]]; then
   printf 'UNREADABLE %s: no pin row in %s\n' "$CHROME_LABEL" "$MATRIX"
   unreadable=1
-elif ! latest="$(curl --proto '=https' --tlsv1.2 -fsSL "$CHROME_FEED" | chrome_stable 2>&1)"; then
+elif ! latest="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$CHROME_FEED" | chrome_stable 2>&1)"; then
   printf 'UNREADABLE %s: could not read the newest Stable release from %s (%s)\n' \
     "$CHROME_LABEL" "$CHROME_FEED" "$latest"
   unreadable=1

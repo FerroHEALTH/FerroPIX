@@ -116,7 +116,7 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off conformance; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
@@ -640,6 +640,30 @@ jobs:
       - run: cargo nextest run --workspace --all-features --locked --no-tests=warn
       - run: cargo test --doc --workspace --all-features --locked
 
+  # The conformance gate (#162): the corpus tests of ihe-iti over every
+  # example of the vendored PIXm, PDQm and PMIR packages, held to the pass
+  # lists under conformance/, with the shields.io badge files and the README
+  # block they render checked against those lists.
+  conformance:
+    name: conformance
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-nextest
+      - run: bash scripts/checks/conformance.sh --check
+
   # The container cases behind FERROPIX_E2E: the testkit's own (#65), PostgreSQL
   # 18 and the stub OpenID Provider, and the server's store against PostgreSQL
   # (#59), started from the digests docs/VERSIONS.md pins on the runner's
@@ -898,6 +922,7 @@ jobs:
       - console-wasm
       - journeys
       - test
+      - conformance
       - e2e
       - doc
       - cargo-deny

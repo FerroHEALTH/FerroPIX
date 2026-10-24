@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+#
+# The AuditEvent examples of the PIXm, PDQm and PMIR packages, against the record ihe-iti writes for each.
+# One example per line: a passing example is its path, a failing one is
+# `fail <path>: <reason>`; the last line is the total. The corpus test
+# writes it under scripts/checks/conformance.sh --update, and fails when a
+# listed pass stops passing.
+ihe-pdqm/example/AuditEvent-ex-auditPdqmMatch-consumer.json
+fail ihe-pdqm/example/AuditEvent-ex-auditPdqmMatch-supplier.json: ihe-iti writes no IHE.PDQm.Match.Audit.Supplier record: the server side records it in ferropix-server
+ihe-pdqm/example/AuditEvent-ex-auditPdqmQuery-consumer.json
+fail ihe-pdqm/example/AuditEvent-ex-auditPdqmQuery-supplier.json: ihe-iti writes no IHE.PDQm.Query.Audit.Supplier record: the server side records it in ferropix-server
+fail ihe-pixm/example/AuditEvent-ex-auditPixmFeed-create-manager.json: ihe-iti writes no IHE.PIXm.Feed.Create.Audit.Manager record: the server side records it in ferropix-server
+fail ihe-pixm/example/AuditEvent-ex-auditPixmFeed-delete-manager.json: ihe-iti writes no IHE.PIXm.Feed.Delete.Audit.Manager record: the server side records it in ferropix-server
+fail ihe-pixm/example/AuditEvent-ex-auditPixmFeed-update-manager.json: ihe-iti writes no IHE.PIXm.Feed.Update.Audit.Manager record: the server side records it in ferropix-server
+ihe-pixm/example/AuditEvent-ex-auditPixmQuery-consumer.json
+fail ihe-pixm/example/AuditEvent-ex-auditPixmQuery-manager.json: ihe-iti writes no IHE.PIXm.Query.Audit.Manager record: the server side records it in ferropix-server
+ihe-pmir/example/AuditEvent-ex-auditPmirFeed-consumer.json
+ihe-pmir/example/AuditEvent-ex-auditPmirSubscription-subscriber-create.json
+ihe-pmir/example/AuditEvent-ex-auditPmirSubscription-subscriber-delete.json
+ihe-pmir/example/AuditEvent-ex-auditPmirSubscription-subscriber-read.json
+total 13

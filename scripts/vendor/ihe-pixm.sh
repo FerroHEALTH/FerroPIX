@@ -9,10 +9,11 @@
 # Manager and Source capability statements, the ImplementationGuide, the IG's
 # own ITI-83 request, response and error examples, which the client's tests
 # decode, the ITI-104 Patient Identity Feed's Patient profiles and example
-# Patients, which the PIX Manager's feed will be held to, and the ITI-83
+# Patients, which the PIX Manager's feed will be held to, the ITI-83
 # Consumer's BALP audit profile and example, which the ITI-83 audit record
-# will be held to. The set is FerroFED's, at FerroFED's pin, so the tree is
-# byte-identical to FerroFED's copy. The package manifest is
+# is held to, and the Manager's ITI-83 and ITI-104 audit profiles and
+# examples, which the server's own records are held to (#63). FerroFED's set,
+# at FerroFED's pin, plus the Manager's audit artefacts. The package manifest is
 # read for its name, version and licence and left out of the tree (the
 # dependency-manifest rule of scripts/vendor/lib/corpus.sh).
 #
@@ -47,8 +48,8 @@ want="$(awk '{ for (i = 1; i <= NF; i++) { t = $i; gsub(/[`,.;:]/, "", t); if (t
 
 # The artefacts of the ITI-83 Get Corresponding Identifiers and ITI-104 Patient
 # Identity Feed FHIR transactions, at their upstream paths inside the package.
-# The Consumer's audit (BALP) profile and example are taken; the Manager's and
-# the ITI-104 audit profiles and examples serve no reader here and are not.
+# The Consumer's and the Manager's audit (BALP) profiles and examples are
+# taken; the ITI-104 Source's serve no reader here and are not.
 paths=(
   package/ImplementationGuide-ihe.iti.pixm.json
   package/OperationDefinition-IHE.PIXm.pix.json
@@ -74,6 +75,14 @@ paths=(
   package/example/Patient-ex-patient.json
   package/StructureDefinition-IHE.PIXm.Query.Audit.Consumer.json
   package/example/AuditEvent-ex-auditPixmQuery-consumer.json
+  package/StructureDefinition-IHE.PIXm.Query.Audit.Manager.json
+  package/example/AuditEvent-ex-auditPixmQuery-manager.json
+  package/StructureDefinition-IHE.PIXm.Feed.Create.Audit.Manager.json
+  package/example/AuditEvent-ex-auditPixmFeed-create-manager.json
+  package/StructureDefinition-IHE.PIXm.Feed.Update.Audit.Manager.json
+  package/example/AuditEvent-ex-auditPixmFeed-update-manager.json
+  package/StructureDefinition-IHE.PIXm.Feed.Delete.Audit.Manager.json
+  package/example/AuditEvent-ex-auditPixmFeed-delete-manager.json
 )
 
 tmp="$(mktemp -d)"
@@ -139,8 +148,9 @@ change the pin in docs/VERSIONS.md and re-run the script.
   \`PROVENANCE.md\` excluded): \`$digest\`
 - Read by: the ITI-83 client of \`crates/ihe-iti\` (feature \`pixm\`), whose
   tests decode the examples and hold the request and response to the
-  OperationDefinition. The Patient profiles and the audit artefacts are kept
-  for the PIX Manager and its audit, as FerroFED vendors them
+  OperationDefinition, and the BALP audit of \`app/ferropix-server\`, whose
+  tests hold the Manager's ITI-83 and ITI-104 records to their profiles. The
+  Patient profiles are kept for the PIX Manager's feed
 
 ## What is here
 
@@ -152,8 +162,10 @@ artefacts of ITI-104, Patient Identity Feed FHIR: the Source capability
 statement, the Patient profile and its birth-date variant, and the IG's
 example Patients. The audit record of ITI-83 as the Consumer records it
 (§2:3.83.5.1.1): the PIXm Query Consumer audit profile, built on the BALP
-Patient Query pattern, and its example. The package's other files serve no
-reader here: the Manager's and the ITI-104 BALP audit profiles and examples,
+Patient Query pattern, and its example. The audit records of the Manager
+(§2:3.83.5.1.2, §2:3.104.5.1.2): the Query, Feed Create, Feed Update and Feed
+Delete Manager audit profiles and their examples. The package's other files
+serve no reader here: the ITI-104 Source's BALP audit profiles and examples,
 the Schematron renderings, the OpenAPI renderings and the registry's
 \`.index.db\`, a SQLite file. They are not taken.
 

@@ -717,6 +717,20 @@ cannot be spooled fails closed with `503`, as FerroFED's does. The console's
 audit trail view reads `steward_action`, the server's own copy, because the
 repository is the deployment's and may not be readable by the console.
 
+How the trail is built (`app/ferropix-server/src/audit/`), our own design
+where no specification governs it: a layer in front of every audited row of
+the permission table (every FHIR transaction and every steward action that
+reads or changes a person) takes the record's place in the spool, 16 KiB,
+before the handler runs, so a full spool answers `503` with a `transient`
+issue before any change; the handler fills the place once it knows the
+outcome, and a place left unfilled is given back. A search writes one record
+per person found and one with no patient when none was (BALP 1.1.4
+§1:52.4.1.6 recommends one per patient); a steward's view is BALP Patient
+Read and a decision Patient Update. A token whose subject is its own client
+is recorded as the system acting for itself, any other with its user. With
+no `[audit] url` the records stay in the spool until one is named. The
+readiness indicator `audit_spool` is down under a tenth of either bound.
+
 **Health.** `GET {base}/health` is liveness; `GET {base}/health/readiness`
 runs the indicators (the database, the audit spool's headroom, the MLLP
 listener's socket, the feed sender's backlog) and answers `503` with the

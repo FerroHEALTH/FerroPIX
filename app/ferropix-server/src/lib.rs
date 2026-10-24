@@ -10,6 +10,7 @@
 //! serves them until the process is asked to stop. `main.rs` only hands in
 //! the arguments and returns the exit code.
 
+pub mod audit;
 pub mod auth;
 pub mod cli;
 pub mod config;
@@ -160,6 +161,9 @@ pub enum ServeError {
     /// The resource server could not start.
     #[error("the resource server could not start")]
     Auth(#[source] auth::SmartError),
+    /// The audit spool or the FHIR Feed could not start.
+    #[error("the audit trail could not start")]
+    Audit(#[source] audit::OpenError),
     /// The listener could not be bound, or serving failed.
     #[error("the listener could not serve")]
     Io(#[source] std::io::Error),
@@ -169,8 +173,9 @@ pub enum ServeError {
 /// serves until the process is asked to stop.
 ///
 /// # Errors
-/// Returns [`ServeError::Auth`] when an authorization server cannot be read
-/// and [`ServeError::Io`] for the I/O error from binding, accepting or
+/// Returns [`ServeError::Auth`] when an authorization server cannot be read,
+/// [`ServeError::Audit`] when the audit spool or its repository cannot
+/// start, and [`ServeError::Io`] for the I/O error from binding, accepting or
 /// serving.
 pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     // TODO(#59): apply the pending migrations unless [db] migrate = false, and seed the domains.
@@ -182,6 +187,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         pdqm,
         pmir,
         operator,
+        audit,
         ..
     } = settings;
     let smart = Arc::new(
@@ -196,13 +202,16 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         pmir: pmir.enabled,
         operator: operator.enabled,
     };
-    let health = health::Registry::default();
+    let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
+    let draining = audit.drain();
+    let health = health::Registry::default().and(Arc::new(audit::Headroom(audit.clone())));
     let guarded = fhir::routes(
         &server.base_path,
         &server.public_base_url,
         mounts,
         &smart,
         &health,
+        &audit,
     );
     let listener = TcpListener::bind(server.listen)
         .await
@@ -213,14 +222,18 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         version = env!("CARGO_PKG_VERSION"),
         "ferropix serving"
     );
-    http::serve_until(
+    let served = http::serve_until(
         listener,
         http::router(&server, &health, Some(guarded)),
         server.drain_timeout,
         http::shutdown_signal(),
     )
     .await
-    .map_err(ServeError::Io)
+    .map_err(ServeError::Io);
+    if let Some(draining) = draining {
+        draining.abort();
+    }
+    served
 }
 
 /// Runs `job` on a multi-threaded runtime.

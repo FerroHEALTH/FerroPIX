@@ -25,9 +25,12 @@ path = "src/main.rs"
 [dependencies]
 axum.workspace = true
 clap.workspace = true
-# The R4 OperationOutcome and CapabilityStatement the FHIR face answers
-# with, from the generated model.
-fhir-types = { workspace = true, features = ["r4", "terminology"] }
+# The R4 OperationOutcome and CapabilityStatement the FHIR face answers, and
+# the AuditEvent the audit tests read back, from the generated model.
+fhir-types = { workspace = true, features = ["r4", "terminology", "resources"] }
+# The BALP records of the Manager and the Supplier, their ITI-20 spool and
+# the FHIR Feed to the audit repository (FerroAUDIT).
+ihe-atna = { workspace = true, features = ["balp"] }
 # The readiness document and the dependency report, shared with the
 # operator console.
 ferropix-operator-api = { path = "../ferropix-operator-api" }
@@ -61,6 +64,8 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+# The base64 query entity of a search's audit record, read back.
+base64.workspace = true
 # The synthetic BSN the request-log test sends, from the reserved range.
 ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 # The signing keys of the authorization tests, generated when a case runs.

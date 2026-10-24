@@ -152,7 +152,7 @@ async fn healthcheck_exits_one_on_a_server_whose_readiness_answers_503() {
 async fn the_dependency_report_is_the_stewards_and_carries_the_readiness_report() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(auth_settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(auth_settings(&issuer, &secrets)).await;
     let anonymous = send(&app, Method::GET, "/operator/dependencies", None).await;
     assert_eq!(StatusCode::UNAUTHORIZED, anonymous.status);
     let consumer = bearer(&issuer.token("east-lab", "system/Patient.rs"));
@@ -170,7 +170,7 @@ async fn the_dependency_report_is_the_stewards_and_carries_the_readiness_report(
 async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(auth_settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(auth_settings(&issuer, &secrets)).await;
     let bsn = ferropix_testkit::synthetic::bsn(0)
         .expect("the synthetic range holds a BSN")
         .digits();

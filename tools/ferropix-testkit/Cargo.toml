@@ -15,6 +15,11 @@ authors.workspace = true
 publish = false
 
 [dependencies]
+# The in-process OTLP collector (`otlp`): the OTLP/gRPC trace service on a
+# loopback port, keeping every span it receives.
+async-trait.workspace = true
+opentelemetry-proto = { workspace = true, features = ["gen-tonic", "trace"] }
+tonic = { workspace = true, features = ["server", "router"] }
 # The test OpenID Provider (`oidc`): its ES256 key generated per run, the
 # random codes, the PKCE check, the signed ID Tokens and the wiremock issuer
 # they are served from.
@@ -37,7 +42,7 @@ serde.workspace = true
 serde_json.workspace = true
 testcontainers.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "rt", "net", "sync"] }
 
 [dev-dependencies]
 # The browser journeys run the console in process, against its release site

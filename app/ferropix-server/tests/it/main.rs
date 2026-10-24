@@ -33,4 +33,6 @@ mod serve;
 #[cfg(test)]
 mod support;
 #[cfg(test)]
+mod traces;
+#[cfg(test)]
 mod usage_report;

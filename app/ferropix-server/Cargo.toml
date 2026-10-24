@@ -80,6 +80,11 @@ toml.workspace = true
 tower-http = { workspace = true, features = ["request-id", "catch-panic", "timeout", "limit"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# The span export to `[telemetry] otlp_endpoint` over OTLP/gRPC.
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+tracing-opentelemetry.workspace = true
 # Names folded to their base letters before the scorer compares them.
 unicode-normalization.workspace = true
 url.workspace = true
@@ -93,6 +98,8 @@ ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 # Every usage report the server builds, validated against the vendored
 # FerroPULSE report envelope v2.
 jsonschema.workspace = true
+# The spans the in-process OTLP collector of the testkit receives.
+opentelemetry-proto = { workspace = true, features = ["gen-tonic", "trace"] }
 # The scorer's properties: symmetry, the unit interval and determinism.
 proptest.workspace = true
 tempfile.workspace = true

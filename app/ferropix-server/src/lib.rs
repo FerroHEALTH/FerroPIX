@@ -114,7 +114,8 @@ where
     reason = "the job prints its tables on standard output and a failure on stderr"
 )]
 fn estimate(settings: Settings) -> ExitCode {
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal()) {
+    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal(), None)
+    {
         eprintln!("ferropix: cannot start: {}", chain(&error));
         return ExitCode::from(EXIT_CONFIG);
     }
@@ -214,12 +215,30 @@ async fn healthcheck(settings: Settings) -> ExitCode {
     reason = "a subscriber that cannot be installed is reported on stderr"
 )]
 fn serve(settings: Settings) -> ExitCode {
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal()) {
-        eprintln!("ferropix: cannot start: {}", chain(&error));
-        return ExitCode::from(EXIT_CONFIG);
-    }
     runtime_then(|| async move {
-        match serve_settings(settings).await {
+        let traces = match settings
+            .telemetry
+            .otlp_endpoint
+            .as_ref()
+            .map(telemetry::Traces::new)
+        {
+            None => None,
+            Some(Ok(traces)) => Some(traces),
+            Some(Err(error)) => {
+                eprintln!("ferropix: cannot start: {}", chain(&error));
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
+        let exporting = traces.as_ref().map(telemetry::Traces::tracer);
+        if let Err(error) = telemetry::init(
+            &settings.telemetry,
+            std::io::stdout().is_terminal(),
+            exporting,
+        ) {
+            eprintln!("ferropix: cannot start: {}", chain(&error));
+            return ExitCode::from(EXIT_CONFIG);
+        }
+        let code = match serve_settings(settings).await {
             Ok(()) => {
                 tracing::info!("ferropix stopped");
                 ExitCode::SUCCESS
@@ -228,7 +247,13 @@ fn serve(settings: Settings) -> ExitCode {
                 tracing::error!(error = %chain(&error), "cannot serve");
                 ExitCode::FAILURE
             }
+        };
+        if let Some(traces) = traces
+            && let Err(error) = traces.shutdown()
+        {
+            tracing::warn!(error = %chain(&error), "the span export did not flush");
         }
+        code
     })
 }
 
@@ -254,7 +279,8 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
             }
         },
     };
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal()) {
+    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal(), None)
+    {
         eprintln!("ferropix: cannot start: {}", chain(&error));
         return ExitCode::from(EXIT_CONFIG);
     }

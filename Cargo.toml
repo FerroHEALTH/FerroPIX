@@ -81,6 +81,18 @@ unicode-normalization = "0.1.26"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.53.1", default-features = false }
+# The OTLP span export of `[telemetry] otlp_endpoint` (#143): the tracer
+# provider, its gRPC exporter and the bridge from the server's tracing spans,
+# the opentelemetry crates in lockstep and tracing-opentelemetry on the line
+# paired with them, as FerroFED pins them. Test-only: the OTLP trace service
+# the testkit's in-process collector answers, and the gRPC server it runs on.
+# Verified against crates.io on 2026-10-24.
+opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["trace", "grpc-tonic", "tls-aws-lc", "tls-webpki-roots"] }
+opentelemetry-proto = { version = "0.33.1", default-features = false }
+tonic = { version = "0.14.6", default-features = false }
+tracing-opentelemetry = { version = "0.34.0", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "env-filter", "json", "ansi"] }
 url = "2.5.8"
 uuid = { version = "1.26.1", default-features = false, features = ["v4", "std"] }

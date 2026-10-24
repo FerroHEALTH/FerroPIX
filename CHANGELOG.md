@@ -14,6 +14,11 @@ and this project adheres to
 
 ### Added
 
+- The span export of `[telemetry] otlp_endpoint` (#143): `serve` sends one
+  `request` span per request over OTLP/gRPC, with the method, the matched
+  route template and the status and nothing that names a patient, a caller
+  or a query.
+
 - The operator API's reveal and domain writes (#90).
   `POST /operator/persons/{id}/reveal` unmasks one identifier, carried
   identifier or pseudonym the person holds, with a required reason: a

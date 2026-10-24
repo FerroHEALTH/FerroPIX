@@ -9,7 +9,12 @@
 //! line: the ITI-83 `GET` form carries the identifier in its query, and the
 //! line names `/fhir/Patient/$ihe-pix` and nothing after it (#52). The
 //! caller and the domain are left on the response by the guard behind which
-//! they are known. No specification governs the log line: our own design.
+//! they are known.
+//!
+//! The request runs inside a `request` span with the method, the matched
+//! route template and the status, the span `[telemetry] otlp_endpoint`
+//! exports; the caller, the domain and the request id stay on the log line.
+//! No specification governs the log line or the span: our own design.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -17,6 +22,7 @@ use std::time::Instant;
 use axum::extract::{MatchedPath, Request};
 use axum::middleware::Next;
 use axum::response::Response;
+use tracing::Instrument as _;
 
 use crate::http::request_id;
 use crate::usage_report::window::Window;
@@ -52,11 +58,19 @@ pub async fn log(request: Request, next: Next) -> Response {
     let request_id = request_id::of(request.headers())
         .unwrap_or_default()
         .to_owned();
+    let span = tracing::info_span!(
+        target: TARGET,
+        "request",
+        http.request.method = method.as_str(),
+        http.route = matched.as_deref().unwrap_or(UNMATCHED),
+        http.response.status_code = tracing::field::Empty,
+    );
     let started = Instant::now();
-    let response = next.run(request).await;
+    let response = next.run(request).instrument(span.clone()).await;
     let elapsed = started.elapsed();
     let latency_ms = elapsed.as_secs_f64() * 1000.0;
     let status = response.status();
+    span.record("http.response.status_code", status.as_u16());
     if let Some(window) = window {
         window.record(&method, matched.as_deref(), status, elapsed);
     }

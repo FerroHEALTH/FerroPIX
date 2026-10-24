@@ -67,6 +67,37 @@ SHA-256. They are the versions FerroBRIDGE's console builds with.
 `scripts/checks/versions.sh` reads each pin back from the files its row
 names.
 
+## The console's browser journeys
+
+The browser journeys (`tools/ferropix-testkit`, #98) drive the console in
+headless Chrome over WebDriver, through chromedriver, with the `thirtyfour`
+client, a test-only dependency of the testkit. Chrome and chromedriver come
+as one Chrome for Testing release, which `browser-actions/setup-chrome`
+installs in the `journeys` job of `ci.yml`, so the browser and its driver
+always match. Both pins are the ones FerroBRIDGE, FerroFED and FerroTERM
+run. The weekly `scripts/checks/pin-freshness.sh` reports a newer Stable
+release.
+
+For a local run, `scripts/release/journey-tools.sh target/journey-tools`
+installs the same release into `target/journey-tools`, where the journeys
+look first. It takes each download URL from the Chrome for Testing JSON API
+and checks each zip against the SHA-256 below before it unpacks it. Chrome
+for Testing publishes no SHA-256; each digest is the one the family took of
+a download whose MD5 equals the `x-goog-hash` the storage bucket serves with
+it, and the `mac-arm64` pair verified again here on 2026-10-24.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| thirtyfour | `0.37.5` | `Cargo.toml` |
+| Chrome for Testing (Chrome and chromedriver) | `155.0.8059.79` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `bcd9a79130d7e44d70f93be87042e9bcee7fe0f0b3898e06b8c9bed5fb619dcd` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `e141a7cbf948780bb7d381860bd5a7944c6736f79b9918b9826fccb199d28ea4` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `876f0ea4095237bb3e93321d95758d38c9195989935d7bdc9f51d8e26bc6a3a1` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `ca9a98c74b8d3904be6536ff6d26493abb7d7a476e2b384a75cd55d101bce29d` | `scripts/release/journey-tools.sh` |
+
+`scripts/checks/versions.sh` reads each pin back from the files its row
+names.
+
 ## Container images
 
 The images the testkit (`tools/ferropix-testkit`) starts behind

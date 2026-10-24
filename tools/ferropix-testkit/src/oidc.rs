@@ -15,10 +15,8 @@
 //! browser there and a test reads the redirect. No specification governs
 //! the harness: our own design.
 #![expect(
-    dead_code,
-    unreachable_pub,
     clippy::disallowed_types,
-    reason = "the provider is FerroBRIDGE's test OpenID Provider whole, its browser sign-in kept for the console's journeys (#98), and a JWT's claims are a JSON wire seam"
+    reason = "a JWT's claims and the token endpoint's answer are a JSON wire seam"
 )]
 
 use std::collections::BTreeMap;

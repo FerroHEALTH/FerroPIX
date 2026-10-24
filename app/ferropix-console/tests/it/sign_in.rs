@@ -11,11 +11,11 @@
 
 use std::error::Error;
 
-use crate::provider::{IdTokenClaims, Provider, TokenAnswer};
 use base64::Engine as _;
 use ferrohealth_ui::i18n::Locale;
 use ferropix_console::locale::{Msg, catalog, tr_in};
 use ferropix_console::session::Occupancy;
+use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, Header};
 use secrecy::ExposeSecret as _;
@@ -365,7 +365,7 @@ async fn an_id_token_not_signed_by_a_published_key_is_refused() -> Result<(), Bo
     let begun = begin(&service).await?;
     let claims = IdTokenClaims::new(&provider.issuer(), CLIENT_ID, begun.pair("nonce"));
     let mut header = Header::new(Algorithm::HS256);
-    header.kid = Some(String::from(crate::provider::KID));
+    header.kid = Some(String::from(ferropix_testkit::oidc::KID));
     let shared = jsonwebtoken::encode(
         &header,
         &serde_json::to_value(&claims)?,

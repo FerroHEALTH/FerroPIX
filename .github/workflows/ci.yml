@@ -514,6 +514,71 @@ jobs:
       - name: Measure the bundle against its budget
         run: bash scripts/checks/console-bundle.sh
 
+  # The operator console's browser journeys (#97, #98; no specification
+  # governs them: our own design). Each journey checks FERROPIX_JOURNEYS
+  # first and returns at once without it, so the nextest job needs no
+  # browser; this job sets the gate, builds the release site bundle the
+  # console serves, and drives headless Chrome through chromedriver, both at
+  # the Chrome for Testing release docs/VERSIONS.md pins, against the console
+  # run in process over the test OpenID Provider and a stand-in server.
+  journeys:
+    name: journeys
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      FERROPIX_JOURNEYS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          target: wasm32-unknown-unknown
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install cargo-leptos
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-leptos@0.3.11
+      - name: Install the wasm-bindgen CLI
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: wasm-bindgen@0.2.129
+      - name: Install wasm-opt
+        run: |
+          bash scripts/release/console-tools.sh "$RUNNER_TEMP/console-tools"
+          echo "$RUNNER_TEMP/console-tools/bin" >> "$GITHUB_PATH"
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-nextest
+      - name: Install Chrome and chromedriver
+        id: chrome
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        with:
+          chrome-version: 155.0.8059.79
+          install-chromedriver: true
+      - run: bash scripts/release/console-site.sh --release
+      # Each journey starts a chromedriver of its own on a port the system
+      # picks and stops it with its session, so they run in parallel.
+      - name: Run the journeys
+        env:
+          FERROPIX_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+          FERROPIX_CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+        run: cargo nextest run --locked -p ferropix-testkit -E 'test(/^journeys::/)'
+      # A failed wait leaves a screenshot and the whole document; a passing
+      # run writes nothing, so this attaches only where there is something to
+      # look at.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: journey-failures
+          path: target/journey-failures
+          if-no-files-found: ignore
+          retention-days: 14
+
   test:
     name: nextest
     needs: detect
@@ -790,6 +855,7 @@ jobs:
       - fmt
       - clippy
       - console-wasm
+      - journeys
       - test
       - e2e
       - doc

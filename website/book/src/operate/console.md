@@ -107,3 +107,9 @@ week, the shortcut hints, how long a revealed identifier stays and whether
 leaving a page hides it are each a cookie of their own, set in Your
 preferences behind your name and read when each page is drawn. They are only
 for you, in this browser, and name no patient.
+
+A language cookie naming `qps` draws the console in its pseudo-locale:
+every word accented and two fifths longer, in brackets. It ships no
+catalog, and Your preferences never offers it; it is how the console's
+browser journeys find a word that skipped the catalog and a layout with no
+room for a longer translation.

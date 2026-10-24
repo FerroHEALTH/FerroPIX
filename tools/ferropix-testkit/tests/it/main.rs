@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The testkit's integration suite: the fixtures decode and pass the guard,
-//! the guard refuses what it must, every image is pinned in the matrix, and
-//! the containers start behind `FERROPIX_E2E`.
+//! the guard refuses what it must, every image is pinned in the matrix, the
+//! containers start behind `FERROPIX_E2E`, and the console's browser
+//! journeys run behind `FERROPIX_JOURNEYS`.
 //!
 //! The modules carry `#[cfg(test)]`, which an integration test always has, so
 //! the test-scoped relaxations of `clippy.toml` reach their helpers too.
@@ -14,5 +15,7 @@ mod e2e;
 mod fixtures;
 #[cfg(test)]
 mod guard;
+#[cfg(test)]
+mod journeys;
 #[cfg(test)]
 mod pins;

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ferropix-testkit"
-description = "Test support for the FerroPIX suites: the container harness behind FERROPIX_E2E, the synthetic fixtures and their guard; never shipped"
+description = "Test support for the FerroPIX suites: the container harness behind FERROPIX_E2E, the synthetic fixtures and their guard, the test OpenID Provider and the console's browser journeys; never shipped"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,15 @@ authors.workspace = true
 publish = false
 
 [dependencies]
+# The test OpenID Provider (`oidc`): its ES256 key generated per run, the
+# random codes, the PKCE check, the signed ID Tokens and the wiremock issuer
+# they are served from.
+aws-lc-rs.workspace = true
+base64.workspace = true
+jiff.workspace = true
+jsonwebtoken.workspace = true
+url.workspace = true
+wiremock.workspace = true
 # The FHIR R4 model every fixture decodes into, with the `resources` root
 # set for Patient, Bundle and MessageHeader.
 fhir-types = { workspace = true, features = ["r4", "resources"] }
@@ -31,12 +40,16 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["time"] }
 
 [dev-dependencies]
-# The end-to-end case reads the claims of a token the stub provider signed.
-base64.workspace = true
+# The browser journeys run the console in process, against its release site
+# bundle, and drive headless Chrome through a chromedriver of their own.
+ferropix-console = { path = "../../app/ferropix-console" }
+rustix.workspace = true
+tempfile.workspace = true
+thirtyfour.workspace = true
 # The end-to-end case connects to the started PostgreSQL and reads its
 # version.
 sqlx.workspace = true
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "process", "io-util", "net"] }
 
 [lints]
 workspace = true

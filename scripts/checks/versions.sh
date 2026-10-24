@@ -33,7 +33,17 @@ pin() {
 
 # The rows whose pin each file their "Repeated in" cell names must carry
 # word for word: the build and test tools a workflow or a script installs.
-readonly REPEATED_ROWS=("cargo-leptos" "wasm-bindgen" "Binaryen")
+readonly REPEATED_ROWS=(
+  "cargo-leptos"
+  "wasm-bindgen"
+  "Binaryen"
+  "thirtyfour"
+  "Chrome for Testing (Chrome and chromedriver)"
+  "Chrome for Testing, \`chrome-linux64.zip\` SHA-256"
+  "Chrome for Testing, \`chrome-mac-arm64.zip\` SHA-256"
+  "Chrome for Testing, \`chromedriver-linux64.zip\` SHA-256"
+  "Chrome for Testing, \`chromedriver-mac-arm64.zip\` SHA-256"
+)
 
 # Every backticked path of the "Repeated in" cell of the row whose first
 # cell is $1, one per line.

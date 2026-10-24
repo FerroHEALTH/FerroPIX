@@ -117,7 +117,11 @@ the workspace resolves, never memory.
   §13) fails a literal under `src/` that reads as words; one no reader sees
   as text (an HTTP request line, a header value) is allowed with its reason
   in `scripts/checks/stray-literals.allow`, which also skips the modules that
-  write only to the terminal.
+  write only to the terminal. The pseudo-locale, `qps` (`locale::pseudo`),
+  draws every console and library word accented and two fifths longer; only
+  a language cookie naming it chooses it, and the pseudo-locale journey
+  walks every screen in it, failing on a word it left unstretched and on a
+  page that scrolls sideways at 1440 or 390 px.
 
 ## 4. Preferences, captures and the bundle
 
@@ -131,8 +135,21 @@ the workspace resolves, never memory.
   before a change to it merges. `tests/it/captures.rs`, behind
   `FERROPIX_CAPTURES` (a directory), writes every page as a browser receives
   it with its stylesheets; FerroUI's `design/tools/render.py` capture draws
-  them as the design renders are drawn. The browser journeys and the
-  committed captures are #98.
+  them as the design renders are drawn. The committed captures are #98.
+- **The browser journeys** (`tools/ferropix-testkit/tests/it/journeys/`,
+  behind `FERROPIX_JOURNEYS`, CI job `journeys`) drive the console in
+  headless Chrome for Testing over the test OpenID Provider and a stand-in
+  server: sign-in and sign-out, the preferences, the pseudo-locale, and the
+  WCAG 2.2 AA battery over every screen's refused state in both themes
+  (text contrast, control edges, the keyboard walk with its focus rings,
+  the markup, the reflow at 320 px), with a self-test that a wrong theme
+  fails. Every wait waits for the `data-hydrated` mark the browser half sets
+  on `<html>`, and a press for the page it loads. `journeys::SCREENS` names
+  one address per route, held by a guard in the ordinary suite; a screen's
+  filled state joins the battery when the screen lands. Locally:
+  `scripts/release/journey-tools.sh target/journey-tools`, the site bundle,
+  then `FERROPIX_JOURNEYS=1 cargo nextest run -p ferropix-testkit -E
+  'test(/^journeys::/)'`.
 - **The bundle budget**, over the entry WebAssembly of
   `cargo leptos build --release --split`, brotli `-q 11`:
 

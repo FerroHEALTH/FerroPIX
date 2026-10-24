@@ -8,6 +8,19 @@
 
 use secrecy::SecretString;
 
+/// The name and value pairs of a URL query (without its `?`), each
+/// percent-decoded as RFC 3986 §2.1 reads a URL, so a `+` stands for itself.
+pub(crate) fn url_query(query: &str) -> Vec<(String, String)> {
+    form(query.replace('+', "%2B").as_bytes())
+}
+
+/// The name and value pairs of an `application/x-www-form-urlencoded` body,
+/// in which a `+` stands for a space (WHATWG URL, the
+/// `application/x-www-form-urlencoded` parser).
+pub(crate) fn form(body: &[u8]) -> Vec<(String, String)> {
+    url::form_urlencoded::parse(body).into_owned().collect()
+}
+
 /// The parts of `text` between each `separator` no backslash escapes, every
 /// escape kept for [`unescape`].
 pub(crate) fn split(text: &str, separator: char) -> Vec<&str> {
@@ -92,6 +105,18 @@ mod tests {
             r"x|1,2$3\4\n",
             "the four escapes"
         );
+    }
+
+    #[test]
+    fn a_plus_is_itself_in_a_url_and_a_space_in_a_form() {
+        let pairs = |list: Vec<(String, String)>| {
+            list.into_iter().map(|(_, value)| value).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            pairs(super::url_query("_format=application/fhir+xml")),
+            ["application/fhir+xml"]
+        );
+        assert_eq!(pairs(super::form(b"family=van+Dam")), ["van Dam"]);
     }
 
     #[test]

@@ -26,6 +26,7 @@ use crate::outcome::IssueType;
 use crate::pdqm::matches::MatchGrade;
 use crate::server::answer::{Answer, Severity};
 use crate::server::format::{BodyError, Format};
+use crate::server::token;
 use ihe_atna::redact::REDACTED;
 
 /// One `$match` request, the same whichever form carried it.
@@ -58,10 +59,10 @@ impl MatchRequest {
     pub fn from_request(query: &str, format: Format, body: &[u8]) -> Result<Self, MatchError> {
         let mut asked = None;
         let mut operation_parameter = false;
-        for (name, value) in url::form_urlencoded::parse(query.as_bytes()) {
-            match name.as_ref() {
+        for (name, value) in token::url_query(query) {
+            match name.as_str() {
                 "_format" => {
-                    if asked.replace(value.into_owned()).is_some() {
+                    if asked.replace(value).is_some() {
                         return Err(MatchError::SecondParameter);
                     }
                 }

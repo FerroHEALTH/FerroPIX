@@ -228,8 +228,8 @@ impl Removal {
 /// The identifier of a conditional interaction's query.
 fn condition(query: &str) -> Result<SourceIdentifier, FeedError> {
     let mut found = None;
-    for (name, value) in url::form_urlencoded::parse(query.as_bytes()) {
-        match name.as_ref() {
+    for (name, value) in token::url_query(query) {
+        match name.as_str() {
             "identifier" => {
                 if found.is_some() || token::split(&value, ',').len() > 1 {
                     return Err(FeedError::SecondIdentifier);

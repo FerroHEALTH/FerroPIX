@@ -199,8 +199,8 @@ pub struct PatientSearch {
 }
 
 impl PatientSearch {
-    /// Reads the query string of a `GET` (without its `?`) or the form body
-    /// of a `POST` search, both `application/x-www-form-urlencoded`.
+    /// Reads the query string of a `GET` (without its `?`), percent-encoded
+    /// as a URL query is (RFC 3986), so a `+` is itself.
     ///
     /// Every parameter of §2:3.78.4.1.2.1 is read, `_count` (FHIR R4 search,
     /// paging) and `_format` beside them, and `_pretty` admitted. A parameter
@@ -214,6 +214,21 @@ impl PatientSearch {
     /// A [`SearchError`] for a value the search cannot be run with, whose
     /// [`refusal`](SearchError::refusal) is the answer to send.
     pub fn from_query(query: &str) -> Result<Self, SearchError> {
+        Self::from_pairs(token::url_query(query))
+    }
+
+    /// Reads the body of a `POST [base]/Patient/_search`, an
+    /// `application/x-www-form-urlencoded` form in which a `+` is a space
+    /// (FHIR R4 http.html, search), as [`PatientSearch::from_query`] reads a
+    /// query.
+    ///
+    /// # Errors
+    /// As [`PatientSearch::from_query`].
+    pub fn from_form(body: &[u8]) -> Result<Self, SearchError> {
+        Self::from_pairs(token::form(body))
+    }
+
+    fn from_pairs(pairs: Vec<(String, String)>) -> Result<Self, SearchError> {
         let mut search = Self {
             criteria: Vec::new(),
             domains: Vec::new(),
@@ -222,9 +237,8 @@ impl PatientSearch {
             respected: Vec::new(),
             dropped: Vec::new(),
         };
-        for (name, value) in url::form_urlencoded::parse(query.as_bytes()) {
-            let value = SecretString::from(value.into_owned());
-            search.read(&name, value)?;
+        for (name, value) in pairs {
+            search.read(&name, SecretString::from(value))?;
         }
         Ok(search)
     }
@@ -577,6 +591,33 @@ mod tests {
         };
         assert_eq!(dates[0].prefix(), DatePrefix::Ge);
         assert!(matches!(criteria[4], Criterion::Gender(Gender::Female)));
+    }
+
+    #[test]
+    fn the_get_query_and_the_post_form_read_alike() {
+        let query = PatientSearch::from_query("family=van%20Dam&telecom=%2B31201234567")
+            .expect("a GET search");
+        let form = PatientSearch::from_form(b"family=van+Dam&telecom=%2B31201234567")
+            .expect("a POST search");
+        for search in [&query, &form] {
+            let Criterion::Text { values, .. } = &search.criteria()[0] else {
+                panic!("family");
+            };
+            assert_eq!(values[0].expose_secret(), "van Dam", "a space either way");
+            let Criterion::Telecom(tokens) = &search.criteria()[1] else {
+                panic!("telecom");
+            };
+            assert_eq!(tokens[0].value().expose_secret(), "+31201234567");
+        }
+        let plus = PatientSearch::from_query("telecom=+31201234567").expect("a GET search");
+        let Criterion::Telecom(tokens) = &plus.criteria()[0] else {
+            panic!("telecom");
+        };
+        assert_eq!(
+            tokens[0].value().expose_secret(),
+            "+31201234567",
+            "a + in a URL is itself (RFC 3986)"
+        );
     }
 
     #[test]

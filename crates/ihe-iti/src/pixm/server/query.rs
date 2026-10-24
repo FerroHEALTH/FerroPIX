@@ -37,7 +37,7 @@ pub struct PixQuery {
 
 impl PixQuery {
     /// Reads the query string of a `GET` (without its `?`), percent-encoded
-    /// as a URL query is.
+    /// as a URL query is (RFC 3986), so a `+` is itself.
     ///
     /// `_format` and `_pretty`, which FHIR R4 gives every interaction (FHIR
     /// R4 http.html, <http://hl7.org/fhir/R4/http.html#parameters>), are
@@ -48,9 +48,9 @@ impl PixQuery {
     /// [`refusal`](QueryError::refusal) is the answer to send.
     pub fn from_query(query: &str) -> Result<Self, QueryError> {
         let mut reader = Reader::default();
-        for (name, value) in url::form_urlencoded::parse(query.as_bytes()) {
-            let value = SecretString::from(value.into_owned());
-            match name.as_ref() {
+        for (name, value) in token::url_query(query) {
+            let value = SecretString::from(value);
+            match name.as_str() {
                 "sourceIdentifier" => reader.source(&value)?,
                 "targetSystem" => reader.target(value.expose_secret())?,
                 "_format" => reader.format(value.expose_secret())?,

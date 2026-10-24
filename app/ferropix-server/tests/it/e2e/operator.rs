@@ -20,7 +20,7 @@ use super::BSN_SYSTEM;
 use super::pixm::{Answer, Harness, LAB, feed_both, synthetic_seeds};
 
 /// Asserts `answer` is a `200` no cache keeps and reads its body as `T`.
-fn document<T: serde::de::DeserializeOwned>(answer: &Answer, label: &str) -> T {
+pub(crate) fn document<T: serde::de::DeserializeOwned>(answer: &Answer, label: &str) -> T {
     assert_eq!(StatusCode::OK, answer.status, "{label}: {}", answer.body);
     assert_eq!(
         Some("no-store"),
@@ -34,14 +34,14 @@ fn document<T: serde::de::DeserializeOwned>(answer: &Answer, label: &str) -> T {
 }
 
 /// `GET uri` as the steward.
-async fn get(harness: &Harness, uri: &str) -> Answer {
+pub(crate) async fn get(harness: &Harness, uri: &str) -> Answer {
     harness
         .send(Method::GET, uri, Some(&harness.steward()), &[], None)
         .await
 }
 
 /// `POST uri` of the JSON `body` as the steward.
-async fn post(harness: &Harness, uri: &str, body: &str) -> Answer {
+pub(crate) async fn post(harness: &Harness, uri: &str, body: &str) -> Answer {
     harness
         .send(
             Method::POST,
@@ -62,16 +62,16 @@ fn holds_no_identifier(text: &str, values: &[&str], label: &str) {
 
 /// A Manager fed the hospital and the laboratory, joined by the BSN, with
 /// the id of their one person.
-struct Fed {
-    harness: Harness,
-    hospital: String,
-    bsn: String,
-    person: String,
+pub(crate) struct Fed {
+    pub(crate) harness: Harness,
+    pub(crate) hospital: String,
+    pub(crate) bsn: String,
+    pub(crate) person: String,
 }
 
 impl Fed {
     /// Starts the Manager, feeds both records and finds their person.
-    async fn start() -> Self {
+    pub(crate) async fn start() -> Self {
         let harness = Harness::start(synthetic_seeds()).await;
         let (hospital, bsn) = feed_both(&harness).await;
         let found: Results = document(
@@ -93,7 +93,7 @@ impl Fed {
     }
 
     /// Asserts no fed identifier value is in `text`.
-    fn holds_no_identifier(&self, text: &str, label: &str) {
+    pub(crate) fn holds_no_identifier(&self, text: &str, label: &str) {
         holds_no_identifier(text, &[&self.hospital, &self.bsn, LAB], label);
     }
 }

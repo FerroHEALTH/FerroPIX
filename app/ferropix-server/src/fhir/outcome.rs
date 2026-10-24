@@ -35,6 +35,8 @@ pub enum IssueType {
     TooLong,
     /// `exception`: the server could not answer.
     Exception,
+    /// `conflict`: the request conflicts with what the server holds.
+    Conflict,
 }
 
 impl IssueType {
@@ -50,6 +52,7 @@ impl IssueType {
             Self::NotFound => "not-found",
             Self::TooLong => "too-long",
             Self::Exception => "exception",
+            Self::Conflict => "conflict",
         }
     }
 }

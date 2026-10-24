@@ -14,6 +14,21 @@ and this project adheres to
 
 ### Added
 
+- The operator API's reveal and domain writes (#90).
+  `POST /operator/persons/{id}/reveal` unmasks one identifier, carried
+  identifier or pseudonym the person holds, with a required reason: a
+  `reveal` steward action naming the person, the record and the domain, and
+  a BALP Privacy Disclosure record with the person as subject and the reason
+  as a detail, are written in one transaction before the value is answered
+  once, `no-store`, shown 15 seconds by default and never more than 30.
+  Behind the administrator scope, `POST /operator/domains` adds a local or
+  authoritative domain whose Source an issuer lists, and
+  `PATCH /operator/domains/{id}` renames one, gives it another Source or
+  retires it for good, each a `domain-create` or `domain-update` steward
+  action with its BALP record; the guard takes the new Source the moment
+  the write commits. The migration `0014_steward_subjects` adds the
+  identifier and pseudonymisation domain a steward action names, and the
+  grants move to `0015`. The trail and its export carry both columns.
 - The operator API the console reads (#90, `ferropix_server::operator`),
   under `{base}/operator` behind `[operator] enabled` and the steward or
   administrator scope the permission table names, with its documents in

@@ -565,10 +565,17 @@ async fn no_identifier_name_or_query_value_reaches_a_log_a_span_or_a_refusal_thr
                 format!("/operator/actions?person={person}&actor={unknown}"),
                 None,
             ),
+            reveal(
+                &person,
+                r#"{"carried":"00000000-0000-7000-8000-000000000000"}"#,
+                &unknown,
+            ),
+            reveal(&person, r#"{"record":"x"}"#, ""),
         ],
     )
     .await;
     refusals.extend(more);
+    reveal_every(&harness, &person).await;
     assert!(
         refusals.len() >= 5,
         "the refusals were driven: {refusals:?}"
@@ -595,5 +602,44 @@ async fn no_identifier_name_or_query_value_reaches_a_log_a_span_or_a_refusal_thr
                 "{place} holds an identifier, a name or a query value: {text}"
             );
         }
+    }
+}
+
+/// The reveal of `target` of the person `person` with `reason`.
+fn reveal(person: &str, target: &str, reason: &str) -> (http::Method, String, Option<String>) {
+    (
+        http::Method::POST,
+        format!("/operator/persons/{person}/reveal"),
+        Some(format!(r#"{{"target":{target},"reason":"{reason}"}}"#)),
+    )
+}
+
+/// Reveals every identifier of the person `person`, each answered.
+async fn reveal_every(harness: &super::pixm::Harness, person: &str) {
+    let steward = harness.steward();
+    let read = harness
+        .send(
+            http::Method::GET,
+            &format!("/operator/persons/{person}"),
+            Some(&steward),
+            &[],
+            None,
+        )
+        .await;
+    let document: ferropix_operator_api::person::Person =
+        serde_json::from_str(&read.body).expect("the person reads");
+    for row in &document.identifiers {
+        let target = serde_json::to_string(&row.handle).expect("a handle");
+        let (method, uri, body) = reveal(person, &target, "a leak check");
+        let answer = harness
+            .send(
+                method,
+                &uri,
+                Some(&steward),
+                &[(http::header::CONTENT_TYPE, "application/json")],
+                body,
+            )
+            .await;
+        assert_eq!(http::StatusCode::OK, answer.status, "{}", answer.body);
     }
 }

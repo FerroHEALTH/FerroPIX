@@ -21,7 +21,10 @@ use crate::auth::{Issuer, application, bearer, send, settings};
 use crate::support::Secrets;
 
 /// The operator routes this build serves, by interaction.
-pub(crate) const SERVED: [&str; 9] = [
+pub(crate) const SERVED: [&str; 12] = [
+    "operator-reveal",
+    "operator-domain-create",
+    "operator-domain-update",
     "operator-overview",
     "operator-dependencies",
     "operator-search",
@@ -109,7 +112,7 @@ async fn every_served_operator_route_refuses_a_token_without_its_product_scope()
         }
         checked += 1;
     }
-    assert_eq!(10, checked, "every served route was driven");
+    assert_eq!(13, checked, "every served route was driven");
 }
 
 #[tokio::test]

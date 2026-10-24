@@ -112,6 +112,7 @@ the PIXm Manager or the PDQm Supplier, and for every steward action:
 | ITI-119 `$match` | PDQm Match Supplier (§2:3.119.5.1.2) |
 | A steward's view or decision | BALP Patient Read or Patient Update |
 | A steward's search | BALP Patient Query per person found, or Query when none was |
+| A steward's reveal of an identifier or a pseudonym | BALP Privacy Disclosure at the source, with the reason |
 | An export of the steward trail | an Export event (DICOM `110106`) |
 
 Each record names the patient as its subject and, for a search, carries the

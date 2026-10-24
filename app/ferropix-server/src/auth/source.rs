@@ -12,19 +12,23 @@
 //! the issuer that signed the token lists it in its `clients`; a Basic user
 //! of the development profile is that client when its user-id equals it.
 //! The issuer binding is FerroPIX's own design: two authorization servers
-//! may each mint a token for a client of the same name.
+//! may each mint a token for a client of the same name. An administrator's
+//! write of a domain replaces the map at once ([`Sources::replace`]), so a
+//! new Source feeds and a replaced one stops without a restart.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, PoisonError, RwLock};
 
 use ferrohealth_smart::resource::{Access, Via};
 
 use crate::config::section::domain::DomainSeed;
 
 /// The Sources of the domains and the clients each issuer may vouch for.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 pub struct Sources {
-    /// The `source_client_id` of each domain, by system.
-    domains: BTreeMap<String, String>,
+    /// The `source_client_id` of each unretired domain, by system, shared by
+    /// every clone so a replacement reaches the guard.
+    domains: Arc<RwLock<BTreeMap<String, String>>>,
     /// The Source clients each issuer may vouch for, by issuer.
     clients: BTreeMap<String, BTreeSet<String>>,
     /// The user-ids of the Basic users.
@@ -53,19 +57,34 @@ impl Sources {
         basic_users: BTreeSet<String>,
     ) -> Self {
         Self {
-            domains: domains
-                .iter()
-                .map(|domain| (domain.system.clone(), domain.source_client_id.clone()))
-                .collect(),
+            domains: Arc::new(RwLock::new(map(domains))),
             clients,
             basic_users,
         }
     }
 
+    /// Replaces the domains with `domains`, the unretired ones the store
+    /// holds after an administrator's write.
+    pub fn replace(&self, domains: &[DomainSeed]) {
+        // NOTE: no specification governs this: our own design; the map is
+        // replaced whole, so a writer that panicked left no half-written map.
+        let mut held = self.domains.write().unwrap_or_else(PoisonError::into_inner);
+        *held = map(domains);
+    }
+
+    /// Returns whether `client` may be a Source: an issuer lists it in its
+    /// `clients`, or it is a Basic user.
+    #[must_use]
+    pub fn admits(&self, client: &str) -> bool {
+        self.clients.values().any(|listed| listed.contains(client))
+            || self.basic_users.contains(client)
+    }
+
     /// Returns whether `access` may write to the domain `system` names.
     #[must_use]
     pub fn verdict(&self, access: &Access, system: &str) -> Verdict {
-        let Some(source) = self.domains.get(system) else {
+        let held = self.domains.read().unwrap_or_else(PoisonError::into_inner);
+        let Some(source) = held.get(system) else {
             return Verdict::Unknown;
         };
         if self.client(access) == Some(source.as_str()) {
@@ -95,6 +114,14 @@ impl Sources {
             }
         }
     }
+}
+
+/// Returns the `source_client_id` of each domain of `domains`, by system.
+fn map(domains: &[DomainSeed]) -> BTreeMap<String, String> {
+    domains
+        .iter()
+        .map(|domain| (domain.system.clone(), domain.source_client_id.clone()))
+        .collect()
 }
 
 /// Returns the system of every `identifier` search parameter of the query
@@ -188,6 +215,38 @@ mod tests {
         let basic = Access::Caller(Arc::new(Caller::basic(String::from("dev-source"), "")));
         assert_eq!(Some("dev-source"), sources.client(&basic));
         assert_eq!(None, sources.client(&Access::Open));
+    }
+
+    #[test]
+    fn a_replaced_map_reaches_every_clone_and_admits_only_a_listed_client() {
+        let sources = sources();
+        let guard = sources.clone();
+        let system = "urn:oid:2.999.1.1";
+        sources.replace(&[DomainSeed {
+            system: system.to_owned(),
+            name: String::from("East"),
+            kind: DomainKind::Local,
+            source_client_id: String::from("west-lab"),
+            sensitive: true,
+        }]);
+        assert_eq!(
+            Verdict::Admitted,
+            guard.verdict(&bearer("west-lab", ISSUER), system),
+            "the new Source"
+        );
+        assert_eq!(
+            Verdict::Forbidden,
+            guard.verdict(&bearer("east-lab", ISSUER), system),
+            "the replaced one"
+        );
+        sources.replace(&[]);
+        assert_eq!(
+            Verdict::Unknown,
+            guard.verdict(&bearer("west-lab", ISSUER), system)
+        );
+        assert!(sources.admits("east-lab"));
+        assert!(sources.admits("dev-source"));
+        assert!(!sources.admits("north-lab"));
     }
 
     #[test]

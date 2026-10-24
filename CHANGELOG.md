@@ -433,6 +433,15 @@ and this project adheres to
 
 ### Fixed
 
+- A PIXm feed body in FHIR JSON whose narrative is not well-formed XHTML,
+  so that its FHIR XML form reads back changed, is refused as having no
+  XML form; the server accepted it and would have answered with a
+  different Patient in XML (#190, `ihe-iti` 0.0.49).
+- `ihe-atna` moves to 0.2.5, the FerroAUDIT release that fixes a syslog
+  frame lost before a dropped connection. FerroPIX delivers its audit
+  records to a FHIR repository over HTTP and opens no syslog connection,
+  so no `Connection::close` call is missing (#191).
+
 - The PIXm ITI-83 reader refuses an empty `_format` with a 400, where it
   accepted one its `Parameters` form cannot carry (#185, `ihe-iti` 0.0.48).
 

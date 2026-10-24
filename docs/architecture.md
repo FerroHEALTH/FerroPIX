@@ -405,9 +405,25 @@ field frequencies and nothing else. The comparators:
 | mother's maiden name | Jaro-Winkler | |
 | an identifier in a `local` domain shared by both records' domains | exact | a shared local identifier is evidence, never proof |
 
-The total is the sum of the weights, mapped to `[0, 1]` by the logistic of
-the total against the midpoint between the two thresholds, so `search.score`
-is comparable across deployments. The grade follows the thresholds:
+A partial agreement adds half the agreement weight and a field absent on
+either side adds nothing; where a field holds several values (names,
+addresses, telecom) the best pair counts, so every comparator is symmetric.
+Names and addresses are compared folded (accents removed, lowercased,
+punctuation a space), a telephone number on its last nine digits. The
+defaults are `m` 0.95 and `u` 0.01 for the family name, 0.90 and 0.02 for
+the given names, 0.97 and 0.003 for the birth date, 0.98 and 0.5 for the
+gender, 0.85 and 0.001 for the postal code, 0.80 and 0.001 for the address,
+0.60 and 0.0001 for telephone and email, 0.90 and 0.01 for the mother's
+maiden name, and 0.50 and 0.00001 for a shared local identifier; the book's
+Matching page lists them with their weights, and the scorer's corpus test
+reads them from there.
+
+The total is the sum of the weights in bits, mapped to `[0, 1]` by the
+logistic `1 / (1 + 2^(10 - total))`: a total of 10 bits scores 0.5, the
+point where the evidence outweighs prior odds of one in 1,024 that two
+blocked records are one patient. The midpoint is fixed, never derived from
+a deployment's thresholds or weights, so `search.score` is comparable across
+deployments. The grade follows the thresholds:
 
 | Grade | When | Used for |
 |---|---|---|
@@ -418,14 +434,17 @@ is comparable across deployments. The grade follows the thresholds:
 
 **Blocking.** A pair is scored only when it shares a blocking key: `(birth
 year, the phonetic key of the family name)`, `(postal code, birth date)`, or
-an identifier value shared across domains. The keys are columns of
+an identifier value shared across domains. The phonetic key is American
+Soundex over the last word of the folded family name, so a Dutch prefix
+(`van`, `de`, `van der`) does not decide the block. The keys are columns of
 `source_record_version`, indexed, so a feed scores tens of pairs and not the
 table.
 
 **Evidence.** Every score is kept with its evidence: one entry per field
-with the comparator, the two values as compared (sealed values masked to
-their last three characters, section 12.5), the agreement, and the weight
-it added, plus the blocking key that produced the pair. The console draws
+with the comparator, the two values as compared (every value masked to its
+last three characters and at most half its length, section 12.5), the
+agreement, the comparator's reading, and the weight it added, plus the
+blocking key that produced the pair. The console draws
 the breakdown from that, and the ITI-119 answer carries the score and the
 grade and nothing of the evidence.
 
@@ -1599,3 +1618,4 @@ The milestones carry the order; every issue cites the section it builds.
 | D14 | The identifier search field | masked as typed, posted, never in a URL | #52; owner 2026-10-21 |
 | D15 | A start under another sealing key | refused, with the key id of every row and of the store recorded; `db reseal` resumable and refusing every start until done | no specification governs it; a wrong key would answer every identifier as unknown, a silent wrong answer |
 | D16 | The store's errors | the SQLSTATE, the constraint and the message of a refusal; never PostgreSQL's detail, which quotes the row | no specification governs it; PostgreSQL fills the detail of a refusal with the values of the offending row |
+| D17 | The score's midpoint | a fixed 10 bits (prior odds of one in 1,024), never derived from a deployment's thresholds or weights | no specification governs it; PDQm 3.2.0 §2:3.119.4.2.2.4 asks for a score in `[0, 1]`, and a fixed midpoint keeps a score comparable across deployments |

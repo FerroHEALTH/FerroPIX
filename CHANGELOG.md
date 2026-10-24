@@ -29,6 +29,17 @@ and this project adheres to
   the schema `scripts/vendor/ferropulse-schemas.sh` vendors from the pin in
   `docs/VERSIONS.md`, and `scripts/checks/usage-report-off.sh` holds every
   launcher of the server in a test lane to the switch.
+- The server's probabilistic scorer (#61, `ferropix_server::matching`): a
+  Fellegi-Sunter weight per field from the `[matching]` `m` and `u` (each
+  field's default documented on the book's new Matching page), the
+  comparators of each field (Jaro-Winkler on names, exact with half credit
+  on birth dates, the four-character prefix on postal codes, the token
+  overlap of addresses, telephone numbers on their last nine digits), a
+  score in `[0, 1]` by the logistic of the total against a fixed midpoint
+  of 10 bits, the grades `certain`, `probable`, `possible` and
+  `certainly-not` against the thresholds, the blocking keys, and the
+  evidence of every field with its values masked. The scorer reads no
+  store; the feed records its candidates with #60.
 - The server's BALP audit trail through `ihe-atna` (#63). `serve` opens the
   ITI-20 spool under `audit.spool_dir` and refuses to start on a directory
   open to other users, unwritable or holding a foreign file, and sends the

@@ -61,6 +61,8 @@ serde_json.workspace = true
 # The cross-reference store: PostgreSQL 18 with the embedded migration set,
 # uuid ids and jsonb demographics, over rustls for a `sslmode=require` URL.
 sqlx = { workspace = true, features = ["macros", "migrate", "uuid", "json", "tls-rustls-aws-lc-rs"] }
+# The Jaro-Winkler comparator of the scorer (docs/architecture.md section 5.2).
+strsim.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 toml.workspace = true
@@ -69,6 +71,8 @@ toml.workspace = true
 tower-http = { workspace = true, features = ["request-id", "catch-panic", "timeout", "limit"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# Names folded to their base letters before the scorer compares them.
+unicode-normalization.workspace = true
 url.workspace = true
 # The request id minted for a request that brings none, and the store's ids.
 uuid.workspace = true
@@ -80,6 +84,8 @@ ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 # Every usage report the server builds, validated against the vendored
 # FerroPULSE report envelope v2.
 jsonschema.workspace = true
+# The scorer's properties: symmetry, the unit interval and determinism.
+proptest.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "process", "test-util"] }
 tower = { workspace = true, features = ["util"] }

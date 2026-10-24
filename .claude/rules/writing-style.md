@@ -24,8 +24,8 @@ Write plainly, so the text reads like a person wrote it for another person.
 3. **Overused buzzwords.** Avoid delve, robust, elevate, testament, landscape,
    leverage, tapestry, underscore, foster, realm, seamless, empower, unlock,
    journey (as a metaphor), cutting-edge, state-of-the-art, game-changing,
-   holistic, synergy, streamline, harness, pivotal. Use the plain word: read,
-   strong, improve, shows, area, use.
+   holistic, synergy, streamline, harness (as a verb), pivotal. Use the plain
+   word: read, strong, improve, shows, area, use.
 4. **The em dash habit.** Do not use em dashes to attach explanatory clauses.
    Almost every one is a comma, a period, parentheses, or a colon. This is the
    most common tell, so check every one. A bullet that defines a term uses a

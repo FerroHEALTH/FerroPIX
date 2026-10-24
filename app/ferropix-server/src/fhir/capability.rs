@@ -13,8 +13,8 @@
 use fhir_types::r4::capability_statement::{
     CapabilityStatement, CapabilityStatementImplementation, CapabilityStatementRest,
     CapabilityStatementRestResource, CapabilityStatementRestResourceInteraction,
-    CapabilityStatementRestResourceOperation, CapabilityStatementRestSecurity,
-    CapabilityStatementSoftware,
+    CapabilityStatementRestResourceOperation, CapabilityStatementRestResourceSearchParam,
+    CapabilityStatementRestSecurity, CapabilityStatementSoftware,
 };
 use fhir_types::r4::codeable_concept::CodeableConcept;
 use fhir_types::r4::coding::Coding;
@@ -36,6 +36,62 @@ pub const PIXM_PATIENT: &str =
 /// The `$ihe-pix` operation (PIXm 3.1.0, `OperationDefinition-IHE.PIXm.pix`).
 pub const IHE_PIX: &str = "https://profiles.ihe.net/ITI/PIXm/OperationDefinition/IHE.PIXm.pix";
 
+/// The PDQm Patient Demographics Supplier actor statement (PDQm 3.2.0,
+/// `CapabilityStatement-IHE.PDQm.PatientDemographicsSupplier`).
+pub const PDQM_SUPPLIER: &str =
+    "https://profiles.ihe.net/ITI/PDQm/CapabilityStatement/IHE.PDQm.PatientDemographicsSupplier";
+
+/// The statement of the Supplier with the Match Operation Option (PDQm
+/// 3.2.0, `CapabilityStatement-IHE.PDQm.PatientDemographicsSupplierMatch`).
+pub const PDQM_SUPPLIER_MATCH: &str = "https://profiles.ihe.net/ITI/PDQm/CapabilityStatement/IHE.PDQm.PatientDemographicsSupplierMatch";
+
+/// The `$match` operation of PDQm (PDQm 3.2.0,
+/// `OperationDefinition-PDQmMatch`).
+pub const PDQM_MATCH: &str = "https://profiles.ihe.net/ITI/PDQm/OperationDefinition/PDQmMatch";
+
+/// The search parameters of the Supplier's statement the search reads, each
+/// with its type and, for `mothersMaidenName`, its definition
+/// (§2:3.78.4.1.2.1, §2:3.78.4.1.2.2).
+// NOTE: no specification governs this: our own design; `_lastUpdated`, which
+// the vendored statement lists and §2:3.78.4.1.2.1 does not, is not read.
+pub const PDQM_SEARCH_PARAMETERS: [(&str, &str, Option<&str>); 22] = [
+    ("_id", "token", None),
+    ("active", "token", None),
+    ("family", "string", None),
+    ("family:exact", "string", None),
+    ("given", "string", None),
+    ("given:exact", "string", None),
+    ("identifier", "token", None),
+    ("telecom", "token", None),
+    ("birthdate", "date", None),
+    ("address", "string", None),
+    ("address:exact", "string", None),
+    ("address-city", "string", None),
+    ("address-city:exact", "string", None),
+    ("address-country", "string", None),
+    ("address-country:exact", "string", None),
+    ("address-postalcode", "string", None),
+    ("address-postalcode:exact", "string", None),
+    ("address-state", "string", None),
+    ("address-state:exact", "string", None),
+    ("gender", "token", None),
+    (
+        "mothersMaidenName",
+        "string",
+        Some(MOTHERS_MAIDEN_NAME_PARAMETER),
+    ),
+    (
+        "mothersMaidenName:exact",
+        "string",
+        Some(MOTHERS_MAIDEN_NAME_PARAMETER),
+    ),
+];
+
+/// The search parameter of the mother's maiden name extension, as the
+/// Supplier's statement names it.
+const MOTHERS_MAIDEN_NAME_PARAMETER: &str =
+    "http://hl7.org/fhir/SearchParameter/patient-extensions-Patient-mothersMaidenName|5.2.0";
+
 /// The `oauth-uris` extension, the form SMART App Launch 1.0.0 defined and
 /// 2.x keeps for existing clients while it calls it deprecated
 /// (<https://hl7.org/fhir/smart-app-launch/conformance.html>).
@@ -55,6 +111,10 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> C
     let mut instantiates = Vec::new();
     if mounts.pixm {
         instantiates.push(PIXM_MANAGER.into());
+    }
+    if mounts.pdqm {
+        instantiates.push(PDQM_SUPPLIER.into());
+        instantiates.push(PDQM_SUPPLIER_MATCH.into());
     }
     let resource: Vec<CapabilityStatementRestResource> = patient(mounts).into_iter().collect();
     CapabilityStatement {
@@ -100,6 +160,9 @@ fn patient(mounts: Mounts) -> Option<CapabilityStatementRestResource> {
     if mounts.pixm {
         pixm(&mut patient, mounts.remove_patient);
     }
+    if mounts.pdqm {
+        pdqm(&mut patient);
+    }
     let served = !patient.interaction.is_empty() || !patient.operation.is_empty();
     served.then_some(patient)
 }
@@ -134,6 +197,46 @@ fn pixm(patient: &mut CapabilityStatementRestResource, remove_patient: bool) {
         ),
         ..CapabilityStatementRestResourceOperation::default()
     });
+}
+
+/// Adds the PDQm Supplier with the Match Operation Option to `patient`, as
+/// `CapabilityStatement-IHE.PDQm.PatientDemographicsSupplierMatch` declares
+/// it: the PDQm Patient profile, the `read` and `search-type` of ITI-78
+/// (§2:3.78.4.3, §2:3.78.4.1.2) with the parameters it reads, and `$match`
+/// (§2:3.119.4.1.2).
+fn pdqm(patient: &mut CapabilityStatementRestResource) {
+    patient
+        .supported_profile
+        .push(crate::pdqm::patient::PDQM_PATIENT.into());
+    patient.interaction.push(interaction(
+        "read",
+        "ITI-78: Retrieve Patient Resource, one person by its id",
+    ));
+    patient.interaction.push(interaction(
+        "search-type",
+        "ITI-78: Query Patient Resource, by GET or by POST of a form to _search",
+    ));
+    patient.search_param = PDQM_SEARCH_PARAMETERS
+        .iter()
+        .map(
+            |(name, kind, definition)| CapabilityStatementRestResourceSearchParam {
+                name: (*name).into(),
+                r#type: (*kind).into(),
+                definition: definition.map(Into::into),
+                ..CapabilityStatementRestResourceSearchParam::default()
+            },
+        )
+        .collect();
+    patient
+        .operation
+        .push(CapabilityStatementRestResourceOperation {
+            name: "match".into(),
+            definition: PDQM_MATCH.into(),
+            documentation: Some(
+                "ITI-119: by POST of the PDQm Match Input Parameters or of a bare Patient".into(),
+            ),
+            ..CapabilityStatementRestResourceOperation::default()
+        });
 }
 
 /// Returns the interaction `code` with its `documentation`.

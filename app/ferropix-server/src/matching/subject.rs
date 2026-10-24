@@ -224,6 +224,27 @@ impl Subject {
     pub fn family(&self) -> Option<&str> {
         self.names.iter().find_map(|name| name.family.as_deref())
     }
+
+    /// Returns how many of the scorer's fields the subject states, each
+    /// counted once however many values it holds.
+    #[must_use]
+    pub fn stated(&self) -> usize {
+        [
+            self.family().is_some(),
+            self.names.iter().any(|name| !name.given.is_empty()),
+            self.birth.is_some(),
+            self.gender.is_some(),
+            !self.postal_codes.is_empty(),
+            !self.addresses.is_empty(),
+            !self.telephones.is_empty(),
+            !self.emails.is_empty(),
+            self.mothers_maiden_name.is_some(),
+            !self.local_identifiers.is_empty(),
+        ]
+        .into_iter()
+        .filter(|stated| *stated)
+        .count()
+    }
 }
 
 impl fmt::Debug for Subject {
@@ -321,6 +342,8 @@ mod tests {
         assert_eq!(vec!["612345678"], subject.telephones);
         assert_eq!(vec!["a@example.org"], subject.emails);
         assert_eq!(Some(mother.to_lowercase()), subject.mothers_maiden_name);
+        assert_eq!(9, subject.stated(), "every field but a local identifier");
+        assert_eq!(0, Subject::default().stated());
         let home: BTreeSet<String> = ["kade", "1", "voorbeeld"].map(String::from).into();
         assert_eq!(vec![home], subject.addresses);
     }

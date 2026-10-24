@@ -145,7 +145,14 @@ pub async fn lookup(
 /// Reads every identifier of `person`: its records' own and the
 /// authoritative ones they carry with no record of their own, ordered by
 /// system.
-async fn identifiers(
+///
+/// The PDQm Supplier serves the same identifiers in each `Patient`, so a
+/// person answers alike in ITI-83 and ITI-78.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when a statement fails, and
+/// [`StoreError::Seal`] when a sealed value does not open under `keys`.
+pub async fn identifiers(
     connection: &mut PgConnection,
     keys: &Sealer,
     person: Uuid,

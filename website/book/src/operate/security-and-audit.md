@@ -46,11 +46,11 @@ need no token: the capability statement names the SMART service, the token
 endpoint and the scopes, and the SMART discovery document lists the same
 scopes as `scopes_supported`. FerroPIX never forwards a caller's token.
 
-The PIXm routes are served ([The PIXm Manager](../integrate/pixm-manager.md)).
-The other transaction routes are guarded today and answer `501` until the
-faces behind them land
-([#70](https://github.com/FerroHEALTH/FerroPIX/issues/70),
-[#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
+The PIXm and PDQm routes are served
+([The PIXm Manager](../integrate/pixm-manager.md),
+[The PDQm Supplier](../integrate/pdqm-supplier.md)). The other transaction
+routes are guarded today and answer `501` until the faces behind them land
+([#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
 [#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)).
 
 Basic users are for a run on your own machine: they need
@@ -114,8 +114,13 @@ the PIXm Manager or the PDQm Supplier, and for every steward action:
 
 Each record names the patient as its subject and, for a search, carries the
 raw request base64-encoded in `entity.query` (BALP 1.1.4 §1:52.4.1.4,
-§1:52.4.1.6). A search that found several people writes one record per
-person. The audit record is the only place outside the store where the
+§1:52.4.1.6): the URL of a `GET`, or the request line, media type and body of
+a `POST`. A search or a match that answers several people writes one record
+per person in the answer, and one that answers none writes one record naming
+no patient; an ITI-78 read writes the PDQm Query Supplier record of the one
+person it answers. The PDQm Supplier stores its records before it sends the
+answer, and answers `503` with a `transient` issue when they cannot be
+stored. The audit record is the only place outside the store where the
 server writes a patient identifier.
 
 The records wait in a spool under `audit.spool_dir`, one file readable by
@@ -127,10 +132,7 @@ takes its record's place in the spool: when the spool is full, the request
 is refused with `503` and a `transient` issue before it changes anything.
 `GET {base}/health/readiness` reports `audit_spool` down when less than a
 tenth of either bound is left, and `GET {base}/operator/dependencies` shows
-whether the last delivery to the repository went through. The transactions
-write their records as their faces land
-([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
-[#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)).
+whether the last delivery to the repository went through.
 
 ## The crates' audit trail
 

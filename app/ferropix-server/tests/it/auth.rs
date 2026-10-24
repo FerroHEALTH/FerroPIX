@@ -50,7 +50,13 @@ const IDENTIFIER: &str = "SYNTHETIC-ID-4711";
 
 /// The guarded routes served today; every other one answers `501` until its
 /// issue lands.
-const SERVED: [&str; 3] = ["operator-dependencies", "ITI-83", "ITI-104"];
+const SERVED: [&str; 5] = [
+    "operator-dependencies",
+    "ITI-83",
+    "ITI-104",
+    "ITI-78",
+    "ITI-119",
+];
 
 /// Returns whether `status` is an answer of the route's handler: neither a
 /// refusal of the guard nor the pending handler's `501`.
@@ -187,6 +193,7 @@ pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
     fhir::Backend {
         store: ferropix_server::store::Store::lazy(&settings.db).expect("the store is described"),
         matching: settings.matching.clone(),
+        deprecated: settings.pdqm.deprecated,
     }
 }
 
@@ -194,6 +201,16 @@ pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
 /// audit spool in the temporary directory returned beside it.
 pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let backend = backend(&settings);
+    application_with(settings, &backend).await
+}
+
+/// Returns the application of `settings` with every route mounted, its
+/// transactions over `backend`, its audit spool in the temporary directory
+/// returned beside it.
+pub(crate) async fn application_with(
+    settings: Settings,
+    backend: &fhir::Backend,
+) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let smart = Arc::new(
         Smart::discover(settings.auth, &settings.domains)
             .await
@@ -212,7 +229,7 @@ pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, temp
         &smart,
         &health,
         &audit,
-        &backend,
+        backend,
     );
     (
         router(&settings.server, &health, Some(guarded)),
@@ -357,7 +374,7 @@ async fn every_guarded_route_admits_the_domains_source_holding_every_scope() {
         if SERVED.contains(&route.interaction) {
             assert!(
                 handled(answer.status),
-                "{label}: the guard admits it and the Manager answers: {}",
+                "{label}: the guard admits it and the Manager or the Supplier answers: {}",
                 answer.status
             );
             continue;

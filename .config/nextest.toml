@@ -33,3 +33,12 @@ threads-required = 2
 filter = 'package(ferropix-server) & test(=e2e::blocking::a_feed_scores_only_the_pairs_its_blocking_keys_produce_among_100000_records)'
 slow-timeout = { period = "30s", terminate-after = 6 }
 threads-required = 2
+
+# The PDQm search case loads 100000 records into its own PostgreSQL and
+# times the first page of three searches, each held to the request timeout:
+# about ten seconds alone, so it gets three minutes and a second thread like
+# the blocking case (#72).
+[[profile.default.overrides]]
+filter = 'package(ferropix-server) & test(=e2e::pdqm_search::the_first_page_of_a_search_over_100000_records_answers_within_the_request_timeout)'
+slow-timeout = { period = "30s", terminate-after = 6 }
+threads-required = 2

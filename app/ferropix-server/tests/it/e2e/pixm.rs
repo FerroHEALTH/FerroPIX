@@ -120,6 +120,7 @@ impl Harness {
             &Backend {
                 store: store.clone(),
                 matching: settings.matching.clone(),
+                deprecated: settings.pdqm.deprecated,
             },
         );
         Self {

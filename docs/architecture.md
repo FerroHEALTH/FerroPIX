@@ -509,12 +509,15 @@ with `conditionalUpdate` and, when `[pixm] remove_patient` is on,
 an `OperationOutcome` with the issue the profile prescribes.
 
 **The Patient resource FerroPIX serves is the person.** `Patient/{id}` is
-the person's `uuid`; its `identifier[]` is every identifier of every open
-link, each with its domain's `system`; its demographics are the current
-version of the record in the domain the deployment ranks first (`[[domain]]
-rank`, the authoritative domain by default); a merged person reads
-`active = false` with a `link` of type `replaced-by` to its survivor (FHIR
-R4 Patient, "Patient records that have been merged"; PMIR 1.6.0
+the person's `uuid`; its `identifier[]` is the person's id in the Master
+Patient Identification Domain (`[server] public_base_url`, PMIR 1.6.0
+§2:3.93.4.1.3), then every identifier a PIX query answers for the person
+(section 6.1), each with its domain's `system`; its demographics are the
+current version of one open link's record, an `authoritative` domain's
+first, then the most recently received (decision D21); a merged person
+reads `active = false` with a `link` of type `replaced-by` to its active
+survivor and no demographics, since its records moved to the survivor
+(FHIR R4 Patient, "Patient records that have been merged"; PMIR 1.6.0
 §2:3.93.4.1.3). This one choice makes `targetId` of ITI-83, the entries of
 ITI-78 and ITI-119, and the Patient Master Identity of PMIR the same
 resource. No specification fixes what a Manager's `Patient` is (PIXm
@@ -601,8 +604,28 @@ to: `200` with the `total`; `200` with identifiers filtered; `200` with
 for an unknown domain (the preferred response of case 4); `406` for a
 `_format` the server cannot produce; and, for a merged person, the
 `[pdqm] deprecated` policy: `inactive` (the person with `active = false`
-and its `replaced-by` link, the survivor included in the Bundle) by default,
-or `omit`. `GET {base}/fhir/Patient/{id}` is the retrieve (§2:3.78.4.3).
+and its `replaced-by` link, the survivor included in the Bundle as an
+`include` entry) by default, or `omit`. `GET {base}/fhir/Patient/{id}` is
+the retrieve (§2:3.78.4.3): a merged person answers `200` with
+`active = false` under `inactive` and `404` under `omit` (case 3), and a
+format the server cannot write `400` (§2:3.78.4.4.2).
+
+The search is one statement over the persons and the demographics each
+`Patient` shows, read in one read-only snapshot with the page's Patients.
+A string parameter compares both sides folded by PostgreSQL's `unaccent`,
+installed into `pix` as `btree_gist` is, and lowercased; an `identifier`
+is found by the HMAC of its normalised value, in the records' own
+identifiers and in the authoritative identifiers they carry with no record
+of their own, as a PIX query finds it, so no sealed value is opened to
+search; a `birthdate` compares the ranges of days the value and the stored
+date cover. A merged person holds no records, so only `_id` and `active`
+find it. A page holds `_count` persons, 20 by default and at most 100, in
+id order after the cursor the `next` link names, so a person created or
+merged while a client pages moves no other person (decision D22). The
+domain filter recognises every unretired domain the store holds and the
+Master Patient Identification Domain. `_lastUpdated`, which the vendored
+Supplier statement lists and §2:3.78.4.1.2.1 does not, is not read: the
+person has no version of its own to date.
 
 **ITI-119.** `POST {base}/fhir/Patient/$match` with the PDQm Match input
 `Parameters` (`resource`, `onlyCertainMatches`, `count`), or a bare `Patient`
@@ -610,13 +633,23 @@ body when neither parameter is used (PDQm 3.2.0 §2:3.119.4.1.2). The answer
 is the PDQm Match Output Bundle: one entry per person found, ordered from
 most to least likely, each with `search.score` in `[0, 1]` and the
 `match-grade` extension (§2:3.119.4.1.3, §2:3.119.4.2.2.4), computed by the
-scorer of section 5.2 against the input as if it were a record. With
+scorer of section 5.2 against the input as if it were a record: the
+records sharing one of the configured blocking keys with the input are
+scored, the input's `local` identifiers compared by their HMAC, and each
+person takes the best score of its records; a person graded
+`certainly-not` is no match and is left out (decision D23). With
 `onlyCertainMatches = true` only `certain` entries are returned, and when the
 certain entries are more than one and not one person, the Bundle is empty
-(case 5). `count` cuts the ordered list. A deprecated person follows the
-`[pdqm] deprecated` policy (case 8). A warning the scorer raises (an input
-with too few fields to score) rides as an `OperationOutcome` entry of
-severity `warning` (case 10).
+(case 5). `count` cuts the ordered list. A merged person holds no records,
+so the match finds its survivor, the second option of case 8 under either
+`[pdqm] deprecated` policy. An input stating fewer than three of the
+scorer's fields rides with an `OperationOutcome` entry of severity
+`warning` and code `incomplete` (case 10).
+
+Every search, read and match, answered or refused, writes the PDQm
+Supplier BALP record with its raw request, one per person in the answer
+or one naming no patient, before the answer is sent; a record that cannot
+be stored withholds the answer with `503` (decision D24).
 
 ### 6.3 PMIR
 
@@ -1667,3 +1700,7 @@ The milestones carry the order; every issue cites the section it builds.
 | D18 | A duplicate resolution naming a survivor the store lacks | refused; a subsumed identifier the store lacks is inserted and subsumed | no specification governs it; PIXm 3.1.0 §2:3.104.4.2.3 replaces references to the subsumed identifier with the survivor's, which needs a survivor to point at |
 | D19 | An identifier value before it is sealed | normalised by its domain's rule: a BSN to nine digits passing the eleven-proof, any other trimmed with its case kept; a refused value refuses the feed | no specification governs it; section 5.1 links on the same normalised value, and FHIR R4 compares `Identifier.value` as written |
 | D20 | The identifiers a version carries | rows of `carried_identifier`, found by HMAC and sealed as a record's own; never in the demographics | no specification governs it; a BSN in plain `jsonb` would defeat the sealing of section 4.2 |
+| D21 | The demographics a `Patient` shows | the current version of an `authoritative` domain's record first, then the most recently received; no ranking key | no specification governs it; the national number's Source is the best-vetted, and a rule without a key cannot be misconfigured |
+| D22 | ITI-78 paging | a cursor of the last person id in the `next` link, 20 a page by default, at most 100 | FHIR R4 leaves paging links to the server (http.html, paging); a cursor keeps every person on exactly one page while the set changes, an offset does not |
+| D23 | Who ITI-119 returns | each person once, at the best score of its records, `certainly-not` left out | PDQm 3.2.0 §2:3.119.4.1.3 leaves the matching to the Supplier; a pair below `possible_at` is no match by the scorer's own grades |
+| D24 | The PDQm audit record | written before the answer, for refusals too; `503` when it cannot be stored | BALP 1.1.4 §1:52.4.1.6 wants one record per patient; an answer whose disclosure is not recorded is withheld, as the spool already refuses an unaudited transaction |

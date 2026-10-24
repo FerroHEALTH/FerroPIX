@@ -15,10 +15,10 @@ with its health routes and the guard in front of the FHIR face and the
 operator API (`[auth]`), and the usage report
 ([`[usage_report]`](#usage_report)). The other services behind the sections
 are planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3):
-the PIXm and PDQm faces
-([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
-[#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)). A key whose
+[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3); the
+PIXm Manager and the PDQm Supplier serve today
+([The PIXm Manager](../integrate/pixm-manager.md),
+[The PDQm Supplier](../integrate/pdqm-supplier.md)). A key whose
 service is not built yet is still checked, so a configuration you write today
 keeps working when the service lands.
 
@@ -266,7 +266,7 @@ stays the record. A system named twice is refused.
 | `pixm.enabled` | `true` | Whether the PIXm Manager serves ITI-83 and ITI-104. |
 | `pixm.remove_patient` | `false` | Whether ITI-104 serves the Remove Patient Option. |
 | `pdqm.enabled` | `true` | Whether the PDQm Supplier serves ITI-78 and ITI-119. |
-| `pdqm.deprecated` | `"inactive"` | How a merged patient is answered: `"inactive"` (with its replaced-by link, the survivor included) or `"omit"`. |
+| `pdqm.deprecated` | `"inactive"` | How a merged patient is answered by ITI-78: `"inactive"` (with `active = false` and its replaced-by link, the survivor included in a search) or `"omit"` (left out of a search, and `404` on a read). |
 | `pmir.enabled` | `false` | Whether the PMIR Registry serves ITI-93 and ITI-94. |
 | `pmir.feed.max_attempts` | `10` | The most delivery attempts of one outbound ITI-93 message. |
 | `pmir.feed.initial_backoff_ms` | `1000` | The wait before the first retry. |

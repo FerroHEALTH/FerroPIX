@@ -27,12 +27,13 @@ parts exist today.
   (the Dutch Generic Functions). They hold the client side of each profile
   and are on crates.io for any product to use. FerroFED takes both from
   there.
-- **Planned:** the server. The PIXm Manager, the PDQm Supplier, the PMIR
-  Registry, the persisted cross-reference, pseudonym minting, the HL7 v2 PIX
-  and PDQ transactions and the container image are the
+- **Being built:** the server, the
   [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
-  Until it lands there is no FerroPIX binary to run, and the pages under
-  Operate say so.
+  Its cross-reference in PostgreSQL, the
+  [PIXm Manager](integrate/pixm-manager.md) and the
+  [PDQm Supplier](integrate/pdqm-supplier.md) run today; the PMIR Registry,
+  pseudonym minting, the HL7 v2 PIX and PDQ transactions and the container
+  image are planned, and the pages under Operate say which is which.
 
 [What FerroPIX is](evaluate/what-ferropix-is.md) lists every capability with
 its status.

@@ -19,6 +19,7 @@ use serde::Serialize;
 
 use crate::config::section::matching::{BlockingKey, Field, Matching, Weights};
 use crate::matching::compare::{self, Agreement, Comparator};
+use crate::matching::conflict::Conflict;
 use crate::matching::subject::Subject;
 
 /// The total, in bits, that scores `0.5`.
@@ -180,6 +181,7 @@ impl Scorer {
             score,
             grade,
             evidence: Evidence {
+                conflicts: Vec::new(),
                 blocking_key: key,
                 total,
                 score,
@@ -221,6 +223,10 @@ pub struct Scored {
 /// `Debug` leaves the masked values out.
 #[derive(Clone, PartialEq, Serialize)]
 pub struct Evidence {
+    /// The hard conflicts that held a shared authoritative identifier from
+    /// linking the pair, the first line of the evidence when there are any.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub conflicts: Vec<Conflict>,
     /// The blocking key that produced the pair, `None` for a pair the
     /// deterministic tier named.
     pub blocking_key: Option<BlockingKey>,
@@ -237,6 +243,7 @@ pub struct Evidence {
 impl fmt::Debug for Evidence {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Evidence")
+            .field("conflicts", &self.conflicts)
             .field("blocking_key", &self.blocking_key)
             .field("total", &self.total)
             .field("score", &self.score)

@@ -238,7 +238,7 @@ state.
 
 One schema, `pix`, one migration set under `app/ferropix-server/migrations/`
 (`sqlx migrate`, one concern per file, the grants in the last file of the
-set), embedded in the binary and applied in order by `db migrate` or at the
+set, which a unit test holds), embedded in the binary and applied in order by `db migrate` or at the
 start of `serve`, under the migrator's advisory lock, with its bookkeeping in
 `pix._sqlx_migrations`; the migrator creates the schema, and `btree_gist`
 is installed into `pix`, so the runtime role needs no other schema. Every
@@ -249,11 +249,12 @@ row reads in order without a sequence.
 |---|---|---|
 | `identifier_domain` | `id`, `system` (unique), `name`, `kind`, `source_client_id`, `sensitive`, `created_at`, `retired_at` | retired, never deleted; a retired domain answers `targetSystem not found` (section 6) |
 | `source_record` | `id`, `domain_id`, `identifier_hmac` (unique with `domain_id`), `identifier_sealed` or `identifier_value` (exactly one), `key_id`, `head_version`, `active`, `replaced_by` (a `source_record.id` of the same domain), `removed_at` | the one mutable row per record; `replaced_by` is the Source's own duplicate resolution (PIXm 3.1.0 §2:3.104.4.2.3) |
-| `source_record_version` | `id`, `record_id`, `version`, `demographics` (jsonb), `received_at`, `channel` (`fhir`, `v2`, `pmir`), `request_id` | write-once; every feed inserts one |
+| `source_record_version` | `id`, `record_id`, `version`, `demographics` (jsonb), `received_at`, `channel` (`fhir`, `v2`, `pmir`), `request_id`, `block_phonetic`, `block_postal` | write-once; every feed inserts one; the demographics hold no identifier (the fed `Patient` without `identifier`, `link`, `contained`, `text`, `id` and `meta`), and the two text blocking keys of section 5.2 are indexed columns |
+| `carried_identifier` | `id`, `record_id`, `version`, `domain_id`, `identifier_hmac`, `identifier_sealed` or `identifier_value`, `key_id` | every identifier a version carries in a domain the store knows, the record's own included, found and sealed as a record's own; kept, never deleted, rewritten only by `db reseal` |
 | `person` | `id`, `status` (`active`, `merged`), `merged_into`, `created_at` | the Patient Master Identity; `id` is the FHIR `Patient.id` |
 | `link` | `id`, `record_id`, `person_id`, `kind`, `score`, `valid` (`tstzrange`), `made_by` (an actor), `made_at`, `reason`, `ended_by_action` | `UNIQUE (record_id, valid WITHOUT OVERLAPS)` over `btree_gist`, so a record is in one person at any instant and the history is the table |
 | `candidate` | `id`, `record_a`, `record_b`, `a_version`, `b_version`, `score`, `grade`, `evidence` (jsonb), `status` (`open`, `linked`, `not-a-match`, `deferred`), `decided_by`, `decided_at`, `reason`, `deferred_until` | the review queue; a `not-a-match` pair is not queued again until either record changes |
-| `merge` | `id`, `survivor_id`, `merged_id`, `kind` (`steward`, `source`), `made_by`, `made_at`, `reason`, `reverted_at`, `reverted_by`, `revert_reason` | one row per merge |
+| `merge` | `id`, `survivor_id`, `merged_id`, `kind` (`steward`, `source`, `deterministic`, `probabilistic`), `made_by`, `made_at`, `reason`, `reverted_at`, `reverted_by`, `revert_reason` | one row per merge |
 | `merge_effect` | `merge_id`, `record_id`, `from_person`, `link_closed`, `link_opened` | what the merge moved, which the revert replays backwards |
 | `pseudonym_domain` | `id`, `namespace` (unique), `name`, `created_at`, `retired_at` | |
 | `pseudonym` | `person_id`, `domain_id`, `value` (uuid, unique), `minted_at` | immutable; resolved through the merge chain (section 8) |
@@ -286,8 +287,8 @@ first start records it, and a start under another key is refused, since it
 would find nothing and answer every identifier as unknown. The key is
 rotated by `db reseal`, the one subcommand that reads the old key: it marks
 the configured key pending in `seal_key`, which refuses every start until it
-finishes, rewrites the HMAC of every record and the sealed value of every
-sealed one in batches of 500, one transaction each, so an interrupted run
+finishes, rewrites the HMAC of every record and of every carried
+identifier, and the sealed value of every sealed one, in batches of 500, one transaction each, so an interrupted run
 resumes, and records the new key once no row is left under the old one. No
 specification governs sealing: our own design.
 
@@ -311,9 +312,21 @@ locks, and every steward decision carries the versions it was made against
 with `409` and the console re-reads. No specification governs the
 boundaries: our own design.
 
+- **The lock order.** A transaction first takes an advisory lock on every
+  identifier it will lock or match on (its record's own, the survivor of a
+  duplicate, every `authoritative` identifier the version carries), keyed
+  by the first eight bytes of the HMAC and taken in ascending key order;
+  then the record rows; then an advisory lock on each person, keyed by the
+  random tail of its `uuidv7` and taken in ascending order. Two feeds that
+  carry one BSN therefore run one after the other, and the second sees the
+  first's commit. A person found merged once its lock is held, or a
+  deadlock the database breaks, retries the whole transaction, at most
+  three times.
 - **A feed** (ITI-104 add or revise, ITI-93 create or update, ITI-8): lock
   the `source_record` row by `(domain_id, identifier_hmac)` with `SELECT …
-  FOR UPDATE`, or insert it; insert the version; run the deterministic match
+  FOR UPDATE`, or insert it; insert the version and the identifiers it
+  carries (a revision of a removed identifier brings it back; a revision of
+  a subsumed one is refused); run the deterministic match
   (section 5.1) over the authoritative identifiers the version carries; take
   an advisory lock on each person the match names, in `uuid` order, so two
   feeds that join the same persons never deadlock; open or move the link;
@@ -322,15 +335,20 @@ boundaries: our own design.
   action produces; commit. The BALP record is written to the audit spool
   after the commit, by the request handler, and the ITI-93 message to each
   matching subscription is inserted into `feed_outbox` inside the
-  transaction, so a committed change is never unannounced.
+  transaction, so a committed change is never unannounced (#104).
 - **A Source's duplicate resolution** (ITI-104 with `replaced-by`,
   §2:3.104.4.2.3, or an ITI-93 merge, PMIR 1.6.0 §2:3.93.4.1.2.4): both
-  records of the domain locked; the subsumed record gets `active = false`
+  records of the domain locked, the subsumed one inserted when the store
+  lacks it and the survivor refused when the store lacks it or holds it
+  removed or subsumed; the subsumed record takes the message's version; the subsumed record gets `active = false`
   and `replaced_by`; when the two records sit in different persons, the
   persons are merged with `kind = source` (the Source's statement is the
   ground), recorded in `merge` and `merge_effect` as a steward merge would
   be; then the cross-referencing runs again over the survivor (§2:3.104.4.2.3:
-  "shall reapply its internal cross-referencing logic").
+  "shall reapply its internal cross-referencing logic"). The subsumed
+  record's link closes: a PIX query of its identifier follows `replaced_by`
+  to the survivor and answers the survivor's set, which never names the
+  subsumed identifier.
 - **A removal** (ITI-104 `DELETE`, the Remove Patient Option, PIXm 3.1.0
   §2:3.104.4.3.3): the record locked, `removed_at` set, its link closed, and
   the identifier is answered as not found from then on. The versions stay,
@@ -372,13 +390,20 @@ the human in the middle.
 
 ### 5.1 Deterministic, on identifiers
 
-Two records are the same patient when they carry the same identifier in
-the same `authoritative` domain, with the value normalised (whitespace and
-case per the domain's rule, the BSN's eleven-proof checked), and no hard
-conflict in demographics (a birth date that differs in year, or an
-administrative gender that differs where both are stated). A hard conflict
-turns the deterministic link into a candidate for review, with the conflict
-as the first line of evidence. A `local` domain never links
+Two records are the same patient when their current versions carry the
+same identifier in the same `authoritative` domain, with the value
+normalised by its domain's rule, and no hard conflict in demographics (a
+birth date that differs in year, or an administrative gender that differs
+where both are stated). The rule of a BSN system keeps the nine digits
+(spaces, dots and dashes dropped, a leading zero dropped from an
+eight-digit number restored) and requires the eleven-proof; every other
+domain trims the value and keeps its case, as FHIR R4 compares an
+`Identifier.value`. A value its domain's rule refuses refuses the feed.
+The record joins the oldest of the persons its identifiers name, and every
+other is merged into it with `kind = deterministic`. A hard conflict turns
+the deterministic link into a candidate for review, its evidence carrying
+the conflicts (`conflicts`, which the console draws first), graded at
+least `possible`. A `local` domain never links
 deterministically across domains: two hospitals that both number a patient
 `12345` say nothing. The feed's own `replaced-by` is deterministic by
 definition (section 4.3).
@@ -451,8 +476,12 @@ grade and nothing of the evidence.
 **Automatic linking is off by default.** `[matching] auto_link = false`
 means a `certain` pair is still a candidate at the top of the queue: a
 deployment decides, with its own data, when the scorer has earned the
-right to link alone. The deterministic tier links alone always, because an
-authoritative identifier is the Source's statement.
+right to link alone. With `auto_link = true` a `certain` pair merges the
+two persons, the younger into the older, with `kind = probabilistic`. The
+deterministic tier links alone always, because an authoritative identifier
+is the Source's statement. A feed refreshes the open candidate of a pair it
+scores again with the new versions, score and evidence, and leaves a
+deferred one as the steward left it.
 
 ### 5.3 Human review
 
@@ -1619,3 +1648,6 @@ The milestones carry the order; every issue cites the section it builds.
 | D15 | A start under another sealing key | refused, with the key id of every row and of the store recorded; `db reseal` resumable and refusing every start until done | no specification governs it; a wrong key would answer every identifier as unknown, a silent wrong answer |
 | D16 | The store's errors | the SQLSTATE, the constraint and the message of a refusal; never PostgreSQL's detail, which quotes the row | no specification governs it; PostgreSQL fills the detail of a refusal with the values of the offending row |
 | D17 | The score's midpoint | a fixed 10 bits (prior odds of one in 1,024), never derived from a deployment's thresholds or weights | no specification governs it; PDQm 3.2.0 §2:3.119.4.2.2.4 asks for a score in `[0, 1]`, and a fixed midpoint keeps a score comparable across deployments |
+| D18 | A duplicate resolution naming a survivor the store lacks | refused; a subsumed identifier the store lacks is inserted and subsumed | no specification governs it; PIXm 3.1.0 §2:3.104.4.2.3 replaces references to the subsumed identifier with the survivor's, which needs a survivor to point at |
+| D19 | An identifier value before it is sealed | normalised by its domain's rule: a BSN to nine digits passing the eleven-proof, any other trimmed with its case kept; a refused value refuses the feed | no specification governs it; section 5.1 links on the same normalised value, and FHIR R4 compares `Identifier.value` as written |
+| D20 | The identifiers a version carries | rows of `carried_identifier`, found by HMAC and sealed as a record's own; never in the demographics | no specification governs it; a BSN in plain `jsonb` would defeat the sealing of section 4.2 |

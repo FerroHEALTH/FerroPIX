@@ -32,7 +32,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | Capability | Transactions | Status |
 |---|---|---|
 | PIXm, the identifier cross-reference query | ITI-83 by `GET`, or by `POST` of a `Parameters` body | Client, in `ihe-iti` (`pixm`). The PIXm Manager is planned. |
-| PIXm, the FHIR identity feed | ITI-104 | Planned, with the PIXm Manager. |
+| PIXm, the FHIR identity feed | ITI-104 | The feed transaction is built in the server's store; the route is planned with the PIXm Manager ([#68](https://github.com/FerroHEALTH/FerroPIX/issues/68)). |
 | PDQm, the demographics query and match | ITI-78, ITI-119 | Client, in `ihe-iti` (`pdqm`). The PDQm Supplier is planned. |
 | PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`). The PMIR Registry is planned. |
 | mCSD, the care services directory | ITI-90, ITI-91 | Client and replica, in `ihe-iti` (`mcsd`). |

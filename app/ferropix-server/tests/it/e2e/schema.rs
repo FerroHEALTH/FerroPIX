@@ -15,9 +15,10 @@ use uuid::Uuid;
 use super::{BSN_SYSTEM, app_role, bsn, create, domain, fresh_key, seeds, settings};
 
 /// Every relation of schema `pix`, the migrator's bookkeeping included.
-const RELATIONS: [&str; 16] = [
+const RELATIONS: [&str; 17] = [
     "_sqlx_migrations",
     "candidate",
+    "carried_identifier",
     "feed_outbox",
     "identifier_domain",
     "link",
@@ -35,7 +36,9 @@ const RELATIONS: [&str; 16] = [
 ];
 
 /// The constraints the model rests on.
-const CONSTRAINTS: [&str; 14] = [
+const CONSTRAINTS: [&str; 16] = [
+    "carried_identifier_key",
+    "merge_kind_check",
     "identifier_domain_system_key",
     "identifier_domain_kind_check",
     "source_record_identifier_key",

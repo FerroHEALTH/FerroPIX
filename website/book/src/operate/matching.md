@@ -11,11 +11,42 @@ governs how a Manager cross-references: PIXm leaves it to the Manager, and
 PDQm asks only that a match carry a score and a grade. The rules below are
 FerroPIX's own.
 
-The scorer is built. Recording its candidates when a feed arrives is
-planned in [#60](https://github.com/FerroHEALTH/FerroPIX/issues/60),
-answering ITI-119 with its score and grade in
+The scorer and the feed transaction that runs both tiers are built. The
+ITI-104 route that hands a Source's message to the feed transaction is
+planned in [#68](https://github.com/FerroHEALTH/FerroPIX/issues/68),
+answering ITI-119 with the scorer's score and grade in
 [#73](https://github.com/FerroHEALTH/FerroPIX/issues/73), and the review
 queue in [#107](https://github.com/FerroHEALTH/FerroPIX/issues/107).
+
+## When a feed arrives
+
+Each ITI-104 message is one database transaction:
+
+- **Add or revise.** The record of the identifier is created or gets a new
+  version. FerroPIX then looks for every other record whose current version
+  carries one of the same identifiers in an `authoritative` domain, such as
+  the BSN. Those records are one patient with this one, so the record joins
+  the oldest of their patients and any other is merged into it, unless the
+  two records disagree on the birth year or on a stated administrative
+  gender. Such a hard conflict links nothing: the pair becomes a candidate
+  for review, with the conflict in its evidence. A value in a `local`
+  domain never links across domains, even when two domains share it.
+- **Scoring.** The new version is scored against every record in another
+  patient that shares a blocking key with it. A pair graded `possible` or
+  better becomes an open candidate, or refreshes the open candidate of the
+  pair. With `auto_link = true`, a `certain` pair merges the two patients
+  instead.
+- **Resolve duplicate.** When the Source says that one of its identifiers
+  is replaced by another, the subsumed record stops answering for itself: a
+  PIX query of it answers the survivor's identifiers, its patient is merged
+  into the survivor's, and the cross-referencing runs again over the
+  survivor. A survivor FerroPIX does not hold is refused.
+- **Remove.** The identifier is answered as not found from then on, and the
+  versions it had stay for the audit trail.
+
+Every link, merge, candidate and removal is recorded as an action in the
+audit trail the operator console reads. Two feeds that join the same
+patients at the same moment both commit and end as one patient.
 
 ## How a pair is scored
 
@@ -91,3 +122,20 @@ half the value), how the field agreed, the comparator's reading (such as the
 Jaro-Winkler similarity) and the weight it added, plus the blocking key
 that produced the pair. The operator console draws its score breakdown from
 it. No log line and no error shows a compared value.
+
+## Estimating `u`
+
+`u` depends on your population: a common family name agrees by chance more
+often than a rare one. Once the store holds your records, run
+
+```text
+ferropix matching estimate
+```
+
+It counts how often each value of each field occurs over the current
+version of every record and prints, for each field that at least 100
+records state, the `[matching.fields.<field>]` table that would set its
+`u`, beside the `m` your configuration holds. Paste the tables you agree
+with into your configuration. A field whose estimate reaches its `m` is
+named in a comment and left out, since `[matching]` refuses it. The output
+holds counts and probabilities, never a value.

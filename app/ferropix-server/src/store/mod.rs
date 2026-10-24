@@ -7,8 +7,11 @@
 //! refuses a role able to read a schema beside `pix`, [`seal`] the sealing of
 //! identifier values, [`key`] the check that the configured key is the one the
 //! store was written under, [`seed`] the `[[domain]]` seed, [`record`] the
-//! source records found by their identifier, [`reseal`] the key rotation and
-//! [`indicator`] the readiness indicator.
+//! source records found by their identifier, [`identifier`] the rule each
+//! domain's values are normalised by, [`xref`] the cross-reference a PIX
+//! query reads, [`estimate`] the field frequencies `matching estimate`
+//! reads, [`reseal`] the key rotation and [`indicator`] the readiness
+//! indicator.
 //! [`Store::start`] runs them in the order a job needs.
 //!
 //! PIXm fixes what the store must answer and what the feed does to it (PIXm
@@ -16,7 +19,9 @@
 //! specification governs how it is stored: our own design
 //! (`docs/architecture.md` §4).
 
+pub mod estimate;
 pub mod gate;
+pub mod identifier;
 pub mod indicator;
 pub mod key;
 pub mod record;
@@ -24,6 +29,7 @@ pub mod reseal;
 pub mod schema;
 pub mod seal;
 pub mod seed;
+pub mod xref;
 
 use std::error::Error;
 use std::fmt;
@@ -209,6 +215,9 @@ pub enum StoreError {
     /// A sealed identifier cannot be sealed or opened.
     #[error("an identifier cannot be sealed or opened")]
     Seal(#[from] SealError),
+    /// A record holds the most versions a version number counts.
+    #[error("the record holds the most versions a version number counts")]
+    VersionOverflow,
 }
 
 impl StoreError {

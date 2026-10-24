@@ -34,6 +34,13 @@ clap.workspace = true
 # The R4 OperationOutcome and CapabilityStatement the FHIR face answers, and
 # the AuditEvent the audit tests read back, from the generated model.
 fhir-types = { workspace = true, features = ["r4", "terminology", "resources"] }
+# The ITI-104 messages the feed transaction applies, read by the PIX
+# Manager side of the identity profiles crate (PIXm 3.1.0 §2:3.104).
+ihe-iti = { path = "../../crates/ihe-iti", features = ["pixm-server"] }
+# The BSN naming systems, whose values the store normalises by the BSN's
+# own rule. The crate gates its identification module behind a function's
+# feature; `nvi` brings no dependency the server lacks.
+nl-generic-functions = { path = "../../crates/nl-generic-functions", features = ["nvi"] }
 # The BALP records of the Manager and the Supplier, their ITI-20 spool and
 # the FHIR Feed to the audit repository (FerroAUDIT).
 ihe-atna = { workspace = true, features = ["balp"] }

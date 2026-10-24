@@ -134,7 +134,7 @@ pub fn server_state(probe: Option<&Probe>, needs: Needs, route: &str) -> AnyView
         return ().into_any();
     };
     if probe.is_up() {
-        // TODO(#90): read the operator API and draw the page from its document.
+        // TODO(#89): read the operator API and draw the page from its document.
         return notice(
             Tone::Info,
             Announce::Status,

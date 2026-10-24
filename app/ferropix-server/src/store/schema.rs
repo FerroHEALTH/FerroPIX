@@ -50,3 +50,18 @@ pub async fn apply(store: &Store) -> Result<(), StoreError> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::migrator;
+
+    #[test]
+    fn the_grants_are_the_last_file_of_the_set() {
+        let last = migrator().iter().last().map(|m| m.description.to_string());
+        assert_eq!(
+            Some(String::from("grants")),
+            last,
+            "a file after the grants escapes them"
+        );
+    }
+}

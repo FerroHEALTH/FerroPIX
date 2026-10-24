@@ -14,6 +14,7 @@ pub mod audit;
 pub mod auth;
 pub mod cli;
 pub mod config;
+pub mod feed;
 pub mod fhir;
 pub mod health;
 pub mod healthcheck;
@@ -33,7 +34,7 @@ use std::time::Instant;
 use clap::Parser;
 use tokio::net::TcpListener;
 
-use crate::cli::{Cli, Command, ConfigCommand, DbCommand};
+use crate::cli::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
 use crate::config::Config;
 use crate::config::settings::Settings;
 
@@ -96,7 +97,78 @@ where
         Command::Healthcheck => runtime_then(|| healthcheck(settings)),
         Command::Serve => serve(settings),
         Command::Db { command } => db(settings, &command),
+        Command::Matching {
+            command: MatchingCommand::Estimate,
+        } => estimate(settings),
     }
+}
+
+/// Runs `matching estimate`: the `u` of every field enough records state,
+/// printed as the `[matching.fields]` tables that would set it, each beside
+/// the `m` the configuration holds.
+#[expect(
+    clippy::print_stderr,
+    clippy::print_stdout,
+    reason = "the job prints its tables on standard output and a failure on stderr"
+)]
+fn estimate(settings: Settings) -> ExitCode {
+    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal()) {
+        eprintln!("ferropix: cannot start: {}", chain(&error));
+        return ExitCode::from(EXIT_CONFIG);
+    }
+    runtime_then(|| async move {
+        let outcome = async {
+            let store = store::Store::connect(&settings.db).await?;
+            store::key::verify(&store).await?;
+            let estimates = store::estimate::estimate(&store).await;
+            store.close().await;
+            estimates
+        }
+        .await;
+        match outcome {
+            Ok(estimates) => {
+                println!("{}", estimate_tables(&settings.matching, &estimates));
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("ferropix: the estimate failed: {}", chain(&error));
+                ExitCode::FAILURE
+            }
+        }
+    })
+}
+
+/// Writes `estimates` as `[matching.fields]` tables, each with the `m` of
+/// `matching`; a field whose `u` reaches its `m` is named in a comment and
+/// left out, since `[matching]` refuses it.
+#[must_use]
+pub fn estimate_tables(
+    matching: &config::section::matching::Matching,
+    estimates: &store::estimate::Estimates,
+) -> String {
+    let mut text = String::from("# Estimated by `ferropix matching estimate`.\n");
+    for (field, (u, records)) in estimates {
+        let m = matching
+            .fields
+            .get(field)
+            .copied()
+            .unwrap_or_else(|| matching::scorer::default_weights(*field))
+            .m;
+        if *u >= m {
+            let _written = writeln!(
+                text,
+                "# {}: u {u:.6} from {records} records reaches m {m}; left out",
+                field.key()
+            );
+            continue;
+        }
+        let _written = writeln!(
+            text,
+            "\n# from {records} records\n[matching.fields.{}]\nm = {m}\nu = {u:.6}",
+            field.key()
+        );
+    }
+    text
 }
 
 /// Runs `config check`: the settings resolved, and nothing bound.

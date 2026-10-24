@@ -14,6 +14,29 @@ and this project adheres to
 
 ### Added
 
+- The server's feed transaction (#60, `ferropix_server::feed`): an ITI-104
+  add or revise, resolve duplicate or remove, as `ihe-iti` reads it, is one
+  PostgreSQL transaction. The record is locked by `(domain, hmac)` or
+  inserted and takes a version whose demographics hold no identifier; every
+  identifier the `Patient` carries in a known domain is its own row, found
+  by its HMAC and sealed in a sensitive domain, after its domain's rule
+  normalised it (a BSN to nine digits passing the eleven-proof). Records
+  that carry one `authoritative` identifier are joined into the oldest of
+  their persons unless the birth year or a stated gender differs, which
+  records a candidate instead; a `local` value never links across domains.
+  Every record sharing a blocking key is scored and a pair graded
+  `possible` or better becomes an open candidate, linked alone only with
+  `auto_link = true` (#61). The advisory locks on identifiers, then the
+  records, then the persons, each in key order, let two feeds that join the
+  same persons both commit as one person. A resolved duplicate merges the
+  persons with `kind = source` and a PIX query of the subsumed identifier
+  answers the survivor's set (`store::xref`); a removal answers not found
+  and keeps the versions. Every system action is a `steward_action` row,
+  and `feed::record` writes the PIXm Feed Manager BALP record after the
+  commit. The migration `0012_feed` adds `carried_identifier` and the
+  blocking columns, the grants move to `0013`, and `db reseal` rewrites the
+  carried identifiers too. `ferropix matching estimate` prints each field's
+  `u` from the store's value frequencies.
 - The installation report to FerroPULSE (#153). `ferropix serve` sends one
   `start` report (at most one per ten minutes) and one `daily` report on
   FerroPULSE's report envelope v2 with the product `ferropix`: the instance

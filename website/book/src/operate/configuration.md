@@ -158,13 +158,21 @@ the last migration grants a role named `ferropix` the rows it needs, so
 **Sealing.** In a domain with `sensitive = true`, an identifier value is
 stored encrypted with AES-256-GCM under the sealing key, and every
 identifier is found by an HMAC-SHA256 under a key derived from it, so a
-database dump shows no identifier and a lookup is one index probe. The
-demographics are stored plain, because search and matching read them.
+database dump shows no identifier and a lookup is one index probe. This
+holds for the identifier a record is fed under and for every other
+identifier the fed `Patient` carries in a domain FerroPIX knows. Before it
+is sealed, a value takes its domain's form: a BSN keeps its nine digits
+(spaces, dots and dashes dropped, a dropped leading zero restored) and must
+pass the eleven-proof; any other value is trimmed and keeps its case. The
+demographics are stored plain, because search and matching read them, and
+without any identifier: the `identifier`, `link`, `contained`, `text`, `id`
+and `meta` of the fed `Patient` are left out.
 
 **Rotating the key.** Stop every server, put the new key in the file
 `db.data_key_file` names, keep the old key in another file, and run
 `ferropix db reseal --old-key-file <old>`. It rewrites the identifier
-columns in batches of 500, one transaction each, and a run that stops
+columns of the records and of the identifiers each version carries in
+batches of 500, one transaction each, and a run that stops
 part way resumes when you run it again. Until it finishes, `serve` refuses
 to start. Afterwards the old key opens nothing, and you can destroy it.
 

@@ -18,6 +18,7 @@ use serde_json::value::RawValue;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::config::section::domain::DomainKind;
 use crate::store::StoreError;
 use crate::store::seal::{IdentifierValue, Sealer};
 
@@ -43,6 +44,29 @@ impl RecordId {
     pub fn uuid(self) -> Uuid {
         self.0
     }
+
+    /// Returns the id of the record the store calls `uuid`.
+    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+/// The id of a person, the cross-reference: the FHIR `Patient.id` the face
+/// serves (`docs/architecture.md` §6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PersonId(Uuid);
+
+impl PersonId {
+    /// Returns the uuid.
+    #[must_use]
+    pub fn uuid(self) -> Uuid {
+        self.0
+    }
+
+    /// Returns the id of the person the store calls `uuid`.
+    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
 }
 
 /// An identifier domain as the record functions need it.
@@ -50,6 +74,10 @@ impl RecordId {
 pub struct Domain {
     /// The domain's id.
     pub id: DomainId,
+    /// The domain's system.
+    pub system: String,
+    /// What the domain's identifiers are.
+    pub kind: DomainKind,
     /// Whether its identifier values are sealed at rest.
     pub sensitive: bool,
     /// Whether the domain is retired, so it answers as unknown.
@@ -115,23 +143,58 @@ impl fmt::Debug for Demographics {
 /// Reads the domain whose system is `system`.
 ///
 /// # Errors
-/// Returns [`StoreError::Query`] when the statement fails.
+/// Returns [`StoreError::Query`] when the statement fails, and
+/// [`StoreError::UnknownDomainKind`] for a kind the schema does not admit.
 pub async fn domain<'c, E>(executor: E, system: &str) -> Result<Option<Domain>, StoreError>
 where
     E: sqlx::PgExecutor<'c>,
 {
-    let row: Option<(Uuid, bool, bool)> = sqlx::query_as(
-        "SELECT id, sensitive, retired_at IS NOT NULL
+    let row: Option<DomainRow> = sqlx::query_as(
+        "SELECT id, system, kind, sensitive, retired_at IS NOT NULL
          FROM pix.identifier_domain WHERE system = $1",
     )
     .bind(system)
     .fetch_optional(executor)
     .await?;
-    Ok(row.map(|(id, sensitive, retired)| Domain {
+    row.map(read_domain).transpose()
+}
+
+/// Reads every domain the store holds, retired ones included, by system.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails, and
+/// [`StoreError::UnknownDomainKind`] for a kind the schema does not admit.
+pub async fn domains<'c, E>(executor: E) -> Result<Vec<Domain>, StoreError>
+where
+    E: sqlx::PgExecutor<'c>,
+{
+    let rows: Vec<DomainRow> = sqlx::query_as(
+        "SELECT id, system, kind, sensitive, retired_at IS NOT NULL
+         FROM pix.identifier_domain ORDER BY system",
+    )
+    .fetch_all(executor)
+    .await?;
+    rows.into_iter().map(read_domain).collect()
+}
+
+/// A domain row: id, system, kind, sensitive, retired.
+type DomainRow = (Uuid, String, String, bool, bool);
+
+/// Reads one domain row.
+fn read_domain((id, system, kind, sensitive, retired): DomainRow) -> Result<Domain, StoreError> {
+    let kind = match kind.as_str() {
+        "local" => DomainKind::Local,
+        "authoritative" => DomainKind::Authoritative,
+        "master" => DomainKind::Master,
+        _ => return Err(StoreError::UnknownDomainKind { system }),
+    };
+    Ok(Domain {
         id: DomainId(id),
+        system,
+        kind,
         sensitive,
         retired,
-    }))
+    })
 }
 
 /// Inserts a record for `value` in `domain` with its first version, inside

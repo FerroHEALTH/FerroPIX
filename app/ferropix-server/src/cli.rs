@@ -6,7 +6,9 @@
 //! `serve` runs the server, `config check` reads and resolves the
 //! configuration the way `serve` would and exits, `healthcheck` asks the
 //! server beside it for its readiness, `db migrate` applies the pending
-//! migrations and the domain seed, and `db reseal` rotates the sealing key. No specification governs the command line: our own design.
+//! migrations and the domain seed, `db reseal` rotates the sealing key, and
+//! `matching estimate` estimates each field's `u` from the store. No
+//! specification governs the command line: our own design.
 
 use std::path::PathBuf;
 
@@ -48,6 +50,20 @@ pub enum Command {
         #[command(subcommand)]
         command: DbCommand,
     },
+    /// Works on the matching.
+    Matching {
+        /// The job to run.
+        #[command(subcommand)]
+        command: MatchingCommand,
+    },
+}
+
+/// The `matching` jobs.
+#[derive(Debug, Subcommand, PartialEq, Eq)]
+pub enum MatchingCommand {
+    /// Estimates each field's `u` from how often its values occur in the
+    /// store, and prints them as `[matching.fields]` tables.
+    Estimate,
 }
 
 /// The `config` jobs.
@@ -77,7 +93,11 @@ impl Command {
     #[must_use]
     pub const fn pending_issue(&self) -> Option<u32> {
         match self {
-            Self::Serve | Self::Config { .. } | Self::Healthcheck | Self::Db { .. } => None,
+            Self::Serve
+            | Self::Config { .. }
+            | Self::Healthcheck
+            | Self::Db { .. }
+            | Self::Matching { .. } => None,
         }
     }
 
@@ -96,6 +116,9 @@ impl Command {
             Self::Db {
                 command: DbCommand::Reseal { .. },
             } => "db reseal",
+            Self::Matching {
+                command: MatchingCommand::Estimate,
+            } => "matching estimate",
         }
     }
 }
@@ -106,7 +129,7 @@ mod tests {
 
     use clap::{CommandFactory, Parser};
 
-    use super::{Cli, Command, ConfigCommand, DbCommand};
+    use super::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
 
     #[test]
     fn the_command_line_is_well_formed() {
@@ -130,6 +153,12 @@ mod tests {
                     command: DbCommand::Migrate,
                 },
             ),
+            (
+                vec!["ferropix", "matching", "estimate"],
+                Command::Matching {
+                    command: MatchingCommand::Estimate,
+                },
+            ),
         ] {
             let parsed = Cli::try_parse_from(&args).expect("the job parses");
             assert_eq!(command, parsed.command, "{args:?}");
@@ -147,6 +176,7 @@ mod tests {
             vec!["ferropix", "run"],
             vec!["ferropix", "db"],
             vec!["ferropix", "config"],
+            vec!["ferropix", "matching"],
         ] {
             assert!(Cli::try_parse_from(&args).is_err(), "{args:?}");
         }

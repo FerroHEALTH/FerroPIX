@@ -157,3 +157,93 @@ async fn no_identifier_or_name_reaches_a_log_a_debug_rendering_or_an_error() {
         }
     }
 }
+
+#[tokio::test]
+async fn no_identifier_or_name_reaches_a_log_a_debug_rendering_or_an_error_through_the_feed() {
+    if !e2e_enabled() {
+        return;
+    }
+    let capture = Capture::default();
+    let _subscriber = tracing::subscriber::set_default(capture.subscriber());
+    let started = super::feeds::start().await;
+    let feeder = super::feeds::feeder(&started.store);
+    let context = super::feeds::context();
+    let shared = bsn(2).expose().to_owned();
+    let (family, given) = (FAMILY_NAMES[2], GIVEN_NAMES[2]);
+    let hospital = super::feeds::Patient::new(
+        ferropix_testkit::synthetic::HOSPITAL_DOMAIN,
+        "H-leak-1",
+        family,
+        given,
+    )
+    .carrying(BSN_SYSTEM, &shared);
+    let mut laboratory = super::feeds::Patient::new(
+        ferropix_testkit::synthetic::LABORATORY_DOMAIN,
+        "L-leak-1",
+        family,
+        given,
+    )
+    .carrying(BSN_SYSTEM, &shared);
+    laboratory.birth = String::from("1980-01-01");
+    let mut shown = Vec::new();
+    let revision = hospital.revision();
+    let applied = feeder.revise(&revision, &context).await.unwrap();
+    shown.push(format!("{applied:?} {revision:?} {feeder:?} {context:?}"));
+    let conflicted = feeder
+        .revise(&laboratory.revision(), &context)
+        .await
+        .unwrap();
+    shown.push(format!("{conflicted:?}"));
+    let merge = hospital.subsumed_by("H-leak-unknown");
+    let refused = feeder
+        .resolve_duplicate(&merge, &context)
+        .await
+        .expect_err("no such survivor");
+    shown.push(format!("{refused} {refused:?} {}", chain(&refused)));
+    let mut broken = shared.clone();
+    broken.pop();
+    broken.push(if shared.ends_with('0') { '1' } else { '0' });
+    let not_a_bsn = feeder
+        .revise(
+            &super::feeds::Patient::new(BSN_SYSTEM, &broken, family, given).revision(),
+            &context,
+        )
+        .await
+        .expect_err("the eleven-proof fails");
+    shown.push(format!("{not_a_bsn} {not_a_bsn:?} {}", chain(&not_a_bsn)));
+    let mut connection = started.store.pool().acquire().await.unwrap();
+    let found = ferropix_server::store::xref::lookup(
+        &mut connection,
+        started.store.sealer(),
+        ferropix_testkit::synthetic::HOSPITAL_DOMAIN,
+        "H-leak-1",
+    )
+    .await
+    .unwrap();
+    shown.push(format!(
+        "{:?}",
+        matches!(found, ferropix_server::store::xref::Lookup::Found(_))
+    ));
+    drop(connection);
+    started.store.close().await;
+    let logs = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+    assert!(logs.contains("a feed is applied"), "the capture works");
+    shown.push(logs);
+    let secrets = [
+        shared.clone(),
+        broken,
+        String::from("H-leak-1"),
+        String::from("L-leak-1"),
+        String::from("H-leak-unknown"),
+        family.to_owned(),
+        given.to_owned(),
+    ];
+    for text in &shown {
+        for secret in &secrets {
+            assert!(
+                !text.contains(secret.as_str()),
+                "an identifier or a name leaked into: {text}"
+            );
+        }
+    }
+}

@@ -244,8 +244,8 @@ stays the record. A system named twice is refused.
 | `matching.possible_at` | `0.60` | The score at or above which a pair grades `possible`. The three hold `0 < possible_at <= review_at <= link_at <= 1`. |
 | `matching.auto_link` | `false` | Whether a `certain` pair is linked without a steward. |
 | `matching.blocking_keys` | all three | The keys a pair must share one of to be scored: `"birth_year_family_phonetic"`, `"postal_code_birth_date"`, `"shared_identifier"`. |
-| `matching.fields.<field>.m` | the scorer's | The probability that the field agrees for a true pair. |
-| `matching.fields.<field>.u` | the scorer's | The probability that the field agrees for a random pair; `0 < u < m < 1`. |
+| `matching.fields.<field>.m` | the field's default in [Matching](matching.md#the-fields-and-their-defaults) | The probability that the field agrees for a true pair. |
+| `matching.fields.<field>.u` | the field's default in [Matching](matching.md#the-fields-and-their-defaults) | The probability that the field agrees for a random pair; `0 < u < m < 1`. |
 
 `<field>` is one of `family_name`, `given_names`, `birth_date`, `gender`,
 `postal_code`, `address`, `telephone`, `email`, `mothers_maiden_name` and

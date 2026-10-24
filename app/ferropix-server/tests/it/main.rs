@@ -21,6 +21,8 @@ mod e2e;
 #[cfg(test)]
 mod health;
 #[cfg(test)]
+mod matching;
+#[cfg(test)]
 mod secrets;
 #[cfg(test)]
 mod serve;

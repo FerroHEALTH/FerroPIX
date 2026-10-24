@@ -21,6 +21,7 @@
 # Operate
 
 - [Configuration](operate/configuration.md)
+- [Matching](operate/matching.md)
 - [Deployment](operate/deployment.md)
 - [The operator console](operate/console.md)
 - [Security and audit](operate/security-and-audit.md)

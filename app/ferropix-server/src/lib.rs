@@ -18,6 +18,7 @@ pub mod fhir;
 pub mod health;
 pub mod healthcheck;
 pub mod http;
+pub mod matching;
 pub mod store;
 pub mod telemetry;
 pub mod usage_report;

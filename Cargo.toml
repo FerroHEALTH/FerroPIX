@@ -65,11 +65,19 @@ jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.58.3", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 pem = { version = "4.0.0", default-features = false, features = ["std"] }
+# The property tests of the server's scorer, at the version FerroFED and
+# FerroBRIDGE take. Verified against crates.io on 2026-10-24.
+proptest = "1.12.0"
 quick-xml = { version = "0.42.0", default-features = false }
 reqwest = { version = "0.13.5", default-features = false }
 secrecy = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["raw_value"] }
+# The scorer's Jaro-Winkler comparator and the folding of a name to its
+# letters (docs/architecture.md section 5.2), at the versions clap and url
+# already resolve. Verified against crates.io on 2026-10-24.
+strsim = "0.11.1"
+unicode-normalization = "0.1.26"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.53.1", default-features = false }

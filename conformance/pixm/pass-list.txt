@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+#
+# The PIXm 3.1.0 examples of docs/specs/ihe-pixm, read and written through ihe-iti.
+# One example per line: a passing example is its path, a failing one is
+# `fail <path>: <reason>`; the last line is the total. The corpus test
+# writes it under scripts/checks/conformance.sh --update, and fails when a
+# listed pass stops passing.
+example/OperationOutcome-pixm-response-error-not-found.json
+example/Parameters-pixm-request-mohralice-red-all.json
+example/Parameters-pixm-request-mohralice-red-to-blue.json
+example/Parameters-pixm-response-mohralice-red-all.json
+example/Parameters-pixm-response-mohralice-red-to-blue.json
+example/Patient-Patient-MaidenAlice-Red.json
+example/Patient-Patient-MohrAlice-Blue.json
+example/Patient-Patient-MohrAlice-Green.json
+example/Patient-Patient-MohrAlice-Red.json
+example/Patient-Patient-MohrAlice.json
+example/Patient-Patient-MohrAlissa-Red.json
+example/Patient-Patient-MohrMaidenResolvedByMohrMalice-Red.json
+fail example/Patient-ex-patient.json: the Patient carries no identifier, so no ITI-104 conditional update names it (§2:3.104.4.1.2)
+total 13

@@ -14,6 +14,19 @@ and this project adheres to
 
 ### Added
 
+- The conformance gate (#162, `scripts/checks/conformance.sh`): corpus
+  tests in `ihe-iti` read and write every example of the vendored PIXm
+  3.1.0, PDQm 3.2.0 and PMIR 1.6.0 packages, and check each audit example
+  against the record `ihe-iti` writes. Each corpus ratchets against its pass
+  list under `conformance/`, which names every failing example with its
+  reason, and renders a shields.io endpoint badge under
+  `conformance/badges/`. Today: PIXm 12 of 13, PDQm 10 of 11, PMIR 7 of 7,
+  audit records 7 of 13 (the six Manager and Supplier records are the
+  server's). CI runs the gate under `--check` in `conclusion`.
+- The README opens on the family's badge row: CI, CodeQL, OpenSSF
+  Scorecard, the SonarCloud quality gate and coverage, the licence, the
+  latest release, the documentation, the crates.io and docs.rs badges of
+  `ihe-iti` and `nl-generic-functions`, and the four conformance badges.
 - The server's feed transaction (#60, `ferropix_server::feed`): an ITI-104
   add or revise, resolve duplicate or remove, as `ihe-iti` reads it, is one
   PostgreSQL transaction. The record is locked by `(domain, hmac)` or

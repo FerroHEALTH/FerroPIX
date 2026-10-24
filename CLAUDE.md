@@ -166,8 +166,11 @@ The build order is the milestones:
   changelog, the contribution licence, `ihe-citations.sh`, every IHE
   section the tree cites held to the vendored text, and the documentation
   guards `site-links.sh`, `docs-claims.sh`, `book-guard.sh` and
-  `writing-style.sh`, and `pin-freshness.sh`, every unwatched pin against
-  its newest upstream release). `scripts/release/`: the
+  `writing-style.sh`, `pin-freshness.sh`, every unwatched pin against
+  its newest upstream release, and `conformance.sh`, the corpus tests of
+  `ihe-iti` over the vendored IG examples held to the pass lists under
+  `conformance/`, which render the README's shields.io badges, #162).
+  `scripts/release/`: the
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor
   script is proven by re-running it against its pin.

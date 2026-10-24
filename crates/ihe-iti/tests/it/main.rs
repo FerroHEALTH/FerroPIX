@@ -13,6 +13,14 @@
 ))]
 mod audit;
 #[cfg(test)]
+#[cfg(all(
+    feature = "balp",
+    feature = "pixm-server",
+    feature = "pdqm-server",
+    feature = "pmir"
+))]
+mod conformance;
+#[cfg(test)]
 #[cfg(any(feature = "pixm-server", feature = "pdqm-server"))]
 mod display;
 #[cfg(test)]

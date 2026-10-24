@@ -48,6 +48,27 @@ the repository builds with, the FerroHEALTH family's rule.
   feature of both crates alone and with its audit feature, as well as all of
   them together.
 
+## The conformance gate
+
+The corpus tests of `ihe-iti` read and write every example the vendored
+implementation guides ship, and `scripts/checks/conformance.sh` holds each
+corpus to its committed pass list. A failing example stays in the list as
+failing, with its reason, so the count shows what is not met. Each corpus
+renders the shields.io badge the README shows.
+
+| Corpus | What each example goes through |
+|---|---|
+| [PIXm 3.1.0](https://github.com/FerroHEALTH/FerroPIX/blob/main/conformance/pixm/pass-list.txt) | An ITI-83 request read by the Manager in JSON and XML, an answer read by the client and written by the Manager, the not-found answer both ways, and each Patient read as the ITI-104 conditional update its first identifier names. |
+| [PDQm 3.2.0](https://github.com/FerroHEALTH/FerroPIX/blob/main/conformance/pdqm/pass-list.txt) | An ITI-78 answer and each ITI-119 answer read by the client and written by the Supplier, each `$match` input read by the Supplier, and each Patient read from a search answer and written as a retrieve. |
+| [PMIR 1.6.0](https://github.com/FerroHEALTH/FerroPIX/blob/main/conformance/pmir/pass-list.txt) | Each ITI-93 message read by the Consumer as the changes it names, the response written by the Consumer, the ITI-94 request written and a Subscription's status read by the subscriber. |
+| [Audit records](https://github.com/FerroHEALTH/FerroPIX/blob/main/conformance/audit/pass-list.txt) | Each `AuditEvent` example against the record `ihe-iti` writes for that exchange, held to the example's audit profile, the BALP pattern beneath it and the example itself. The Manager and Supplier records are written by the server, so they count as failing here. |
+
+Run `scripts/checks/conformance.sh` to compare, `--update` to rewrite the
+lists, the badge files and the README badge block after a change, and
+`--check` for what CI runs: a listed pass that stops passing fails every
+mode, and under `--check` so does a new pass, a moved total or a changed
+reason.
+
 There is no conformance statement for the server yet: it is part of the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3),
 which is planned.

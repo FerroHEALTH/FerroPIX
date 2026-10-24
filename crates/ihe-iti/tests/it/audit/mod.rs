@@ -13,7 +13,7 @@ mod pdqm;
 mod pixm;
 #[cfg(feature = "pmir")]
 mod pmir;
-mod profile;
+pub(crate) mod profile;
 
 use ihe_atna::balp::{NetworkAddress, Observer};
 

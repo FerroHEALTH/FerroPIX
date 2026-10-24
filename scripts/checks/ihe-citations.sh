@@ -49,7 +49,12 @@ cd "$(dirname "$0")/../.."
 
 # The cited sections no committed text carries, one per line: the section
 # root, a tab, and why it is not checked. A root the cache holds is checked.
-readonly UNVENDORED='2:3.55	ITI TF-2 §3.55 Cross Gateway Patient Discovery [ITI-55] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it'
+readonly UNVENDORED='2:3.55	ITI TF-2 §3.55 Cross Gateway Patient Discovery [ITI-55] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it
+2:3.8	ITI TF-2 §3.8 Patient Identity Feed [ITI-8] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it
+2:3.9	ITI TF-2 §3.9 PIX Query [ITI-9] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it
+2:3.10	ITI TF-2 §3.10 PIX Update Notification [ITI-10] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it
+2:3.21	ITI TF-2 §3.21 Patient Demographics Query [ITI-21] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it
+2:3.22	ITI TF-2 §3.22 Patient Demographics and Visit Query [ITI-22] is cache only (HL7 tables, all rights reserved); run scripts/vendor/ihe-iti-tf.sh to check it'
 
 # corpus_files ROOT: the IHE narrative texts under ROOT, the vendored ones
 # and the cached ones, one path per line, the FHIR packages and the
@@ -327,6 +332,9 @@ self_test() {
   expect 0 '/// the syslog interaction (§3.20.4.1).'
   expect 0 '/// TF-1 §1:41 is the profile.'
   expect 0 '/// the five cases of §3.55.4.2.3 (not vendored).'
+  expect 0 '/// the merge of ITI TF-2 §3.8.4.2 (not fetched).'
+  expect 0 '/// ITI-9 §3.9.4.1.2.2 and ITI TF-2 §3.10.4.1, §3.21.4.1.3.3 and §3.22.4 (not fetched).'
+  expect 0 '/// the continuation of §3.21.4.1.3.3 (not fetched).'
   expect 0 '/// the federation specification §5.4, N33, §12.7 and §3.2.4.2.'
   expect 0 '/// RFC 8725 §3.20 and AQL 1.1.0 §3.9.1.5 and RFC 6749 §27.1.'
   expect 0 '/// no section here.'
@@ -350,6 +358,19 @@ self_test() {
   expect 0 '/// ITI-55 §3.55.4.2.3 and ITI TF-2 §3.55.'
   expect 1 '/// ITI TF-2 §3.55.4.2.9, which the cached page does not hold.'
   expect 1 '/// ITI-38 §3.55.4.2.3 names another transaction.'
+  # The HL7 v2 transactions are cache only too, and a bare §3.8 or §3.9 is
+  # read only behind a TF-2 or ITI-n designator.
+  mkdir -p "$work/.vendor-cache/ihe-iti-tf-hl7v2"
+  printf '<h2 id="3.8">3.8 Patient Identity Feed [ITI-8]</h2>\n<h5 id="y">3.8.4.2.1 Trigger Events</h5>\n' \
+    > "$work/.vendor-cache/ihe-iti-tf-hl7v2/ITI-8.html"
+  printf '<h2 id="3.21">3.21 Patient Demographics Query [ITI-21]</h2>\n<h6 id="z">3.21.4.1.3.3 Incremental Response Processing</h6>\n' \
+    > "$work/.vendor-cache/ihe-iti-tf-hl7v2/ITI-21.html"
+  expect 0 '/// the A40 merge, ITI TF-2 §3.8.4.2.1, from the cache.'
+  expect 0 '/// ITI-21 §3.21.4.1.3.3 and the continuation of §3.21.4.1.3.3.'
+  expect 0 '/// ITI-9 §3.9.4.1, whose page the cache does not hold.'
+  expect 1 '/// ITI TF-2 §3.8.4.9, which the cached page does not hold.'
+  expect 1 '/// ITI-21 §3.8.4.2.1 names another transaction.'
+  expect 1 '/// the query of §3.21.4.1.9, which the cached page does not hold.'
   # A PDF heading is read with and without a margin line number before it,
   # and a numbered body line is no heading.
   local layout

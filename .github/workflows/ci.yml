@@ -916,7 +916,7 @@ jobs:
           YQ_SHA256: fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4
         run: |
           set -euo pipefail
-          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o "$RUNNER_TEMP/yq" "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          curl --proto '=https' --proto-redir '=https' -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o "$RUNNER_TEMP/yq" "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
           echo "${YQ_SHA256}  $RUNNER_TEMP/yq" | sha256sum -c -
           sudo install -m 0755 "$RUNNER_TEMP/yq" /usr/local/bin/yq
           yq --version

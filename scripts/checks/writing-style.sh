@@ -22,7 +22,7 @@
 
 set -uo pipefail
 
-readonly BUZZWORDS='delve|robust|elevate|testament|landscape|leverage|tapestry|underscore|foster|realm|seamless|seamlessly|empower|unlock|cutting-edge|state-of-the-art|game-changing|holistic|synergy|streamline|harness|pivotal'
+readonly BUZZWORDS='delve|robust|elevate|testament|landscape|leverage|tapestry|underscore|foster|realm|seamless|seamlessly|empower|unlock|cutting-edge|state-of-the-art|game-changing|holistic|synergy|streamline|harnessed|harnessing|pivotal'
 readonly ATTRIBUTION='co-authored-by:[[:space:]]*.*(claude|anthropic|\[bot\])|generated[[:space:]]+with[[:space:]]+.*claude|generated[[:space:]]+by[[:space:]]+.*claude|assisted-by:[[:space:]]*.*claude'
 
 # One rule over one file. Prints every hit and returns non-zero on a hit, with
@@ -68,6 +68,8 @@ self_test() {
   printf 'The client refuses an answer that departs from the profile.\nThe lint is let_underscore_drop.\n' > "$work/sound.md"
   printf 'The client \342\200\224 a fast one \342\200\224 answers.\n' > "$work/dash.md"
   printf 'A robust index.\n' > "$work/buzzword.md"
+  printf 'The index is built by harnessing the store.\n' > "$work/verb.md"
+  printf 'The test harness starts PostgreSQL.\n' > "$work/noun.md"
   printf 'Co-Authored-By: Claude <noreply@anthropic.com>\n' > "$work/attribution.md"
   if check_files "$work/sound.md" > /dev/null 2>&1; then
     echo "  ok: plain prose passes, an identifier with an underscore included"
@@ -75,7 +77,13 @@ self_test() {
     echo "  FAIL: plain prose was refused" >&2
     failed=1
   fi
-  for case in dash buzzword attribution; do
+  if check_files "$work/noun.md" > /dev/null 2>&1; then
+    echo "  ok: harness as a noun passes"
+  else
+    echo "  FAIL: harness as a noun was refused" >&2
+    failed=1
+  fi
+  for case in dash buzzword verb attribution; do
     if check_files "$work/$case.md" > /dev/null 2>&1; then
       echo "  FAIL: the $case fixture passed" >&2
       failed=1

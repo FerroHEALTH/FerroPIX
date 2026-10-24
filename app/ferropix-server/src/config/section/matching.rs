@@ -216,6 +216,26 @@ mod tests {
     }
 
     #[test]
+    fn every_field_key_is_the_name_the_table_reads() {
+        for field in [
+            Field::FamilyName,
+            Field::GivenNames,
+            Field::BirthDate,
+            Field::Gender,
+            Field::PostalCode,
+            Field::Address,
+            Field::Telephone,
+            Field::Email,
+            Field::MothersMaidenName,
+            Field::LocalIdentifier,
+        ] {
+            let text = format!("[fields.{}]\nm = 0.9\nu = 0.1\n", field.key());
+            let read: Matching = toml::from_str(&text).expect("the key reads");
+            assert!(read.fields.contains_key(&field), "{}", field.key());
+        }
+    }
+
+    #[test]
     fn weights_outside_zero_u_m_one_are_refused_and_named_by_field() {
         for (m, u) in [(0.5, 0.9), (1.0, 0.1), (0.9, 0.0), (0.5, 0.5)] {
             let matching = Matching {

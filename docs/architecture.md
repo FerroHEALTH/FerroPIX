@@ -156,25 +156,32 @@ renders as `***` through `Debug`, `Display` and `Serialize`, read from the
 value or from a `<key>_file` sibling (the file's text trimmed, then zeroed),
 so no consumer ever holds a bare string. A URL that may carry a password
 (`[db] url`) is a `SecretUrl`, rendered with its userinfo and query replaced.
-A `[dev]` profile exists for a loopback run with Basic users and no TLS, and
-`profile = "production"` refuses it.
+`profile = "production"` is the default and refuses every development
+setting: the `[dev]` table, Basic users, a secret set inline instead of
+through its `_file` sibling, a plain `http` public base URL off loopback and
+a plain `http` audit repository. `profile = "development"` admits them for a
+loopback run with Basic users and no TLS, and `[dev] loopback` (on by
+default) refuses a listener on any address but a loopback one. An error
+names the key and never the value, and a parse error keeps the parser's
+message and position without quoting the line.
 
 | Section | Holds |
 |---|---|
-| `[server]` | `listen`, `base_path`, `public_base_url` (the `[base]` the `CapabilityStatement` and every `targetId` name), the body ceiling, the request timeout, the drain window on `SIGTERM` |
+| `[server]` | `listen`, `base_path`, `public_base_url` (the `[base]` the `CapabilityStatement` and every `targetId` name), `body_limit_bytes`, `request_timeout_ms`, `drain_timeout_ms` (the drain window on `SIGTERM`) |
 | `[telemetry]` | the `tracing` filter and format, the OTLP endpoint |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
-| `[auth]` | the `ferrohealth-smart` resource-server settings: issuers with their RFC 8414 metadata, the audience, `[[auth.basic.users]]` under `[dev]` only, and the two product scopes, `steward_scope` and `admin_scope` |
+| `[auth]` | the `ferrohealth-smart` resource-server settings: `[[auth.issuer]]` entries with their RFC 8414 metadata, each listing the `clients` it may vouch for as a Source, the audience, `[[auth.basic.users]]` under the development profile only, and the two product scopes, `steward_scope` and `admin_scope` |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |
 | `[pixm]`, `[pdqm]`, `[pmir]` | each profile's switch and options: `[pixm] remove_patient` (PIXm 3.1.0 §1:41.2.1), `[pdqm] deprecated` (which of the policy choices of PDQm 3.2.0 §2:3.78.4.1.3 case 6 the supplier takes), `[pmir] feed` (the outbound ITI-93 sender's retry bounds) |
-| `[hl7v2]` | `listen`, `default_charset`, `frame_limit`, the timeouts, `[[hl7v2.senders]]` (section 7) |
-| `[audit]` | the ATNA repository the BALP records go to, the spool directory and its bounds |
+| `[hl7v2]` | `listen`, `default_charset`, `frame_limit_bytes`, the timeouts, `[[hl7v2.senders]]` (section 7) |
+| `[audit]` | the ATNA repository the BALP records go to (`url`, a FHIR base for the FHIR Feed, BALP 1.1.4 §1:52.1.1.1), the spool directory and its bounds |
 | `[operator]` | the operator API switch (`enabled`, off by default; on requires `[auth]`) |
 | `[usage_report]` | the FerroPULSE report (section 9) |
 
-A `[[domain]]` entry whose `source_client_id` names a client no issuer can
-admit is refused at load, as is a seed that names one system twice.
+A `[[domain]]` entry whose `source_client_id` no `[[auth.issuer]]` lists in
+its `clients` (or, under the development profile, no Basic user is named) is
+refused at load, as is a seed that names one system twice.
 
 ## 4. The cross-reference store
 

@@ -14,6 +14,24 @@ and this project adheres to
 
 ### Added
 
+- `ferropix-server`, the FerroPIX server crate with its binary `ferropix`
+  (#58): `serve`, `config check`, `healthcheck`, and `db migrate`, which
+  names the store issue (#59) until it runs. The configuration tree of
+  `docs/architecture.md` §3 loads from one TOML file named by `--config` or
+  `FERROPIX_CONFIG`, with `FERROPIX__<SECTION>__<KEY>` overrides, and every
+  table refuses an unknown key. A secret is a `Secret` or `SecretUrl` that
+  renders `***` (a URL with its user information and query replaced), read
+  from its key or its `_file` sibling; `profile = "production"`, the
+  default, takes the `_file` form only and refuses the `[dev]` table, Basic
+  users and plain `http` bases off loopback. A `[[domain]]` seed whose
+  `source_client_id` no `[[auth.issuer]]` lists in its `clients` is refused,
+  as is a system seeded twice. `serve` runs `{base}/health` and
+  `{base}/health/readiness` behind the request id, the panic catch, the
+  request timeout, the body ceiling and the bounded drain on `SIGTERM`.
+  `app/ferropix-server/quickstart.toml` is the smallest production
+  configuration, and the book's
+  [Configuration](https://ferropix.eu/docs/operate/configuration.html) page
+  lists every key, held by a test.
 - `ferropix-console`, FerroPIX's first operator console (#119), built new on
   FerroUI 0.3.6 (`ferrohealth-ui = "=0.3.6"`, with its `split` feature for
   the `--split` site build, #127, #131, #137, #139) in its FerroPIX brand as part

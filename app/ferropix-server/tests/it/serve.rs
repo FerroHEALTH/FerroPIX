@@ -174,13 +174,7 @@ async fn a_request_past_its_timeout_is_answered_408() {
 #[tokio::test]
 async fn a_panicking_handler_is_a_500_naming_the_request_id_and_not_the_message() {
     let server = settings("");
-    let app = with_middleware(
-        Router::new().route(
-            "/boom",
-            get(boom),
-        ),
-        &server,
-    );
+    let app = with_middleware(Router::new().route("/boom", get(boom)), &server);
     let running = start(app, server.drain_timeout).await;
     let response = client()
         .get(format!("http://{}/boom", running.address))

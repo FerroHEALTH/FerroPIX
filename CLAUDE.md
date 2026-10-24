@@ -42,11 +42,11 @@ FerroPIX in prose, `ferropix` in identifiers.
   `POST`, so a BSN never sits in a URL (#52).
 
 The console, `app/ferropix-console`, is built on `ferrohealth-ui`
-(pinned exactly, today `=0.3.5`), and FerroUI leads its UI: the FerroUI
+(pinned exactly, today `=0.3.6`), and FerroUI leads its UI: the FerroUI
 repository holds the components, the design (`design/`, the only design
 source, with this console's pages under `design/consoles/ferropix/`) and the
 component rules, and its consumer guide
-[`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.5/docs/consoles.md)
+[`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.6/docs/consoles.md)
 says how a console uses them. `.claude/rules/leptos-ui.md` points at them
 and keeps only what is particular to this console: its routes, its session
 and server boundary, its client of the FerroPIX server, its configuration
@@ -90,7 +90,7 @@ The build order is the milestones:
   operator console's screens filled from the operator API (dashboard,
   search, the patient record, domains, the audit trail), its image and
   release lane, and the Helm chart. The console itself, `app/ferropix-console`
-  on FerroUI 0.3.5, landed in v0.0.3 with the family rollout
+  on FerroUI 0.3.6, landed in v0.0.3 with the family rollout
   (FerroHEALTH/FerroUI#161, #119), each page drawing its refused state until
   the server serves it.
 - **v0.0.5, PMIR, review and pseudonyms:** the PMIR Registry (ITI-93,

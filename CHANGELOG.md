@@ -15,8 +15,8 @@ and this project adheres to
 ### Added
 
 - `ferropix-console`, FerroPIX's first operator console (#119), built new on
-  FerroUI 0.3.5 (`ferrohealth-ui = "=0.3.5"`, with its `split` feature for
-  the `--split` site build, #127, #131, #137) in its FerroPIX brand as part
+  FerroUI 0.3.6 (`ferrohealth-ui = "=0.3.6"`, with its `split` feature for
+  the `--split` site build, #127, #131, #137, #139) in its FerroPIX brand as part
   of the family console rollout (FerroHEALTH/FerroUI#161): a Leptos islands
   app the server renders whole, with every island FerroUI's and every page
   working without its WebAssembly. It has the OpenID Connect sign-in
@@ -88,6 +88,9 @@ and this project adheres to
   magnifier.
 - `ferropix-console` moves to FerroUI 0.3.5 (#137). The console draws no part
   0.3.5 changes, so its pages look and behave as before.
+- `ferropix-console` moves to FerroUI 0.3.6 (#139). The console draws no
+  activity chart, the one part whose interface 0.3.6 changes, so its pages
+  look and behave as before.
 
 - The repository builds with Rust 1.99.1 in place of 1.98.1, and the MSRV
   stays at 1.98: the FerroHEALTH family builds with the latest stable

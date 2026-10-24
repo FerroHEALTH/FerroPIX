@@ -193,7 +193,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("FerroPIX 0.0.3"), "the server's version");
     assert!(page.contains("4.0.1"), "the FHIR version");
-    assert!(page.contains("ferrohealth-ui 0.3.5"), "the library");
+    assert!(page.contains("ferrohealth-ui 0.3.6"), "the library");
     assert!(page.contains("Cadasto B.V."), "the maker");
     assert!(page.contains("The CapabilityStatement"), "the card");
     assert!(

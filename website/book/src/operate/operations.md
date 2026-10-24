@@ -4,9 +4,11 @@
 # Operations
 
 This page covers the server's health checks and request log, and what
-operating the crates involves. The server's metrics, upgrade path and
-installation report are planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
+operating the crates involves. The installation report the server sends
+is set under [`[usage_report]`](configuration.md#usage_report), the span
+export under [`[telemetry]`](configuration.md#telemetry), and an upgrade
+of the server applies its migrations with `db migrate` or at the start of
+`serve` ([Deployment](deployment.md)).
 
 ## Health checks
 

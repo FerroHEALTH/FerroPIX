@@ -46,12 +46,12 @@ need no token: the capability statement names the SMART service, the token
 endpoint and the scopes, and the SMART discovery document lists the same
 scopes as `scopes_supported`. FerroPIX never forwards a caller's token.
 
-The PIXm and PDQm routes are served
+The PIXm and PDQm routes and the operator API are served
 ([The PIXm Manager](../integrate/pixm-manager.md),
-[The PDQm Supplier](../integrate/pdqm-supplier.md)). The other transaction
-routes are guarded today and answer `501` until the faces behind them land
-([#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
-[#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)).
+[The PDQm Supplier](../integrate/pdqm-supplier.md),
+[The operator API](operator-api.md)). The PMIR routes are guarded today and
+answer `501` until the Registry behind them lands
+([#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)).
 
 Basic users are for a run on your own machine: they need
 `profile = "development"` and the `[dev]` table.

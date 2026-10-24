@@ -12,13 +12,17 @@ the crates, which you configure in your own code.
 The server loads and checks every section below at start, and `serve`
 starts the store (see [The store](#the-store)) and runs the HTTP listener
 with its health routes and the guard in front of the FHIR face and the
-operator API (`[auth]`), and the usage report
-([`[usage_report]`](#usage_report)). The other services behind the sections
-are planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3); the
-PIXm Manager and the PDQm Supplier serve today
+operator API (`[auth]`), the usage report
+([`[usage_report]`](#usage_report)) and, with `telemetry.otlp_endpoint`
+set, the span export. The PIXm Manager, the PDQm Supplier and the operator
+API serve today
 ([The PIXm Manager](../integrate/pixm-manager.md),
-[The PDQm Supplier](../integrate/pdqm-supplier.md)). A key whose
+[The PDQm Supplier](../integrate/pdqm-supplier.md),
+[The operator API](operator-api.md)). The HL7 v2 listener behind
+`[hl7v2]` ([#85](https://github.com/FerroHEALTH/FerroPIX/issues/85)) and
+the PMIR Registry behind `[pmir]`
+([#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)) are built
+next. A key whose
 service is not built yet is still checked, so a configuration you write today
 keeps working when the service lands.
 

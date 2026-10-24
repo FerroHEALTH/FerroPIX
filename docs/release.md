@@ -19,7 +19,9 @@ On the branch `release/vX.Y.Z`:
    titled `vX.Y.Z` is closed or moved; the release refuses the tag otherwise
    (`scripts/release/milestone.sh check vX.Y.Z`).
 2. **Bump the product version.** Set the `[workspace.package]` version in
-   `Cargo.toml` and run `cargo update -w`.
+   `Cargo.toml`, run `cargo update -w`, and set the server image tag
+   `compose.yaml` defaults to (`${FERROPIX_VERSION:-X.Y.Z}`) to the same
+   version; `scripts/checks/versions.sh` refuses the two apart.
 3. **Cut the changelog.** Rename `## [Unreleased]` to
    `## [X.Y.Z] - YYYY-MM-DD` and open a fresh, empty `## [Unreleased]` above
    it. The date is the day of the cut: the release notes count the support
@@ -98,11 +100,58 @@ git push origin vX.Y.Z
 ```
 
 `release.yml` runs the preflight's list at the tag, takes the notes from
-the `[X.Y.Z]` section with the support period appended, attests and attaches
-each listed crate, publishes the release, and its `crates` leg waits on the
-`crates-io` environment's reviewer. Its last job closes the milestone. A
-pushed tag is never moved or deleted; a bad cut ships forward as a new
-patch version.
+the `[X.Y.Z]` section with the support period appended, builds and attests
+the server binaries and the image, records every vulnerability finding,
+attests and attaches each listed crate, publishes the release, tags the
+image, and its `crates` leg waits on the `crates-io` environment's
+reviewer. Its last job closes the milestone. A pushed tag is never moved or
+deleted; a bad cut ships forward as a new patch version.
+
+## The build legs
+
+No specification governs the lane's shape: our own design, the family's
+(FerroBRIDGE, FerroFED). Every artefact is built in a reusable workflow,
+which runs on a VM its caller cannot add steps to, so the signing identity
+is out of reach of the build steps: SLSA v1.2 Build Level 3 (SLSA, Build
+requirements; GitHub, "Using artifact attestations and reusable workflows
+to achieve SLSA v1 Build Level 3").
+
+| Leg | Workflow | What it produces |
+|---|---|---|
+| `build-binaries` | `release-build.yml`, once per target (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`), each on a runner of its own architecture | `ferropix-vX.Y.Z-<target>.tar.gz` built with `cargo auditable` and no cache, its `.sha256sum`, a CycloneDX source SBOM and an SPDX build SBOM, and the provenance and both SBOMs attested, attached as `.sigstore.json` bundles and an `.intoto.jsonl` |
+| `build-image` | `release-image.yml` | verifies both musl tarballs against `release-build.yml` before it unpacks them, stages them with `scripts/release/stage-dist.sh tree`, builds `docker/Dockerfile` for `linux/amd64` and `linux/arm64` with no cache, pushes `ghcr.io/ferrohealth/ferropix` by digest with no tag, attests the index and both manifests (SLSA provenance, an SPDX SBOM per manifest) as OCI referrers, and verifies its own output as a consumer would |
+| `crate` | `release-crate.yml` | each listed `.crate`, its checksum and its attestation |
+| `vulnerability-record` | in `release.yml` | Trivy over the pushed image (both platforms) and the server tarballs at every severity, fixed or not; `scripts/checks/vex-coverage.sh` refuses the release while a finding has no OpenVEX judgement under `security/vex/`, and the record (each finding joined with its statement) and the raw reports are attached to the draft |
+| `scan-and-tag` | `scan-and-tag.yml` | the gate of `trivy.yaml` (HIGH and CRITICAL with a fix) on the digest, then the tags `X.Y.Z` and, for a release that is not a pre-release, `X.Y` and `latest`, each verified after it is applied |
+
+`finalize-release` publishes the draft only once every asset of every leg
+is attached, and `scan-and-tag` runs only after the vulnerability record,
+so a refused release is neither published nor tagged. Verify what a
+release published:
+
+```sh
+gh attestation verify ferropix-vX.Y.Z-x86_64-unknown-linux-musl.tar.gz \
+  --repo FerroHEALTH/FerroPIX \
+  --signer-workflow FerroHEALTH/FerroPIX/.github/workflows/release-build.yml
+gh attestation verify oci://ghcr.io/ferrohealth/ferropix:X.Y.Z \
+  --repo FerroHEALTH/FerroPIX \
+  --signer-workflow FerroHEALTH/FerroPIX/.github/workflows/release-image.yml
+```
+
+`scripts/release/stage-dist.sh X.Y.Z` stages the published binaries under
+`dist/` for a local build of the same image. After the first release
+publishes the image, the owner sets the GHCR package
+`ghcr.io/ferrohealth/ferropix` to public visibility and links it to this
+repository; a new package is private by default.
+
+## The published image, every week
+
+`image-scan.yml` scans `ghcr.io/ferrohealth/ferropix:latest` each Monday
+with `trivy.yaml` and every OpenVEX document under `security/vex/`
+applied, and files or comments on one tracking issue when a finding
+remains. An image not yet published is named and skipped.
+`scripts/security/scan-images.sh` runs the same scan locally, and with
+`--candidate <ref>` over an image you built.
 
 ## A security fix
 
@@ -118,6 +167,8 @@ version, in the same hour as the release.
 
 An accepted advisory in `deny.toml` needs its statement in
 `security/vex/rust-advisories.toml`, and `scripts/security/vex-generate.sh`
-regenerates the published document (`security/vex/README.md`). The release
-publishes no container image yet; the image scans FerroFED runs arrive with
-the server and console images.
+regenerates the published document (`security/vex/README.md`). A finding in
+the server image or its binary that does not affect FerroPIX gets its
+statement in an OpenVEX document under `security/vex/` with the product
+`pkg:oci/ferropix` or `pkg:cargo/ferropix-server`, which the release's
+vulnerability record and the weekly image scan both read.

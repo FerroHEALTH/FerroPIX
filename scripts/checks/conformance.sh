@@ -44,10 +44,12 @@ readonly BUILD_BADGES=(
   '[![CI](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml/badge.svg)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml)'
   '[![CodeQL](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml/badge.svg)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)'
   '[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/FerroHEALTH/FerroPIX/badge)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)'
+  '[![SLSA Build L3](https://slsa.dev/images/gh-badge-level3.svg)](docs/release.md#the-build-legs)'
   '[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=FerroHEALTH_FerroPIX&metric=alert_status)](https://sonarcloud.io/summary/overall?id=FerroHEALTH_FerroPIX)'
   '[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=FerroHEALTH_FerroPIX&metric=coverage)](https://sonarcloud.io/summary/new_code?id=FerroHEALTH_FerroPIX)'
   '[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)'
   '[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/FerroHEALTH/FerroPIX?sort=semver)](https://github.com/FerroHEALTH/FerroPIX/releases/latest)'
+  '[![Image pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FFerroHEALTH%2FFerroPIX%2Fferropix&query=downloadCount&label=image%20pulls&logo=github)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
   '[![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8.svg)](https://ferropix.eu/docs/)'
 )
 # The published crates, each with its crates.io and docs.rs badge.

@@ -10,7 +10,9 @@
 #      named in a row of the corpus table of docs/VERSIONS.md.
 #   3. Tool pins: each row REPEATED_ROWS names is carried word for word by
 #      every file its "Repeated in" cell names.
-#   4. Licence: every tracked first-party file names Cadasto B.V. in an
+#   4. The quickstart: the server image tag compose.yaml defaults to is the
+#      [workspace.package] version of the root Cargo.toml.
+#   5. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
 #      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE,
 #      the lockfiles, JSON (which has no comment syntax), the raster images
@@ -47,6 +49,14 @@ readonly REPEATED_ROWS=(
   "Chrome for Testing, \`chrome-mac-arm64.zip\` SHA-256"
   "Chrome for Testing, \`chromedriver-linux64.zip\` SHA-256"
   "Chrome for Testing, \`chromedriver-mac-arm64.zip\` SHA-256"
+  "distroless static base"
+  "PostgreSQL quickstart image"
+  "Quickstart issuer image"
+  "hadolint image"
+  "Trivy"
+  "cargo-auditable"
+  "cargo-cyclonedx"
+  "syft"
 )
 
 # Every backticked path of the "Repeated in" cell of the row whose first
@@ -123,6 +133,13 @@ self_test() {
   expect 0 "a tool pin its script repeats"
   sed -i.bak 's/version_133/version_132/' "$d/scripts/tools.sh" && rm "$d/scripts/tools.sh.bak"
   expect 1 "a tool pin its script does not repeat"
+  case_dir
+  printf '[workspace.package]\nversion = "1.2.3"\n' >> "$d/Cargo.toml"
+  # shellcheck disable=SC2016 # the fixture is literal compose text, never expanded here
+  printf '# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\nservices:\n  ferropix:\n    image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-1.2.3}\n' > "$d/compose.yaml"
+  expect 0 "a quickstart on the workspace version"
+  sed -i.bak 's/:-1.2.3/:-1.2.2/' "$d/compose.yaml" && rm "$d/compose.yaml.bak"
+  expect 1 "a quickstart behind the workspace version"
   case_dir
   mkdir -p "$d/fuzz/seeds/pix_query"
   printf 'sourceIdentifier=urn%%3Aoid%%3A2.999.1%%7C1' > "$d/fuzz/seeds/pix_query/gen-a.txt"
@@ -203,7 +220,16 @@ for item in "${REPEATED_ROWS[@]}"; do
   done < <(repeats "$item")
 done
 
-# 4. Licence.
+# 4. The server image tag compose.yaml defaults to is the product version,
+#    so the quickstart of a release pulls the image that release published.
+if [[ -f compose.yaml && -f Cargo.toml ]]; then
+  want="$(toml_value Cargo.toml version)"
+  got="$(sed -nE 's|^[[:space:]]*image:[[:space:]]*ghcr\.io/ferrohealth/ferropix:\$\{FERROPIX_VERSION:-([^}]+)\}[[:space:]]*$|\1|p' compose.yaml | sort -u)"
+  [[ -n "$got" ]] || drift "compose.yaml names no ghcr.io/ferrohealth/ferropix:\${FERROPIX_VERSION:-<version>} image"
+  [[ -z "$got" || "$got" == "$want" ]] || drift "compose.yaml defaults the server image to $(tr '\n' ' ' <<< "$got")but Cargo.toml says $want"
+fi
+
+# 5. Licence.
 while IFS= read -r file; do
   case "$file" in
     LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/*) continue ;;

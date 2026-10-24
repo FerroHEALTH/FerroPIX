@@ -47,7 +47,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | Dutch Generic Functions: addressing (LRZa) | the URA of an organisation | In `nl-generic-functions` (`lrza`). |
 | Dutch Generic Functions: authentication (Nuts) | the Nuts RFC021 access token request | Client, in `nl-generic-functions` (`nuts-auth`). |
 | BSN and the pseudonymised BSN | the identifier systems the functions share | The naming systems and a redacting pseudonym type, in `nl-generic-functions`. |
-| The server's container image | | Planned, pinned by digest, with a compose quickstart beside PostgreSQL. |
+| The server's container image | `ghcr.io/ferrohealth/ferropix`, on distroless static pinned by digest, SLSA Build Level 3 | Built from source today, with the compose quickstart beside PostgreSQL; the release lane publishes it from the first tagged release ([Deployment](../operate/deployment.md)). |
 | The operator console | the data steward's tool: search, the patient record, the review queue, merge and unmerge, the audit trail | Built on the FerroHEALTH component library, each page saying it cannot be shown until the server's operator API ([#90](https://github.com/FerroHEALTH/FerroPIX/issues/90)) exists; see [The operator console](../operate/console.md). Its image is planned ([#99](https://github.com/FerroHEALTH/FerroPIX/issues/99)). |
 
 The BSNk polymorphic pseudonyms are in the scope of `nl-generic-functions`
@@ -71,9 +71,9 @@ this list is planned:
   publishes, so the family has one parser.
 - **Audit:** the Manager side's BALP records through `ihe-atna`, the audit
   crate of FerroAUDIT.
-- **The server's container image**, published and pinned by digest, with
-  a compose quickstart beside PostgreSQL; the operator console's own image
-  follows in the milestone after it.
+- **The server's container image**, published by the release lane from
+  the first tagged release; the operator console's own image follows in the
+  milestone after it.
 
 ## What FerroPIX is not
 

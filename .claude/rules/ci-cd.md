@@ -19,13 +19,17 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
   self-test of every helper and guard, the comment-style guard, the pin and
   licence guard `versions.sh`, the file-length guard, the `TODO(#N)` guard,
   the released-changelog guard, and on pull requests the changelog guard,
-  the contribution-licence guard and the crate-version guard) and the Rust
+  the contribution-licence guard and the crate-version guard, and hadolint
+over every Dockerfile) and the Rust
   tier once the workspace has a member (`cargo fmt --all --check`; `cargo
   clippy --workspace --all-targets --locked -- -D warnings` with and without
   `--all-features`; `cargo nextest run --workspace --locked` with and
   without `--all-features`, plus `cargo test --doc`; `cargo doc` with
   `RUSTDOCFLAGS=-D warnings`; `cargo deny check`; the publish dry run of
-  every listed crate; `dependency-review-action` on pull requests). The
+  every listed crate; `dependency-review-action` on pull requests; the
+`quickstart` job, which builds the server for the musl target, builds the
+image from the staged tree and runs `docker compose up --wait` to
+readiness with the usage report off). The
   `manifest` job reads the root manifest under the pinned toolchain even
   while the workspace is empty. The `conclusion` job is the single required
   status check on `main`.
@@ -58,12 +62,25 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
   holds `fuzz/Cargo.lock` in step with the crates it builds.
 - `.github/workflows/release.yml`: dormant until a `v*` tag is pushed. It
   validates the tag against the workspace version, takes the notes from the
-  matching `CHANGELOG.md` section, creates the release as a draft, calls
-  `release-crate.yml` (a reusable workflow, so the signing identity stays out
-  of reach of caller steps) to package each `.crate`, attest it and attach it,
-  publishes the release, and then its `crates` leg uploads the crates through
-  Trusted Publishing behind the `crates-io` environment
-  (`crates-publishing.md`).
+  matching `CHANGELOG.md` section, creates the release as a draft, and calls
+  three reusable workflows, so the signing identity stays out of reach of
+  caller steps (SLSA v1.2 Build Level 3): `release-build.yml` builds the
+  musl server binary per architecture with `cargo auditable` and attests the
+  tarball and its two SBOMs; `release-image.yml` verifies those tarballs
+  against `release-build.yml`, pushes `ghcr.io/ferrohealth/ferropix` for
+  both platforms by digest and attests the index and both manifests as OCI
+  referrers; `release-crate.yml` packages, attests and attaches each
+  `.crate`. Its `vulnerability-record` job scans the image and the tarballs
+  at every severity and refuses the release while a finding lacks an
+  OpenVEX judgement (`scripts/checks/vex-coverage.sh`), and `scan-and-tag.yml`
+  gates the digest on fixable HIGH and CRITICAL findings before it applies
+  the tags. It publishes the release once every asset is attached, and its
+  `crates` leg uploads the crates through Trusted Publishing behind the
+  `crates-io` environment (`crates-publishing.md`). `docs/release.md` is the
+  lane.
+- `.github/workflows/image-scan.yml`: each Monday, Trivy over the published
+  image at `latest` with every OpenVEX document applied; a finding files or
+  comments on one tracking issue, and an image not yet published is skipped.
   Its `plan` job refuses a tag when no milestone is titled exactly as the tag
   or that milestone still holds an open issue or pull request, naming each
   one, and its last job, `milestone`, closes that milestone once every leg,

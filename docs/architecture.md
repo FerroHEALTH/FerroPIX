@@ -74,7 +74,7 @@ console are that open part, and they are FerroPIX's own design.
 | IHE PDQm | 3.2.0 (`ihe.iti.pdqm`) | the search and the `$match` the server answers; `CapabilityStatement-IHE.PDQm.PatientDemographicsSupplier` and `…SupplierMatch` |
 | IHE PMIR | 1.6.0 (`ihe.iti.pmir`) | the master identity feed and subscription; `CapabilityStatement-IHE.PMIR.PatientIdentityRegistry` |
 | IHE BALP | 1.1.4 (`ihe.iti.balp`) | the audit record of every transaction and of every steward action (section 9) |
-| IHE ITI TF-2, the PIX and PDQ transactions | the revision the vendoring issue pins | the HL7 v2 face (section 7); vendored before the first v2 transaction is built |
+| IHE ITI TF-2, the PIX and PDQ transactions | ITI-8, ITI-9 and ITI-10 at Revision 20.0, ITI-21 at Revision 20.2, ITI-22 at Revision 20.1, each page by sha256 (`docs/VERSIONS.md`) | the HL7 v2 face (section 7); vendored cache only, since each page reproduces HL7 tables |
 | HL7 FHIR | R4 (4.0.1) | the resources, search and REST interactions the profiles constrain |
 | HL7 v2 | the version each transaction names in ITI TF-2 | the segments and fields of the v2 messages |
 | `hl7v2-types`, `ferrobridge-hl7v2` | FerroBRIDGE's published line, pinned exactly | the v2 tables, the MLLP codec, the parser and the acknowledgment; FerroPIX writes no second parser (`CLAUDE.md` §Scope) |
@@ -573,10 +573,12 @@ removed identifier").
 ITI TF-1 defines PIX and PDQ with the HL7 v2 transactions ITI-8 Patient
 Identity Feed, ITI-9 PIX Query, ITI-10 PIX Update Notification, ITI-21
 Patient Demographics Query and ITI-22 Patient Demographics and Visit Query.
-Their ITI TF-2 texts are not vendored (`docs/VERSIONS.md` names them as
-pending), so this section names the transactions and the shape, and cites
-no section until the vendoring issue lands; the texts carry HL7 tables, so
-they are expected to be cache-only, as the ITI-55 text is.
+Their ITI TF-2 texts are vendored cache only, as the ITI-55 text is: each
+reproduces HL7 v2 segment tables whose rights HL7 reserves, so
+`scripts/vendor/ihe-iti-tf.sh` fetches them by checksum into the ignored
+`.vendor-cache/ihe-iti-tf-hl7v2/` (`docs/VERSIONS.md`). This section names
+the transaction sections that govern each part; the issue that builds a
+transaction reads its text in full.
 
 - **Transport.** One MLLP Release 1 listener on `[hl7v2] listen` (default
   `0.0.0.0:2575`), the frame codec, the idle and frame timeouts, the frame
@@ -589,24 +591,27 @@ they are expected to be cache-only, as the ITI-55 text is.
   and facility (MSH-3, MSH-4) and the identifier domain it feeds, which is
   the v2 counterpart of a Source's client id: a message from an unlisted
   sender is acknowledged `AR` and not applied.
-- **ITI-8** (ADT A01, A04, A05, A08 add and revise; A40 merge) writes a
-  source record version from PID, with the domain from PID-3.4 checked
-  against the sender's domain, and is acknowledged in original mode (`AA`,
-  `AE`, `AR`) by `ferrobridge_hl7v2::ack`, MSA-2 echoing MSH-10. A message
-  whose MSH-10 was already acknowledged by this sender is acknowledged again
-  with the same code and not applied (`v2_receipt`).
-- **ITI-9** (QBP^Q23, RSP^K23) answers the same cross-reference as ITI-83,
-  with the same policy for merged and removed identifiers (section 6.4), and
-  the domain filter from QPD-4.
-- **ITI-21** (QBP^Q22, RSP^K22) answers the same search as ITI-78 over the
-  QPD-3 parameters, with continuation (DSC) over a server-side cursor
+- **ITI-8** (ADT A01, A04, A05, A08 add and revise, ITI TF-2 §3.8.4.1.1; A40
+  merge, ITI TF-2 §3.8.4.2.1) writes a source record version from PID, with
+  the domain from PID-3.4 checked against the sender's domain, and is
+  acknowledged in original mode (`AA`, `AE`, `AR`) by
+  `ferrobridge_hl7v2::ack`, MSA-2 echoing MSH-10. A message whose MSH-10 was
+  already acknowledged by this sender is acknowledged again with the same
+  code and not applied (`v2_receipt`).
+- **ITI-9** (QBP^Q23, RSP^K23, ITI TF-2 §3.9.4) answers the same
+  cross-reference as ITI-83, with the same policy for merged and removed
+  identifiers (section 6.4), and the domain filter from QPD-4
+  (ITI TF-2 §3.9.4.1.2.2).
+- **ITI-21** (QBP^Q22, RSP^K22, ITI TF-2 §3.21.4) answers the same search
+  as ITI-78 over the QPD-3 parameters (ITI TF-2 §3.21.4.1.2.3), with
+  continuation (DSC, ITI TF-2 §3.21.4.1.3.3) over a server-side cursor
   bounded in time.
-- **ITI-22** holds visit data FerroPIX does not keep; whether it is answered
-  as a demographics-only query or refused is decided when the TF-2 text is
-  read, and recorded on its issue.
-- **ITI-10** is an outbound notification to configured consumers after a
-  cross-reference change; it is the v2 counterpart of the ITI-93 sender and
-  shares its outbox.
+- **ITI-22** (ITI TF-2 §3.22) holds visit data FerroPIX does not keep;
+  whether it is answered as a demographics-only query or refused is decided
+  when its issue reads the text, and recorded there.
+- **ITI-10** (ITI TF-2 §3.10.4.1) is an outbound notification to configured
+  consumers after a cross-reference change; it is the v2 counterpart of the
+  ITI-93 sender and shares its outbox.
 
 Every v2 message is logged by its MSH-10, sender and acknowledgment code,
 never by its content; the BALP record of each transaction is the one the

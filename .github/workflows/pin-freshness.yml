@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The freshness half of the pin discipline (no specification governs this:
+# our own design, after FerroFED's lane of the same name).
+#
+# scripts/checks/versions.sh catches drift between two files we control, and
+# Dependabot bumps what its ecosystems read, which is `uses:` references and
+# the manifests. Between the two sits a set of pins nothing watches: the
+# analyzer versions handed to taiki-e/install-action as an input, the
+# actionlint image and the yq release named in ci.yml, the documentation
+# toolchain, the commits, release tags, FHIR package versions, document
+# hashes, RFCs and dated W3C publications the vendored corpora are fetched
+# at, and the container images the testkit starts. This workflow reads the
+# newest upstream release, commit, registry version, served bytes,
+# obsoleting RFC or registry tag of each and opens ONE issue when a pin is
+# behind.
+#
+# It opens an issue rather than failing: a weekly red job trains a maintainer
+# to ignore red jobs, and a newer lint release is not a broken build. A pull
+# request that changes the lane or the pin matrix runs it as a dry run, which
+# proves every reader against the current pins and files nothing.
+name: Pin freshness
+
+on:
+  schedule:
+    # Monday morning, after the weekly Dependabot run, so both arrive together.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/pin-freshness.yml
+      - .github/workflows/ci.yml
+      - scripts/checks/pin-freshness.sh
+      - docs/VERSIONS.md
+
+concurrency:
+  group: pin-freshness-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  freshness:
+    name: pin freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Filing the report; a pull-request run files nothing.
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare every unwatched pin with its newest upstream release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          status=0
+          bash scripts/checks/pin-freshness.sh > freshness.txt || status=$?
+          cat freshness.txt
+          # 0 every pin current, 1 at least one behind, 2 a release could not
+          # be read. Only 1 opens an issue; 2 fails the job, because a pin that
+          # could not be compared is not a pin known to be fresh.
+          if [ "$status" -eq 2 ]; then
+            echo "a release could not be read; the comparison is incomplete" >&2
+            exit 1
+          fi
+          echo "stale=$([ "$status" -eq 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue when a pin is behind
+        if: steps.check.outputs.stale == 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: A pinned CI tool, corpus or test image is behind its newest upstream release
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # --limit well past the open count: the default page is 30 issues,
+          # and a report that scrolled off it would be reopened every week.
+          open="$(gh issue list --state open --limit 500 --json number,title \
+            --jq "[.[] | select(.title == \"$TITLE\")] | length")"
+          if [ "$open" -ne 0 ]; then
+            echo "an open issue already carries this report; not opening a second"
+            exit 0
+          fi
+          {
+            echo "\`scripts/checks/pin-freshness.sh\` found a pin behind its newest upstream release or commit."
+            echo
+            echo "Bump the pin in \`docs/VERSIONS.md\` or \`.github/workflows/ci.yml\` and in the file that"
+            echo "repeats it, keep the local install on the same number, and re-run the gates. The digest"
+            echo "beside an image tag moves with the tag, so read the new digest from the registry rather"
+            echo "than guessing it."
+            echo
+            echo '```text'
+            cat freshness.txt
+            echo '```'
+            echo
+            echo "Reported by [this run]($RUN_URL)."
+          } > body.md
+          # fields.sh files the issue as a Task at Low priority and Low effort;
+          # this job's default token may not read the organisation's issue
+          # types, and then the issue lands with its label alone and whoever
+          # picks it up sets the three (.claude/rules/issue-workflow.md).
+          bash scripts/gh/fields.sh new task low low \
+            --title "$TITLE" --body-file body.md --label ci

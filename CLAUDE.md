@@ -154,7 +154,8 @@ The build order is the milestones:
   changelog, the contribution licence, `ihe-citations.sh`, every IHE
   section the tree cites held to the vendored text, and the documentation
   guards `site-links.sh`, `docs-claims.sh`, `book-guard.sh` and
-  `writing-style.sh`). `scripts/release/`: the
+  `writing-style.sh`, and `pin-freshness.sh`, every unwatched pin against
+  its newest upstream release). `scripts/release/`: the
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor
   script is proven by re-running it against its pin.
@@ -171,7 +172,8 @@ The build order is the milestones:
   (`.claude/rules/docs-website.md`).
 - `assets/brand/`: the mark, the favicon set and the "Plum & Iron" tokens.
 - `.github/`: CI with the single required `conclusion` check, CodeQL,
-  Scorecard, Dependabot, the Docs workflow, the release lane (`release.yml`,
+  Scorecard, SonarQube Cloud (advisory), the weekly pin freshness lane,
+  Dependabot, the Docs workflow, the release lane (`release.yml`,
   `release-crate.yml`) and `publish-crates.yml` through Trusted Publishing,
   the templates.
 - `.claude/`: the working discipline (rules, agents, skills, hooks, memory).
@@ -287,7 +289,7 @@ beside each tree.
 
 - Rules: `writing-style`, `rust-style`, `reliability`, `comments`, `testing`,
   `spec-adherence`, `vendored-inputs`, `codegen`, `ci-cd`,
-  `crates-publishing`, `issue-workflow`, `issue-relationships`,
+  `ai-code-review`, `crates-publishing`, `issue-workflow`, `issue-relationships`,
   `project-board`, `docs-website` (path-scoped to the site), `leptos-ui`
   (path-scoped to the console, leading with FerroUI).
 - Agents: `spec-researcher`, `implementer` (both on Opus 5).

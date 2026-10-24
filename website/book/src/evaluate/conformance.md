@@ -31,7 +31,11 @@ the repository builds with, the FerroHEALTH family's rule.
   specification texts the crates read are vendored under `docs/specs/` at
   pinned versions, each with a `PROVENANCE.md`, and the `ihe-citations`
   check in CI holds every IHE section the tree cites to the vendored text of
-  that profile and version.
+  that profile and version. The ITI TF-2 texts of the HL7 v2 transactions
+  (ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22) reproduce HL7 tables whose
+  rights HL7 reserves, so they are pinned by checksum and fetched into a
+  local cache by the vendor script, never committed: a citation of one is
+  checked when a local run has fetched it, and counted otherwise.
 - **Each answer is held to its profile.** The clients refuse an answer that
   departs from the transaction: a PIXm `$ihe-pix` answer is held to its
   `OperationDefinition`, a PDQm search to the Query Patient Resource Response

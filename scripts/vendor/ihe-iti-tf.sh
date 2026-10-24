@@ -8,7 +8,10 @@
 # (ch. 18) and XCPD (ch. 27), and the two Volume 2 transactions the XCPD code
 # cites by section into docs/specs/ihe-iti-tf-vol2/: Cross Gateway Query
 # [ITI-38], committed, and Cross Gateway Patient Discovery [ITI-55], fetched
-# into the git-ignored .vendor-cache/ihe-iti-tf-vol2/ alone, each as
+# into the git-ignored .vendor-cache/ihe-iti-tf-vol2/ alone. The five HL7 v2
+# transactions of PIX and PDQ (ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22) are
+# fetched into .vendor-cache/ihe-iti-tf-hl7v2/ alone, with their
+# PROVENANCE.md in docs/specs/ihe-iti-tf-hl7v2/. Every page is taken as
 # profiles.ihe.net renders it.
 #
 # Each page is pinned by URL and sha256 (scripts/vendor/lib/pinned.sh), and
@@ -86,5 +89,46 @@ only: the guard checks the ITI-55 citations against the cached page when a
 local run has fetched it, and counts them otherwise." \
   "" "the IHE section citation guard, \`scripts/checks/ihe-citations.sh\`,
   over the ITI-55 citations of crates/ihe-iti"
+
+# The Volume 2 transaction pages of the HL7 v2 face: Patient Identity Feed
+# [ITI-8], PIX Query [ITI-9], PIX Update Notification [ITI-10], Patient
+# Demographics Query [ITI-21] and Patient Demographics and Visit Query
+# [ITI-22], all cache only. Each page reproduces the HL7 v2 segment tables of
+# its messages, whose rights HL7 reserves (General Introduction §9.1.2).
+hl7v2='IHE Technical Frameworks General Introduction §9.1.2: "Health Level Seven, Inc. has granted permission to IHE to reproduce tables from the HL7 standard. The HL7 tables in this document are copyrighted by Health Level Seven, Inc. All rights reserved." The page reproduces the HL7 v2 segment tables of its messages, so it is not redistributed.'
+
+pin cache ITI-8.html "ITI TF Volume 2, the page states Revision 20.0, served on 2026-10-24" \
+  https://profiles.ihe.net/ITI/TF/Volume2/ITI-8.html \
+  64f5a636b8d5ed530b35a93491bea19e6746088bfd161c86cf1d3ef3b1bef693 "$hl7v2" \
+  "Rendered HTML page whose bytes may change on a re-render. The page links one figure, media/Figure_3.8-1.png, which is not taken."
+pin cache ITI-9.html "ITI TF Volume 2, the page states Revision 20.0, served on 2026-10-24" \
+  https://profiles.ihe.net/ITI/TF/Volume2/ITI-9.html \
+  db5bbdd715e04c9c909349b3744582729d08bee198258bf39d98537121e80372 "$hl7v2" \
+  "Rendered HTML page whose bytes may change on a re-render. The page links one figure, media/Figure_3.9-1.png, which is not taken."
+pin cache ITI-10.html "ITI TF Volume 2, the page states Revision 20.0, served on 2026-10-24" \
+  https://profiles.ihe.net/ITI/TF/Volume2/ITI-10.html \
+  ddac0c13917df03c8cf7c273e656bd167e7872175546a05761fdc266950dbd60 "$hl7v2" \
+  "Rendered HTML page whose bytes may change on a re-render. The page links one figure, media/Figure_3.10-1.png, which is not taken."
+pin cache ITI-21.html "ITI TF Volume 2, the page states Revision 20.2, served on 2026-10-24" \
+  https://profiles.ihe.net/ITI/TF/Volume2/ITI-21.html \
+  27dc792c15915aa7f5297ddcccffec44c08baacab357ff202cc5107c610fcbe4 "$hl7v2" \
+  "Rendered HTML page whose bytes may change on a re-render. The page links one figure, media/Figure_3.21.4-1.png, which is not taken."
+pin cache ITI-22.html "ITI TF Volume 2, the page states Revision 20.1, served on 2026-10-24" \
+  https://profiles.ihe.net/ITI/TF/Volume2/ITI-22.html \
+  b4f2736afde9aa9136751624069b37be8b05ea633f4846058c69fa26f2b47e27 "$hl7v2" \
+  "Rendered HTML page whose bytes may change on a re-render. The page links one figure, media/Figure_3.22.4-1.png, which is not taken."
+pinned_corpus ihe-iti-tf-hl7v2 "IHE ITI Technical Framework Volume 2 HL7 v2 pages" \
+  "IHE ITI Technical Framework Volume 2, transactions ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22" \
+  "The HL7 v2 transactions of PIX and PDQ: Patient Identity Feed [ITI-8], PIX
+Query [ITI-9], PIX Update Notification [ITI-10], Patient Demographics Query
+[ITI-21] and Patient Demographics and Visit Query [ITI-22], whose sections
+the HL7 v2 face cites and the IHE section citation guard
+(\`scripts/checks/ihe-citations.sh\`) checks. Each page reproduces the HL7
+v2 segment tables of its messages, whose rights HL7 reserves (General
+Introduction §9.1.2, <https://profiles.ihe.net/GeneralIntro/ch-9.html>), so
+all five are cache only: the guard checks their citations against the
+cached pages when a local run has fetched them, and counts them otherwise." \
+  "" "the IHE section citation guard, \`scripts/checks/ihe-citations.sh\`,
+  over the ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22 citations"
 
 say "done"

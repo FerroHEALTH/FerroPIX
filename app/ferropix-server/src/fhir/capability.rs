@@ -1,19 +1,40 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The FHIR R4 `CapabilityStatement` of `GET {base}/fhir/metadata`, as far
-//! as authorization states it: the SMART service, the token endpoint and the
-//! scopes the permission table enforces.
+//! The FHIR R4 `CapabilityStatement` of `GET {base}/fhir/metadata`.
+//!
+//! It names the interactions and operations the mounted routes serve, each
+//! as the vendored IHE actor statement declares it, and the SMART service,
+//! the token endpoint and the scopes the permission table enforces. "A
+//! given resource can only be described once per `RESTful` mode" (FHIR R4
+//! `CapabilityStatement`, the constraints on `rest`), so every profile served
+//! on `Patient` adds to the one `Patient` entry (`patient`).
 
 use fhir_types::r4::capability_statement::{
     CapabilityStatement, CapabilityStatementImplementation, CapabilityStatementRest,
-    CapabilityStatementRestSecurity, CapabilityStatementSoftware,
+    CapabilityStatementRestResource, CapabilityStatementRestResourceInteraction,
+    CapabilityStatementRestResourceOperation, CapabilityStatementRestSecurity,
+    CapabilityStatementSoftware,
 };
 use fhir_types::r4::codeable_concept::CodeableConcept;
 use fhir_types::r4::coding::Coding;
 use fhir_types::r4::extension::{Extension, ExtensionValue};
 
 use crate::auth::Smart;
+use crate::fhir::Mounts;
+
+/// The PIXm Manager actor statement (PIXm 3.1.0,
+/// `CapabilityStatement-IHE.PIXm.Manager`).
+pub const PIXM_MANAGER: &str =
+    "https://profiles.ihe.net/ITI/PIXm/CapabilityStatement/IHE.PIXm.Manager";
+
+/// The PIXm Patient profile the Manager's statement names as a
+/// `supportedProfile` (§2:3.104.4.1.2.1).
+pub const PIXM_PATIENT: &str =
+    "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Patient";
+
+/// The `$ihe-pix` operation (PIXm 3.1.0, `OperationDefinition-IHE.PIXm.pix`).
+pub const IHE_PIX: &str = "https://profiles.ihe.net/ITI/PIXm/OperationDefinition/IHE.PIXm.pix";
 
 /// The `oauth-uris` extension, the form SMART App Launch 1.0.0 defined and
 /// 2.x keeps for existing clients while it calls it deprecated
@@ -27,12 +48,17 @@ pub const SECURITY_SERVICE_SYSTEM: &str =
     "http://terminology.hl7.org/CodeSystem/restful-security-service";
 
 /// Returns the statement of a server reached at `public_base_url`, guarded
-/// by `smart`.
-// TODO(#69): build the whole statement from the vendored actor statements.
+/// by `smart`, serving what `mounts` switches on.
 #[must_use]
-pub fn statement(public_base_url: &url::Url, smart: &Smart) -> CapabilityStatement {
+pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> CapabilityStatement {
     let base = public_base_url.as_str().trim_end_matches('/');
+    let mut instantiates = Vec::new();
+    if mounts.pixm {
+        instantiates.push(PIXM_MANAGER.into());
+    }
+    let resource: Vec<CapabilityStatementRestResource> = patient(mounts).into_iter().collect();
     CapabilityStatement {
+        instantiates,
         status: "active".into(),
         date: jiff::Timestamp::now()
             .strftime("%Y-%m-%d")
@@ -50,13 +76,72 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart) -> CapabilityStateme
             ..CapabilityStatementImplementation::default()
         }),
         fhir_version: "4.0.1".into(),
-        format: vec!["application/fhir+json".into()],
+        format: vec![
+            "application/fhir+json".into(),
+            "application/fhir+xml".into(),
+        ],
         rest: vec![CapabilityStatementRest {
             mode: "server".into(),
             security: Some(security(smart)),
+            resource,
             ..CapabilityStatementRest::default()
         }],
         ..CapabilityStatement::default()
+    }
+}
+
+/// Returns the one `Patient` entry, with what every mounted profile serves
+/// on it, or `None` when none is mounted.
+fn patient(mounts: Mounts) -> Option<CapabilityStatementRestResource> {
+    let mut patient = CapabilityStatementRestResource {
+        r#type: "Patient".into(),
+        ..CapabilityStatementRestResource::default()
+    };
+    if mounts.pixm {
+        pixm(&mut patient, mounts.remove_patient);
+    }
+    let served = !patient.interaction.is_empty() || !patient.operation.is_empty();
+    served.then_some(patient)
+}
+
+/// Adds the PIXm Manager to `patient`, as `CapabilityStatement-IHE.PIXm.Manager`
+/// declares it: the conditional update of ITI-104 (§2:3.104.4.1.3), the
+/// conditional delete with the Remove Patient Option (§2:3.104.4.3.3), and
+/// `$ihe-pix` (§2:3.83.4.1). Its `conditionalCreate` is left out, since no
+/// `POST` creates a `Patient` here.
+fn pixm(patient: &mut CapabilityStatementRestResource, remove_patient: bool) {
+    patient.supported_profile.push(PIXM_PATIENT.into());
+    patient.interaction.push(interaction(
+        "update",
+        "ITI-104: Add or Revise Patient and Resolve Duplicate Patient, by conditional update on identifier",
+    ));
+    patient.conditional_update = Some(true.into());
+    if remove_patient {
+        patient.interaction.push(interaction(
+            "delete",
+            "ITI-104: Remove Patient, by conditional delete on identifier (the Remove Patient Option)",
+        ));
+        patient.conditional_delete = Some("single".into());
+    }
+    // NOTE: FHIR R4 CapabilityStatement.rest.resource.operation.name, "The name does
+    // not include the "$" portion that is always included in the URL".
+    patient.operation.push(CapabilityStatementRestResourceOperation {
+        name: "ihe-pix".into(),
+        definition: IHE_PIX.into(),
+        documentation: Some(
+            "ITI-83: by GET with the query of PIXm 3.1.0, or by POST of a Parameters body, which keeps the identifier out of the URL"
+                .into(),
+        ),
+        ..CapabilityStatementRestResourceOperation::default()
+    });
+}
+
+/// Returns the interaction `code` with its `documentation`.
+fn interaction(code: &str, documentation: &str) -> CapabilityStatementRestResourceInteraction {
+    CapabilityStatementRestResourceInteraction {
+        code: code.into(),
+        documentation: Some(documentation.into()),
+        ..CapabilityStatementRestResourceInteraction::default()
     }
 }
 

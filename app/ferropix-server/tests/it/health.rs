@@ -189,7 +189,11 @@ async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
         crate::auth::DOMAIN.replace(':', "%3A")
     );
     let answer = send(&app, Method::GET, &uri, Some(&token)).await;
-    assert!(!answer.status.is_server_error() || answer.status == StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(
+        StatusCode::SERVICE_UNAVAILABLE,
+        answer.status,
+        "admitted, and the store at an unresolvable host cannot be read"
+    );
     let anonymous = send(&app, Method::GET, &uri, None).await;
     assert_eq!(StatusCode::UNAUTHORIZED, anonymous.status);
     let unmatched = format!("/fhir/Patient/{bsn}/_history?x={bsn}");
@@ -205,7 +209,7 @@ async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
     let first = &requests[0]["fields"];
     assert_eq!("/fhir/Patient/$ihe-pix", first["route"]);
     assert_eq!("GET", first["method"]);
-    assert_eq!(501, first["status"]);
+    assert_eq!(503, first["status"]);
     assert_eq!("east-lab", first["caller"]);
     assert_eq!("-", first["domain"]);
     assert!(

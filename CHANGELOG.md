@@ -14,6 +14,27 @@ and this project adheres to
 
 ### Added
 
+- The PIXm Manager (#66, #68, #52, #69). `$ihe-pix` (ITI-83) answers by
+  `GET` and by `POST` of a `Parameters` body, the two forms alike, in FHIR
+  JSON and XML, from `store::xref::lookup` through `ihe-iti`'s
+  `pixm::server` reader and writer, with the five answers of PIXm 3.1.0
+  §2:3.83.4.2.2. An identifier in an `authoritative` domain that no Source
+  feeds, such as the BSN a hospital's `Patient` carries, is found and
+  answered too, and one carried by records of two persons answers `409`
+  `multiple-matches` (#167). ITI-104 adds, revises, resolves a duplicate
+  and, with `[pixm] remove_patient`, removes through the feed transaction: `201` or
+  `200` with an `information` issue and a `Location` naming the person,
+  `403` for a client that is not the domain's Source, and `400` or `422`
+  for a refused message. Each route passes the permission table and fills
+  the audit place it took with its PIXm BALP record; an ITI-83 answer is
+  withheld with `503` when its record cannot be stored. No query, body or
+  identifier reaches a log line, a span or a refusal. `GET /fhir/metadata`
+  serves the `CapabilityStatement` in JSON or XML, instantiating the PIXm
+  Manager actor statement with `conditionalUpdate`, `conditionalDelete`
+  only with the Remove Patient Option, and the `ihe-pix` operation;
+  `_format` is honoured on every served route and an unsupported one
+  answers `406`. `fhir::status` is the one table of every outcome the face
+  answers. The book's new page "The PIXm Manager" says what it accepts.
 - The conformance gate (#162, `scripts/checks/conformance.sh`): corpus
   tests in `ihe-iti` read and write every example of the vendored PIXm
   3.1.0, PDQm 3.2.0 and PMIR 1.6.0 packages, and check each audit example

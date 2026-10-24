@@ -46,10 +46,10 @@ need no token: the capability statement names the SMART service, the token
 endpoint and the scopes, and the SMART discovery document lists the same
 scopes as `scopes_supported`. FerroPIX never forwards a caller's token.
 
-The transaction routes are guarded today and answer `501` until the faces
-behind them land
-([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
-[#70](https://github.com/FerroHEALTH/FerroPIX/issues/70),
+The PIXm routes are served ([The PIXm Manager](../integrate/pixm-manager.md)).
+The other transaction routes are guarded today and answer `501` until the
+faces behind them land
+([#70](https://github.com/FerroHEALTH/FerroPIX/issues/70),
 [#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
 [#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)).
 
@@ -68,14 +68,16 @@ Basic users are for a run on your own machine: they need
   credential.
 - Build each `reqwest::Client` you pass in with `redirect::Policy::none()`:
   the request carries the identifier, and a redirect would send it on.
-- **Lookups by a patient identifier use `POST`.** A PDQm query sends its
-  criteria in the request body. FerroHEALTH clients call a PIXm Manager by
-  `POST` with a `Parameters` body (`ihe_iti::pixm::Invocation::Post`, FHIR
-  R4 Operations §3.2.0.1), so a BSN never appears in a URL. FerroPIX's
-  planned PIX Manager is to accept `$ihe-pix` by `GET` (ITI-83) and by
-  `POST`, and to keep no URL query in a request log
-  ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)). A proxy in front of any Manager must not log query strings,
-  because a client that uses the `GET` puts the identifier there.
+- **Use `POST` for every lookup by a patient identifier.** A PDQm query
+  sends its criteria in the request body. Call a PIXm Manager by `POST`
+  with a `Parameters` body (`ihe_iti::pixm::Invocation::Post`, FHIR R4
+  Operations §3.2.0.1), as every FerroHEALTH client does, so a BSN never
+  appears in a URL. FerroPIX's PIX Manager accepts `$ihe-pix` by `GET`
+  (ITI-83) and by `POST` with the same answers, and its request log, spans
+  and errors hold neither the query nor the body
+  ([The PIXm Manager](../integrate/pixm-manager.md)). A proxy in front of
+  any Manager must not log query strings, because a client that uses the
+  `GET` puts the identifier there.
 - The PMIR feed drops every demographic as it reads an ITI-93 message.
 - The server's store seals every identifier of a sensitive domain at rest
   and finds it by a keyed HMAC, so a database dump shows no identifier

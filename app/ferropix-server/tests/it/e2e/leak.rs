@@ -247,3 +247,94 @@ async fn no_identifier_or_name_reaches_a_log_a_debug_rendering_or_an_error_throu
         }
     }
 }
+
+#[tokio::test]
+async fn no_identifier_or_name_reaches_a_log_a_span_or_a_refusal_through_the_pixm_routes() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = super::pixm::Harness::start(super::pixm::synthetic_seeds()).await;
+    let captured = crate::auth::Captured::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .with_max_level(tracing::Level::TRACE)
+        .with_current_span(true)
+        .with_span_list(true)
+        .with_writer(captured.clone())
+        .finish();
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let (hospital, stored) = super::pixm::feed_both(&harness).await;
+    let unknown = bsn(7).expose().to_owned();
+    let broken = String::from("999990001");
+    let mut refusals = Vec::new();
+    for (source, targets, expected) in [
+        (stored.as_str(), &[][..], http::StatusCode::OK),
+        (
+            stored.as_str(),
+            &["urn:oid:2.999.9.9"][..],
+            http::StatusCode::FORBIDDEN,
+        ),
+        (unknown.as_str(), &[][..], http::StatusCode::NOT_FOUND),
+        (broken.as_str(), &[][..], http::StatusCode::NOT_FOUND),
+    ] {
+        let got = harness.pix_get(BSN_SYSTEM, source, targets).await;
+        assert_eq!(expected, got.status, "GET: {}", got.body);
+        let posted = harness
+            .pix_post(&super::pixm::pix_parameters(BSN_SYSTEM, source, targets))
+            .await;
+        assert_eq!(expected, posted.status, "POST: {}", posted.body);
+        if expected != http::StatusCode::OK {
+            refusals.push(got.body);
+            refusals.push(posted.body);
+        }
+    }
+    let refused_feed = harness
+        .feed(
+            BSN_SYSTEM,
+            &broken,
+            &ferropix_testkit::fixtures::Fixture::FeedLaboratory
+                .document()
+                .unwrap(),
+        )
+        .await;
+    assert!(
+        refused_feed.status.is_client_error(),
+        "{}",
+        refused_feed.body
+    );
+    refusals.push(refused_feed.body);
+    let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+    let requests = logs
+        .lines()
+        .filter(|line| line.contains("\"target\":\"ferropix_server::request\""))
+        .count();
+    assert_eq!(
+        11, requests,
+        "the capture holds one line per request: {logs}"
+    );
+    assert!(
+        logs.contains("/fhir/Patient/$ihe-pix"),
+        "the matched route is logged"
+    );
+    assert!(
+        !logs.contains("sourceIdentifier"),
+        "no query or body reaches the log"
+    );
+    let secrets = [
+        stored.clone(),
+        unknown,
+        broken,
+        hospital,
+        String::from(super::pixm::LAB),
+        FAMILY_NAMES[0].to_owned(),
+        GIVEN_NAMES[0].to_owned(),
+    ];
+    for (place, text) in [("the log", logs), ("a refusal", refusals.join("\n"))] {
+        for secret in &secrets {
+            assert!(
+                !text.contains(secret.as_str()),
+                "{place} holds an identifier or a name: {text}"
+            );
+        }
+    }
+}

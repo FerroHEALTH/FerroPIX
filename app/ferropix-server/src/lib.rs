@@ -361,6 +361,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         hl7v2,
         operator,
         audit,
+        matching,
         usage_report: report_settings,
         ..
     } = settings;
@@ -399,6 +400,10 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &smart,
         &health,
         &audit,
+        &fhir::Backend {
+            store: store.clone(),
+            matching,
+        },
     );
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = TcpListener::bind(server.listen)

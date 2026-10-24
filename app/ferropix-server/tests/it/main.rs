@@ -25,6 +25,8 @@ mod health;
 #[cfg(test)]
 mod matching;
 #[cfg(test)]
+mod operator;
+#[cfg(test)]
 mod secrets;
 #[cfg(test)]
 mod serve;

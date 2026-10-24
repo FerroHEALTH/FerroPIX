@@ -1332,6 +1332,7 @@ dependencies = [
  "console_error_panic_hook",
  "cookie",
  "ferrohealth-ui",
+ "ferropix-operator-api",
  "ferropix-testkit",
  "fluent-templates",
  "http",

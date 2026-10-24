@@ -48,15 +48,10 @@ pub(crate) const DOMAIN: &str = "urn:oid:2.999.1.1";
 /// refusal may show.
 const IDENTIFIER: &str = "SYNTHETIC-ID-4711";
 
-/// The guarded routes served today; every other one answers `501` until its
-/// issue lands.
-const SERVED: [&str; 5] = [
-    "operator-dependencies",
-    "ITI-83",
-    "ITI-104",
-    "ITI-78",
-    "ITI-119",
-];
+/// The FHIR transactions served today; every other one answers `501` until its
+/// issue lands, as does an operator route [`crate::operator::SERVED`] does
+/// not name.
+const SERVED: [&str; 4] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119"];
 
 /// Returns whether `status` is an answer of the route's handler: neither a
 /// refusal of the guard nor the pending handler's `501`.
@@ -371,7 +366,9 @@ async fn every_guarded_route_admits_the_domains_source_holding_every_scope() {
             assert_eq!(StatusCode::OK, answer.status, "{label}: served");
             continue;
         }
-        if SERVED.contains(&route.interaction) {
+        if SERVED.contains(&route.interaction)
+            || crate::operator::SERVED.contains(&route.interaction)
+        {
             assert!(
                 handled(answer.status),
                 "{label}: the guard admits it and the Manager or the Supplier answers: {}",

@@ -13,7 +13,9 @@
 //!   on BALP Query (PDQm 3.2.0 §2:3.78.5.1.2, §2:3.119.5.1.2), one record
 //!   per person found and one with no patient when none was.
 //! - A steward action: a `RESTful` activity on the person (BALP 1.1.4
-//!   §3:5.7.3), a read for a view and an update for a decision.
+//!   §3:5.7.3), a read for a view and an update for a decision; a steward's
+//!   search, a BALP Patient Query record per person found or a Query record
+//!   when none was; and an export of the trail, an Export event.
 //!
 //! A search's raw request is written base64 to `entity.query` (BALP 1.1.4
 //! §1:52.4.1.4) and the patient is the subject entity (§1:52.4.1.6), which
@@ -25,8 +27,9 @@ use std::net::IpAddr;
 use ferrohealth_smart::resource::{Access, Via};
 use ihe_atna::balp::{
     APPLICATION, CREATE, CUSTODIAN, Coded, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE, Described,
-    Direction, Entity, EventKind, Exchange, IHE_TRANSACTIONS, NetworkAddress, Outcome, Peer, READ,
-    REQUEST_ID, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT, UPDATE, What, request_text,
+    Detail, Direction, EXPORT, Entity, EventKind, Exchange, IHE_TRANSACTIONS, NetworkAddress,
+    Outcome, Peer, READ, REQUEST_ID, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT, UPDATE, What,
+    request_text,
 };
 use ihe_atna::user::{OnBehalfOf, User};
 use secrecy::{ExposeSecret, SecretString};
@@ -370,6 +373,87 @@ pub fn steward(call: &Call, action: StewardAction, person: &str, outcome: Outcom
             person_data(Some(person)),
             Entity::PatientReference(SecretString::from(person.to_owned())),
         ],
+    )
+}
+
+/// Returns the records of a steward's search `query`, its raw request,
+/// that found `persons` (`Patient/{id}` each), ended in `outcome`.
+///
+/// One BALP Patient Query record per person found, or one BALP Query record
+/// with no patient when none was (BALP 1.1.4 §1:52.4.1.6, §3:5.7.3).
+#[must_use]
+pub fn steward_search(
+    call: &Call,
+    query: &SecretString,
+    persons: &[String],
+    outcome: Outcome,
+) -> Vec<Exchange> {
+    let kind = |profile| EventKind {
+        profile,
+        event_type: REST,
+        subtypes: vec![SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    };
+    if persons.is_empty() {
+        return vec![call.exchange(
+            kind("https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Query"),
+            outcome,
+            vec![Entity::Query(query.clone())],
+        )];
+    }
+    persons
+        .iter()
+        .map(|person| {
+            call.exchange(
+                kind(
+                    "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PatientQuery",
+                ),
+                outcome,
+                vec![
+                    Entity::Query(query.clone()),
+                    Entity::PatientReference(SecretString::from(person.clone())),
+                ],
+            )
+        })
+        .collect()
+}
+
+/// Returns the record of an export of the steward trail of `rows` actions,
+/// filtered to the person `person` (`Patient/{id}`) when the filter names
+/// one, ended in `outcome`.
+///
+/// An Export event (DICOM `110106`) the system sends to the steward; no BALP
+/// pattern describes a trail export, so the record claims no profile (no
+/// specification governs this: our own design).
+#[must_use]
+pub fn export(call: &Call, rows: usize, person: Option<&str>, outcome: Outcome) -> Exchange {
+    let mut entities = vec![Entity::Described(Described {
+        what: None,
+        kind: SYSTEM_OBJECT,
+        role: None,
+        name: Some(String::from("steward_action")),
+        description: Some(String::from("the steward audit trail")),
+        details: vec![Detail::new("rows", rows.to_string())],
+        security_labels: Vec::new(),
+    })];
+    if let Some(person) = person {
+        entities.push(Entity::PatientReference(SecretString::from(
+            person.to_owned(),
+        )));
+    }
+    call.exchange(
+        EventKind {
+            profile: "",
+            event_type: EXPORT,
+            subtypes: vec![READ],
+            action: "R",
+            client: DESTINATION_ROLE,
+            server: SOURCE_ROLE,
+        },
+        outcome,
+        entities,
     )
 }
 

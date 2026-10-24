@@ -14,6 +14,29 @@ and this project adheres to
 
 ### Added
 
+- The operator API the console reads (#90, `ferropix_server::operator`),
+  under `{base}/operator` behind `[operator] enabled` and the steward or
+  administrator scope the permission table names, with its documents in
+  `ferropix-operator-api`. `GET /operator/overview` answers the dashboard;
+  `POST /operator/search/identifier` finds the persons one identifier is
+  cross-referenced to by its HMAC, a carried authoritative identifier
+  included, and `POST /operator/search/demographics` runs the scorer over
+  the blocking keys, each paged (20 by default, at most 50);
+  `GET /operator/persons/{id}` answers the person with its identifiers per
+  domain masked, its source records, its history (at most 200 entries) and
+  its pseudonyms masked; `GET /operator/domains` and
+  `GET /operator/domains/{id}` the identifier domains with their record
+  counts and last 20 feeds; `GET /operator/matching` the `[matching]`
+  section in effect with every field's weights; `GET /operator/actions` a
+  page of the steward trail filtered by actor, kind, person and time, and
+  `POST /operator/actions/export` the same as CSV, at most 10,000 rows.
+  Every lookup that carries an identifier is a `POST`, every answer is
+  `no-store`, and no refusal quotes the request. A person view writes a
+  `view` steward action and a BALP Patient Read record, a search one BALP
+  Patient Query record per person found or a Query record, and an export an
+  `export` action and an Export record, each stored before the answer. The
+  console's client reads the dashboard typed and walks every document field
+  by field, so a renamed field fails its build.
 - The operator console's image and release lane (#99).
   `docker/console/Dockerfile` puts the static console binary and its site
   bundle on the same distroless base, compiling nothing: user `65532`, port

@@ -111,6 +111,8 @@ the PIXm Manager or the PDQm Supplier, and for every steward action:
 | ITI-78 search | PDQm Query Supplier (PDQm 3.2.0 §2:3.78.5.1.2) |
 | ITI-119 `$match` | PDQm Match Supplier (§2:3.119.5.1.2) |
 | A steward's view or decision | BALP Patient Read or Patient Update |
+| A steward's search | BALP Patient Query per person found, or Query when none was |
+| An export of the steward trail | an Export event (DICOM `110106`) |
 
 Each record names the patient as its subject and, for a search, carries the
 raw request base64-encoded in `entity.query` (BALP 1.1.4 §1:52.4.1.4,

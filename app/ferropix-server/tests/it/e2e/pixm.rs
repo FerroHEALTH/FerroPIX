@@ -137,6 +137,11 @@ impl Harness {
         bearer(&self.issuer.token("synthetic-consumer", "system/Patient.rs"))
     }
 
+    /// A data steward's token.
+    pub(crate) fn steward(&self) -> String {
+        bearer(&self.issuer.token("synthetic-console", "__ferropix.steward"))
+    }
+
     /// The Source's token.
     pub(crate) fn source(&self) -> String {
         bearer(&self.issuer.token(SOURCE, "system/Patient.cud"))

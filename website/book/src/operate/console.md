@@ -10,15 +10,15 @@ a client of the FerroPIX server that keeps no patient data of its own. It is
 drawn with FerroUI, the component library every FerroHEALTH console shares,
 in the FerroPIX brand ({{dep:ferrohealth-ui}}).
 
-The console is built and runs from source today. The FerroPIX server it reads
-is planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3), and
-its operator API in [#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
-so every page that reads the server says that it cannot be shown: the server
-refused the connection, did not answer in time, refused the console, or
-answers but serves no operator API yet. A page never shows a row the server
-did not send. The console ships as its own container image, published by
-the release lane from the first tagged release
+The console is built and runs from source today. It reads the FerroPIX
+server's [operator API](operator-api.md), whose documents it compiles
+against; the pages that draw them are planned in the
+[v0.0.4 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/4).
+Until a page draws its document, it says that it cannot be shown: the
+server refused the connection, did not answer in time, refused the console,
+or answers but serves no operator API yet. A page never shows a row the
+server did not send. The console ships as its own container image,
+published by the release lane from the first tagged release
 ([The image](#the-image)).
 
 ## Build and run it

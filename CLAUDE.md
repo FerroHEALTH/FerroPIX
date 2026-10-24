@@ -203,9 +203,14 @@ The build order is the milestones:
   development issuer whose network namespace the server joins, with file
   secrets and the hardening set, and the console under the `console`
   profile.
-- `.github/`: CI with the single required `conclusion` check, CodeQL,
-  Scorecard, SonarQube Cloud (advisory), the weekly pin freshness lane,
-  the weekly fuzz lane (`fuzz.yml`, advisory), the weekly published-image
+- `.github/`: CI with the single required `conclusion` check,
+  `pr-guards.yml` (re-runs the contribution-licence, changelog and
+  crate-version guards in the head commit's CI run when a label or the
+  description changes), CodeQL, Scorecard, `sonar.yml` (SonarQube Cloud
+  with the coverage of the offline and `FERROPIX_E2E` suites, advisory),
+  `pin-freshness.yml` (weekly, files an issue for each pin behind its
+  newest upstream release), `fuzz.yml` (weekly and on a pull request that
+  touches a target's inputs, uploads a crash input, advisory), the weekly published-image
   scan (`image-scan.yml`), Dependabot, the Docs workflow, the release lane
   (`release.yml` calling the reusable `release-build.yml`,
   `release-image.yml`, `release-console.yml`, `release-crate.yml` and

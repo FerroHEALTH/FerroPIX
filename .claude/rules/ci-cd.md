@@ -34,6 +34,12 @@ placeholder tree). The
   `manifest` job reads the root manifest under the pinned toolchain even
   while the workspace is empty. The `conclusion` job is the single required
   status check on `main`.
+- `.github/workflows/pr-guards.yml`: on a label or description event of a
+  pull request, waits for the head commit's CI run and re-runs each guard
+  whose verdict the change may move (the contribution-licence guard on an
+  edited body, the changelog and crate-version guards on their escape
+  labels), so `conclusion` reports again in that run. It decides nothing a
+  merge depends on by itself.
 - `.github/workflows/codeql.yml`: CodeQL over the `actions` language and Rust.
 - `.github/workflows/scorecard.yml`: OpenSSF Scorecard, published to the
   OpenSSF API and to code scanning.

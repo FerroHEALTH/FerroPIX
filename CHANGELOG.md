@@ -426,6 +426,10 @@ and this project adheres to
 
 ### Fixed
 
+- The PIXm client percent-encodes a space in its ITI-83 query as `%20`
+  (RFC 3986 §2.1), where it wrote `+`, which a Manager reading the query
+  as RFC 3986 takes as a literal plus (#164, `ihe-iti` 0.0.47).
+
 - `ihe-iti` 0.0.46 fixes three request readers the new fuzz lane caught
   (#79). The ITI-83 `GET` reader refuses with a `400` and a `value` issue a
   query value no FHIR `string` holds (a vertical tab or a form feed), which

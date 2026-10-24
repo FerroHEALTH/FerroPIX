@@ -836,7 +836,7 @@ jobs:
           # §2:3.83.4.2.2.2); a refused token would be a 401.
           status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
             -H "Authorization: Bearer ${token}" \
-            'http://localhost:8080/fhir/Patient/$ihe-pix?sourceIdentifier=urn:oid:2.999.1.1|0')"
+            "http://localhost:8080/fhir/Patient/\$ihe-pix?sourceIdentifier=urn:oid:2.999.1.1|0")"
           [ "$status" = "404" ] || { echo "::error::ITI-83 answered ${status}, not 404" >&2; exit 1; }
       - name: Logs of a failed start
         if: failure()

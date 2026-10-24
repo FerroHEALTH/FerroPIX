@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use ferropix_server::config::Config;
 use ferropix_server::config::secret::{REDACTED, Secret, SecretUrl};
 
-use crate::support::{FULL, PASSWORD, Secrets};
+use crate::support::{DATA_KEY, FULL, PASSWORD, Secrets};
 
 #[test]
 fn the_secret_types_render_three_stars_through_debug_display_and_serialize() {
@@ -55,10 +55,7 @@ fn the_resolved_settings_show_neither_the_url_password_nor_the_key() {
         .expect("the full configuration resolves");
     let rendered = format!("{settings:?}");
     assert!(!rendered.contains(PASSWORD), "the URL password leaked");
-    assert!(
-        !rendered.contains("a-sealing-key-made-for-this-test"),
-        "the sealing key leaked"
-    );
+    assert!(!rendered.contains(DATA_KEY), "the sealing key leaked");
     assert_eq!(
         "postgres://***@db.invalid:5432/pix?***",
         settings.db.url.to_string()

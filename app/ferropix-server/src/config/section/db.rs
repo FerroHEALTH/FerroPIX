@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Profile;
 use crate::config::error::Error;
 use crate::config::secret::{self, Secret, SecretUrl};
+use crate::store::seal::{KeyFormatError, SealingKey};
 
 /// The `[db]` section as written.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -54,8 +55,8 @@ pub struct DbSettings {
     pub pool_size: u32,
     /// Whether `serve` applies the pending migrations at start.
     pub migrate: bool,
-    /// The sealing key, as the file holds it.
-    pub data_key: Secret,
+    /// The sealing key the identifier values are sealed under.
+    pub data_key: SealingKey,
 }
 
 impl Db {
@@ -65,7 +66,9 @@ impl Db {
     /// Returns every [`Error`] of [`secret::read`] for the URL,
     /// [`Error::Missing`] for an unset URL or key file, [`Error::Value`] for a
     /// URL that is not `postgres://` or `postgresql://` or a pool of 0, and
-    /// the errors of [`secret::read_file`] for the key file.
+    /// the errors of [`secret::read_file`] for the key file, and
+    /// [`Error::Value`] for a key file that does not hold the base64 of 32
+    /// bytes.
     pub fn resolve(&self, profile: Profile) -> Result<DbSettings, Error> {
         let inline = self.url.as_ref().map(|url| Secret::new(url.expose()));
         let url = secret::read("db.url", inline.as_ref(), self.url_file.as_deref(), profile)?
@@ -92,8 +95,12 @@ impl Db {
             .ok_or_else(|| Error::Missing {
                 key: String::from("db.data_key_file"),
             })?;
-        // TODO(#59): read the key in the form the sealing defines.
-        let data_key = secret::read_file("db.data_key_file", key_file)?;
+        let data_key =
+            SealingKey::from_base64(secret::read_file("db.data_key_file", key_file)?.expose())
+                .map_err(|KeyFormatError| Error::Value {
+                    key: String::from("db.data_key_file"),
+                    rule: "the file holds the base64 of exactly 32 bytes",
+                })?;
         Ok(DbSettings {
             url: SecretUrl::new(url.expose()),
             pool_size: self.pool_size,
@@ -112,6 +119,9 @@ mod tests {
     use crate::config::error::Error;
     use crate::config::secret::SecretUrl;
 
+    /// A sealing key made for the tests: the base64 of 32 bytes of `A`.
+    const TEST_KEY: &str = "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=";
+
     fn db(url: &str, key: &Path) -> Db {
         Db {
             url: Some(SecretUrl::new(url)),
@@ -124,7 +134,7 @@ mod tests {
     fn a_url_of_another_scheme_a_zero_pool_and_a_missing_key_file_are_refused() {
         let directory = tempfile::tempdir().expect("a temporary directory");
         let key = directory.path().join("key");
-        std::fs::write(&key, "a-test-key-made-for-this-case").expect("the fixture is written");
+        std::fs::write(&key, TEST_KEY).expect("the fixture is written");
         db("postgres://db.invalid/pix", &key)
             .resolve(Profile::Development)
             .expect("a PostgreSQL URL resolves");
@@ -158,7 +168,7 @@ mod tests {
     fn a_bare_url_is_refused_under_production_and_its_file_is_taken() {
         let directory = tempfile::tempdir().expect("a temporary directory");
         let key = directory.path().join("key");
-        std::fs::write(&key, "a-test-key-made-for-this-case").expect("the fixture is written");
+        std::fs::write(&key, TEST_KEY).expect("the fixture is written");
         let error = db("postgres://u:Qz7pw@db.invalid/pix", &key)
             .resolve(Profile::Production)
             .expect_err("production takes the URL from its file");
@@ -179,6 +189,27 @@ mod tests {
         .expect("the URL file resolves");
         assert_eq!("postgres://***@db.invalid/pix", from_file.url.to_string());
         assert!(!format!("{from_file:?}").contains("Qz7pw"));
-        assert!(!format!("{from_file:?}").contains("a-test-key"));
+        assert!(!format!("{from_file:?}").contains(TEST_KEY));
+    }
+
+    #[test]
+    fn a_key_file_that_is_not_the_base64_of_32_bytes_is_refused() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let key = directory.path().join("key");
+        for text in [
+            "a-key-that-is-no-base64",
+            "QUFBQQ==",
+            "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB",
+        ] {
+            std::fs::write(&key, text).expect("the fixture is written");
+            let error = db("postgres://db.invalid/pix", &key)
+                .resolve(Profile::Development)
+                .expect_err("the key is refused");
+            assert!(
+                matches!(&error, Error::Value { key, .. } if key == "db.data_key_file"),
+                "{error:?}"
+            );
+            assert!(!error.to_string().contains(text), "{error}");
+        }
     }
 }

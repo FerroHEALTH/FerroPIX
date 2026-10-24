@@ -145,8 +145,10 @@ FerroBRIDGE's `app/ferrobridge-server`).
 **Subcommands.** `serve` runs the server; `config check` loads and validates
 the configuration and exits; `healthcheck` asks `GET {base}/health/readiness`
 of the process beside it with a short timeout and exits 0 or 1, the
-container `HEALTHCHECK`; `db migrate` applies the pending migrations and
-exits (`serve` applies them at start unless `[db] migrate = false`).
+container `HEALTHCHECK`; `db migrate` applies the pending migrations,
+checks the sealing key and applies the `[[domain]]` seed, and exits (`serve`
+does the same at start, the migrations unless `[db] migrate = false`); `db
+reseal --old-key-file <path>` rotates the sealing key (section 4.2).
 
 **Configuration.** One TOML file named by `FERROPIX_CONFIG` or `--config`,
 overridden by environment variables `FERROPIX__<SECTION>__<KEY>` (two
@@ -236,14 +238,17 @@ state.
 
 One schema, `pix`, one migration set under `app/ferropix-server/migrations/`
 (`sqlx migrate`, one concern per file, the grants in the last file of the
-set), applied in order by `db migrate` or at the start of `serve`. Every
+set), embedded in the binary and applied in order by `db migrate` or at the
+start of `serve`, under the migrator's advisory lock, with its bookkeeping in
+`pix._sqlx_migrations`; the migrator creates the schema, and `btree_gist`
+is installed into `pix`, so the runtime role needs no other schema. Every
 database-minted id is `uuidv7()`, so ids sort by time and the history of a
 row reads in order without a sequence.
 
 | Relation | Columns (the load-bearing ones) | Notes |
 |---|---|---|
 | `identifier_domain` | `id`, `system` (unique), `name`, `kind`, `source_client_id`, `sensitive`, `created_at`, `retired_at` | retired, never deleted; a retired domain answers `targetSystem not found` (section 6) |
-| `source_record` | `id`, `domain_id`, `identifier_hmac` (unique with `domain_id`), `identifier_sealed`, `head_version`, `active`, `replaced_by` (a `source_record.id` of the same domain), `removed_at` | the one mutable row per record; `replaced_by` is the Source's own duplicate resolution (PIXm 3.1.0 §2:3.104.4.2.3) |
+| `source_record` | `id`, `domain_id`, `identifier_hmac` (unique with `domain_id`), `identifier_sealed` or `identifier_value` (exactly one), `key_id`, `head_version`, `active`, `replaced_by` (a `source_record.id` of the same domain), `removed_at` | the one mutable row per record; `replaced_by` is the Source's own duplicate resolution (PIXm 3.1.0 §2:3.104.4.2.3) |
 | `source_record_version` | `id`, `record_id`, `version`, `demographics` (jsonb), `received_at`, `channel` (`fhir`, `v2`, `pmir`), `request_id` | write-once; every feed inserts one |
 | `person` | `id`, `status` (`active`, `merged`), `merged_into`, `created_at` | the Patient Master Identity; `id` is the FHIR `Patient.id` |
 | `link` | `id`, `record_id`, `person_id`, `kind`, `score`, `valid` (`tstzrange`), `made_by` (an actor), `made_at`, `reason`, `ended_by_action` | `UNIQUE (record_id, valid WITHOUT OVERLAPS)` over `btree_gist`, so a record is in one person at any instant and the history is the table |
@@ -256,26 +261,47 @@ row reads in order without a sequence.
 | `subscription` | `id`, `resource` (jsonb), `status`, `criteria`, `endpoint`, `error`, `created_at` | ITI-94 |
 | `feed_outbox` | `id`, `subscription_id`, `bundle` (jsonb), `attempts`, `next_at`, `delivered_at` | ITI-93 messages to subscribers, delivered with bounded retry |
 | `v2_receipt` | `control_id`, `sending_facility`, `received_at`, `ack_code` | the MSH-10 of each v2 message, so a resent message is acknowledged again and not applied twice (section 7) |
+| `seal_key` | `key_id`, `pending_key_id`, `set_at` | one row: the id of the key the identifier columns are written under, and the key an unfinished `db reseal` moves them to |
 
 **Sealing.** An identifier value is personal data and, in a domain marked
 `sensitive` (the BSN, by default every domain), it is stored sealed:
-`identifier_sealed` is the value under AES-256-GCM with the key `[db]
-data_key_file` names, and `identifier_hmac` is HMAC-SHA256 of the normalised
-value under a second key derived from it, which is what the equality lookups
-of ITI-83, ITI-104 and the `identifier` search parameter use. A database
-dump therefore shows no identifier, and a lookup is one index probe. The
+`identifier_sealed` is a format byte, a random 96-bit nonce and the value
+under AES-256-GCM with the key `[db] data_key_file` names (the base64 of 32
+random bytes), the domain id as associated data, so a sealed value moved to
+another domain does not open. In a domain not marked `sensitive` the value
+is `identifier_value`, plain. Either way `identifier_hmac` is HMAC-SHA256 of
+the domain id and the value, as the feed normalised it (section 5.1), under
+a second key derived from the first with HKDF-SHA256 (RFC 5869), which is
+what the equality lookups of ITI-83, ITI-104 and the `identifier` search
+parameter use; the domain id in it keeps one value in two domains from
+showing as one. A database dump therefore shows no sealed identifier, and a
+lookup is one probe of the `(domain_id, identifier_hmac)` index. The
 demographics are not sealed: the search of ITI-78 needs prefix and
 `:exact` string matching (PDQm 3.2.0 §2:3.78.4.1.2.2) and the scorer needs
 the values, so they stay plain in a database whose roles and disk the
 operator protects, as FerroEHR keeps its party records plain and seals only
-`national_identifier`. The key is rotated by `db reseal`, which rewrites
-every sealed column under the new key in batches and is the one subcommand
-that reads the old key. No specification governs sealing: our own design.
+`national_identifier`. Every row carries the `key_id` it was written under,
+16 bytes derived from the key, and `seal_key` names the store's key: the
+first start records it, and a start under another key is refused, since it
+would find nothing and answer every identifier as unknown. The key is
+rotated by `db reseal`, the one subcommand that reads the old key: it marks
+the configured key pending in `seal_key`, which refuses every start until it
+finishes, rewrites the HMAC of every record and the sealed value of every
+sealed one in batches of 500, one transaction each, so an interrupted run
+resumes, and records the new key once no row is left under the old one. No
+specification governs sealing: our own design.
 
 **Roles.** The server connects as `ferropix`, which owns schema `pix` and
-nothing else; a `ferropix_migrate` role runs the migrations. A boot gate
-refuses to serve when the connected role can read any schema beside `pix`,
-after FerroEHR's `verify_domain_isolation`.
+nothing else, and runs the migrations itself unless `[db] migrate = false`.
+A deployment that migrates with another role runs `db migrate` as that role,
+and the grants file gives `ferropix` the schema and its rows, without
+`UPDATE` or `DELETE` on the write-once relations, which a trigger refuses to
+any role. A boot gate refuses to serve when the connected role can read any
+schema beside `pix`: a superuser, a member of `pg_read_all_data`, or a role
+with `SELECT` on a table, view, materialized view, foreign table or sequence
+in another schema, the system catalogs aside; `db migrate` is not gated,
+since the role it runs as may be wider. After FerroEHR's
+`verify_domain_isolation`.
 
 ### 4.3 Transactions and concurrency
 
@@ -1568,3 +1594,5 @@ The milestones carry the order; every issue cites the section it builds.
 | D12 | Helm | a chart after the images, as FerroEHR ships one | owner 2026-10-21: Helm only if a sibling ships one |
 | D13 | FerroUI gaps | six components and the FerroPIX brand theme, filed on FerroUI, built there; the confirm-with-preview composed from existing parts | owner 2026-10-21; `.claude/memory/ferroui-lockstep.md` |
 | D14 | The identifier search field | masked as typed, posted, never in a URL | #52; owner 2026-10-21 |
+| D15 | A start under another sealing key | refused, with the key id of every row and of the store recorded; `db reseal` resumable and refusing every start until done | no specification governs it; a wrong key would answer every identifier as unknown, a silent wrong answer |
+| D16 | The store's errors | the SQLSTATE, the constraint and the message of a refusal; never PostgreSQL's detail, which quotes the row | no specification governs it; PostgreSQL fills the detail of a refusal with the values of the offending row |

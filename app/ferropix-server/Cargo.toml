@@ -23,7 +23,13 @@ name = "ferropix"
 path = "src/main.rs"
 
 [dependencies]
+# The sealing of identifier values at rest: AES-256-GCM, HMAC-SHA256 and
+# HKDF-SHA256 (docs/architecture.md §4.2).
+aws-lc-rs.workspace = true
 axum.workspace = true
+# The sealing key file holds the base64 of its 32 bytes; the audit tests read
+# back a search's base64 query entity.
+base64.workspace = true
 clap.workspace = true
 # The R4 OperationOutcome and CapabilityStatement the FHIR face answers, and
 # the AuditEvent the audit tests read back, from the generated model.
@@ -49,8 +55,12 @@ jsonwebtoken.workspace = true
 reqwest = { workspace = true, features = ["rustls"] }
 secrecy.workspace = true
 serde.workspace = true
-# The bodies of the FHIR face, written from the generated model.
+# The bodies of the FHIR face, written from the generated model, and the
+# demographics a source record version carries, stored as jsonb.
 serde_json.workspace = true
+# The cross-reference store: PostgreSQL 18 with the embedded migration set,
+# uuid ids and jsonb demographics, over rustls for a `sslmode=require` URL.
+sqlx = { workspace = true, features = ["macros", "migrate", "uuid", "json", "tls-rustls-aws-lc-rs"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 toml.workspace = true
@@ -60,16 +70,13 @@ tower-http = { workspace = true, features = ["request-id", "catch-panic", "timeo
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
-# The request id minted for a request that brings none.
+# The request id minted for a request that brings none, and the store's ids.
 uuid.workspace = true
 
 [dev-dependencies]
-# The base64 query entity of a search's audit record, read back.
-base64.workspace = true
-# The synthetic BSN the request-log test sends, from the reserved range.
+# PostgreSQL behind FERROPIX_E2E, and the synthetic BSNs, names and domains
+# the store cases and the request-log test send.
 ferropix-testkit = { path = "../../tools/ferropix-testkit" }
-# The signing keys of the authorization tests, generated when a case runs.
-aws-lc-rs.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "process", "test-util"] }
 tower = { workspace = true, features = ["util"] }

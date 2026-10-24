@@ -9,13 +9,13 @@ the crates, which you configure in your own code.
 
 ## The server
 
-The server loads and checks every section below at start, and `serve` runs
-the HTTP listener with its health routes and the guard in front of the FHIR
-face and the operator API (`[auth]`). The services behind the sections
-are planned in the
+The server loads and checks every section below at start, and `serve`
+starts the store (see [The store](#the-store)) and runs the HTTP listener
+with its health routes and the guard in front of the FHIR face and the
+operator API (`[auth]`). The other services behind the sections are planned
+in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3):
-the store and its migrations
-([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the usage
+the usage
 report ([#153](https://github.com/FerroHEALTH/FerroPIX/issues/153)), and
 the PIXm and PDQm faces
 ([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
@@ -27,10 +27,11 @@ keeps working when the service lands.
 
 | Command | What it does |
 |---|---|
-| `ferropix serve` | Reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
+| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, and exits 0 when the server would start on it. Otherwise it prints the first error on one line and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down exits 1. Use it as the container health check. |
-| `ferropix db migrate` | Applies the pending migrations. Planned with the store ([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)); today it exits 2 and names the issue. |
+| `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` seed, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
+| `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 
 Every command takes `--config <PATH>`. A refused configuration exits 78
 (`EX_CONFIG`), so an orchestrator can tell a bad configuration from a server
@@ -122,8 +123,51 @@ fails answers `500` with that id and no detail.
 | `db.url` | none | The PostgreSQL URL, `postgres://` or `postgresql://`. Development only; under production use `db.url_file`. |
 | `db.url_file` | none | The file holding the PostgreSQL URL. One of `db.url` and `db.url_file` is required. |
 | `db.pool_size` | `10` | The most connections the pool holds. |
-| `db.migrate` | `true` | Whether `serve` applies the pending migrations at start. |
-| `db.data_key_file` | none, required | The file holding the key every identifier value is sealed under at rest. |
+| `db.migrate` | `true` | Whether `serve` applies the pending migrations at start. With `false`, run `ferropix db migrate` before `serve`. |
+| `db.data_key_file` | none, required | The file holding the sealing key: the base64 of 32 random bytes, which `openssl rand -base64 32` makes. Any other content is refused. |
+
+### The store
+
+The server keeps the cross-reference in schema `pix` of a PostgreSQL 18
+database. `ferropix db migrate`, and `serve` unless `db.migrate = false`, run
+these steps in order:
+
+1. **The migrations.** The migration set is built into the binary and
+   applied in order, each file once, under a lock, so two servers that start
+   together apply it once. The migrator creates schema `pix` and keeps its
+   record of applied files in `pix._sqlx_migrations`. A file changed after it
+   was applied stops the start.
+2. **The key check.** The first start records which key the identifiers are
+   written under. A later start with a different `db.data_key_file`, or one
+   during an unfinished `db reseal`, is refused, because the server would
+   otherwise find no record by its identifier and answer every lookup as
+   unknown.
+3. **The seed.** Each `[[domain]]` the store lacks is inserted. A domain the
+   store holds already is left as it is, since the store is the record; when
+   it differs from the seed, the server logs a warning naming its system.
+
+Before these steps, `serve` refuses to start when the role it connects as
+can read anything outside `pix`: a superuser, a member of
+`pg_read_all_data`, or a role with `SELECT` on any table, view or sequence
+in another schema. Connect `serve` as a role that has `CREATE` on the
+database (the migrations create the schema and the `btree_gist` extension,
+which PostgreSQL trusts any such role to create) and nothing else. To
+migrate with another role, run `ferropix db migrate` as that role first;
+the last migration grants a role named `ferropix` the rows it needs, so
+`serve` can connect as `ferropix` with `db.migrate = false`.
+
+**Sealing.** In a domain with `sensitive = true`, an identifier value is
+stored encrypted with AES-256-GCM under the sealing key, and every
+identifier is found by an HMAC-SHA256 under a key derived from it, so a
+database dump shows no identifier and a lookup is one index probe. The
+demographics are stored plain, because search and matching read them.
+
+**Rotating the key.** Stop every server, put the new key in the file
+`db.data_key_file` names, keep the old key in another file, and run
+`ferropix db reseal --old-key-file <old>`. It rewrites the identifier
+columns in batches of 500, one transaction each, and a run that stops
+part way resumes when you run it again. Until it finishes, `serve` refuses
+to start. Afterwards the old key opens nothing, and you can destroy it.
 
 ### `[auth]`
 

@@ -77,6 +77,12 @@ Basic users are for a run on your own machine: they need
   ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)). A proxy in front of any Manager must not log query strings,
   because a client that uses the `GET` puts the identifier there.
 - The PMIR feed drops every demographic as it reads an ITI-93 message.
+- The server's store seals every identifier of a sensitive domain at rest
+  and finds it by a keyed HMAC, so a database dump shows no identifier
+  ([The store](configuration.md#the-store)). Its errors keep the SQLSTATE,
+  the constraint and the message of a refusal and drop the detail
+  PostgreSQL fills with the row, so no identifier or name reaches a log line
+  through them.
 
 ## Access tokens
 

@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The `ferropix` binary: `config check` on the quickstart and on a refused
-//! configuration, the pending `db migrate`, and `healthcheck` with nothing
-//! listening.
+//! configuration, `db migrate` and `db reseal` with no store to reach, and
+//! `healthcheck` with nothing listening.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use ferropix_server::{EXIT_CONFIG, EXIT_PENDING_JOB};
+use ferropix_server::EXIT_CONFIG;
 
-use crate::support::{PASSWORD, Secrets};
+use crate::support::{DATA_KEY, PASSWORD, Secrets};
 
 /// The quickstart configuration beside the crate's manifest.
 fn quickstart() -> PathBuf {
@@ -111,12 +111,54 @@ fn config_check_never_prints_a_secret_it_refuses() {
 }
 
 #[test]
-fn db_migrate_names_the_issue_that_lands_it() {
+fn db_migrate_with_no_store_to_reach_fails_without_printing_a_secret() {
     let secrets = Secrets::new();
-    let output = ferropix(&["db", "migrate"], &secrets);
-    assert_eq!(Some(i32::from(EXIT_PENDING_JOB)), output.status.code());
+    let output = ferropix(
+        &[
+            "db",
+            "migrate",
+            "--config",
+            &quickstart().display().to_string(),
+        ],
+        &secrets,
+    );
+    assert_eq!(Some(1), output.status.code(), "{output:?}");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("#59"), "{stderr}");
+    assert!(stderr.contains("cannot connect to the store"), "{stderr}");
+    assert!(!stderr.contains(PASSWORD), "{stderr}");
+    assert!(!stderr.contains(DATA_KEY), "{stderr}");
+}
+
+#[test]
+fn db_reseal_refuses_an_old_key_that_is_no_key_and_never_prints_it() {
+    let secrets = Secrets::new();
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let old = directory.path().join("old-key");
+    std::fs::write(
+        &old,
+        "Qz7-not-a-key
+",
+    )
+    .expect("the old key file is written");
+    let output = ferropix(
+        &[
+            "db",
+            "reseal",
+            "--old-key-file",
+            &old.display().to_string(),
+            "--config",
+            &quickstart().display().to_string(),
+        ],
+        &secrets,
+    );
+    assert_eq!(
+        Some(i32::from(EXIT_CONFIG)),
+        output.status.code(),
+        "{output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("old_key_file"), "{stderr}");
+    assert!(!stderr.contains("Qz7-not-a-key"), "{stderr}");
 }
 
 #[test]

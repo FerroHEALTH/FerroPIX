@@ -19,6 +19,58 @@ and this project adheres to
   route template and the status and nothing that names a patient, a caller
   or a query.
 
+- The operator API's reveal and domain writes (#90).
+  `POST /operator/persons/{id}/reveal` unmasks one identifier, carried
+  identifier or pseudonym the person holds, with a required reason: a
+  `reveal` steward action naming the person, the record and the domain, and
+  a BALP Privacy Disclosure record with the person as subject and the reason
+  as a detail, are written in one transaction before the value is answered
+  once, `no-store`, shown 15 seconds by default and never more than 30.
+  Behind the administrator scope, `POST /operator/domains` adds a local or
+  authoritative domain whose Source an issuer lists, and
+  `PATCH /operator/domains/{id}` renames one, gives it another Source or
+  retires it for good, each a `domain-create` or `domain-update` steward
+  action with its BALP record; the guard takes the new Source the moment
+  the write commits. The migration `0014_steward_subjects` adds the
+  identifier and pseudonymisation domain a steward action names, and the
+  grants move to `0015`. The trail and its export carry both columns.
+- The operator API the console reads (#90, `ferropix_server::operator`),
+  under `{base}/operator` behind `[operator] enabled` and the steward or
+  administrator scope the permission table names, with its documents in
+  `ferropix-operator-api`. `GET /operator/overview` answers the dashboard;
+  `POST /operator/search/identifier` finds the persons one identifier is
+  cross-referenced to by its HMAC, a carried authoritative identifier
+  included, and `POST /operator/search/demographics` runs the scorer over
+  the blocking keys, each paged (20 by default, at most 50);
+  `GET /operator/persons/{id}` answers the person with its identifiers per
+  domain masked, its source records, its history (at most 200 entries) and
+  its pseudonyms masked; `GET /operator/domains` and
+  `GET /operator/domains/{id}` the identifier domains with their record
+  counts and last 20 feeds; `GET /operator/matching` the `[matching]`
+  section in effect with every field's weights; `GET /operator/actions` a
+  page of the steward trail filtered by actor, kind, person and time, and
+  `POST /operator/actions/export` the same as CSV, at most 10,000 rows.
+  Every lookup that carries an identifier is a `POST`, every answer is
+  `no-store`, and no refusal quotes the request. A person view writes a
+  `view` steward action and a BALP Patient Read record, a search one BALP
+  Patient Query record per person found or a Query record, and an export an
+  `export` action and an Export record, each stored before the answer. The
+  console's client reads the dashboard typed and walks every document field
+  by field, so a renamed field fails its build.
+- The operator console's image and release lane (#99).
+  `docker/console/Dockerfile` puts the static console binary and its site
+  bundle on the same distroless base, compiling nothing: user `65532`, port
+  `3000`, the bundle under `/site`, and a `HEALTHCHECK` on
+  `ferropix-console healthcheck`. A `v*` tag now builds, attests and
+  attaches the console's musl binaries and site bundle and pushes
+  `ghcr.io/ferrohealth/ferropix-console` for both platforms with SLSA
+  provenance and SPDX SBOMs (`release-console.yml`), checked with
+  `gh attestation verify`; the vulnerability record, the tag gate and the
+  weekly scan cover it beside the server image. `compose.yaml` gains the
+  `console` profile, signed in through the development issuer with the
+  client secret as a file secret. CI builds the console image from a
+  placeholder tree. The book's console page documents the image, its port
+  and its verification.
 - The PDQm Patient Demographics Supplier with the Match Operation Option
   (#70, #72, #73, `ferropix_server::pdqm`). ITI-78 answers
   `GET /fhir/Patient` and `POST /fhir/Patient/_search` alike with every
@@ -378,6 +430,10 @@ and this project adheres to
   (#43).
 
 ### Fixed
+
+- The PIXm client percent-encodes a space in its ITI-83 query as `%20`
+  (RFC 3986 §2.1), where it wrote `+`, which a Manager reading the query
+  as RFC 3986 takes as a literal plus (#164, `ihe-iti` 0.0.47).
 
 - `ihe-iti` 0.0.46 fixes three request readers the new fuzz lane caught
   (#79). The ITI-83 `GET` reader refuses with a `400` and a `value` issue a

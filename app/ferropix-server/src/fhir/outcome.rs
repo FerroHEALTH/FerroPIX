@@ -27,6 +27,16 @@ pub enum IssueType {
     Transient,
     /// `not-supported`: the server does not serve the interaction.
     NotSupported,
+    /// `invalid`: the request is not well formed.
+    Invalid,
+    /// `not-found`: what the request names does not exist.
+    NotFound,
+    /// `too-long`: the request body is larger than the server reads.
+    TooLong,
+    /// `exception`: the server could not answer.
+    Exception,
+    /// `conflict`: the request conflicts with what the server holds.
+    Conflict,
 }
 
 impl IssueType {
@@ -38,6 +48,11 @@ impl IssueType {
             Self::Forbidden => "forbidden",
             Self::Transient => "transient",
             Self::NotSupported => "not-supported",
+            Self::Invalid => "invalid",
+            Self::NotFound => "not-found",
+            Self::TooLong => "too-long",
+            Self::Exception => "exception",
+            Self::Conflict => "conflict",
         }
     }
 }

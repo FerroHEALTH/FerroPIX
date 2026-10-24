@@ -129,7 +129,7 @@ pub fn resolve(domains: &[Domain], auth: &AuthSettings) -> Result<Vec<DomainSeed
 /// Returns whether `system` is an absolute URI with no whitespace, and, when
 /// it starts with `urn:oid:`, the FHIR R4 `oid` type,
 /// `urn:oid:[0-2](\.(0|[1-9][0-9]*))+` (<https://hl7.org/fhir/R4/datatypes.html#oid>).
-fn is_system(system: &str) -> bool {
+pub(crate) fn is_system(system: &str) -> bool {
     if system.chars().any(char::is_whitespace) || url::Url::parse(system).is_err() {
         return false;
     }

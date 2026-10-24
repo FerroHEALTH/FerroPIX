@@ -442,3 +442,204 @@ async fn no_identifier_name_or_query_value_reaches_a_log_a_debug_rendering_or_an
         }
     }
 }
+
+/// Sends each `(method, uri, body)` as the steward and returns the bodies of
+/// the refusals, with the id of the first person a success names.
+async fn operator_requests(
+    harness: &super::pixm::Harness,
+    requests: &[(http::Method, String, Option<String>)],
+) -> (Vec<String>, Option<String>) {
+    let steward = harness.steward();
+    let json = [(http::header::CONTENT_TYPE, "application/json")];
+    let mut refusals = Vec::new();
+    let mut person = None;
+    for (method, uri, body) in requests {
+        let headers: &[(http::header::HeaderName, &str)] = if body.is_some() { &json } else { &[] };
+        let answer = harness
+            .send(method.clone(), uri, Some(&steward), headers, body.clone())
+            .await;
+        if answer.status.is_success() {
+            if answer.body.starts_with('{') {
+                person = person.or_else(|| {
+                    answer.json()["persons"][0]["id"]
+                        .as_str()
+                        .map(str::to_owned)
+                });
+            }
+        } else {
+            refusals.push(answer.body);
+        }
+    }
+    (refusals, person)
+}
+
+/// The requests the operator leak case sends with the stored BSN `stored`
+/// and a BSN no record holds, `unknown`: the searches, refused ones among
+/// them, an export and a trail filter that does not read.
+fn leak_requests(stored: &str, unknown: &str) -> Vec<(http::Method, String, Option<String>)> {
+    let post = |uri: &str, body: String| (http::Method::POST, uri.to_owned(), Some(body));
+    let identifier = "/operator/search/identifier";
+    let demographics = "/operator/search/demographics";
+    vec![
+        post(
+            identifier,
+            format!(r#"{{"system":"{BSN_SYSTEM}","value":"{stored}"}}"#),
+        ),
+        post(
+            identifier,
+            format!(r#"{{"system":"{BSN_SYSTEM}","value":"{unknown}"}}"#),
+        ),
+        post(
+            identifier,
+            format!(r#"{{"system":"urn:oid:2.999.9.9","value":"{unknown}"}}"#),
+        ),
+        post(
+            identifier,
+            format!(r#"{{"system":"x","value":"{unknown}","colour":"{unknown}"}}"#),
+        ),
+        post(
+            identifier,
+            format!(r#"{{"system":"{BSN_SYSTEM}","value":{unknown}}}"#),
+        ),
+        post(
+            demographics,
+            format!(
+                r#"{{"family":"{}","birth_date":"1961-04-12"}}"#,
+                FAMILY_NAMES[0]
+            ),
+        ),
+        post(
+            demographics,
+            format!(
+                r#"{{"family":"{}","birth_date":"{unknown}"}}"#,
+                FAMILY_NAMES[3]
+            ),
+        ),
+        post(
+            demographics,
+            format!(r#"{{"family":"{}","given":1}}"#, FAMILY_NAMES[3]),
+        ),
+        post(
+            "/operator/actions/export",
+            format!(r#"{{"actor":"{unknown}"}}"#),
+        ),
+        (
+            http::Method::GET,
+            format!("/operator/actions?person={unknown}"),
+            None,
+        ),
+    ]
+}
+
+#[tokio::test]
+async fn no_identifier_name_or_query_value_reaches_a_log_a_span_or_a_refusal_through_the_operator_api()
+ {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = super::pixm::Harness::start(super::pixm::synthetic_seeds()).await;
+    let captured = crate::auth::Captured::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .with_max_level(tracing::Level::TRACE)
+        .with_current_span(true)
+        .with_span_list(true)
+        .with_writer(captured.clone())
+        .finish();
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let (hospital, stored) = super::pixm::feed_both(&harness).await;
+    let unknown = bsn(8).expose().to_owned();
+    let (mut refusals, person) =
+        operator_requests(&harness, &leak_requests(&stored, &unknown)).await;
+    let person = person.expect("the stored BSN finds its person");
+    let (more, _) = operator_requests(
+        &harness,
+        &[
+            (
+                http::Method::GET,
+                format!("/operator/persons/{person}"),
+                None,
+            ),
+            (
+                http::Method::GET,
+                format!("/operator/actions?person={person}&actor={unknown}"),
+                None,
+            ),
+            reveal(
+                &person,
+                r#"{"carried":"00000000-0000-7000-8000-000000000000"}"#,
+                &unknown,
+            ),
+            reveal(&person, r#"{"record":"x"}"#, ""),
+        ],
+    )
+    .await;
+    refusals.extend(more);
+    reveal_every(&harness, &person).await;
+    assert!(
+        refusals.len() >= 5,
+        "the refusals were driven: {refusals:?}"
+    );
+    let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+    assert!(
+        logs.contains("/operator/search/identifier"),
+        "the request log names the route: {logs}"
+    );
+    let secrets = [
+        stored,
+        unknown,
+        hospital,
+        String::from(super::pixm::LAB),
+        FAMILY_NAMES[0].to_owned(),
+        FAMILY_NAMES[3].to_owned(),
+        GIVEN_NAMES[0].to_owned(),
+        String::from("1961-04-12"),
+    ];
+    for (place, text) in [("the log", logs), ("a refusal", refusals.join("\n"))] {
+        for secret in &secrets {
+            assert!(
+                !text.contains(secret.as_str()),
+                "{place} holds an identifier, a name or a query value: {text}"
+            );
+        }
+    }
+}
+
+/// The reveal of `target` of the person `person` with `reason`.
+fn reveal(person: &str, target: &str, reason: &str) -> (http::Method, String, Option<String>) {
+    (
+        http::Method::POST,
+        format!("/operator/persons/{person}/reveal"),
+        Some(format!(r#"{{"target":{target},"reason":"{reason}"}}"#)),
+    )
+}
+
+/// Reveals every identifier of the person `person`, each answered.
+async fn reveal_every(harness: &super::pixm::Harness, person: &str) {
+    let steward = harness.steward();
+    let read = harness
+        .send(
+            http::Method::GET,
+            &format!("/operator/persons/{person}"),
+            Some(&steward),
+            &[],
+            None,
+        )
+        .await;
+    let document: ferropix_operator_api::person::Person =
+        serde_json::from_str(&read.body).expect("the person reads");
+    for row in &document.identifiers {
+        let target = serde_json::to_string(&row.handle).expect("a handle");
+        let (method, uri, body) = reveal(person, &target, "a leak check");
+        let answer = harness
+            .send(
+                method,
+                &uri,
+                Some(&steward),
+                &[(http::header::CONTENT_TYPE, "application/json")],
+                body,
+            )
+            .await;
+        assert_eq!(http::StatusCode::OK, answer.status, "{}", answer.body);
+    }
+}

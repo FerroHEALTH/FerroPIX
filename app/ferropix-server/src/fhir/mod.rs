@@ -6,7 +6,8 @@
 //! configuration switches on, behind the guard.
 //!
 //! The capability statement, the SMART discovery document, the PIXm
-//! Manager ([`pixm`]) and the PDQm Supplier ([`pdqm`]) answer; every other
+//! Manager ([`pixm`]), the PDQm Supplier ([`pdqm`]) and the operator API
+//! ([`crate::operator`]) answer; every other
 //! transaction route answers `501` with a `not-supported` issue until the
 //! issue that serves it lands, so the guard in front of it is in place and
 //! tested first. [`status`] is the one table of every outcome a transaction
@@ -146,6 +147,13 @@ pub fn routes(
         )),
         audit.clone(),
     ));
+    let operator = Arc::new(crate::operator::Operator::new(
+        backend.store.clone(),
+        &backend.matching,
+        audit.clone(),
+        smart.sources().clone(),
+        public_base_url,
+    ));
     let mut router = Router::new();
     for route in table::ROUTES
         .iter()
@@ -154,7 +162,9 @@ pub fn routes(
         let Ok(filter) = MethodFilter::try_from(route.method.clone()) else {
             continue;
         };
-        if let Some(handler) = pdqm::handler(route, filter, &pdqm) {
+        if let Some(handler) = pdqm::handler(route, filter, &pdqm)
+            .or_else(|| crate::operator::handler(route, filter, &operator))
+        {
             router = router.route(route.path, handler);
             continue;
         }
@@ -268,7 +278,9 @@ async fn pending_fhir() -> Response {
 }
 
 /// A route of the operator API that is not served yet.
-// TODO(#90): serve the operator API.
+// TODO(#107): serve the review queue and the decisions.
+// TODO(#108): serve the merge preview, the merge and the unmerge.
+// TODO(#115): serve the pseudonymisation domains and the resolution.
 async fn pending_operator() -> Response {
     respond(
         StatusCode::NOT_IMPLEMENTED,

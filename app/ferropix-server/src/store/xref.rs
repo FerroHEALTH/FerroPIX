@@ -84,6 +84,34 @@ pub async fn lookup(
         return Ok(Lookup::NotFound);
     };
     let hmac = keys.hmac(domain.id.uuid(), &value);
+    let persons = persons(&mut *connection, domain.id.uuid(), &hmac).await?;
+    let person = match persons.as_slice() {
+        [] => return Ok(Lookup::NotFound),
+        [person] => *person,
+        _ => return Ok(Lookup::Ambiguous),
+    };
+    let identifiers = identifiers(connection, keys, person).await?;
+    Ok(Lookup::Found(CrossReference {
+        person: PersonId::from_uuid(person),
+        identifiers,
+    }))
+}
+
+/// Reads every active person an identifier is cross-referenced to.
+///
+/// The identifier is the one of HMAC `hmac` in the domain `domain`, and the
+/// persons come in id order: the person of its record,
+/// followed to the survivor of a subsumed record and a merged person, or the
+/// persons of the current versions that carry it when it is authoritative
+/// and has no record of its own.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn persons(
+    connection: &mut PgConnection,
+    domain: Uuid,
+    hmac: &[u8],
+) -> Result<Vec<Uuid>, StoreError> {
     let persons: Vec<Uuid> = sqlx::query_scalar(
         "WITH RECURSIVE chain (id, replaced_by, removed, hops) AS (
              SELECT id, replaced_by, removed_at IS NOT NULL, 0
@@ -125,21 +153,12 @@ pub async fn lookup(
          )
          SELECT DISTINCT id FROM people WHERE merged_into IS NULL ORDER BY id",
     )
-    .bind(domain.id.uuid())
-    .bind(hmac.as_slice())
+    .bind(domain)
+    .bind(hmac)
     .bind(MAX_HOPS)
     .fetch_all(&mut *connection)
     .await?;
-    let person = match persons.as_slice() {
-        [] => return Ok(Lookup::NotFound),
-        [person] => *person,
-        _ => return Ok(Lookup::Ambiguous),
-    };
-    let identifiers = identifiers(connection, keys, person).await?;
-    Ok(Lookup::Found(CrossReference {
-        person: PersonId::from_uuid(person),
-        identifiers,
-    }))
+    Ok(persons)
 }
 
 /// Reads every identifier of `person`: its records' own and the

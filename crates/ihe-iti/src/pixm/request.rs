@@ -68,17 +68,32 @@ fn source_token(source: &SourceIdentifier) -> SecretString {
 }
 
 /// The request URL: one `sourceIdentifier` and one `targetSystem` per domain
-/// asked about (§2:3.83.4.1.2.1, §2:3.83.4.1.2.2).
+/// asked about (§2:3.83.4.1.2.1, §2:3.83.4.1.2.2), each value
+/// percent-encoded as an RFC 3986 §2.1 query, so a space is `%20` and a `+`
+/// is `%2B`.
 fn query(endpoint: &Url, source: &SourceIdentifier, targets: &[TargetSystem]) -> Url {
+    let mut pairs = vec![format!(
+        "sourceIdentifier={}",
+        component(source_token(source).expose_secret())
+    )];
+    pairs.extend(
+        targets
+            .iter()
+            .map(|target| format!("targetSystem={}", component(&escape(target.as_str())))),
+    );
     let mut url = endpoint.clone();
-    {
-        let mut pairs = url.query_pairs_mut();
-        pairs.append_pair("sourceIdentifier", source_token(source).expose_secret());
-        for target in targets {
-            pairs.append_pair("targetSystem", &escape(target.as_str()));
-        }
-    }
+    url.set_query(Some(&pairs.join("&")));
     url
+}
+
+/// `value` percent-encoded for a query component. The form serializer
+/// encodes every byte but the unreserved set and writes a space as `+`
+/// (WHATWG URL, the `application/x-www-form-urlencoded` serializer), and a
+/// literal `+` as `%2B`, so each remaining `+` is a space and becomes `%20`.
+fn component(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes())
+        .collect::<String>()
+        .replace('+', "%20")
 }
 
 /// The `Parameters` resource of a `POST`: the same input parameters as the
@@ -179,6 +194,30 @@ mod tests {
             ],
             "the value's own | is escaped, the separator is not"
         );
+    }
+
+    #[cfg(feature = "pixm-server")]
+    #[test]
+    fn a_value_with_a_space_a_plus_and_an_ampersand_reaches_the_reader_unchanged() {
+        use crate::server::token::{token, url_query};
+
+        let (base, _, targets) = asked();
+        let value = "a b+c&d=e";
+        let source = SourceIdentifier::new("urn:oid:2.999.1", SecretString::from(value))
+            .expect("a source identifier");
+        let Ok(Request::Get(url)) = request(&base, Invocation::Get, &source, &targets) else {
+            panic!("a GET");
+        };
+        let query = url.query().expect("a query");
+        assert!(query.contains("a%20b%2Bc%26d%3De"), "{query}");
+        let pairs = url_query(query);
+        let [(name, text), ..] = pairs.as_slice() else {
+            panic!("no pair in {query}");
+        };
+        assert_eq!(name, "sourceIdentifier");
+        let read = token(text);
+        assert_eq!(read.system.as_deref(), Some("urn:oid:2.999.1"));
+        assert_eq!(read.code.expose_secret(), value);
     }
 
     #[test]

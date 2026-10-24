@@ -137,9 +137,29 @@ impl Harness {
         bearer(&self.issuer.token("synthetic-consumer", "system/Patient.rs"))
     }
 
+    /// A data steward's token.
+    pub(crate) fn steward(&self) -> String {
+        bearer(&self.issuer.token("synthetic-console", "__ferropix.steward"))
+    }
+
+    /// An administrator's token.
+    pub(crate) fn admin(&self) -> String {
+        bearer(&self.issuer.token("synthetic-console", "__ferropix.admin"))
+    }
+
     /// The Source's token.
     pub(crate) fn source(&self) -> String {
         bearer(&self.issuer.token(SOURCE, "system/Patient.cud"))
+    }
+
+    /// The text of every record the spool holds.
+    pub(crate) fn audit_texts(&self) -> Vec<String> {
+        std::fs::read_dir(self.spool.path().join("spool"))
+            .expect("the spool reads")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_file())
+            .map(|entry| std::fs::read_to_string(entry.path()).expect("a record reads"))
+            .collect()
     }
 
     /// The records the spool holds.

@@ -10,10 +10,10 @@ publishes them exists; the first tagged release of the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
 publishes the first image, so until then you build the image from source
 (see [Building the image locally](#building-the-image-locally)). The
-operator console's own image and a Helm chart are planned for the milestone
-after it ([#99](https://github.com/FerroHEALTH/FerroPIX/issues/99),
-[#100](https://github.com/FerroHEALTH/FerroPIX/issues/100)); the console
-itself runs from source today ([The operator console](console.md)).
+operator console has an image of its own, `ghcr.io/ferrohealth/ferropix-console`,
+published by the same release ([The operator console](console.md#the-image)).
+A Helm chart is planned
+([#100](https://github.com/FerroHEALTH/FerroPIX/issues/100)).
 
 The two crates deploy inside your own application: they build with the
 Rust toolchain your application uses, at or above the minimum supported
@@ -109,6 +109,10 @@ curl http://localhost:8080/health/readiness
   `http://localhost:8180/ferropix`. It signs any client credentials
   request: a development issuer, never for real data. For a deployment,
   name your own `https` issuer in `[[auth.issuer]]`.
+- **The console.** The `console` profile runs the operator console beside
+  the server on `http://localhost:3000/`, in the same network namespace,
+  signed in through the development issuer; it needs a fifth secret,
+  `secrets/console-oidc-client-secret`.
 - **The usage report** is on and states `compose`; set
   `FERROPIX__USAGE_REPORT__ENABLED=false` in your shell or a `.env` file to
   switch it off ([Configuration](configuration.md#usage_report)).

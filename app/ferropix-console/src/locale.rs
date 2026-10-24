@@ -11,13 +11,34 @@
 //! falls back to; a language joins as one directory with no code change.
 //! No specification governs the catalog layout: our own design; the message
 //! syntax is Project Fluent's.
+//!
+//! The pseudo-locale, tagged [`PSEUDO_TAG`], draws every console string and
+//! every library string accented and two fifths longer, so the browser
+//! journeys see a word that skipped the catalog and a layout that does not
+//! leave room for a longer translation. It ships no catalog file and the
+//! language preference never offers it: only a language cookie naming it
+//! chooses it (FerroUI §13, after the gallery's pseudo-locale).
 
-use ferrohealth_ui::i18n::{Arg, Locale, locale};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::LazyLock;
+
+use ferrohealth_ui::i18n::{Arg, Locale, library_catalog, locale};
 use ferrohealth_ui::theme::Preferences;
-use fluent_templates::Loader;
+use fluent_templates::fluent_bundle::FluentValue;
+use fluent_templates::{LanguageIdentifier, Loader};
+
+/// The tag of the pseudo-locale, a private-use language subtag (BCP 47,
+/// `qaa` to `qtz`), so no catalog the console or the library ships serves
+/// it.
+pub const PSEUDO_TAG: &str = "qps";
+
+/// The pseudo-locale's language.
+static PSEUDO_LANGUAGE: LazyLock<LanguageIdentifier> =
+    LazyLock::new(|| fluent_templates::langid!("qps"));
 
 fluent_templates::static_loader! {
-    static CATALOG = {
+    static SHIPPED = {
         locales: "./locales",
         fallback_language: "en",
         // NOTE: Fluent's guide, "Bidirectionality": the isolation marks around a
@@ -29,10 +50,111 @@ fluent_templates::static_loader! {
     };
 }
 
+/// The console's catalog: its own words in every language it ships, and in
+/// the pseudo-locale the library's English and its own, stretched.
+#[derive(Debug, Clone, Copy)]
+pub struct Catalog;
+
+/// The one catalog the console looks its words up in and hands the library.
+static CATALOG: Catalog = Catalog;
+
 /// The console's catalog, every language it holds.
 #[must_use]
 pub fn catalog() -> &'static (dyn Loader + Send + Sync) {
-    &*CATALOG
+    &CATALOG
+}
+
+impl Loader for Catalog {
+    fn lookup_complete(
+        &self,
+        lang: &LanguageIdentifier,
+        text_id: &str,
+        args: Option<&HashMap<Cow<'static, str>, FluentValue>>,
+    ) -> String {
+        self.try_lookup_complete(lang, text_id, args)
+            .unwrap_or_else(|| text_id.to_owned())
+    }
+
+    fn try_lookup_complete(
+        &self,
+        lang: &LanguageIdentifier,
+        text_id: &str,
+        args: Option<&HashMap<Cow<'static, str>, FluentValue>>,
+    ) -> Option<String> {
+        if *lang != *PSEUDO_LANGUAGE {
+            return SHIPPED.try_lookup_complete(lang, text_id, args);
+        }
+        let english = fluent_templates::langid!("en");
+        SHIPPED
+            .try_lookup_complete(&english, text_id, args)
+            .or_else(|| library_catalog().try_lookup_complete(&english, text_id, args))
+            .map(|english| stretch(&english))
+    }
+
+    // NOTE: no specification governs this: our own design; the pseudo-locale is
+    // left out, so neither the language preference nor `Accept-Language` reaches it.
+    fn locales(&self) -> Box<dyn Iterator<Item = &LanguageIdentifier> + '_> {
+        SHIPPED.locales()
+    }
+}
+
+/// `english` accented letter by letter and padded by two fifths of its
+/// length (at least three), in brackets, so a cut end shows.
+///
+/// The padding is tildes in words of at most five, so a long message breaks
+/// across lines as a translation would, where one run of tildes could not.
+#[must_use]
+pub fn stretch(english: &str) -> String {
+    let accented: String = english.chars().map(accent).collect();
+    let length = english.chars().count();
+    let pad = length.saturating_mul(2).div_ceil(5).max(3);
+    let words: Vec<String> = (0..pad.div_ceil(PAD_WORD))
+        .map(|word| "~".repeat(PAD_WORD.min(pad.saturating_sub(word.saturating_mul(PAD_WORD)))))
+        .collect();
+    format!("[{accented} {}]", words.join(" "))
+}
+
+/// The longest word of tildes the pseudo-locale pads a message with.
+const PAD_WORD: usize = 5;
+
+/// The accented look-alike of `letter`, the letter itself when it has none.
+const fn accent(letter: char) -> char {
+    match letter {
+        'a' => 'á',
+        'c' => 'ç',
+        'e' => 'é',
+        'i' => 'í',
+        'n' => 'ñ',
+        'o' => 'ö',
+        'u' => 'ü',
+        'y' => 'ý',
+        'A' => 'Å',
+        'C' => 'Ç',
+        'E' => 'É',
+        'I' => 'Î',
+        'N' => 'Ñ',
+        'O' => 'Ö',
+        'U' => 'Ü',
+        'Y' => 'Ý',
+        other => other,
+    }
+}
+
+/// The pseudo-locale, with the console's catalog consulted for every
+/// message, the library's included.
+///
+/// # Panics
+///
+/// Never: [`PSEUDO_TAG`] is a constant private-use language subtag, which
+/// every parse accepts.
+#[must_use]
+pub fn pseudo() -> Locale {
+    #[expect(
+        clippy::expect_used,
+        reason = "PSEUDO_TAG is a constant private-use language subtag, which every parse accepts"
+    )]
+    let language = Locale::parse(PSEUDO_TAG).expect("the pseudo-locale's tag should parse");
+    language.with_catalog(catalog())
 }
 
 /// Declares the console's messages: each variant names one message of the
@@ -418,15 +540,16 @@ pub fn negotiated(headers: &http::HeaderMap, configured: Locale) -> Locale {
 }
 
 /// The locale a page is drawn in: the language the steward chose in Your
-/// preferences when the console ships it, else the request's negotiated
-/// one.
+/// preferences when the console ships it or it is the pseudo-locale, else
+/// the request's negotiated one.
 #[must_use]
 pub fn chosen(preferences: &Preferences, headers: &http::HeaderMap, configured: Locale) -> Locale {
-    preferences
-        .language
-        .tag()
-        .and_then(|tag| choices().into_iter().find(|locale| locale.tag() == tag))
-        .unwrap_or_else(|| negotiated(headers, configured))
+    match preferences.language.tag() {
+        Some(PSEUDO_TAG) => pseudo(),
+        tag => tag
+            .and_then(|tag| choices().into_iter().find(|locale| locale.tag() == tag))
+            .unwrap_or_else(|| negotiated(headers, configured)),
+    }
 }
 
 #[cfg(test)]
@@ -436,9 +559,10 @@ mod tests {
     use std::path::Path;
 
     use ferrohealth_ui::i18n::Locale;
+    use ferrohealth_ui::theme::{Language, Preferences};
     use fluent_templates::fluent_bundle::FluentValue;
 
-    use super::{Msg, catalog, tr_in};
+    use super::{Msg, PSEUDO_TAG, catalog, choices, chosen, negotiated, pseudo, stretch, tr_in};
 
     fluent_templates::static_loader! {
         static THROWAWAY = {
@@ -535,6 +659,54 @@ mod tests {
             "Back to the dashboard",
             tr_in(catalog(), &throwaway, Msg::NotFoundBack),
             "the shipped catalog falls back to English"
+        );
+    }
+
+    #[test]
+    fn the_pseudo_locale_accents_and_lengthens_every_string() {
+        assert_eq!("[Págé ~~~]", stretch("Page"));
+        assert_eq!(
+            "[Báçk tö thé dáshböárd ~~~~~ ~~~~]",
+            stretch("Back to the dashboard"),
+            "the padding breaks into words of at most five"
+        );
+        let words = tr_in(catalog(), &pseudo(), Msg::NotFoundTitle);
+        assert_eq!(stretch("Page not found"), words, "a console word stretches");
+        assert_eq!(
+            Some(stretch("Series")),
+            catalog().try_lookup(&PSEUDO_TAG.parse().expect("a language"), "chart-series"),
+            "a library word stretches too, so the library's own words follow the page"
+        );
+        assert_eq!(
+            PSEUDO_TAG,
+            pseudo().tag(),
+            "<html lang> names the pseudo-locale"
+        );
+    }
+
+    #[test]
+    fn only_a_language_cookie_naming_the_pseudo_locale_chooses_it() {
+        assert!(
+            choices().iter().all(|locale| locale.tag() != PSEUDO_TAG),
+            "the language preference never offers the pseudo-locale"
+        );
+        let mut asking = http::HeaderMap::new();
+        asking.insert(
+            http::header::ACCEPT_LANGUAGE,
+            http::HeaderValue::from_static("qps"),
+        );
+        assert_eq!(
+            "en",
+            negotiated(&asking, Locale::english()).tag(),
+            "a browser asking for it is drawn in the configured language"
+        );
+        let cookie = Preferences {
+            language: Language::Chosen(String::from(PSEUDO_TAG)),
+            ..Preferences::default()
+        };
+        assert_eq!(
+            PSEUDO_TAG,
+            chosen(&cookie, &http::HeaderMap::new(), Locale::english()).tag()
         );
     }
 }

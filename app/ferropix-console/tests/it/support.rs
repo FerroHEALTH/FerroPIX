@@ -16,10 +16,10 @@ use http::{Request, Response, StatusCode};
 use tower::ServiceExt as _;
 use url::Url;
 
-use crate::provider::{IdTokenClaims, Provider, TokenAnswer};
 use ferropix_console::config::Config;
 use ferropix_console::config::settings::Settings;
 use ferropix_console::server::{ConsoleState, router};
+use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
 
 /// The settings a console with its site bundle under `site_root` and its
 /// FerroPIX server at `server` runs on.

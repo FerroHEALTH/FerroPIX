@@ -8,8 +8,8 @@
 
 use std::error::Error;
 
-use crate::provider::{Provider, TokenAnswer};
 use axum::body::Body;
+use ferropix_testkit::oidc::{Provider, TokenAnswer};
 use http::{Request, StatusCode};
 use url::Url;
 

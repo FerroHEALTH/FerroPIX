@@ -17,3 +17,11 @@ slow-timeout = { period = "30s", terminate-after = 2 }
 [[profile.default.overrides]]
 filter = 'package(ihe-iti) & test(/^features::/)'
 slow-timeout = { period = "30s", terminate-after = 6 }
+
+# The console's browser journeys walk every screen in a real browser, the
+# battery in two themes, so each gets ten minutes; each starts a Chrome of
+# its own, so no more than four run at once.
+[[profile.default.overrides]]
+filter = 'package(ferropix-testkit) & test(/^journeys::/)'
+slow-timeout = { period = "60s", terminate-after = 10 }
+threads-required = 2

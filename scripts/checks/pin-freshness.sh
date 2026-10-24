@@ -16,7 +16,8 @@
 # The lint and install pins of .github/workflows/ci.yml (zizmor, shellcheck,
 # the actionlint image, yq, cargo-leptos), the documentation toolchain and
 # the console's Binaryen of docs/VERSIONS.md are read against the upstream
-# project's newest GitHub release. A corpus of docs/VERSIONS.md pinned by commit on a repository with
+# project's newest GitHub release, and the Chrome for Testing release of the
+# browser journeys against the newest Stable one its JSON endpoints list. A corpus of docs/VERSIONS.md pinned by commit on a repository with
 # no releases is read against the newest commit of the branch it follows, a
 # corpus pinned by a release tag against the newest tag of that shape, a FHIR
 # package or implementation guide pinned by version against the versions its
@@ -185,6 +186,23 @@ matrix_first() {
       gsub(/`/, "", value)
       if (label == want && match(value, pattern)) { print substr(value, RSTART, RLENGTH); exit }
     }' "${3:-$MATRIX}"
+}
+
+# The Chrome for Testing release the console's browser journeys run Chrome
+# and chromedriver at, read against the newest Stable release the Chrome for
+# Testing JSON endpoints publish.
+readonly CHROME_LABEL="Chrome for Testing (Chrome and chromedriver)"
+readonly CHROME_FEED=https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json
+
+# chrome_stable: the version of the Stable channel in the
+# last-known-good-versions JSON on stdin; fails when it names none.
+chrome_stable() {
+  jq -er '.channels.Stable.version | select(type == "string" and length > 0)'
+}
+
+# chrome_pin [MATRIX]: the four-part version of the Chrome for Testing row.
+chrome_pin() {
+  matrix_first "$CHROME_LABEL" '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' "${1:-$MATRIX}"
 }
 
 # One "matrix label<TAB>reason" record per line: an image compared only
@@ -484,6 +502,17 @@ self_test() {
   rmdir "$work"
   got="$(unwatched_rows "$MATRIX" | paste -sd ';' -)"
   expect "" "$got" "the corpus rows of $MATRIX with no reader and no recorded reason"
+
+  got="$(chrome_stable <<< '{"timestamp":"2026-10-17T00:00:00Z","channels":{"Stable":{"channel":"Stable","version":"155.0.8059.84"},"Beta":{"version":"156.0.8100.10"}}}')"
+  expect 155.0.8059.84 "$got" "the Stable channel of a Chrome for Testing feed"
+  got="$(chrome_stable <<< '{"channels":{"Beta":{"version":"156.0.8100.10"}}}' 2> /dev/null || echo refused)"
+  expect refused "$got" "a feed with no Stable channel"
+  got="$(chrome_stable <<< 'not json' 2> /dev/null || echo refused)"
+  expect refused "$got" "a feed that is no JSON"
+  case "$(chrome_pin)" in
+    [0-9]*.[0-9]*.[0-9]*.[0-9]*) ;;
+    *) expect "a four-part version" "$(chrome_pin)" "the Chrome for Testing row of $MATRIX" ;;
+  esac
 
   [[ "$failed" -eq 0 ]] || exit 1
   echo "pin-freshness: self-test OK."
@@ -793,6 +822,23 @@ while IFS=$'\t' read -r label repository tag; do
     stale=1
   fi
 done <<< "$images"
+
+# The Chrome for Testing release, against the newest Stable one.
+pinned="$(chrome_pin)"
+if [[ -z "$pinned" ]]; then
+  printf 'UNREADABLE %s: no pin row in %s\n' "$CHROME_LABEL" "$MATRIX"
+  unreadable=1
+elif ! latest="$(curl --proto '=https' --tlsv1.2 -fsSL "$CHROME_FEED" | chrome_stable 2>&1)"; then
+  printf 'UNREADABLE %s: could not read the newest Stable release from %s (%s)\n' \
+    "$CHROME_LABEL" "$CHROME_FEED" "$latest"
+  unreadable=1
+elif [[ "$pinned" = "$latest" ]]; then
+  printf 'current    %s %s (%s)\n' "$CHROME_LABEL" "$pinned" "$CHROME_FEED"
+else
+  printf 'STALE      %s: pinned %s, newest Stable release %s (%s)\n' \
+    "$CHROME_LABEL" "$pinned" "$latest" "$CHROME_FEED"
+  stale=1
+fi
 
 [[ "$unreadable" -eq 0 ]] || exit 2
 exit "$stale"

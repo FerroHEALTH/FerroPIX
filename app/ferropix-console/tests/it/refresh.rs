@@ -9,9 +9,9 @@
 
 use std::error::Error;
 
-use crate::provider::{Provider, TokenAnswer};
 use ferropix_console::server::ConsoleState;
 use ferropix_console::session::SessionId;
+use ferropix_testkit::oidc::{Provider, TokenAnswer};
 use http::StatusCode;
 use secrecy::ExposeSecret as _;
 

@@ -59,6 +59,19 @@ and this project adheres to
   of the documents the server writes and the console reads. The usage
   report moves to #153, which waits on FerroPULSE taking the `ferropix`
   product.
+- The operator console's browser journeys (#98), behind `FERROPIX_JOURNEYS`
+  and run by CI's `journeys` job in headless Chrome for Testing 155.0.8059.79
+  (pinned in `docs/VERSIONS.md`, installed locally by
+  `scripts/release/journey-tools.sh`): sign-in and sign-out through the test
+  OpenID Provider, the preferences round-tripping through their cookies, and
+  the WCAG 2.2 AA battery over every screen's refused state in both themes,
+  with a self-test that a wrong theme fails it. The console marks `<html>`
+  `data-hydrated` once its islands run, which every wait waits for.
+- The console's pseudo-locale (#97): a language cookie naming `qps` draws
+  every console and library word accented and two fifths longer. Your
+  preferences never offers it; the pseudo-locale journey walks every screen
+  in it and fails on a word that skipped the catalog or a page that scrolls
+  sideways at 1440 or 390 px.
 - Authorization of the FerroPIX server through `ferrohealth-smart` (#62):
   `serve` reads the RFC 8414 metadata and key set of every
   `[[auth.issuer]]` at start, and every route of `{base}/fhir` and

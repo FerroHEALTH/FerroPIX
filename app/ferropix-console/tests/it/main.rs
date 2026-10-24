@@ -18,7 +18,6 @@ mod captures;
 mod config;
 mod pages;
 mod preferences;
-mod provider;
 mod refresh;
 mod run;
 mod server;

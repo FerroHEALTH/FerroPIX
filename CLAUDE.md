@@ -146,8 +146,12 @@ The build order is the milestones:
   pinned by digest in `docs/VERSIONS.md` and held to its row by the suite;
   the synthetic BSN range with its eleven-proof, the synthetic domains and
   names; the `Patient`, `Parameters` and `Bundle` fixtures of each
-  transaction under `fixtures/fhir/`; and the guard that refuses a fixture
-  holding a value outside the synthetic set.
+  transaction under `fixtures/fhir/`; the guard that refuses a fixture
+  holding a value outside the synthetic set; `oidc`, the test OpenID
+  Provider the console's suites sign in at; and the console's browser
+  journeys behind `FERROPIX_JOURNEYS` (`tests/it/journeys/`, CI's
+  `journeys` job), over the Chrome for Testing release `docs/VERSIONS.md`
+  pins.
 - `docs/architecture.md`: the design of record (the server, the store,
   the matching, the three faces, the images and the release, the console).
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.

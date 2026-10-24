@@ -19,6 +19,7 @@ particular to the crate.
 - **A page is a synchronous server component** drawn from the
   `PageContext` the `gate` middleware read; a route with an id checks it
   before anything else.
-- **A new route joins the captures** (`tests/it/captures.rs`) and the page
-  tests (`tests/it/pages.rs`), and is set beside its mockup in FerroUI's
+- **A new route joins the captures** (`tests/it/captures.rs`), the page
+  tests (`tests/it/pages.rs`) and the journeys' `SCREENS`
+  (`tools/ferropix-testkit/tests/it/journeys/mod.rs`, held by a guard), and is set beside its mockup in FerroUI's
   `design/consoles/ferropix/` at 1440 and 390 px, light and dark.

@@ -57,9 +57,20 @@ use ferrohealth_ui as _;
 
 /// Hydrates the islands of the page the server rendered. Each island takes
 /// the words it draws as props, so the browser builds no locale.
+///
+/// It then marks the root element `data-hydrated`, which the browser
+/// journeys wait for, so no journey acts on a control whose island has not
+/// run.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {
     console_error_panic_hook::set_once();
     leptos::mount::hydrate_islands();
+    if let Some(root) = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.document_element())
+        && let Err(error) = root.set_attribute("data-hydrated", "")
+    {
+        leptos::logging::warn!("the browser refused the hydrated mark: {error:?}");
+    }
 }

@@ -171,6 +171,13 @@ The build order is the milestones:
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor
   script is proven by re-running it against its pin.
+- `fuzz/`: the cargo-fuzz targets (#79), its own workspace and lockfile on
+  the nightly `docs/VERSIONS.md` pins: the ITI-83 query and `Parameters`,
+  the ITI-104 feed, the ITI-78 search and the ITI-119 match readers of
+  `ihe-iti` and the format parsers they share, each asserting that a
+  refusal quotes nothing from the request and that what it read survives a
+  writer. `scripts/fuzz/seeds.sh` writes the seeds under `fuzz/seeds/` from
+  the vendored PIXm and PDQm examples.
 - `website/`: the public site at <https://ferropix.eu/>, the landing page
   (`landing/`) at the root and the mdBook (`book/`) under `/docs/`, with the
   "Plum & Iron" recolour of mdBook's `light` and `navy` themes.
@@ -185,7 +192,7 @@ The build order is the milestones:
 - `assets/brand/`: the mark, the favicon set and the "Plum & Iron" tokens.
 - `.github/`: CI with the single required `conclusion` check, CodeQL,
   Scorecard, SonarQube Cloud (advisory), the weekly pin freshness lane,
-  Dependabot, the Docs workflow, the release lane (`release.yml`,
+  the weekly fuzz lane (`fuzz.yml`, advisory), Dependabot, the Docs workflow, the release lane (`release.yml`,
   `release-crate.yml`) and `publish-crates.yml` through Trusted Publishing,
   the templates.
 - `.claude/`: the working discipline (rules, agents, skills, hooks, memory).

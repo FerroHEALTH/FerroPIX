@@ -46,6 +46,16 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
   the lane, `ci.yml` or the pin matrix runs it as a dry run that files
   nothing. A new corpus row needs a reader there, or its vendor script in
   `UNWATCHED_SCRIPTS` with the reason, or the self-test fails.
+- `.github/workflows/fuzz.yml`: each Thursday and on dispatch for five
+  minutes per target, and for one minute on a pull request that touches
+  what a target reads (`ihe-iti`, the root manifest, `fuzz/`, the vendored
+  PIXm and PDQm examples), cargo-fuzz runs the targets of `fuzz/` on the
+  nightly `docs/VERSIONS.md` pins and uploads the input of a crash or a
+  timeout as an artifact. Its `inputs` job holds the generated seeds to the
+  vendored examples, the trigger paths to the fuzz crate's path
+  dependencies and the matrix to its targets. Advisory: `conclusion` does
+  not need it. CI's `fuzz-lockfile` job, which `conclusion` does need,
+  holds `fuzz/Cargo.lock` in step with the crates it builds.
 - `.github/workflows/release.yml`: dormant until a `v*` tag is pushed. It
   validates the tag against the workspace version, takes the notes from the
   matching `CHANGELOG.md` section, creates the release as a draft, calls

@@ -448,6 +448,32 @@ jobs:
           cache: "false"
       - run: cargo metadata --no-deps --format-version 1 > /dev/null
 
+  # fuzz/ is its own workspace with its own lockfile, outside every cargo
+  # command above, and its path dependency inherits versions from the root
+  # manifest. A crate bump or a dependency change that leaves fuzz/Cargo.lock
+  # behind would fail only the scheduled fuzz run, so the lock is held here.
+  fuzz-lockfile:
+    name: fuzz-lockfile
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+      - name: fuzz/Cargo.lock resolves the fuzz crate unchanged
+        run: |
+          if ! cargo metadata --locked --format-version 1 --manifest-path fuzz/Cargo.toml > /dev/null; then
+            echo "::error::fuzz/Cargo.lock is out of step: run 'cargo metadata --format-version 1 --manifest-path fuzz/Cargo.toml' and commit the lock it rewrites." >&2
+            exit 1
+          fi
+
   fmt:
     name: rustfmt
     needs: detect
@@ -866,6 +892,7 @@ jobs:
       - crate-version-guard
       - detect
       - manifest
+      - fuzz-lockfile
       - fmt
       - clippy
       - console-wasm

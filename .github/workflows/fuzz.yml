@@ -1,0 +1,152 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The fuzz targets of fuzz/, run for a bounded time (#79).
+#
+# The PIX Manager and the PDQm Supplier read what a caller sends before
+# anything else does: the ITI-83 query and Parameters, the ITI-104 feed, the
+# ITI-78 search and the ITI-119 match input, through the token and format
+# parsers they share. Each target is fed arbitrary bytes from its seed
+# corpus, which scripts/fuzz/seeds.sh writes from the vendored IHE examples.
+# A panic, an abort or a hang is a defect: libFuzzer writes the input that
+# triggered it to disk as crash-<sha1> or timeout-<sha1>
+# (https://llvm.org/docs/LibFuzzer.html) and the run uploads it; an Err is
+# the reader doing its job. Every target also asserts that a refusal quotes
+# nothing from the request and that what it read survives the writer, so a
+# breach of either is a panic and reaches the same upload.
+#
+# It runs weekly and on dispatch for five minutes per target, and for one
+# minute per target on a pull request that touches what a target reads. It
+# is a time-boxed search, never a merge gate (no specification governs this:
+# our own design, after FerroFED's lane). It is also the one place the
+# nightly toolchain appears: cargo-fuzz builds with sanitizer flags that need
+# it (https://rust-fuzz.github.io/book/cargo-fuzz.html). The nightly is
+# pinned by date in docs/VERSIONS.md. Nothing built here ships.
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "23 5 * * 4"
+  pull_request:
+    branches: [main]
+    # What the targets read: the crate under test, the root manifest its
+    # dependencies inherit from, the fuzz crate, the vendored examples the
+    # seeds come from, and this lane. The `inputs` job holds the list to the
+    # path dependencies of fuzz/Cargo.toml.
+    paths:
+      - "crates/ihe-iti/**"
+      - "Cargo.toml"
+      - "fuzz/**"
+      - "docs/specs/ihe-pixm/**"
+      - "docs/specs/ihe-pdqm/**"
+      - "scripts/fuzz/**"
+      - ".github/actions/setup-rust/**"
+      - ".github/workflows/fuzz.yml"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: How long to run each target.
+        type: string
+        default: "300"
+
+permissions: {}
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The nightly toolchain of the fuzz lane, the row of docs/VERSIONS.md that
+  # scripts/checks/versions.sh holds this line to.
+  FUZZ_TOOLCHAIN: nightly-2026-10-19
+
+jobs:
+  inputs:
+    name: fuzz inputs are current
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The generated seeds match the vendored examples
+        run: bash scripts/fuzz/seeds.sh --check
+      - name: The trigger paths cover every path dependency of the fuzz crate
+        run: |
+          set -euo pipefail
+          deps="$(sed -nE 's/.*path = "\.\.\/([^"]+)".*/\1/p' fuzz/Cargo.toml | sort -u)"
+          paths="$(sed -nE 's/^ *- "([^"*]+)\/\*\*"$/\1/p' .github/workflows/fuzz.yml | sort -u)"
+          missing="$(comm -23 <(printf '%s\n' "$deps") <(printf '%s\n' "$paths"))"
+          if [ -n "$missing" ]; then
+            printf 'fuzz.yml does not run on a change to %s\n' "$missing" >&2
+            exit 1
+          fi
+      - name: The matrix names every target and every target has seeds
+        run: |
+          set -euo pipefail
+          bins="$(awk '/^\[\[bin\]\]/ { bin = 1; next } bin && /^name = / { gsub(/"/, "", $3); print $3; bin = 0 }' fuzz/Cargo.toml | sort)"
+          matrix="$(sed -nE 's/^ {10}- ([a-z_]+)$/\1/p' .github/workflows/fuzz.yml | sort)"
+          seeds="$(find fuzz/seeds -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
+          if [ "$bins" != "$matrix" ] || [ "$bins" != "$seeds" ]; then
+            printf 'the targets differ:\nfuzz/Cargo.toml: %s\nmatrix: %s\nseeds: %s\n' \
+              "$(paste -sd ' ' - <<< "$bins")" "$(paste -sd ' ' - <<< "$matrix")" \
+              "$(paste -sd ' ' - <<< "$seeds")" >&2
+            exit 1
+          fi
+
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    needs: inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - pix_query
+          - pix_parameters
+          - pix_feed
+          - pdq_search
+          - pdq_match
+          - format
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          toolchain: ${{ env.FUZZ_TOOLCHAIN }}
+          components: rustfmt
+          cache: "false"
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-fuzz@0.13.2
+      - name: The fuzz crate is formatted
+        run: cargo "+${FUZZ_TOOLCHAIN}" fmt --manifest-path fuzz/Cargo.toml --check
+      - name: Run the target over its seeds
+        env:
+          TARGET: ${{ matrix.target }}
+          SECONDS_PER_TARGET: ${{ inputs.seconds || (github.event_name == 'pull_request' && '60') || '300' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "fuzz/corpus/${TARGET}"
+          # The prebuilt cargo-fuzz binary is a musl build and defaults to the
+          # triple it was compiled for; AddressSanitizer refuses a statically
+          # linked libc, so the runner's gnu triple is named. The seeds are a
+          # second corpus, which libFuzzer reads and never writes.
+          cargo "+${FUZZ_TOOLCHAIN}" fuzz run --target x86_64-unknown-linux-gnu \
+            "${TARGET}" "fuzz/corpus/${TARGET}" "fuzz/seeds/${TARGET}" \
+            -- -max_total_time="${SECONDS_PER_TARGET}" -max_len=65536 -timeout=25 \
+            -rss_limit_mb=4096 -print_final_stats=1
+      - name: Upload what reproduces a crash
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          retention-days: 90
+          if-no-files-found: ignore

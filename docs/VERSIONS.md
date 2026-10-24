@@ -98,6 +98,19 @@ it, and the `mac-arm64` pair verified again here on 2026-10-24.
 `scripts/checks/versions.sh` reads each pin back from the files its row
 names.
 
+## The fuzz lane
+
+`.github/workflows/fuzz.yml` runs the targets of `fuzz/` with cargo-fuzz,
+whose sanitizer flags need a nightly toolchain. The lane is the one place
+a nightly appears, and it is pinned by date so a weekly run builds what the
+last one built; the pin-freshness lane reads it against the newest nightly
+and cargo-fuzz against its newest release. Nothing built there ships.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| Nightly toolchain (fuzz lane) | `nightly-2026-10-19` | `.github/workflows/fuzz.yml` |
+| cargo-fuzz | `0.13.2` | `.github/workflows/fuzz.yml` |
+
 ## Container images
 
 The images the testkit (`tools/ferropix-testkit`) starts behind

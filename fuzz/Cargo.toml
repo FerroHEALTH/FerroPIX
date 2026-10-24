@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ferropix-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "BUSL-1.1"
+
+# The crate is outside the workspace: cargo-fuzz builds with sanitizer flags
+# that need the nightly toolchain docs/VERSIONS.md pins, and the product stays
+# on the pinned stable one (#79). It keeps its own lockfile.
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace root, so cargo never walks up into the product's.
+[workspace]
+
+# Only what the targets reach, because cargo-fuzz instruments every crate in
+# the build. The versions are the root manifest's, so the readers are fuzzed
+# against the dependency set they ship with.
+[dependencies]
+fhir-types = { version = "0.1.113", default-features = false, features = ["r4", "resources", "terminology"] }
+ihe-iti = { path = "../crates/ihe-iti", default-features = false, features = ["pixm-server", "pdqm-server"] }
+libfuzzer-sys = "0.4.13"
+secrecy = "0.10.3"
+serde_json = "1.0.151"
+url = "2.5.8"
+
+[lib]
+name = "ferropix_fuzz"
+path = "src/lib.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pix_query"
+path = "fuzz_targets/pix_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pix_parameters"
+path = "fuzz_targets/pix_parameters.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pix_feed"
+path = "fuzz_targets/pix_feed.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdq_search"
+path = "fuzz_targets/pdq_search.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdq_match"
+path = "fuzz_targets/pdq_match.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "format"
+path = "fuzz_targets/format.rs"
+test = false
+doc = false
+bench = false
+
+# Release-optimized, with debug assertions and overflow checks on: an overflow
+# or a broken debug invariant is a finding, and libFuzzer needs the optimized
+# build for a useful execution rate.
+[profile.release]
+debug = 1
+debug-assertions = true
+overflow-checks = true

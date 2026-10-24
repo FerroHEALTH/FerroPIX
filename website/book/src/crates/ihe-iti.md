@@ -103,12 +103,15 @@ no store and no HTTP framework: your server hands a reader the query string,
 the media type and the body, and sends the `Answer` it or a writer returns,
 a status and a resource encoded as FHIR JSON or FHIR XML, both of which the
 profiles require of a server. Every refusal is an `OperationOutcome` whose
-text is fixed, so it never quotes the request.
+text is fixed, so it never quotes the request. A FHIR JSON body whose XML
+form does not read back, such as a Patient whose narrative is no XHTML, is
+refused, so your server never stores a resource it could not answer with in
+XML.
 
 - **`pixm-server`** reads `$ihe-pix` from the `GET` query ITI-83 prescribes
   or from a posted `Parameters` body into one request, and refuses a second
-  `sourceIdentifier`, a token without a system and a parameter the operation
-  does not define. It writes the `Parameters` answer, without the source
+  `sourceIdentifier`, a token without a system, a query value no FHIR
+  `string` holds and a parameter the operation does not define. It writes the `Parameters` answer, without the source
   identifier and without the domains not asked for, and the three failures
   of ITI-83. It reads the ITI-104 conditional update on
   `Patient?identifier=system|value`, refusing a Patient that does not carry
@@ -117,7 +120,7 @@ text is fixed, so it never quotes the request.
 - **`pdqm-server`** reads every ITI-78 search parameter, with `:exact`, AND,
   OR and the `identifier=system|` domain filter. A parameter or modifier it
   does not support is dropped, reported, and left out of the `self` link, as
-  PDQm allows. It writes the `searchset` Bundle with its `total` and paging
+  PDQm allows; following the `self` link reads the same search. It writes the `searchset` Bundle with its `total` and paging
   links, each Patient's identifiers pruned to the domains asked for. It
   reads the `$match` input as `Parameters` or as a bare `Patient`, refusing
   a bare `Patient` posted with `onlyCertainMatches` or `count`, and writes

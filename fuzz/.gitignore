@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# cargo-fuzz's build tree, the corpora a run grows, and what reproduces a
+# finding; the seeds under seeds/ are committed.
+/target/
+/corpus/
+/artifacts/
+/coverage/

@@ -12,9 +12,11 @@
 #      every file its "Repeated in" cell names.
 #   4. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
-#      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE, Cargo.lock, JSON (which has no comment
-#      syntax), the raster images (PNG and ICO, which have none either) and
-#      test fixtures carry no header.
+#      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE,
+#      the lockfiles, JSON (which has no comment syntax), the raster images
+#      (PNG and ICO, which have none either), test fixtures and the fuzz
+#      seeds (bytes a target reads, written from the vendored examples)
+#      carry no header.
 #
 # Usage:
 #   scripts/checks/versions.sh [--root DIR]   check this repository, or DIR
@@ -37,6 +39,8 @@ readonly REPEATED_ROWS=(
   "cargo-leptos"
   "wasm-bindgen"
   "Binaryen"
+  "Nightly toolchain (fuzz lane)"
+  "cargo-fuzz"
   "thirtyfour"
   "Chrome for Testing (Chrome and chromedriver)"
   "Chrome for Testing, \`chrome-linux64.zip\` SHA-256"
@@ -119,6 +123,10 @@ self_test() {
   expect 0 "a tool pin its script repeats"
   sed -i.bak 's/version_133/version_132/' "$d/scripts/tools.sh" && rm "$d/scripts/tools.sh.bak"
   expect 1 "a tool pin its script does not repeat"
+  case_dir
+  mkdir -p "$d/fuzz/seeds/pix_query"
+  printf 'sourceIdentifier=urn%%3Aoid%%3A2.999.1%%7C1' > "$d/fuzz/seeds/pix_query/gen-a.txt"
+  expect 0 "a fuzz seed without the header"
   rm -r "$work"
   if [[ "$failed" -ne 0 ]]; then
     exit 1
@@ -198,7 +206,7 @@ done
 # 4. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | */LICENSE | NOTICE | Cargo.lock | *.json | *.png | *.ico | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/*) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

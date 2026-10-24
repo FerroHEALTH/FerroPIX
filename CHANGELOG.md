@@ -295,6 +295,23 @@ and this project adheres to
 - `ihe-iti` 0.0.44 takes `ihe-atna = "=0.2.4"`, the only supported release
   (#43).
 
+### Fixed
+
+- `ihe-iti` 0.0.46 fixes three request readers the new fuzz lane caught
+  (#79). The ITI-83 `GET` reader refuses with a `400` and a `value` issue a
+  query value no FHIR `string` holds (a vertical tab or a form feed), which
+  it accepted although the same request posted as `Parameters` was refused.
+  A FHIR JSON body whose XML form does not read back, such as a Patient
+  whose narrative `div` is no XHTML, is refused by every body reader with
+  the new `BodyError::NoXmlForm`, so a Manager or a Supplier never stores a
+  resource it could not answer with in XML. The `self` link of an ITI-78
+  search writes a space as `%20`, so following it reads the same search:
+  it wrote the form encoding's `+`, which a URL query reads as itself.
+  `QueryError::NotAString` is the new variant of the first refusal. The
+  fuzz lane (`.github/workflows/fuzz.yml`, the `fuzz/` targets) runs cargo
+  fuzz weekly over the ITI-83, ITI-104, ITI-78 and ITI-119 readers and the
+  format parsers, on the nightly `docs/VERSIONS.md` pins.
+
 ## [0.0.2] - 2026-10-20
 
 The move from FerroFED (FerroHEALTH/FerroFED#367): `ihe-iti` 0.0.39 and

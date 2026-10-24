@@ -1,0 +1,30 @@
+{
+  "resourceType": "Parameters",
+  "meta": {
+    "profile": [
+      "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Parameters.Out"
+    ]
+  },
+  "parameter": [
+    {
+      "name": "targetId",
+      "valueReference": {
+        "reference": "Patient/synthetic-ada-hospital"
+      }
+    },
+    {
+      "name": "targetIdentifier",
+      "valueIdentifier": {
+        "system": "urn:oid:2.999.1.1",
+        "value": "H-100001"
+      }
+    },
+    {
+      "name": "targetIdentifier",
+      "valueIdentifier": {
+        "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+        "value": "999990007"
+      }
+    }
+  ]
+}

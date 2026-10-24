@@ -93,7 +93,8 @@ and this project adheres to
   the pending migrations, check the sealing key and insert each
   `[[domain]]` the store lacks; `serve` first refuses a role that can read
   any schema beside `pix`, and its guard admits as Sources the domains the
-  store holds after the seed. An identifier in a sensitive domain is sealed
+  store holds after the seed; the readiness route reports the store as the
+  `database` indicator. An identifier in a sensitive domain is sealed
   with AES-256-GCM and found by its HMAC-SHA256 in one index probe, so a
   dump shows no identifier. `db.data_key_file` now holds the base64 of 32
   random bytes, and a start under another key is refused. `ferropix db

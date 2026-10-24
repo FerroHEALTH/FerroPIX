@@ -297,7 +297,9 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     };
     let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
     let draining = audit.drain();
-    let health = health::Registry::default().and(Arc::new(audit::Headroom(audit.clone())));
+    let health = health::Registry::default()
+        .and(Arc::new(store::indicator::Database::new(store.clone())))
+        .and(Arc::new(audit::Headroom(audit.clone())));
     let guarded = fhir::routes(
         &server.base_path,
         &server.public_base_url,

@@ -102,7 +102,7 @@ The server routes, under `server.base_path`:
 | Route | Answer |
 |---|---|
 | `GET {base}/health` | `200` while the process is up. |
-| `GET {base}/health/readiness` | `200` today; the readiness indicators are planned ([#64](https://github.com/FerroHEALTH/FerroPIX/issues/64)). |
+| `GET {base}/health/readiness` | `200` while every readiness indicator is up, the `database` indicator of the store among them, and `503` while one is down ([Operations](operations.md)). |
 
 Every answer carries `x-request-id`: the one the request sent when it is
 printable ASCII of at most 128 characters, or a minted UUID. A handler that

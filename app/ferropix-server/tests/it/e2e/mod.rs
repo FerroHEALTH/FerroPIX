@@ -10,6 +10,7 @@
 
 mod cli;
 mod gate;
+mod indicator;
 mod leak;
 mod reseal;
 mod schema;

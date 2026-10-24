@@ -7,7 +7,8 @@
 //! refuses a role able to read a schema beside `pix`, [`seal`] the sealing of
 //! identifier values, [`key`] the check that the configured key is the one the
 //! store was written under, [`seed`] the `[[domain]]` seed, [`record`] the
-//! source records found by their identifier, and [`reseal`] the key rotation.
+//! source records found by their identifier, [`reseal`] the key rotation and
+//! [`indicator`] the readiness indicator.
 //! [`Store::start`] runs them in the order a job needs.
 //!
 //! PIXm fixes what the store must answer and what the feed does to it (PIXm
@@ -16,6 +17,7 @@
 //! (`docs/architecture.md` §4).
 
 pub mod gate;
+pub mod indicator;
 pub mod key;
 pub mod record;
 pub mod reseal;

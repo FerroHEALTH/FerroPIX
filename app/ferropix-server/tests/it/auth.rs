@@ -50,7 +50,18 @@ const IDENTIFIER: &str = "SYNTHETIC-ID-4711";
 
 /// The guarded routes served today; every other one answers `501` until its
 /// issue lands.
-const SERVED: [&str; 1] = ["operator-dependencies"];
+const SERVED: [&str; 3] = ["operator-dependencies", "ITI-83", "ITI-104"];
+
+/// Returns whether `status` is an answer of the route's handler: neither a
+/// refusal of the guard nor the pending handler's `501`.
+fn handled(status: StatusCode) -> bool {
+    ![
+        StatusCode::UNAUTHORIZED,
+        StatusCode::FORBIDDEN,
+        StatusCode::NOT_IMPLEMENTED,
+    ]
+    .contains(&status)
+}
 
 /// The scopes that admit every route of the table.
 pub(crate) const EVERY_SCOPE: &str =
@@ -169,9 +180,20 @@ enabled = true
         .expect("the configuration resolves")
 }
 
+/// Returns the backend of `settings`: a store whose connections open on
+/// first use, at the unresolvable host the secrets name, so a transaction
+/// the guard admits reaches its handler and finds no database.
+pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
+    fhir::Backend {
+        store: ferropix_server::store::Store::lazy(&settings.db).expect("the store is described"),
+        matching: settings.matching.clone(),
+    }
+}
+
 /// Returns the application of `settings` with every route mounted, its
 /// audit spool in the temporary directory returned beside it.
 pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, tempfile::TempDir) {
+    let backend = backend(&settings);
     let smart = Arc::new(
         Smart::discover(settings.auth, &settings.domains)
             .await
@@ -190,6 +212,7 @@ pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, temp
         &smart,
         &health,
         &audit,
+        &backend,
     );
     (
         router(&settings.server, &health, Some(guarded)),
@@ -327,8 +350,16 @@ async fn every_guarded_route_admits_the_domains_source_holding_every_scope() {
     for route in guarded() {
         let answer = send(&app, route.method.clone(), &uri_of(route), Some(&token)).await;
         let label = format!("{} {}", route.method, route.path);
-        if SERVED.contains(&route.interaction) {
+        if route.interaction == "operator-dependencies" {
             assert_eq!(StatusCode::OK, answer.status, "{label}: served");
+            continue;
+        }
+        if SERVED.contains(&route.interaction) {
+            assert!(
+                handled(answer.status),
+                "{label}: the guard admits it and the Manager answers: {}",
+                answer.status
+            );
             continue;
         }
         assert_eq!(
@@ -366,7 +397,11 @@ async fn a_source_feeding_another_domain_is_answered_403_with_a_forbidden_issue(
         }
         let own = bearer(&issuer.token("east-lab", "system/Patient.cud"));
         let answer = send(&app, route.method.clone(), &uri_of(route), Some(&own)).await;
-        assert_eq!(StatusCode::NOT_IMPLEMENTED, answer.status, "the Source");
+        assert!(
+            handled(answer.status),
+            "the Source is admitted and the Manager answers: {}",
+            answer.status
+        );
     }
 }
 
@@ -387,9 +422,9 @@ async fn a_patient_scope_is_refused_and_the_iua_scope_of_a_transaction_admits_it
     let iua = bearer(&issuer.token("east-lab", "ITI-83"));
     let answer = send(&app, Method::POST, pix, Some(&iua)).await;
     assert_eq!(
-        StatusCode::NOT_IMPLEMENTED,
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
         answer.status,
-        "PIXm 3.1.0 §2:3.83.5.2"
+        "PIXm 3.1.0 §2:3.83.5.2: admitted, and the Manager reads a request without a body"
     );
     let answer = send(&app, Method::POST, "/fhir/Patient/$match", Some(&iua)).await;
     assert_eq!(

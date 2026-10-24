@@ -547,6 +547,7 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
     let settings = auth_settings(&issuer, &secrets);
+    let backend = crate::auth::backend(&settings);
     let spool = tempfile::tempdir().expect("a temporary directory");
     let audit = Audit::open(
         &audit_settings(&spool.path().join("spool"), None, 2),
@@ -569,14 +570,15 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
             &smart,
             &health,
             &audit,
+            &backend,
         )),
     );
     let token = bearer(&issuer.token("east-lab", EVERY_SCOPE));
     let admitted = send(&app, Method::POST, "/fhir/Patient/$ihe-pix", Some(&token)).await;
     assert_eq!(
-        StatusCode::NOT_IMPLEMENTED,
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
         admitted.status,
-        "room in the spool"
+        "room in the spool: the Manager reads the request, which posts no FHIR body"
     );
     let ready = send(&app, Method::GET, "/health/readiness", None).await;
     assert_eq!(StatusCode::OK, ready.status, "{}", ready.body);

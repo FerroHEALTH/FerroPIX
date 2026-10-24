@@ -14,6 +14,7 @@
 # Integrate
 
 - [Getting started](integrate/getting-started.md)
+- [The PIXm Manager](integrate/pixm-manager.md)
 - [The published crates](crates/index.md)
   - [ihe-iti](crates/ihe-iti.md)
   - [nl-generic-functions](crates/nl-generic-functions.md)

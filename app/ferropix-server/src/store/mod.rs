@@ -114,6 +114,29 @@ impl Store {
         })
     }
 
+    /// Returns a store over `db` whose connections open on first use, and
+    /// runs nothing: a statement fails as a refused connection does.
+    ///
+    /// It serves a router whose routes may never reach the database, such as
+    /// the guard's tests; `serve` uses [`Store::start`].
+    ///
+    /// # Errors
+    /// Returns [`StoreError::Url`] for a URL the driver refuses and
+    /// [`StoreError::Seal`] when the keys cannot be derived.
+    pub fn lazy(db: &DbSettings) -> Result<Self, StoreError> {
+        let options = PgConnectOptions::from_str(db.url.expose())
+            .map_err(|source| StoreError::Url(DbFailure(source)))?
+            .application_name(APPLICATION_NAME);
+        let pool = PgPoolOptions::new()
+            .max_connections(db.pool_size)
+            .connect_lazy_with(options);
+        let sealer = Sealer::new(&db.data_key)?;
+        Ok(Self {
+            pool,
+            sealer: std::sync::Arc::new(sealer),
+        })
+    }
+
     /// Returns the connection pool.
     #[must_use]
     pub fn pool(&self) -> &PgPool {

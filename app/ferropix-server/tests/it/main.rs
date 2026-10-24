@@ -13,6 +13,8 @@ mod auth;
 #[cfg(test)]
 mod book;
 #[cfg(test)]
+mod capability;
+#[cfg(test)]
 mod cli;
 #[cfg(test)]
 mod config;

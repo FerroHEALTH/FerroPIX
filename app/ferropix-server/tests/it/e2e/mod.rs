@@ -15,6 +15,7 @@ mod feeds;
 mod gate;
 mod indicator;
 mod leak;
+mod pixm;
 mod reseal;
 mod schema;
 mod sealing;

@@ -549,6 +549,13 @@ with no `targetSystem` every identifier of the person except the one asked
 | a target domain is unknown or retired | `403` | `error`, `code-invalid`, "targetSystem not found" | §2:3.83.4.2.2.4 |
 | the identifier's record is subsumed, or its person merged | `200`, the survivor's identifiers | | §2:3.83.4.2.2.5 leaves the choice to policy; FerroPIX follows §2:3.104.4.2.3, which replaces the subsumed identifier's references with the survivor's, so the consumer gets the answer the cross-reference now holds |
 | the caller's token lacks the read scope | `401` or `403` | `security` | section 9 |
+| the identifier has no record of its own and the records that carry it are in two persons | `409` | `error`, `multiple-matches` | no specification governs this: our own design (#167), so two persons' identifiers are never mixed |
+
+An identifier in an `authoritative` domain that no Source feeds, such as the
+BSN on a hospital's `Patient`, is found through the current versions that
+carry it and answered among the person's identifiers, when no record of its
+own exists (#167; our own design). The one status table of the face, with
+every row above and the ITI-104 ones below, is `ferropix_server::fhir::status`.
 
 **ITI-104.** `PUT {base}/fhir/Patient?identifier=system|value` with a
 `Patient` body (PIXm 3.1.0 §2:3.104.4.1.2, FHIR R4 conditional update): no
@@ -564,7 +571,16 @@ caller must be the domain's one Source: a token whose client id is not the
 domain's `source_client_id` is refused `403` with a `forbidden` issue
 (§2:3.104.5: "should check that the Patient Identity Source is only making
 changes to Patient Identifier Domain for which it is authorized"). The new
-cross-reference is visible to PIX queries at the commit (§2:3.104.4.1.3).
+cross-reference is visible to PIX queries at the commit (§2:3.104.4.1.3). A refused feed answers `400` for
+a message ITI-104 does not admit (as `ihe-iti` reads it) and for an unknown or
+retired domain (`code-invalid`, after §2:3.83.4.2.2.3), and `422`
+`business-rule` for a value its domain's rule refuses, a revision of a
+subsumed identifier, or a survivor that names no active record (FHIR R4
+http.html §3.1.0.4.2); a success answers an `OperationOutcome` with one
+`information` issue and a `Location` naming the person, and a removal of an
+identifier the store does not hold answers `200` (§3.1.0.7). These choices
+are our own design where PIXm points at FHIR R4 for the response
+(§2:3.104.4.1.4).
 
 ### 6.2 PDQm
 

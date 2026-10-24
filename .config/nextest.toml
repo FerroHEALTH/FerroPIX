@@ -25,3 +25,11 @@ slow-timeout = { period = "30s", terminate-after = 6 }
 filter = 'package(ferropix-testkit) & test(/^journeys::/)'
 slow-timeout = { period = "60s", terminate-after = 10 }
 threads-required = 2
+
+# The blocking case loads 100000 records into its own PostgreSQL: about 17
+# seconds alone, near a minute on a CI runner beside the other container
+# cases, so it gets three minutes and a second thread (#172).
+[[profile.default.overrides]]
+filter = 'package(ferropix-server) & test(=e2e::blocking::a_feed_scores_only_the_pairs_its_blocking_keys_produce_among_100000_records)'
+slow-timeout = { period = "30s", terminate-after = 6 }
+threads-required = 2

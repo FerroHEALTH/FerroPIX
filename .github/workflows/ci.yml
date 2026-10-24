@@ -389,7 +389,9 @@ jobs:
           cargo=false
           if [ -f Cargo.toml ]; then
             manifest=true
-            if find crates app tools -mindepth 2 -maxdepth 2 -name Cargo.toml 2> /dev/null | grep -q .; then
+            # NOTE: no specification governs this: our own design; a directory
+            # not yet created (tools/) must not fail the probe under pipefail.
+            if { find crates app tools -mindepth 2 -maxdepth 2 -name Cargo.toml 2> /dev/null || true; } | grep -q .; then
               cargo=true
             fi
           fi

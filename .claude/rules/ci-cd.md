@@ -32,6 +32,20 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
 - `.github/workflows/codeql.yml`: CodeQL over the `actions` language and Rust.
 - `.github/workflows/scorecard.yml`: OpenSSF Scorecard, published to the
   OpenSSF API and to code scanning.
+- `.github/workflows/sonar.yml`: SonarQube Cloud over the Rust workspace,
+  with the lcov report of an instrumented run, and over the shell, YAML and
+  JSON, on every pull request and push to `main`. Advisory: `conclusion`
+  does not need it, and it skips without the `SONAR_TOKEN` secret
+  (`ai-code-review.md`).
+- `.github/workflows/pin-freshness.yml`: each Monday and on dispatch,
+  `scripts/checks/pin-freshness.sh` reads every pin no Dependabot ecosystem
+  watches (the CI tool versions in `ci.yml`, the documentation toolchain,
+  the corpus pins and the container images of `docs/VERSIONS.md`) against
+  its newest upstream release and opens one issue through
+  `scripts/gh/fields.sh new` when one is behind. A pull request that changes
+  the lane, `ci.yml` or the pin matrix runs it as a dry run that files
+  nothing. A new corpus row needs a reader there, or its vendor script in
+  `UNWATCHED_SCRIPTS` with the reason, or the self-test fails.
 - `.github/workflows/release.yml`: dormant until a `v*` tag is pushed. It
   validates the tag against the workspace version, takes the notes from the
   matching `CHANGELOG.md` section, creates the release as a draft, calls

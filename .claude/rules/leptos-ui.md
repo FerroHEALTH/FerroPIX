@@ -113,7 +113,11 @@ the workspace resolves, never memory.
   with FerroUI's number formatter and the `number-group` and `number-decimal`
   marks set. A test holds the catalog to every message and no other, and a
   throwaway catalog under `tests/locales/` proves a language joins as one
-  file.
+  file. `scripts/checks/stray-literals.sh` (CI job `stray-literals`, FerroUI
+  §13) fails a literal under `src/` that reads as words; one no reader sees
+  as text (an HTTP request line, a header value) is allowed with its reason
+  in `scripts/checks/stray-literals.allow`, which also skips the modules that
+  write only to the terminal.
 
 ## 4. Preferences, captures and the bundle
 
@@ -139,5 +143,7 @@ the workspace resolves, never memory.
   Measured 2026-10-23 at 295172 bytes (cargo-leptos 0.3.11, wasm-bindgen
   0.2.129, Rust 1.99.1), with FerroUI's lazy date pickers and tree in chunks
   of their own; the budget is a third over it, as FerroUI's gallery keeps
-  its own. FerroUI 0.3.3 with its `split` feature (#127) measured 298123, FerroUI 0.3.4 (#131) 300608, FerroUI 0.3.5 (#137) 301105, and FerroUI 0.3.6 (#139) 301074, with 184554 more in its lazy chunks (142932 in three `split_*` files, 41622 in three `chunk_*` files). The `console` lane that builds the bundle against it in CI is
-  #99; until then a change that adds browser code measures it by hand.
+  its own. FerroUI 0.3.3 with its `split` feature (#127) measured 298123, FerroUI 0.3.4 (#131) 300608, FerroUI 0.3.5 (#137) 301105, and FerroUI 0.3.6 (#139) 301074, with 184554 more in its lazy chunks (142932 in three `split_*` files, 41622 in three `chunk_*` files). The `console-wasm` job of `ci.yml`
+  builds the bundle with `scripts/release/console-site.sh --release` and
+  fails over the budget (`scripts/checks/console-bundle.sh`, which reads it
+  from the table above and writes the sizes to the job summary).

@@ -7,8 +7,9 @@ This file is the single source of truth for every version pin in FerroPIX.
 When it and a file that repeats a pin disagree, that is drift. Fix the
 disagreement; never let either side win silently.
 `scripts/checks/versions.sh` reads the toolchain rows back against
-`rust-toolchain.toml` and the root `Cargo.toml`, and every vendored tree
-under `docs/specs/` against a row of the corpus table.
+`rust-toolchain.toml` and the root `Cargo.toml`, the console's build tools
+against the files that install them, and every vendored tree under
+`docs/specs/` against a row of the corpus table.
 
 No specification governs this file; it is FerroPIX's own design.
 
@@ -46,6 +47,26 @@ lockstep with every FerroHEALTH console on each release
 |---|---|---|
 | FerroUI (`ferrohealth-ui`) | `=0.3.6` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.3.6` |
 
+## The console's build tools
+
+The `console-wasm` job of `.github/workflows/ci.yml` builds the operator
+console's site bundle with three tools and holds it to the budget of
+`.claude/rules/leptos-ui.md` §4. cargo-leptos and the wasm-bindgen CLI are
+fetched by the digest-pinned `taiki-e/install-action`; the wasm-bindgen CLI
+equals the `wasm-bindgen` crate of the root `Cargo.toml`, because the CLI
+and the crate must agree on the bindings they write. Binaryen's `wasm-opt`
+is installed by `scripts/release/console-tools.sh`, checked against its
+SHA-256. They are the versions FerroBRIDGE's console builds with.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| cargo-leptos | `0.3.11` | `.github/workflows/ci.yml` |
+| wasm-bindgen | `0.2.129` | `.github/workflows/ci.yml`, `Cargo.toml` |
+| Binaryen | `version_133` | `scripts/release/console-tools.sh` |
+
+`scripts/checks/versions.sh` reads each pin back from the files its row
+names.
+
 ## Container images
 
 The images the testkit (`tools/ferropix-testkit`) starts behind
@@ -79,7 +100,7 @@ vendored text is a row of the corpus table below.
 | IHE XCPD | ITI Technical Framework Vol 2 Rev 20.1 (2024-12-12), no FHIR package | ITI-55 (a feature of `ihe-iti`) |
 | IHE IUA | ITI Technical Framework Supplement Rev 2.5 (2026-06-18) | ITI-71, ITI-72 (a feature of `ihe-iti`) |
 | Netherlands Generic Functions | `fhir.nl.gf` 0.3.0 | the functions of `nl-generic-functions` |
-| IHE ITI Technical Framework | Volumes 1 and 2, the revision the move pins | PIX and PDQ: ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22, and ITI-44 to ITI-47 as the TF-2 texts decide, with the actors and options of each |
+| IHE ITI Technical Framework | Volumes 1 and 2, each page pinned by sha256 in the corpus table; the ITI-8, ITI-9 and ITI-10 pages state Revision 20.0, ITI-21 Revision 20.2 and ITI-22 Revision 20.1 | PIX and PDQ: ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22, and ITI-44 to ITI-47 as the TF-2 texts decide, with the actors and options of each |
 | HL7 FHIR | R4, 4.0.1 | the resources and the RESTful API PIXm and PDQm are profiled on |
 | HL7 v2 | the version each PIX or PDQ transaction names in ITI TF-2 | the HL7 v2 PIX and PDQ transactions, where in scope |
 <!-- ANCHOR_END: specifications -->
@@ -136,3 +157,4 @@ redistribution is fetched into the git-ignored `.vendor-cache/` and only its
 | IHE IUA supplement, Swiss pin | `IHE/ITI.IUA` Revision 2.3, pin-set digest `2a5f13a87ccf307fecda8c48e77a61fd09c440089b2172be0edea912dea85439` | `scripts/vendor/ch.sh`, `docs/specs/ihe-iua-ch/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 1 pages | ITI TF Revision 20.2 chapters 13, 18 and 27, pin-set digest `838b2f672e0bc34841d7fe297fd561c6f49c42fdd12b5a15119eb10a7234aeb7` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 2 pages | the ITI-38 page (Revision 20.2), committed, and the ITI-55 page (Revision 20.1), cache only, pin-set digest `84c3ff8cfad148b5c066ae364d1f8a3044c6210ed806e9b87f363d8dda2d5546` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-vol2/PROVENANCE.md` |
+| IHE ITI Technical Framework Volume 2 HL7 v2 pages | the ITI-8, ITI-9 and ITI-10 pages (Revision 20.0), the ITI-21 page (Revision 20.2) and the ITI-22 page (Revision 20.1), all cache only, pin-set digest `ff7b90dfcd52d54ab9bec50dcec64fdd0ac811a6b02f45d3314c01385dd9358d` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-hl7v2/PROVENANCE.md` |

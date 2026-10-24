@@ -791,16 +791,19 @@ with no part of its path. The guard leaves the caller (the token's
 successful feed wrote to on the response, where the log reads them; a
 request the gate refused names no caller (our own design).
 
-**The usage report** waits on FerroPULSE (#153): its envelope v2 takes
-`product` from a closed list that does not yet name `ferropix`.
-
-FerroEHR, FerroTERM and FerroBRIDGE send an
+**The usage report.** FerroEHR, FerroTERM and FerroBRIDGE send an
 installation report to FerroPULSE on its envelope v2; FerroPIX does the
-same under `[usage_report]`: on by default with a notice at every start,
-`enabled = false` or an unset `state_dir` keeps it off, one `start` and one
-`daily` report with the version, the deployment kind the artifact states
-(`compose`, `helm`, `binary`), the instance id under `state_dir`, counts by
-route group, and never an identifier, a domain name or a host name. The
+same under `[usage_report]` (`app/ferropix-server/src/usage_report/`): on
+by default with a notice at every start, `enabled = false`, an unset
+`state_dir` or a CI environment (`GITHUB_ACTIONS`, `CI`) keeps it off, one
+`start` and one `daily` report with the version, the deployment kind the
+artifact states (`compose`, `helm`, `binary`), the instance id under
+`state_dir`, latency and counts by route group from the request log, and
+never an identifier, a domain name or a host name. Its `status` and
+`counters` keys are listed in FerroPULSE's `docs/report-v2.md` §FerroPIX,
+every report is validated against the vendored schema, and
+`scripts/checks/usage-report-off.sh` holds every launcher of the server in
+a test lane to the switch. The
 console sends none: FerroTERM dropped its console from the report (#736),
 and the server's report counts the operator API's routes.
 

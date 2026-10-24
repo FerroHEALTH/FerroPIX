@@ -1329,6 +1329,7 @@ dependencies = [
  "http",
  "ihe-atna",
  "jiff",
+ "jsonschema",
  "jsonwebtoken",
  "reqwest",
  "secrecy",

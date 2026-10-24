@@ -14,6 +14,21 @@ and this project adheres to
 
 ### Added
 
+- The installation report to FerroPULSE (#153). `ferropix serve` sends one
+  `start` report (at most one per ten minutes) and one `daily` report on
+  FerroPULSE's report envelope v2 with the product `ferropix`: the instance
+  id kept under `usage_report.state_dir`, the version, the commit, the
+  deployment kind `usage_report.deployment` states, the host size as ranges,
+  the profile, the services switched on, the identifier domains as a range,
+  the readiness of the store and the audit spool, and, once a day, latency
+  per route group and the count of `4xx` answers from the request log. It
+  never carries an identifier, a domain's system or name, a host name or a
+  request path. It is on by default and announced at every start;
+  `usage_report.enabled = false`, an unset `state_dir` or a CI environment
+  (`GITHUB_ACTIONS`, `CI`) keeps it off. Every report is validated against
+  the schema `scripts/vendor/ferropulse-schemas.sh` vendors from the pin in
+  `docs/VERSIONS.md`, and `scripts/checks/usage-report-off.sh` holds every
+  launcher of the server in a test lane to the switch.
 - The server's BALP audit trail through `ihe-atna` (#63). `serve` opens the
   ITI-20 spool under `audit.spool_dir` and refuses to start on a directory
   open to other users, unwritable or holding a foreign file, and sends the

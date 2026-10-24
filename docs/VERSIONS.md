@@ -158,3 +158,14 @@ redistribution is fetched into the git-ignored `.vendor-cache/` and only its
 | IHE ITI Technical Framework Volume 1 pages | ITI TF Revision 20.2 chapters 13, 18 and 27, pin-set digest `838b2f672e0bc34841d7fe297fd561c6f49c42fdd12b5a15119eb10a7234aeb7` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 2 pages | the ITI-38 page (Revision 20.2), committed, and the ITI-55 page (Revision 20.1), cache only, pin-set digest `84c3ff8cfad148b5c066ae364d1f8a3044c6210ed806e9b87f363d8dda2d5546` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-vol2/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 2 HL7 v2 pages | the ITI-8, ITI-9 and ITI-10 pages (Revision 20.0), the ITI-21 page (Revision 20.2) and the ITI-22 page (Revision 20.1), all cache only, pin-set digest `ff7b90dfcd52d54ab9bec50dcec64fdd0ac811a6b02f45d3314c01385dd9358d` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-hl7v2/PROVENANCE.md` |
+
+## The usage report contract
+
+The installation report the server sends to FerroPULSE follows FerroPULSE's
+report envelope v2. Its JSON Schema and the contract's own examples are
+vendored by `scripts/vendor/ferropulse-schemas.sh` from this pin, and the
+server's tests validate every report it builds against them.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| FerroPULSE report envelope v2 | `FerroHEALTH/FerroPULSE` commit `208262ad71f6addbb97c4b8025fcb9c95b3751d0` path `schemas/report-envelope.v2.json` sha256 `e609f17a5bfa78c6c08bdd3a28025889e20e0fde5c72fa881e7ed47b6abc8bc7`, with the examples under `schemas/examples/report-envelope.v2/` | `scripts/vendor/ferropulse-schemas.sh`, `app/ferropix-server/tests/fixtures/ferropulse/PROVENANCE.md` (the contract is `docs/report-v2.md` at the same commit) |

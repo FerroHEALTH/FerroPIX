@@ -116,7 +116,7 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
@@ -182,6 +182,19 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/checks/file-length.sh
+
+  # Every launcher of the server in a test lane switches the usage report off.
+  usage-report-off:
+    name: usage-report-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/checks/usage-report-off.sh
 
   # Every TODO(#N) names an open issue.
   todo-issues:
@@ -780,6 +793,7 @@ jobs:
       - stray-literals
       - versions
       - file-length
+      - usage-report-off
       - todo-issues
       - changelog-released
       - changelog-guard

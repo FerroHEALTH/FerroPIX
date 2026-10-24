@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: BUSL-1.1
 
 # The image vulnerability gate and the tag application, as a reusable
-# workflow release.yml calls once the server image is pushed and the
+# workflow release.yml calls once both images are pushed and the
 # vulnerability record has passed.
 #
-# The ORDER is the point: release-image.yml pushes by digest and applies no
-# tag, this workflow scans that digest, and only a passing scan makes it
-# referencable. A HIGH or CRITICAL finding with a fix therefore never becomes
+# The ORDER is the point: release-image.yml and release-console.yml push by
+# digest and apply no tag, this workflow scans those digests, and only a
+# passing scan makes them referencable. A HIGH or CRITICAL finding with a fix therefore never becomes
 # `latest`. No specification governs this: our own design (docs/release.md),
 # the scan-before-tag gate FerroEHR runs.
 #
@@ -27,6 +27,14 @@ on:
         type: string
       server-tags:
         description: The newline-separated tag list to apply to the server digest.
+        required: true
+        type: string
+      console-digest:
+        description: The ferropix-console image's pushed index digest.
+        required: true
+        type: string
+      console-tags:
+        description: The newline-separated tag list to apply to the console digest.
         required: true
         type: string
 
@@ -68,10 +76,11 @@ jobs:
       - name: Scan every image on both platforms
         env:
           SERVER_DIGEST: ${{ inputs.server-digest }}
+          CONSOLE_DIGEST: ${{ inputs.console-digest }}
         run: |
           set -euo pipefail
           fail=0
-          entries=("ferropix|$SERVER_DIGEST")
+          entries=("ferropix|$SERVER_DIGEST" "ferropix-console|$CONSOLE_DIGEST")
           for entry in "${entries[@]}"; do
             image="${entry%%|*}"
             digest="${entry#*|}"
@@ -114,6 +123,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SERVER_DIGEST: ${{ inputs.server-digest }}
           SERVER_TAGS: ${{ inputs.server-tags }}
+          CONSOLE_DIGEST: ${{ inputs.console-digest }}
+          CONSOLE_TAGS: ${{ inputs.console-tags }}
         run: |
           set -euo pipefail
           tag_image() {
@@ -130,3 +141,4 @@ jobs:
             done <<< "$tags"
           }
           tag_image ghcr.io/ferrohealth/ferropix "$SERVER_DIGEST" "$SERVER_TAGS" release-image.yml
+          tag_image ghcr.io/ferrohealth/ferropix-console "$CONSOLE_DIGEST" "$CONSOLE_TAGS" release-console.yml

@@ -11,12 +11,12 @@ governs how a Manager cross-references: PIXm leaves it to the Manager, and
 PDQm asks only that a match carry a score and a grade. The rules below are
 FerroPIX's own.
 
-The scorer and the feed transaction that runs both tiers are built. The
-ITI-104 route that hands a Source's message to the feed transaction is
-planned in [#68](https://github.com/FerroHEALTH/FerroPIX/issues/68),
-answering ITI-119 with the scorer's score and grade in
-[#73](https://github.com/FerroHEALTH/FerroPIX/issues/73), and the review
-queue in [#107](https://github.com/FerroHEALTH/FerroPIX/issues/107).
+The scorer and the feed transaction that runs both tiers are built, and the
+PDQm Supplier answers ITI-119 `$match` with the scorer's score and grade
+([The PDQm Supplier](../integrate/pdqm-supplier.md)). The PIXm Manager hands
+each ITI-104 message to the feed transaction
+([The PIXm Manager](../integrate/pixm-manager.md)), and the review queue is
+planned in [#107](https://github.com/FerroHEALTH/FerroPIX/issues/107).
 
 ## When a feed arrives
 
@@ -101,6 +101,12 @@ field under `[matching.fields.<field>]` in the
 
 Change a threshold in `[matching]` and the grade of every later score moves
 with it; no code changes.
+
+ITI-119 `$match` answers each person with the best score of its records
+against the `Patient` you send, as `search.score`, and its grade as the
+`match-grade` extension, whose codes are the grades above (PDQm 3.2.0
+§2:3.119.4.2.2.4). A person graded `certainly-not` is no match and is left
+out of the answer.
 
 ## Blocking
 

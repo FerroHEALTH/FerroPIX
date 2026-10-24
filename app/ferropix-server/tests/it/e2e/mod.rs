@@ -15,10 +15,13 @@ mod feeds;
 mod gate;
 mod indicator;
 mod leak;
+mod pdqm_match;
+mod pdqm_search;
 mod pixm;
 mod reseal;
 mod schema;
 mod sealing;
+mod supplier;
 
 use base64::Engine as _;
 use ferropix_server::config::secret::SecretUrl;

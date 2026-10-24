@@ -20,6 +20,7 @@ pub mod health;
 pub mod healthcheck;
 pub mod http;
 pub mod matching;
+pub mod pdqm;
 pub mod store;
 pub mod telemetry;
 pub mod usage_report;
@@ -381,13 +382,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
             .await
             .map_err(ServeError::Auth)?,
     );
-    let mounts = fhir::Mounts {
-        pixm: pixm.enabled,
-        remove_patient: pixm.remove_patient,
-        pdqm: pdqm.enabled,
-        pmir: pmir.enabled,
-        operator: operator.enabled,
-    };
+    let mounts = fhir::Mounts::of(&pixm, &pdqm, &pmir, &operator);
     let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
     let draining = audit.drain();
     let health = health::Registry::default()
@@ -403,6 +398,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &fhir::Backend {
             store: store.clone(),
             matching,
+            deprecated: pdqm.deprecated,
         },
     );
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));

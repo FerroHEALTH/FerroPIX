@@ -127,9 +127,9 @@ XML.
   the Match Output Bundle, most likely first, each entry with its score and
   `match-grade`.
 
-The FerroPIX server that answers with them is planned
-([FerroHEALTH/FerroPIX#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
-[FerroHEALTH/FerroPIX#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)).
+The FerroPIX server answers with them as the PIXm Manager and the PDQm
+Supplier ([The PIXm Manager](../integrate/pixm-manager.md),
+[The PDQm Supplier](../integrate/pdqm-supplier.md)).
 
 ## mCSD (`mcsd`)
 

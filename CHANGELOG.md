@@ -14,6 +14,28 @@ and this project adheres to
 
 ### Added
 
+- The PDQm Patient Demographics Supplier with the Match Operation Option
+  (#70, #72, #73, `ferropix_server::pdqm`). ITI-78 answers
+  `GET /fhir/Patient` and `POST /fhir/Patient/_search` alike with every
+  parameter of PDQm 3.2.0 §2:3.78.4.1.2.1, AND and OR, `:exact`, the domain
+  filter, and `searchset` paging by a cursor (`_count` 20 by default, at
+  most 100), and `GET /fhir/Patient/{id}` reads one person. A string
+  matches as a case- and accent-insensitive prefix, an `identifier` by the
+  HMAC of its normalised value, so search opens no sealed value, and a
+  `birthdate` with every FHIR prefix. Each `Patient` is the person, with
+  its master identifier, the identifiers a PIX query answers for it and the
+  demographics of an `authoritative` domain's record first. The six cases
+  of §2:3.78.4.1.3 answer as PDQm names them, a merged person by
+  `[pdqm] deprecated`. ITI-119 `POST /fhir/Patient/$match` scores the input
+  with the scorer over the blocking keys, one entry per person most likely
+  first with `search.score` and `match-grade` from the `[matching]`
+  thresholds, `onlyCertainMatches`, `count`, and a `warning` entry for an
+  input of fewer than three fields. Every search, read and match writes its
+  PDQm Supplier BALP record, one per person answered, before the answer.
+  The `CapabilityStatement` instantiates the PDQm Supplier statements with
+  `read`, `search-type`, the search parameters and `$match`. The migration
+  `0013_search` installs `unaccent` into `pix` with the functions the
+  search reads, and the grants move to `0014`.
 - The PIXm Manager (#66, #68, #52, #69). `$ihe-pix` (ITI-83) answers by
   `GET` and by `POST` of a `Parameters` body, the two forms alike, in FHIR
   JSON and XML, from `store::xref::lookup` through `ihe-iti`'s

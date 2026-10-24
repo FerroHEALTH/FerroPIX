@@ -5,15 +5,16 @@
 //! `{base}/operator`: every route of [`crate::auth::table`] the
 //! configuration switches on, behind the guard.
 //!
-//! The capability statement, the SMART discovery document and the PIXm
-//! Manager ([`pixm`]) answer; every other transaction route answers `501`
-//! with a `not-supported` issue until the issue that serves it lands, so the
-//! guard in front of it is in place and tested first. [`status`] is the one
-//! table of every outcome a transaction answers, and [`wire`] puts each in
-//! JSON or XML.
+//! The capability statement, the SMART discovery document, the PIXm
+//! Manager ([`pixm`]) and the PDQm Supplier ([`pdqm`]) answer; every other
+//! transaction route answers `501` with a `not-supported` issue until the
+//! issue that serves it lands, so the guard in front of it is in place and
+//! tested first. [`status`] is the one table of every outcome a transaction
+//! answers, and [`wire`] puts each in JSON or XML.
 
 pub mod capability;
 pub mod outcome;
+pub mod pdqm;
 pub mod pixm;
 pub mod status;
 pub mod wire;
@@ -33,18 +34,23 @@ use crate::auth::guard::{self, Confine};
 use crate::auth::table::{self, Mount};
 use crate::auth::{Discovery, Smart};
 use crate::config::section::matching::Matching;
+use crate::config::section::operator::Operator;
+use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
 use crate::fhir::outcome::{IssueType, body, respond};
 use crate::health::Registry;
 use crate::store::Store;
 
-/// What the transactions of the FHIR face read and write: the store and
-/// the `[matching]` section the feed and the scorer run with.
+/// What the transactions of the FHIR face read and write: the store, the
+/// `[matching]` section the feed and the scorer run with, and how the PDQm
+/// Supplier answers a merged person.
 #[derive(Debug, Clone)]
 pub struct Backend {
     /// The cross-reference store.
     pub store: Store,
     /// The `[matching]` section, resolved.
     pub matching: Matching,
+    /// `[pdqm] deprecated`.
+    pub deprecated: Deprecated,
 }
 
 /// Which switches of the configuration are on.
@@ -76,6 +82,19 @@ impl Mounts {
             pdqm: true,
             pmir: true,
             operator: true,
+        }
+    }
+
+    /// Returns the switches the `[pixm]`, `[pdqm]`, `[pmir]` and `[operator]`
+    /// sections set.
+    #[must_use]
+    pub const fn of(pixm: &Pixm, pdqm: &Pdqm, pmir: &Pmir, operator: &Operator) -> Self {
+        Self {
+            pixm: pixm.enabled,
+            remove_patient: pixm.remove_patient,
+            pdqm: pdqm.enabled,
+            pmir: pmir.enabled,
+            operator: operator.enabled,
         }
     }
 
@@ -118,6 +137,15 @@ pub fn routes(
         base,
         public_base_url,
     ));
+    let pdqm = Arc::new(pdqm::Face::new(
+        Arc::new(crate::pdqm::Supplier::new(
+            backend.store.clone(),
+            &backend.matching,
+            backend.deprecated,
+            public_base_url,
+        )),
+        audit.clone(),
+    ));
     let mut router = Router::new();
     for route in table::ROUTES
         .iter()
@@ -126,6 +154,10 @@ pub fn routes(
         let Ok(filter) = MethodFilter::try_from(route.method.clone()) else {
             continue;
         };
+        if let Some(handler) = pdqm::handler(route, filter, &pdqm) {
+            router = router.route(route.path, handler);
+            continue;
+        }
         let handler = match route.interaction {
             "capabilities" => {
                 let statement = Arc::clone(&statement);
@@ -225,7 +257,6 @@ async fn dependencies(health: Registry, audit: Audit) -> Response {
 }
 
 /// A transaction of the FHIR face that is not served yet.
-// TODO(#70): serve ITI-78 and ITI-119, recording audit::records::pdq_search.
 // TODO(#101): serve ITI-93 and ITI-94.
 async fn pending_fhir() -> Response {
     respond(

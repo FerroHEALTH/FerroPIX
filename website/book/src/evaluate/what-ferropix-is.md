@@ -33,7 +33,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 |---|---|---|
 | PIXm, the identifier cross-reference query | ITI-83 by `GET`, or by `POST` of a `Parameters` body | Client, in `ihe-iti` (`pixm`), and the server's PIXm Manager ([The PIXm Manager](../integrate/pixm-manager.md)). |
 | PIXm, the FHIR identity feed | ITI-104 | The server's PIXm Manager, over the store's feed transaction. |
-| PDQm, the demographics query and match | ITI-78, ITI-119 | Client, in `ihe-iti` (`pdqm`). The PDQm Supplier is planned. |
+| PDQm, the demographics query and match | ITI-78 search and read, ITI-119 `$match` | Client, in `ihe-iti` (`pdqm`), and the server's PDQm Supplier with the Match Operation Option ([The PDQm Supplier](../integrate/pdqm-supplier.md)). |
 | PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`). The PMIR Registry is planned. |
 | mCSD, the care services directory | ITI-90, ITI-91 | Client and replica, in `ihe-iti` (`mcsd`). |
 | XCPD, cross-community patient discovery | ITI-55 | Initiating Gateway, in `ihe-iti` (`xcpd`). |
@@ -41,7 +41,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | The persisted cross-reference | identifier domains, one source per domain, linking and merge | Planned. |
 | Pseudonym minting | a UUID per patient and pseudonymisation domain | Planned. |
 | HL7 v2 PIX and PDQ | ITI-8, ITI-9, ITI-21, ITI-22, and ITI-44 to ITI-47 as the ITI Technical Framework texts decide | Planned, on FerroBRIDGE's HL7 v2 parser and MLLP codec. |
-| Audit of the Manager side | BALP `AuditEvent` through `ihe-atna` | The PIXm Manager records every ITI-83 and ITI-104; the PDQm Supplier's records come with it ([#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)). The clients' audit records are built (`balp`, `atna`). |
+| Audit of the Manager side | BALP `AuditEvent` through `ihe-atna` | The PIXm Manager records every ITI-83 and ITI-104, and the PDQm Supplier every ITI-78 and ITI-119. The clients' audit records are built (`balp`, `atna`). |
 | Dutch Generic Functions: localization (NVI) | the NVI Localization Service search | Client, in `nl-generic-functions` (`nvi`). |
 | Dutch Generic Functions: consent (Mitz) | the closed authorization question | Client, in `nl-generic-functions` (`mitz`). |
 | Dutch Generic Functions: addressing (LRZa) | the URA of an organisation | In `nl-generic-functions` (`lrza`). |
@@ -56,11 +56,11 @@ and are not built: the crate does not call the BSNk pseudonym service today.
 ## The server, as planned
 
 The [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
-names what the server will do. The PIXm Manager runs today
-([The PIXm Manager](../integrate/pixm-manager.md)); the rest of this list is
-planned:
+names what the server will do. The PIXm Manager
+([The PIXm Manager](../integrate/pixm-manager.md)) and the PDQm Supplier
+([The PDQm Supplier](../integrate/pdqm-supplier.md)) run today; the rest of
+this list is planned:
 
-- **The PDQm Supplier:** ITI-78 and the ITI-119 match.
 - **The PMIR Registry:** ITI-93 and ITI-94.
 - **The cross-reference:** identifier domains, one Patient Identity Source
   per domain, linking and merge with their full history, persisted in

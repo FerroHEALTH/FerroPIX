@@ -338,3 +338,107 @@ async fn no_identifier_or_name_reaches_a_log_a_span_or_a_refusal_through_the_pix
         }
     }
 }
+
+#[tokio::test]
+async fn no_identifier_name_or_query_value_reaches_a_log_a_debug_rendering_or_an_error_through_pdqm()
+ {
+    if !e2e_enabled() {
+        return;
+    }
+    let capture = Capture::default();
+    let _subscriber = tracing::subscriber::set_default(capture.subscriber());
+    let served = super::supplier::serve(
+        ferropix_server::config::section::profiles::Deprecated::Inactive,
+        &ferropix_server::config::section::matching::Matching::default(),
+    )
+    .await;
+    let population = super::supplier::populate(&served.started.store).await;
+    let token = served.consumer();
+    let (family, given) = (FAMILY_NAMES[1], GIVEN_NAMES[1]);
+    let bsn_value = super::supplier::FIXTURE_BSN;
+    let mut shown = vec![format!("{population:?}")];
+    let queries = [
+        format!("family={family}&given={given}"),
+        format!("identifier={}", super::supplier::bsn_token(bsn_value)),
+        String::from("identifier=urn%3Aoid%3A2.999.1.1%7CH-300001&_format=xml"),
+        format!("family={family}&_page=H-300001"),
+        format!("family={family}&birthdate=1970-13-45"),
+        String::from("telecom=%2B31600000001&_format=text/html"),
+    ];
+    for query in &queries {
+        let answer = super::supplier::search_both(&served.app, &token, query).await;
+        shown.push(format!("{} {}", answer.status, answer.media_type));
+        if !answer.status.is_success() {
+            shown.push(answer.body.clone());
+        }
+    }
+    let retrieve = super::supplier::request(
+        &served.app,
+        http::Method::GET,
+        &format!("/fhir/Patient/{}", population.bram),
+        &[("authorization", &token)],
+        Vec::new(),
+    )
+    .await;
+    shown.push(format!("{:?}", retrieve.status));
+    let body = format!(
+        r#"{{"resourceType":"Patient","name":[{{"family":"{family}","given":["{given}"]}}],"birthDate":"1970-01-01","identifier":[{{"system":"urn:oid:2.999.1.1","value":"H-300001"}}]}}"#
+    );
+    for media in ["application/fhir+json", "text/plain"] {
+        let answer = super::supplier::request(
+            &served.app,
+            http::Method::POST,
+            "/fhir/Patient/$match",
+            &[("authorization", &token), ("content-type", media)],
+            body.clone().into_bytes(),
+        )
+        .await;
+        shown.push(format!("{:?}", answer.status));
+    }
+    let broken = super::supplier::request(
+        &served.app,
+        http::Method::POST,
+        "/fhir/Patient/$match",
+        &[("authorization", &token), ("content-type", "application/fhir+json")],
+        format!(r#"{{"resourceType":"Patient","name":[{{"family":"{family}"}}],"birthDate":"H-300001"}}"#)
+            .into_bytes(),
+    )
+    .await;
+    shown.push(broken.body.clone());
+    let errors = [
+        ferropix_server::pdqm::PdqError::Unsupported,
+        ferropix_server::pdqm::PdqError::Demographics(
+            ferropix_server::feed::demographics::DemographicsError,
+        ),
+    ];
+    for error in &errors {
+        shown.push(format!("{error} {error:?} {}", chain(error)));
+    }
+    served.started.store.close().await;
+    let logs = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+    assert!(logs.contains("a feed is applied"), "the capture works");
+    assert!(
+        logs.contains("/fhir/Patient"),
+        "the request log names the route"
+    );
+    shown.push(logs);
+    let secrets = [
+        bsn_value.to_owned(),
+        String::from("H-300001"),
+        String::from("H-100001"),
+        String::from("L-200001"),
+        String::from("31600000001"),
+        family.to_owned(),
+        given.to_owned(),
+        FAMILY_NAMES[0].to_owned(),
+        String::from("1970-13-45"),
+    ];
+    for text in &shown {
+        for secret in &secrets {
+            assert!(
+                !text.contains(secret.as_str()),
+                "an identifier, a name or a query value leaked into: {text}"
+            );
+        }
+    }
+}

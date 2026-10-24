@@ -35,8 +35,10 @@ clap.workspace = true
 # the AuditEvent the audit tests read back, from the generated model.
 fhir-types = { workspace = true, features = ["r4", "terminology", "resources"] }
 # The ITI-104 messages the feed transaction applies, read by the PIX
-# Manager side of the identity profiles crate (PIXm 3.1.0 §2:3.104).
-ihe-iti = { path = "../../crates/ihe-iti", features = ["pixm-server"] }
+# Manager side of the identity profiles crate (PIXm 3.1.0 §2:3.104), and
+# the ITI-78 and ITI-119 requests and answers of its PDQm Supplier side
+# (PDQm 3.2.0 §2:3.78, §2:3.119).
+ihe-iti = { path = "../../crates/ihe-iti", features = ["pixm-server", "pdqm-server"] }
 # The BSN naming systems, whose values the store normalises by the BSN's
 # own rule. The crate gates its identification module behind a function's
 # feature; `nvi` brings no dependency the server lacks.

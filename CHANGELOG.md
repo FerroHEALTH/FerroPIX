@@ -14,6 +14,11 @@ and this project adheres to
 
 ### Added
 
+- The span export of `[telemetry] otlp_endpoint` (#143): `serve` sends one
+  `request` span per request over OTLP/gRPC, with the method, the matched
+  route template and the status and nothing that names a patient, a caller
+  or a query.
+
 - The PDQm Patient Demographics Supplier with the Match Operation Option
   (#70, #72, #73, `ferropix_server::pdqm`). ITI-78 answers
   `GET /fhir/Patient` and `POST /fhir/Patient/_search` alike with every

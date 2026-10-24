@@ -115,7 +115,7 @@ fails answers `500` with that id and no detail.
 |---|---|---|
 | `telemetry.filter` | `"info"` | The log filter, in the `tracing-subscriber` `EnvFilter` syntax. |
 | `telemetry.format` | `"auto"` | `"json"`, `"pretty"`, or `"auto"`: pretty on a terminal, JSON otherwise. |
-| `telemetry.otlp_endpoint` | `""` | The OTLP collector, `http` or `https`. Checked today; the span export is planned ([#143](https://github.com/FerroHEALTH/FerroPIX/issues/143)). |
+| `telemetry.otlp_endpoint` | `""` | The OTLP/gRPC collector `serve` exports its spans to, `http` or `https` (TLS over the WebPKI roots). One `request` span per request, with the method, the matched route template and the status: no raw path, query string, body, header value, identifier or token, and no log event. Empty exports nothing. |
 
 ### `[db]`
 

@@ -431,6 +431,9 @@ and this project adheres to
 
 ### Fixed
 
+- The PIXm ITI-83 reader refuses an empty `_format` with a 400, where it
+  accepted one its `Parameters` form cannot carry (#185, `ihe-iti` 0.0.48).
+
 - The PIXm client percent-encodes a space in its ITI-83 query as `%20`
   (RFC 3986 §2.1), where it wrote `+`, which a Manager reading the query
   as RFC 3986 takes as a literal plus (#164, `ihe-iti` 0.0.47).

@@ -677,10 +677,18 @@ async fn a_delivered_record_is_removed_and_a_refused_one_quarantined() {
         .await,
         "the delivered record is removed"
     );
-    let upstream = audit.upstream().expect("the repository is named");
-    assert_eq!(
-        Some(ferropix_operator_api::health::State::Up),
-        upstream.last.map(|last| last.state)
+    // The forwarder removes a delivered record before it counts the delivery.
+    assert!(
+        eventually(|| {
+            audit
+                .upstream()
+                .expect("the repository is named")
+                .last
+                .map(|last| last.state)
+                == Some(ferropix_operator_api::health::State::Up)
+        })
+        .await,
+        "the repository reads up once the delivery is counted"
     );
     audit
         .record(vec![bsn_record()])

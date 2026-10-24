@@ -8,13 +8,14 @@
 //! steward's own access token, so the server records the steward as the
 //! actor of every call (`docs/architecture.md` §12.1). Each call carries an
 //! `X-Request-Id` the console mints, which a page shows beside a failure so
-//! a steward can quote it. Two routes are read today: the server's liveness
-//! route, `GET {base}/health` (`docs/architecture.md` §9), and its FHIR
+//! a steward can quote it. It reads the server's liveness route,
+//! `GET {base}/health` (`docs/architecture.md` §9), its FHIR
 //! `CapabilityStatement`, `GET {base}/fhir/metadata` (HL7 FHIR R4, the REST
-//! interaction `capabilities`). The operator API the other pages read is
-//! #90, and until the server serves it every such page draws its refusal
-//! from the [`Probe`] of the liveness route. No specification governs the client:
-//! our own design.
+//! interaction `capabilities`), and the operator API's documents, typed as
+//! `ferropix-operator-api` defines them, so a field renamed on the server
+//! fails this crate's build; a page whose document the server does not serve
+//! draws its refusal from the [`Probe`] of the call. No specification
+//! governs the client: our own design.
 
 use std::fmt;
 use std::time::Duration;
@@ -22,6 +23,8 @@ use std::time::Duration;
 use http::StatusCode;
 use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
+
+use ferropix_operator_api::overview::Overview;
 
 use crate::config::settings::PixSettings;
 
@@ -33,6 +36,9 @@ pub const HEALTH: &str = "health";
 
 /// The FHIR capability route of the server, under its base.
 pub const METADATA: &str = "fhir/metadata";
+
+/// The operator API's dashboard route, under the server's base.
+pub const OVERVIEW: &str = "operator/overview";
 
 /// How many bytes of an answer the console reads at most: a
 /// `CapabilityStatement` is a few kilobytes, so a larger answer is refused
@@ -176,6 +182,24 @@ impl Pix {
         }
     }
 
+    /// Reads the operator API's dashboard document, or the call that did not
+    /// bring one back.
+    ///
+    /// # Errors
+    /// Returns the [`Probe`] of a call that was refused, did not answer, or
+    /// answered with a body that is not the document.
+    pub async fn overview(&self, token: &AccessToken) -> Result<Overview, Probe> {
+        match self.get(OVERVIEW, token).await {
+            (probe, Some(text)) if probe.is_up() => {
+                serde_json::from_str(&text).map_err(|_unread| Probe {
+                    reach: Reach::Unreachable(Failure::Other),
+                    ..probe
+                })
+            }
+            (probe, _) => Err(probe),
+        }
+    }
+
     /// `GET {base}/{route}` with the steward's token: the call's [`Probe`]
     /// and, for a `2xx` answer within [`BODY_LIMIT`], its body as text.
     async fn get(&self, route: &'static str, token: &AccessToken) -> (Probe, Option<String>) {
@@ -222,5 +246,341 @@ impl Pix {
             Ok(_) => (probe(Reach::Unreachable(Failure::Other)), None),
             Err(error) => (probe(Reach::Unreachable(Failure::of(&error))), None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ferropix_operator_api::actions::{Action, ActionFilter, Actions};
+    use ferropix_operator_api::domain::{Domain, DomainPage, DomainQuery, Domains, Feed};
+    use ferropix_operator_api::matching::{FieldWeights, Matching};
+    use ferropix_operator_api::overview::{DayCount, HourFeeds, Overview, Queue, QueueEntry};
+    use ferropix_operator_api::patient::{Address, Demographics, DomainRef, Name, Telecom};
+    use ferropix_operator_api::person::{
+        HistoryEntry, IdentifierRow, Link, Person, PseudonymRow, SourceRecord,
+    };
+    use ferropix_operator_api::search::{
+        DemographicsSearch, Hit, IdentifierSearch, MaskedIdentifier, Results,
+    };
+
+    /// Names every field of every operator document without `..`, so a
+    /// field the server renames, adds or drops fails this crate's build.
+    #[expect(
+        clippy::too_many_lines,
+        clippy::too_many_arguments,
+        clippy::needless_pass_by_value,
+        reason = "one exhaustive pattern per document, each taken whole, is the whole point of the guard"
+    )]
+    fn read_field_by_field(
+        overview: Overview,
+        person: Person,
+        results: Results,
+        domains: Domains,
+        page: DomainPage,
+        matching: Matching,
+        actions: Actions,
+        bodies: (
+            IdentifierSearch,
+            DemographicsSearch,
+            ActionFilter,
+            DomainQuery,
+        ),
+    ) -> usize {
+        let Overview {
+            queue,
+            records_created_24h: _,
+            records_linked_24h: _,
+            versions_fed_today: _,
+            subscriptions_in_error: _,
+            queue_depth,
+            feeds_per_hour,
+            oldest,
+        } = overview;
+        let Queue {
+            open: _,
+            waiting_over_week: _,
+            deferred: _,
+        } = queue;
+        for DayCount { day: _, open: _ } in queue_depth {}
+        for HourFeeds {
+            hour: _,
+            fhir: _,
+            v2: _,
+            pmir: _,
+        } in feeds_per_hour
+        {}
+        for QueueEntry {
+            candidate: _,
+            created_at: _,
+            score: _,
+            grade: _,
+        } in oldest
+        {}
+        let Person {
+            id: _,
+            status: _,
+            merged_into: _,
+            created_at: _,
+            leading,
+            identifiers,
+            records,
+            history,
+            history_truncated: _,
+            pseudonyms,
+        } = person;
+        let mut seen = leading.map(demographics).unwrap_or_default();
+        for IdentifierRow {
+            handle: _,
+            domain,
+            masked: _,
+            state: _,
+            last_fed: _,
+            link,
+        } in identifiers
+        {
+            seen += domain_ref(&domain);
+            if let Some(Link {
+                kind: _,
+                made_by: _,
+                made_at: _,
+            }) = link
+            {
+                seen += 1;
+            }
+        }
+        for SourceRecord {
+            id: _,
+            domain,
+            version: _,
+            received_at: _,
+            channel: _,
+            state: _,
+            demographics: stated,
+        } in records
+        {
+            seen += domain_ref(&domain) + demographics(stated);
+        }
+        for HistoryEntry {
+            at: _,
+            actor: _,
+            reason: _,
+            event: _,
+        } in history
+        {
+            seen += 1;
+        }
+        for PseudonymRow {
+            domain: _,
+            namespace: _,
+            name: _,
+            masked: _,
+        } in pseudonyms
+        {
+            seen += 1;
+        }
+        let Results {
+            total: _,
+            offset: _,
+            next: _,
+            persons,
+        } = results;
+        for Hit {
+            id: _,
+            status: _,
+            leading,
+            identifiers,
+            score: _,
+            grade: _,
+        } in persons
+        {
+            seen += leading.map(demographics).unwrap_or_default();
+            for MaskedIdentifier { domain, masked: _ } in identifiers {
+                seen += domain_ref(&domain);
+            }
+        }
+        let Domains { domains, next: _ } = domains;
+        let DomainPage { domain: one, feeds } = page;
+        for Domain {
+            id: _,
+            system: _,
+            name: _,
+            kind: _,
+            sensitive: _,
+            source_client_id: _,
+            created_at: _,
+            retired_at: _,
+            records: _,
+            last_fed: _,
+        } in domains.into_iter().chain([one])
+        {
+            seen += 1;
+        }
+        for Feed {
+            at: _,
+            channel: _,
+            outcome: _,
+        } in feeds
+        {
+            seen += 1;
+        }
+        let Matching {
+            link_at: _,
+            review_at: _,
+            possible_at: _,
+            auto_link: _,
+            blocking_keys: _,
+            fields,
+        } = matching;
+        for FieldWeights {
+            field: _,
+            m: _,
+            u: _,
+            configured: _,
+        } in fields
+        {
+            seen += 1;
+        }
+        let Actions { actions, next: _ } = actions;
+        for Action {
+            id: _,
+            kind: _,
+            actor: _,
+            at: _,
+            person: _,
+            record: _,
+            candidate: _,
+            merge: _,
+            reason: _,
+            request_id: _,
+        } in actions
+        {
+            seen += 1;
+        }
+        let (
+            IdentifierSearch {
+                system: _,
+                value: _,
+                offset: _,
+                limit: _,
+            },
+            DemographicsSearch {
+                family: _,
+                given: _,
+                birth_date: _,
+                gender: _,
+                postal_code: _,
+                offset: _,
+                limit: _,
+            },
+            ActionFilter {
+                actor: _,
+                kind: _,
+                person: _,
+                from: _,
+                to: _,
+                after: _,
+                limit: _,
+            },
+            DomainQuery { after: _, limit: _ },
+        ) = bodies;
+        seen
+    }
+
+    /// Names every field of a domain reference.
+    fn domain_ref(domain: &DomainRef) -> usize {
+        let DomainRef {
+            id: _,
+            system: _,
+            name: _,
+            kind: _,
+        } = domain;
+        1
+    }
+
+    /// Names every field of a demographics document.
+    fn demographics(demographics: Demographics) -> usize {
+        let Demographics {
+            names,
+            birth_date: _,
+            gender: _,
+            addresses,
+            telecom,
+        } = demographics;
+        let mut seen = 1;
+        for Name {
+            family: _,
+            given: _,
+        } in names
+        {
+            seen += 1;
+        }
+        for Address {
+            lines: _,
+            city: _,
+            postal_code: _,
+            country: _,
+        } in addresses
+        {
+            seen += 1;
+        }
+        for Telecom {
+            system: _,
+            value: _,
+        } in telecom
+        {
+            seen += 1;
+        }
+        seen
+    }
+
+    #[test]
+    fn the_console_reads_every_operator_document_field_by_field() {
+        let overview: Overview = serde_json::from_str(
+            r#"{"queue":{"open":1,"waiting_over_week":0,"deferred":0},
+                "records_created_24h":2,"records_linked_24h":1,"versions_fed_today":3,
+                "subscriptions_in_error":0,
+                "queue_depth":[{"day":"2026-10-24","open":1}],
+                "feeds_per_hour":[{"hour":"2026-10-24T10:00:00Z","fhir":1,"v2":0,"pmir":0}],
+                "oldest":[{"candidate":"c-1","created_at":"2026-10-24T10:00:00Z","score":0.9,"grade":"probable"}]}"#,
+        )
+        .expect("the dashboard document reads");
+        let person: Person = serde_json::from_str(
+            r#"{"id":"p-1","status":"active","created_at":"2026-10-24T10:00:00Z",
+                "leading":{"names":[{"family":"Synthfamily"}]},
+                "identifiers":[{"handle":{"record":"r-1"},
+                    "domain":{"id":"d-1","system":"urn:oid:2.999.1.1","name":"Synthetic","kind":"local"},
+                    "masked":"•••123","state":"active",
+                    "link":{"kind":"feed","made_by":"east-lab","made_at":"2026-10-24T10:00:00Z"}}],
+                "records":[],"history":[],"history_truncated":false,"pseudonyms":[]}"#,
+        )
+        .expect("the person document reads");
+        let empty = |text: &str| text.to_owned();
+        let seen = read_field_by_field(
+            overview,
+            person,
+            serde_json::from_str(&empty(r#"{"total":0,"offset":0,"persons":[]}"#))
+                .expect("the results read"),
+            serde_json::from_str(r#"{"domains":[]}"#).expect("the domains read"),
+            serde_json::from_str(
+                r#"{"domain":{"id":"d-1","system":"urn:oid:2.999.1.1","name":"Synthetic",
+                    "kind":"local","sensitive":false,"source_client_id":"east-lab",
+                    "created_at":"2026-10-24T10:00:00Z","records":0},"feeds":[]}"#,
+            )
+            .expect("the domain page reads"),
+            serde_json::from_str(
+                r#"{"link_at":0.95,"review_at":0.8,"possible_at":0.6,"auto_link":false,
+                    "blocking_keys":[],"fields":[]}"#,
+            )
+            .expect("the matching document reads"),
+            serde_json::from_str(r#"{"actions":[]}"#).expect("the trail reads"),
+            (
+                serde_json::from_str(r#"{"system":"urn:oid:2.999.1.1","value":"x"}"#)
+                    .expect("the identifier search reads"),
+                DemographicsSearch::default(),
+                ActionFilter::default(),
+                DomainQuery::default(),
+            ),
+        );
+        assert!(seen >= 4, "every document was walked: {seen}");
     }
 }

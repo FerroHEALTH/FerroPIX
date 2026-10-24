@@ -15,6 +15,7 @@ mod feeds;
 mod gate;
 mod indicator;
 mod leak;
+mod operator;
 mod pdqm_match;
 mod pdqm_search;
 mod pixm;

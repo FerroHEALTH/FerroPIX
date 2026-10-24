@@ -20,6 +20,7 @@ pub mod health;
 pub mod healthcheck;
 pub mod http;
 pub mod matching;
+pub mod operator;
 pub mod pdqm;
 pub mod store;
 pub mod telemetry;

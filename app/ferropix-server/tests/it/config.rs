@@ -243,6 +243,16 @@ source_client_id = "dev-source"
     );
     let opened = wide.replacen("[dev]\n", "[dev]\nloopback = false\n", 1);
     resolve(&opened, &secrets).expect("loopback = false admits any address");
+    let undeclared = development.replacen("[dev]\n", "", 1);
+    let error = resolve(&undeclared, &secrets).expect_err("Basic users ride with [dev] only");
+    assert!(
+        matches!(&error, Error::DevTableRequired { key } if key == "auth.basic"),
+        "{error:?}"
+    );
+    assert!(
+        !error.to_string().contains("dev-source"),
+        "the refusal names the key and never the value"
+    );
 }
 
 #[test]

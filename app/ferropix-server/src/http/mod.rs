@@ -32,14 +32,18 @@ pub const LIVENESS: &str = "/health";
 pub const READINESS: &str = "/health/readiness";
 
 /// Builds the HTTP application under `server`'s base path, with the shared
-/// middleware.
+/// middleware: the health routes, and the `guarded` routes of the FHIR face
+/// and the operator API when given.
 ///
 /// `GET {base}/health` answers `200` while the process is up, and
 /// `GET {base}/health/readiness` answers `200` while it can serve.
-pub fn router(server: &ServerSettings) -> Router {
-    let routes = Router::new()
+pub fn router(server: &ServerSettings, guarded: Option<Router>) -> Router {
+    let mut routes = Router::new()
         .route(LIVENESS, get(liveness))
         .route(READINESS, get(readiness));
+    if let Some(guarded) = guarded {
+        routes = routes.merge(guarded);
+    }
     let mounted = if server.base_path.is_empty() {
         routes
     } else {

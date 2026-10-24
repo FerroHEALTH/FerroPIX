@@ -61,7 +61,7 @@ fn client() -> reqwest::Client {
 #[tokio::test]
 async fn the_health_routes_answer_under_the_base_path_and_nowhere_else() {
     let server = settings("/pix");
-    let running = start(router(&server), server.drain_timeout).await;
+    let running = start(router(&server, None), server.drain_timeout).await;
     let base = format!("http://{}", running.address);
     for (path, status) in [
         ("/pix/health", StatusCode::OK),
@@ -86,7 +86,7 @@ async fn the_health_routes_answer_under_the_base_path_and_nowhere_else() {
 #[tokio::test]
 async fn a_legal_request_id_is_echoed_and_an_illegal_one_replaced() {
     let server = settings("");
-    let running = start(router(&server), server.drain_timeout).await;
+    let running = start(router(&server, None), server.drain_timeout).await;
     let url = format!("http://{}/health", running.address);
     let echoed = client()
         .get(&url)

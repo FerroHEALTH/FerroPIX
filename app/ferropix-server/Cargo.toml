@@ -25,17 +25,26 @@ path = "src/main.rs"
 [dependencies]
 axum.workspace = true
 clap.workspace = true
+# The R4 OperationOutcome and CapabilityStatement the FHIR face answers
+# with, from the generated model.
+fhir-types = { workspace = true, features = ["r4", "terminology"] }
 # The `[auth]` section is resolved by the family's resource-server crate: the
 # issuer URL rule of RFC 8414, the audiences, the algorithms and the Basic
-# users of the development profile.
-ferrohealth-smart.workspace = true
+# users of the development profile. `axum` adds the layer that guards every
+# route of the FHIR face and the operator API, and `fetch` reads each
+# issuer's metadata and key set.
+ferrohealth-smart = { workspace = true, features = ["axum", "fetch"] }
 http.workspace = true
+# The date the capability statement carries.
+jiff.workspace = true
 # The signature algorithms the `[auth]` section names.
 jsonwebtoken.workspace = true
 # The `healthcheck` job asks the server beside it for its readiness.
 reqwest = { workspace = true, features = ["rustls"] }
 secrecy.workspace = true
 serde.workspace = true
+# The bodies of the FHIR face, written from the generated model.
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 toml.workspace = true
@@ -49,10 +58,13 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
+# The signing keys of the authorization tests, generated when a case runs.
+aws-lc-rs.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "process"] }
-tower.workspace = true
+tower = { workspace = true, features = ["util"] }
+# The authorization server the authorization tests stand up.
+wiremock.workspace = true
 
 [lints]
 workspace = true

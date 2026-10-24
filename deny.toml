@@ -59,6 +59,8 @@ exceptions = [
   # itself, which is never published.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-ui" },
   { allow = ["BUSL-1.1"], crate = "ferropix-console" },
+  # The server, which is never published.
+  { allow = ["BUSL-1.1"], crate = "ferropix-server" },
 ]
 
 [bans]

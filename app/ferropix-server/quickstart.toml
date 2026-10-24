@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The quickstart configuration of the FerroPIX server: a production profile
+# on the loopback base, with both secrets read from the files a container
+# runtime mounts. `ferropix config check --config quickstart.toml` accepts it
+# once the two files exist. Every key and its default is listed in the book,
+# https://ferropix.eu/docs/operate/configuration.html.
+
+profile = "production"
+
+[server]
+listen = "0.0.0.0:8080"
+public_base_url = "http://localhost:8080"
+
+[db]
+url_file = "/run/secrets/ferropix-db-url"
+data_key_file = "/run/secrets/ferropix-data-key"
+
+[auth]
+audience = ["http://localhost:8080/fhir"]
+
+[[auth.issuer]]
+issuer = "http://localhost:8180/realms/ferropix"
+clients = ["quickstart-source"]
+
+# An identifier domain under the OID arc 2.999, which ITU-T X.660 reserves
+# for examples, so the quickstart names no real assigning authority.
+[[domain]]
+system = "urn:oid:2.999.1.1"
+name = "Quickstart hospital"
+kind = "local"
+source_client_id = "quickstart-source"
+
+[usage_report]
+deployment = "compose"
+state_dir = "/var/lib/ferropix"

@@ -115,6 +115,13 @@ The build order is the milestones:
   moved from FerroFED with its history; the Nuts grant holds its
   authorization server to RFC 8414 on `ferrohealth-smart`'s metadata module.
   Its Nuts tests run against the test devices under `tests/it/testkit/`.
+- `app/ferropix-server`: the server (#58), its own binary `ferropix`,
+  `publish = false`: the subcommands `serve`, `config check`, `healthcheck`
+  and `db migrate`, the configuration tree of `docs/architecture.md` §3
+  (`src/config/`, one module per section, the redacting `Secret` and
+  `SecretUrl`, `FERROPIX__` overrides, the production and development
+  profiles), the `tracing` console and the family's `tower-http` stack with
+  the bounded drain (`src/http/`), and `quickstart.toml`.
 - `app/ferropix-console`: the operator console (#119), its own binary
   `ferropix-console`, `publish = false`: a Leptos islands app rendered on the
   server and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC

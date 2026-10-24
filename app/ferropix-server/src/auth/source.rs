@@ -44,9 +44,8 @@ pub enum Verdict {
 }
 
 impl Sources {
-    /// Returns the Sources of the seeded `domains`, with the `clients` each
-    /// issuer lists and the Basic users.
-    // TODO(#59): read the domains from the store, which is their record after the seed.
+    /// Returns the Sources of `domains`, the ones the store holds after the
+    /// seed, with the `clients` each issuer lists and the Basic users.
     #[must_use]
     pub fn new(
         domains: &[DomainSeed],

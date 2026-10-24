@@ -18,6 +18,7 @@ pub mod fhir;
 pub mod health;
 pub mod healthcheck;
 pub mod http;
+pub mod store;
 pub mod telemetry;
 
 use std::error::Error;
@@ -29,7 +30,7 @@ use std::sync::Arc;
 use clap::Parser;
 use tokio::net::TcpListener;
 
-use crate::cli::{Cli, Command, ConfigCommand};
+use crate::cli::{Cli, Command, ConfigCommand, DbCommand};
 use crate::config::Config;
 use crate::config::settings::Settings;
 
@@ -91,7 +92,7 @@ where
         } => config_check(&settings),
         Command::Healthcheck => runtime_then(|| healthcheck(settings)),
         Command::Serve => serve(settings),
-        Command::Db { .. } => ExitCode::from(EXIT_PENDING_JOB),
+        Command::Db { command } => db(settings, &command),
     }
 }
 
@@ -154,10 +155,92 @@ fn serve(settings: Settings) -> ExitCode {
     })
 }
 
+/// Runs a `db` job: the subscriber installed, then the job against the
+/// store, its outcome one line on standard output.
+///
+/// `db migrate` applies the pending migrations, checks the sealing key and
+/// applies the domain seed; `db reseal` rewrites every identifier column
+/// under the configured key, reading the old one from `--old-key-file`.
+#[expect(
+    clippy::print_stderr,
+    clippy::print_stdout,
+    reason = "a db job reports its one answer on standard output and a refused key on stderr"
+)]
+fn db(settings: Settings, command: &DbCommand) -> ExitCode {
+    let old_key = match command {
+        DbCommand::Migrate => None,
+        DbCommand::Reseal { old_key_file } => match read_old_key(old_key_file) {
+            Ok(key) => Some(key),
+            Err(error) => {
+                eprintln!("ferropix: the old key is refused: {}", chain(&error));
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        },
+    };
+    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal()) {
+        eprintln!("ferropix: cannot start: {}", chain(&error));
+        return ExitCode::from(EXIT_CONFIG);
+    }
+    runtime_then(|| async move {
+        let outcome = match old_key {
+            None => store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
+                .await
+                .map(|store| {
+                    (
+                        store,
+                        String::from("the migrations and the domain seed are applied"),
+                    )
+                }),
+            Some(old) => reseal(&settings, &old).await,
+        };
+        match outcome {
+            Ok((store, line)) => {
+                store.close().await;
+                println!("ferropix: {line}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("ferropix: the db job failed: {}", chain(&error));
+                ExitCode::FAILURE
+            }
+        }
+    })
+}
+
+/// Reads the old sealing key of `db reseal` from `path`.
+fn read_old_key(path: &std::path::Path) -> Result<store::seal::SealingKey, config::error::Error> {
+    let text = config::secret::read_file("old_key_file", path)?;
+    store::seal::SealingKey::from_base64(text.expose()).map_err(|store::seal::KeyFormatError| {
+        config::error::Error::Value {
+            key: String::from("old_key_file"),
+            rule: "the file holds the base64 of exactly 32 bytes",
+        }
+    })
+}
+
+/// Connects to the store and rewrites every identifier column from `old` to
+/// the configured key.
+async fn reseal(
+    settings: &Settings,
+    old: &store::seal::SealingKey,
+) -> Result<(store::Store, String), store::StoreError> {
+    let old = store::seal::Sealer::new(old)?;
+    let store = store::Store::connect(&settings.db).await?;
+    let report = store::reseal::run(&store, &old, store::reseal::BATCH).await?;
+    let line = format!(
+        "{} record(s) resealed from key {} to key {}",
+        report.records, report.from, report.to
+    );
+    Ok((store, line))
+}
+
 /// Why `serve` could not run.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ServeError {
+    /// The store could not be started.
+    #[error("the store could not be started")]
+    Store(#[source] store::StoreError),
     /// The resource server could not start.
     #[error("the resource server could not start")]
     Auth(#[source] auth::SmartError),
@@ -169,20 +252,30 @@ pub enum ServeError {
     Io(#[source] std::io::Error),
 }
 
-/// Reads the authorization servers, binds the listener `settings` names and
-/// serves until the process is asked to stop.
+/// Starts the store, reads the authorization servers, binds the listener
+/// `settings` names and serves until the process is asked to stop.
+///
+/// The store passes the boot gate, applies the pending migrations unless
+/// `[db] migrate = false`, checks the sealing key and applies the domain
+/// seed before anything else starts; the Sources the guard admits are the
+/// domains the store then holds.
 ///
 /// # Errors
-/// Returns [`ServeError::Auth`] when an authorization server cannot be read,
+/// Returns [`ServeError::Store`] when the store refuses to start,
+/// [`ServeError::Auth`] when an authorization server cannot be read,
 /// [`ServeError::Audit`] when the audit spool or its repository cannot
 /// start, and [`ServeError::Io`] for the I/O error from binding, accepting or
 /// serving.
 pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
-    // TODO(#59): apply the pending migrations unless [db] migrate = false, and seed the domains.
+    let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
+        .await
+        .map_err(ServeError::Store)?;
+    let domains = store::seed::stored(&store)
+        .await
+        .map_err(ServeError::Store)?;
     let Settings {
         server,
         auth,
-        domains,
         pixm,
         pdqm,
         pmir,
@@ -204,7 +297,9 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     };
     let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
     let draining = audit.drain();
-    let health = health::Registry::default().and(Arc::new(audit::Headroom(audit.clone())));
+    let health = health::Registry::default()
+        .and(Arc::new(store::indicator::Database::new(store.clone())))
+        .and(Arc::new(audit::Headroom(audit.clone())));
     let guarded = fhir::routes(
         &server.base_path,
         &server.public_base_url,
@@ -233,6 +328,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     if let Some(draining) = draining {
         draining.abort();
     }
+    store.close().await;
     served
 }
 

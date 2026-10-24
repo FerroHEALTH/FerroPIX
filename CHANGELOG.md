@@ -68,8 +68,8 @@ and this project adheres to
   reserves. The IHE citation guard checks a citation of them against the
   cached pages, and the book's conformance page says so.
 - `ferropix-server`, the FerroPIX server crate with its binary `ferropix`
-  (#58): `serve`, `config check`, `healthcheck`, and `db migrate`, which
-  names the store issue (#59) until it runs. The configuration tree of
+  (#58): `serve`, `config check`, `healthcheck` and `db migrate`. The
+  configuration tree of
   `docs/architecture.md` §3 loads from one TOML file named by `--config` or
   `FERROPIX_CONFIG`, with `FERROPIX__<SECTION>__<KEY>` overrides, and every
   table refuses an unknown key. A secret is a `Secret` or `SecretUrl` that
@@ -85,6 +85,22 @@ and this project adheres to
   configuration, and the book's
   [Configuration](https://ferropix.eu/docs/operate/configuration.html) page
   lists every key, held by a test.
+- The cross-reference store of `ferropix-server` (#59): schema `pix` in
+  PostgreSQL 18, built from a migration set embedded in the binary, with
+  every relation of `docs/architecture.md` §4.2 and the temporal link
+  constraint that keeps a source record in one person at any instant.
+  `ferropix db migrate` and `serve` (unless `[db] migrate = false`) apply
+  the pending migrations, check the sealing key and insert each
+  `[[domain]]` the store lacks; `serve` first refuses a role that can read
+  any schema beside `pix`, and its guard admits as Sources the domains the
+  store holds after the seed; the readiness route reports the store as the
+  `database` indicator. An identifier in a sensitive domain is sealed
+  with AES-256-GCM and found by its HMAC-SHA256 in one index probe, so a
+  dump shows no identifier. `db.data_key_file` now holds the base64 of 32
+  random bytes, and a start under another key is refused. `ferropix db
+  reseal --old-key-file <PATH>` moves every identifier column to the
+  configured key in resumable batches. No identifier or name reaches a log
+  line, a `Debug` rendering or an error of the store.
 - `ihe-iti` 0.0.45 adds the server sides of PIXm and PDQm, typed and with
   no store and no HTTP server, so FerroPIX and FerroFED can each put them on
   their own stack. `pixm-server` is the PIX Manager (#67): `$ihe-pix` read

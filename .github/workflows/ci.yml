@@ -536,10 +536,11 @@ jobs:
       - run: cargo nextest run --workspace --all-features --locked --no-tests=warn
       - run: cargo test --doc --workspace --all-features --locked
 
-  # The container cases of the testkit behind FERROPIX_E2E (#65): PostgreSQL
-  # 18 and the stub OpenID Provider, started from the digests docs/VERSIONS.md
-  # pins on the runner's Docker. Without the gate they pass at once in the
-  # nextest job above; this is the run where they do their work.
+  # The container cases behind FERROPIX_E2E: the testkit's own (#65), PostgreSQL
+  # 18 and the stub OpenID Provider, and the server's store against PostgreSQL
+  # (#59), started from the digests docs/VERSIONS.md pins on the runner's
+  # Docker. Without the gate they pass at once in the nextest job above; this
+  # is the run where they do their work.
   e2e:
     name: e2e
     needs: detect
@@ -560,7 +561,7 @@ jobs:
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-nextest
-      - run: cargo nextest run -p ferropix-testkit --locked -E 'test(/e2e::/)'
+      - run: cargo nextest run -p ferropix-testkit -p ferropix-server --locked -E 'test(/e2e::/)'
 
   doc:
     name: rustdoc

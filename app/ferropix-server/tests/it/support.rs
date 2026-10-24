@@ -16,6 +16,10 @@ pub(crate) const PASSWORD: &str = "Qz7-test-password";
 /// use.
 pub(crate) const PHC: &str = "$argon2id$v=19$m=19456,t=2,p=1$c3ludGhldGljLXNhbHQtMTY$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
+/// A sealing key made for the tests: the base64 of 32 ASCII bytes, which no
+/// rendering may show.
+pub(crate) const DATA_KEY: &str = "UXo3LWEtc2VhbGluZy1rZXktZm9yLXRoZS10ZXN0cyE=";
+
 /// The two secret files of `[db]`, in a directory removed on drop.
 pub(crate) struct Secrets {
     /// The directory, held so it lives as long as the case.
@@ -37,8 +41,7 @@ impl Secrets {
         )
         .expect("the URL file is written");
         let key = directory.path().join("data-key");
-        std::fs::write(&key, "a-sealing-key-made-for-this-test\n")
-            .expect("the key file is written");
+        std::fs::write(&key, format!("{DATA_KEY}\n")).expect("the key file is written");
         Self {
             _directory: directory,
             url,

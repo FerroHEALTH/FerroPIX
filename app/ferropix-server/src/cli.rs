@@ -5,8 +5,8 @@
 //!
 //! `serve` runs the server, `config check` reads and resolves the
 //! configuration the way `serve` would and exits, `healthcheck` asks the
-//! server beside it for its readiness, and `db migrate` applies the pending
-//! migrations. No specification governs the command line: our own design.
+//! server beside it for its readiness, `db migrate` applies the pending
+//! migrations and the domain seed, and `db reseal` rotates the sealing key. No specification governs the command line: our own design.
 
 use std::path::PathBuf;
 
@@ -61,8 +61,15 @@ pub enum ConfigCommand {
 /// The `db` jobs.
 #[derive(Debug, Subcommand, PartialEq, Eq)]
 pub enum DbCommand {
-    /// Applies the pending migrations and exits.
+    /// Applies the pending migrations and the `[[domain]]` seed, and exits.
     Migrate,
+    /// Rewrites every sealed identifier column under the key
+    /// `[db] data_key_file` names, reading the old key from its own file.
+    Reseal {
+        /// The file holding the key the store is written under now.
+        #[arg(long, value_name = "PATH")]
+        old_key_file: PathBuf,
+    },
 }
 
 impl Command {
@@ -70,10 +77,7 @@ impl Command {
     #[must_use]
     pub const fn pending_issue(&self) -> Option<u32> {
         match self {
-            Self::Serve | Self::Config { .. } | Self::Healthcheck => None,
-            Self::Db {
-                command: DbCommand::Migrate,
-            } => Some(59),
+            Self::Serve | Self::Config { .. } | Self::Healthcheck | Self::Db { .. } => None,
         }
     }
 
@@ -89,6 +93,9 @@ impl Command {
             Self::Db {
                 command: DbCommand::Migrate,
             } => "db migrate",
+            Self::Db {
+                command: DbCommand::Reseal { .. },
+            } => "db reseal",
         }
     }
 }
@@ -146,13 +153,42 @@ mod tests {
     }
 
     #[test]
-    fn a_pending_job_names_the_issue_that_lands_it() {
-        let migrate = Command::Db {
-            command: DbCommand::Migrate,
-        };
-        assert_eq!(Some(59), migrate.pending_issue());
-        assert_eq!("db migrate", migrate.spelling());
-        assert_eq!(None, Command::Serve.pending_issue());
-        assert_eq!(None, Command::Healthcheck.pending_issue());
+    fn db_reseal_takes_the_old_key_file() {
+        let parsed =
+            Cli::try_parse_from(["ferropix", "db", "reseal", "--old-key-file", "/run/old"])
+                .expect("db reseal parses");
+        assert_eq!(
+            Command::Db {
+                command: DbCommand::Reseal {
+                    old_key_file: PathBuf::from("/run/old")
+                }
+            },
+            parsed.command
+        );
+        assert_eq!("db reseal", parsed.command.spelling());
+        assert!(
+            Cli::try_parse_from(["ferropix", "db", "reseal"]).is_err(),
+            "the old key file is required"
+        );
+    }
+
+    #[test]
+    fn no_job_is_pending() {
+        for command in [
+            Command::Serve,
+            Command::Healthcheck,
+            Command::Db {
+                command: DbCommand::Migrate,
+            },
+        ] {
+            assert_eq!(None, command.pending_issue(), "{command:?}");
+        }
+        assert_eq!(
+            "db migrate",
+            Command::Db {
+                command: DbCommand::Migrate
+            }
+            .spelling()
+        );
     }
 }

@@ -1031,6 +1031,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferropix-server"
+version = "0.0.2"
+dependencies = [
+ "axum",
+ "clap",
+ "ferrohealth-smart",
+ "http",
+ "jsonwebtoken",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "toml",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "fhir-types"
 version = "0.1.127"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3928,14 +3953,18 @@ dependencies = [
  "bitflags 2.13.2",
  "bytes",
  "futures-core",
+ "futures-util",
  "http",
  "http-body",
+ "http-body-util",
  "percent-encoding",
  "pin-project-lite",
  "tokio",
  "tokio-util",
  "tower-layer",
  "tower-service",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ferropix-server"
+description = "The FerroPIX server: the Master Patient Index over IHE PIXm and PDQm, with its cross-reference in PostgreSQL"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+# The application is never published.
+publish = false
+
+# A thin main.rs over a testable lib.rs (the Rust book, ch. 12.3, "Separation
+# of Concerns for Binary Projects").
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ferropix"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+clap.workspace = true
+# The `[auth]` section is resolved by the family's resource-server crate: the
+# issuer URL rule of RFC 8414, the audiences, the algorithms and the Basic
+# users of the development profile.
+ferrohealth-smart.workspace = true
+http.workspace = true
+# The signature algorithms the `[auth]` section names.
+jsonwebtoken.workspace = true
+# The `healthcheck` job asks the server beside it for its readiness.
+reqwest = { workspace = true, features = ["rustls"] }
+secrecy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+toml.workspace = true
+# The family's middleware: the request id, the panic catch, the request
+# timeout and the body ceiling.
+tower-http = { workspace = true, features = ["request-id", "catch-panic", "timeout", "limit"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+# The request id minted for a request that brings none.
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "net", "io-util", "process"] }
+tower.workspace = true
+
+[lints]
+workspace = true

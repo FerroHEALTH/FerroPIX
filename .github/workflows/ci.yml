@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: zizmor@1.31.1
       - name: Audit .github
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: shellcheck@0.11.0
       - name: Every tracked shell program is clean at severity=style
@@ -116,13 +116,15 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off conformance; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
         run: bash scripts/release/milestone.sh --self-test
       - name: The release plan orders tags by version and counts the support period
         run: bash scripts/release/plan.sh --self-test
+      - name: The release staging checks each tarball and stages the 0700 spool
+        run: bash scripts/release/stage-dist.sh --self-test
       - name: The destructive-command hook
         run: |
           set -euo pipefail
@@ -195,6 +197,33 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/checks/usage-report-off.sh
+
+  # hadolint over every tracked Dockerfile, under the committed .hadolint.yaml
+  # (failure-threshold: warning).
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Every tracked Dockerfile passes hadolint
+        # The official image, digest-pinned, for the same reason as actionlint:
+        # hadolint is a Haskell binary with no checksum-verified installer in
+        # the pinned tool set.
+        run: |
+          set -euo pipefail
+          files=()
+          while IFS= read -r -d '' f; do files+=("$f"); done \
+            < <(git ls-files -z 'Dockerfile' '*/Dockerfile' '*.Dockerfile' 'Dockerfile.*')
+          printf 'checking: %s\n' "${files[@]}"
+          docker run --rm \
+            -v "$PWD:/repo" --workdir /repo \
+            hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d \
+            hadolint --config .hadolint.yaml "${files[@]}"
 
   # Every TODO(#N) names an open issue.
   todo-issues:
@@ -535,11 +564,11 @@ jobs:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy -p ferropix-console --lib --target wasm32-unknown-unknown --locked -- -D warnings
       - name: Install cargo-leptos
-        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-leptos@0.3.11
       - name: Install the wasm-bindgen CLI
-        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: wasm-bindgen@0.2.129
       # Pinned and checked against its SHA-256 before use, so cargo-leptos
@@ -579,18 +608,18 @@ jobs:
           target: wasm32-unknown-unknown
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-leptos
-        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-leptos@0.3.11
       - name: Install the wasm-bindgen CLI
-        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: wasm-bindgen@0.2.129
       - name: Install wasm-opt
         run: |
           bash scripts/release/console-tools.sh "$RUNNER_TEMP/console-tools"
           echo "$RUNNER_TEMP/console-tools/bin" >> "$GITHUB_PATH"
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest
       - name: Install Chrome and chromedriver
@@ -633,7 +662,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --locked --no-tests=warn
@@ -659,7 +688,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest
       - run: bash scripts/checks/conformance.sh --check
@@ -686,10 +715,135 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest
       - run: cargo nextest run -p ferropix-testkit -p ferropix-server --locked -E 'test(/e2e::/)'
+
+  # The quickstart, run as an operator runs it: the server built for the
+  # static musl target, the image built from that binary through the staged
+  # tree the release lane uses (scripts/release/stage-dist.sh), then
+  # `docker compose up --wait` with compose.yaml as committed. It checks the
+  # image's tree (the binary root-owned 0555, the state directory and its
+  # 0700 audit spool owned by 65532), readiness, the image's HEALTHCHECK, and
+  # a token of the development issuer read by the server. A debug build: the
+  # job proves the packaging, and the release lane builds what ships. The
+  # usage report is off for every server this job starts.
+  quickstart:
+    name: quickstart
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      FERROPIX__USAGE_REPORT__ENABLED: "false"
+      FERROPIX_VERSION: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: compose.yaml resolves, with and without the console
+        run: |
+          set -euo pipefail
+          mkdir -p secrets
+          for secret in ferropix-db-url ferropix-data-key postgres-password ferropix-db-password console-oidc-client-secret; do
+            : > "secrets/${secret}"
+          done
+          docker compose config --quiet
+          docker compose --profile console config --quiet
+      # The console image from placeholder files at the paths
+      # release-console.yml stages: a COPY path or a .dockerignore rule that
+      # misses the staged tree fails here, and the tree carries the owners and
+      # modes the Dockerfile promises. Its real binary and bundle are built
+      # by the release lane alone.
+      - name: docker/console/Dockerfile builds from a staged tree
+        run: |
+          set -euo pipefail
+          mkdir -p dist/console/linux_amd64 dist/console/site/pkg
+          : > dist/console/linux_amd64/ferropix-console
+          for file in ferropix-console.wasm ferropix-console.js; do
+            : > "dist/console/site/pkg/${file}"
+          done
+          docker buildx build --check -f docker/console/Dockerfile .
+          docker buildx build --platform linux/amd64 --load -t ferropix-console:dry-run -f docker/console/Dockerfile .
+          id="$(docker create ferropix-console:dry-run)"
+          listing="$(docker export "$id" | tar -tvf -)"
+          docker rm "$id" > /dev/null
+          grep -qE '^-r-xr-xr-x 0/0 .* usr/local/bin/ferropix-console$' <<< "$listing" \
+            || { echo "::error::the console image lacks its binary, root-owned 0555" >&2; exit 1; }
+          grep -qE ' site/pkg/ferropix-console\.wasm$' <<< "$listing" \
+            || { echo "::error::the console image lacks its site bundle under /site" >&2; exit 1; }
+          [ "$(docker image inspect --format '{{.Config.User}}' ferropix-console:dry-run)" = "65532:65532" ] \
+            || { echo "::error::the console image does not run as 65532:65532" >&2; exit 1; }
+          docker image rm ferropix-console:dry-run > /dev/null
+      - uses: ./.github/actions/setup-rust
+        with:
+          target: x86_64-unknown-linux-musl
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install the musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Build the server for the static target
+        run: cargo build --locked -p ferropix-server --target x86_64-unknown-linux-musl
+      - name: Build the image from the staged tree
+        run: |
+          set -euo pipefail
+          mkdir -p dist/linux_amd64
+          install -m 0555 target/x86_64-unknown-linux-musl/debug/ferropix dist/linux_amd64/ferropix
+          bash scripts/release/stage-dist.sh tree
+          docker buildx build --check -f docker/Dockerfile .
+          docker buildx build --platform linux/amd64 --load \
+            -t "ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION}" -f docker/Dockerfile .
+      - name: The image carries its tree with the owners and modes it promises
+        run: |
+          set -euo pipefail
+          id="$(docker create "ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION}")"
+          listing="$(docker export "$id" | tar -tvf -)"
+          docker rm "$id" > /dev/null
+          want() {
+            local pattern="$1" what="$2"
+            grep -qE "$pattern" <<< "$listing" || { echo "::error::the image lacks ${what}" >&2; exit 1; }
+          }
+          want '^-r-xr-xr-x 0/0 .* usr/local/bin/ferropix$' "the binary, root-owned 0555"
+          want '^d[rwx-]{9} 65532/65532 .* var/lib/ferropix/$' "/var/lib/ferropix owned by 65532"
+          want '^drwx------ 65532/65532 .* var/lib/ferropix/audit/$' "the audit spool, 0700, owned by 65532"
+          [ "$(docker image inspect --format '{{.Config.User}}' "ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION}")" = "65532:65532" ] \
+            || { echo "::error::the image does not run as 65532:65532" >&2; exit 1; }
+      - name: The quickstart reaches readiness
+        run: |
+          set -euo pipefail
+          umask 077
+          openssl rand -base64 32 > secrets/ferropix-data-key
+          openssl rand -hex 16 > secrets/postgres-password
+          openssl rand -hex 16 > secrets/ferropix-db-password
+          printf 'postgresql://ferropix:%s@postgres:5432/ferropix' "$(cat secrets/ferropix-db-password)" > secrets/ferropix-db-url
+          docker compose up --detach --wait --wait-timeout 180
+          curl --fail --silent --show-error http://localhost:8080/health/readiness
+          echo
+          docker compose exec -T ferropix /usr/local/bin/ferropix healthcheck
+          docker compose logs ferropix | grep -F 'usage report OFF'
+      - name: The server admits a token of the development issuer
+        run: |
+          set -euo pipefail
+          token="$(curl --fail --silent --show-error \
+            -d grant_type=client_credentials -d client_id=quickstart-source \
+            -d client_secret=any -d scope=system/Patient.rs \
+            http://localhost:8180/ferropix/token | jq -r .access_token)"
+          # An unknown source identifier is a 404 of ITI-83 (PIXm 3.1.0
+          # §2:3.83.4.2.2.2); a refused token would be a 401.
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${token}" \
+            'http://localhost:8080/fhir/Patient/$ihe-pix?sourceIdentifier=urn:oid:2.999.1.1|0')"
+          [ "$status" = "404" ] || { echo "::error::ITI-83 answered ${status}, not 404" >&2; exit 1; }
+      - name: Logs of a failed start
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop the quickstart
+        if: always()
+        run: docker compose down --volumes
 
   doc:
     name: rustdoc
@@ -725,7 +879,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache: "false"
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-deny
       - run: cargo deny check
@@ -841,7 +995,7 @@ jobs:
         with:
           components: clippy
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest
       - name: Lint the feature set on its own
@@ -909,6 +1063,7 @@ jobs:
       - versions
       - file-length
       - usage-report-off
+      - hadolint
       - todo-issues
       - changelog-released
       - changelog-guard
@@ -924,6 +1079,7 @@ jobs:
       - test
       - conformance
       - e2e
+      - quickstart
       - doc
       - cargo-deny
       - vex

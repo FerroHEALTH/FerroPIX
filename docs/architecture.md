@@ -924,7 +924,10 @@ image with the hardening set (`read_only`, `cap_drop: [ALL]`,
 `no-new-privileges`, `tmpfs` for `/tmp`), the official `postgres:18` image
 pinned by digest with its data on a volume, every secret as a file secret
 (`FERROPIX__DB__URL_FILE`), the `console` profile that runs the console
-beside the server, and a `dev` issuer for the sign-in. FerroBRIDGE's
+beside the server, and a `dev` issuer for the sign-in: the testkit's stub
+provider, NAV's `mock-oauth2-server`, which owns the network namespace the
+server joins, because the server reads its issuer's metadata at start and
+admits plain `http` only on loopback (RFC 8414 §2). FerroBRIDGE's
 `compose.yaml` is the model; the `cdm` profiles are not needed here.
 
 **Kubernetes.** FerroFED ships plain manifests under `deploy/kubernetes`

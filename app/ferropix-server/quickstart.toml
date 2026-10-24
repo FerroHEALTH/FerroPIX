@@ -21,9 +21,15 @@ data_key_file = "/run/secrets/ferropix-data-key"
 [auth]
 audience = ["http://localhost:8080/fhir"]
 
+# The development OpenID Provider the compose quickstart runs beside the
+# server on the same loopback interface (compose.yaml, the `issuer` service).
+# It signs its access tokens with `typ` JWT rather than the `at+jwt` of
+# RFC 9068, so this issuer takes the plain JWT bearer profile; an issuer of
+# RFC 9068 tokens leaves `token_profile` out.
 [[auth.issuer]]
-issuer = "http://localhost:8180/realms/ferropix"
+issuer = "http://localhost:8180/ferropix"
 clients = ["quickstart-source"]
+token_profile = "jwt"
 
 # An identifier domain under the OID arc 2.999, which ITU-T X.660 reserves
 # for examples, so the quickstart names no real assigning authority.

@@ -25,3 +25,8 @@
 # (scripts/site/assemble.sh).
 /website/book/book/
 /_site/
+
+# The container build context scripts/release/stage-dist.sh stages, and the
+# secret files of the compose quickstart (compose.yaml).
+/dist/
+/secrets/

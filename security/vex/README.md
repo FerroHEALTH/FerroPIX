@@ -7,7 +7,9 @@ Vulnerability Exploitability eXchange documents, in
 [OpenVEX](https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md) format,
 stating whether a finding affects what FerroPIX publishes: the crates the
 release uploads to crates.io (`pkg:cargo/ihe-iti`,
-`pkg:cargo/nl-generic-functions`).
+`pkg:cargo/nl-generic-functions`), the server image (`pkg:oci/ferropix`),
+the console image (`pkg:oci/ferropix-console`) and the server binary
+(`pkg:cargo/ferropix-server`).
 
 A VEX document is the machine-readable form of an argument. Each statement
 names the vulnerability, the product, a `status`, a `justification` from the
@@ -33,9 +35,13 @@ later.
 |---|---|---|
 | `rust-advisories.openvex.json` | The Rust dependency advisories the advisory gate accepts. Each statement carries a `ferropix:reachability` block (our own extension; OpenVEX defines none) naming the crates the affected package is reached through. | **generated** |
 
-The release publishes no container image yet, so there is no document for an
-image's packages and no image scan. The server and console images bring
-both, as FerroFED runs them.
+No document covers the server image yet, because no scan has found
+anything in it to judge. The release's vulnerability record
+(`scripts/checks/vex-coverage.sh`) refuses a release while any finding of
+its image or binary scan lacks a statement here, and the weekly
+`image-scan.yml` applies every document in this directory; a statement for
+the image names the product `pkg:oci/ferropix` and is written by hand, in
+its own `*.openvex.json`.
 
 ## The generated document
 

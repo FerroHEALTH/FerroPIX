@@ -14,9 +14,12 @@
 #   scripts/checks/pin-freshness.sh
 #
 # The lint and install pins of .github/workflows/ci.yml (zizmor, shellcheck,
-# the actionlint image, yq, cargo-leptos), the documentation toolchain, the
-# console's Binaryen and the fuzz lane's cargo-fuzz of docs/VERSIONS.md are
-# read against the upstream project's newest GitHub release, and the Chrome
+# the actionlint and hadolint images, yq, cargo-leptos), the documentation
+# toolchain, the console's Binaryen, the fuzz lane's cargo-fuzz and the
+# release lanes' Trivy, cargo-auditable, cargo-cyclonedx and syft of
+# docs/VERSIONS.md are read against the upstream project's newest GitHub
+# release (a release tagged under a prefix against the newest release of
+# that prefix), and the Chrome
 # for Testing release of the browser journeys against the newest Stable one
 # its JSON endpoints list. The fuzz lane's nightly toolchain is read against
 # the date of the newest nightly the Rust project publishes, and is stale
@@ -32,9 +35,11 @@
 # has a reader, or its vendor script is listed in UNWATCHED_SCRIPTS with the
 # reason none is needed. Each row of the container image table of
 # docs/VERSIONS.md, which the testkit holds its `PinnedImage` constants to,
-# is read against the newest stable tag of its shape in the registry that
-# serves it. Needs an authenticated `gh`, awk, curl, find, jq, sed and
-# shasum.
+# and each image row of the release, is read against the newest stable tag
+# of its shape in the registry that serves it; an image pinned under a tag
+# that names no version (distroless `nonroot`) is read against the digest
+# that tag resolves to now. Needs an authenticated `gh`, awk, curl, find, jq,
+# sed and shasum.
 #
 #   scripts/checks/pin-freshness.sh --self-test
 #
@@ -61,6 +66,7 @@ readonly CI_TOOLS="\
 zizmor	zizmorcore/zizmor
 shellcheck	koalaman/shellcheck
 actionlint	rhysd/actionlint
+hadolint	hadolint/hadolint
 yq	mikefarah/yq
 cargo-leptos	leptos-rs/cargo-leptos"
 # The most pages of one tag list the read follows before it gives up.
@@ -243,7 +249,8 @@ chrome_pin() {
 # within the major line its tag names, because the consumer needs that line.
 # The newest tag of a later line is still printed beside it.
 readonly HELD_LINES="\
-PostgreSQL test image	the PostgreSQL major version of the store"
+PostgreSQL test image	the PostgreSQL major version of the store
+PostgreSQL quickstart image	the PostgreSQL major version of the store"
 
 # matrix_images [MATRIX]: one "label<TAB>repository<TAB>tag" record per row of
 # MATRIX whose pin cell is a single `repository:tag@sha256:digest` reference,
@@ -274,6 +281,9 @@ ci_tools() {
       actionlint)
         version="$(sed -nE 's/.*rhysd\/actionlint:([0-9][0-9.]*)@sha256:.*/\1/p' "$workflow" | head -n 1)"
         ;;
+      hadolint)
+        version="$(sed -nE 's/.*hadolint\/hadolint:v([0-9][0-9.]*)@sha256:.*/\1/p' "$workflow" | head -n 1)"
+        ;;
       yq)
         version="$(sed -nE 's/^[[:space:]]*YQ_VERSION:[[:space:]]*v?([0-9][0-9.]*)[[:space:]]*$/\1/p' "$workflow" | head -n 1)"
         ;;
@@ -285,12 +295,12 @@ ci_tools() {
   done <<< "$CI_TOOLS"
 }
 
-# registry_tags REPOSITORY: every tag of the image, one per line, from the
-# OCI distribution API (`GET /v2/<name>/tags/list`) with the anonymous pull
-# token the registry's `WWW-Authenticate` challenge names. A repository with
-# no registry host is a Docker Hub one, and a bare name is an official image.
-registry_tags() {
-  local repository="$1" host path challenge realm service token headers
+# registry_auth REPOSITORY: "host<TAB>path<TAB>token" for REPOSITORY, with the
+# anonymous pull token the registry's `WWW-Authenticate` challenge names. A
+# repository with no registry host is a Docker Hub one, and a bare name is an
+# official image.
+registry_auth() {
+  local repository="$1" host path challenge realm service token
   case "${repository%%/*}" in
     *.* | *:*)
       host="${repository%%/*}"
@@ -311,6 +321,31 @@ registry_tags() {
   token="$(curl --fail --silent --show-error --get --user-agent "$REGISTRY_UA" \
     --data-urlencode "service=$service" --data-urlencode "scope=repository:$path:pull" "$realm" \
     | jq --raw-output --exit-status '.token // .access_token')" || return 1
+  printf '%s\t%s\t%s\n' "$host" "$path" "$token"
+}
+
+# registry_digest REPOSITORY TAG: the digest TAG resolves to now, read from
+# the `Docker-Content-Digest` of a `HEAD /v2/<name>/manifests/<tag>` that
+# accepts an image index first, the object a multi-platform pin names.
+registry_digest() {
+  local repository="$1" tag="$2" host path token auth digest
+  auth="$(registry_auth "$repository")" || return 1
+  IFS=$'\t' read -r host path token <<< "$auth"
+  digest="$(curl --fail --silent --show-error --head --user-agent "$REGISTRY_UA" \
+    --header "Authorization: Bearer $token" \
+    --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+    "https://$host/v2/$path/manifests/$tag" | tr -d '\r' \
+    | awk 'tolower($1) == "docker-content-digest:" { print $2; exit }')" || return 1
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$digest"
+}
+
+# registry_tags REPOSITORY: every tag of the image, one per line, from the
+# OCI distribution API (`GET /v2/<name>/tags/list`).
+registry_tags() {
+  local repository="$1" host path token headers auth
+  auth="$(registry_auth "$repository")" || return 1
+  IFS=$'\t' read -r host path token <<< "$auth"
   headers="$registry_scratch/headers"
   # A registry may page the list whatever size is asked for (Quay stops at
   # 100), and names the next page in a `Link` header, so every page is read
@@ -478,17 +513,19 @@ self_test() {
   expect "Hub image postgres 18.6;Registry image ghcr.io/example/a 6.1.3;Port image registry.example:5000/x/y 1.0" \
     "$got" "the image rows of a matrix"
   got="$(matrix_images "$MATRIX" | cut -f1 | paste -sd ';' -)"
-  expect "PostgreSQL test image;Stub OpenID Provider image" "$got" "the image rows of $MATRIX"
+  expect "PostgreSQL test image;Stub OpenID Provider image;distroless static base;PostgreSQL quickstart image;Quickstart issuer image" \
+    "$got" "the image rows of $MATRIX"
 
   printf '%s\n' '      - uses: taiki-e/install-action@0000 # v2' '        with:' '          tool: zizmor@1.2.3' \
     '          tool: shellcheck@0.9.0' '            rhysd/actionlint:1.7.1@sha256:00 -color' \
+    '            hadolint/hadolint:v2.3.4@sha256:00 hadolint' \
     '          YQ_VERSION: v4.5.6' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f1,3 | tr '\t' ' ' | paste -sd ';' -)"
-  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;yq 4.5.6;cargo-leptos " "$got" "the tool pins of a workflow"
+  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;hadolint 2.3.4;yq 4.5.6;cargo-leptos " "$got" "the tool pins of a workflow"
   printf '%s\n' '          tool: cargo-nextest' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f3 | paste -sd ';' -)"
   rm "$work/ci.yml"
-  expect ";;;;" "$got" "a workflow with no tool pin"
+  expect ";;;;;" "$got" "a workflow with no tool pin"
   got="$(ci_tools | awk -F'\t' '$3 == "" { print $1 }' | paste -sd ';' -)"
   expect "" "$got" "the tools of $CI with no pin found"
 
@@ -599,31 +636,64 @@ matrix_pin() {
     }' "$MATRIX"
 }
 
-# One "matrix label<TAB>upstream repository" record per line: a build tool
-# of docs/VERSIONS.md a script installs by its release tag, read against the
-# newest GitHub release of its project.
+# One "matrix label<TAB>upstream repository<TAB>tag prefix<TAB>hold" record
+# per line: a build or release tool of docs/VERSIONS.md a script or a
+# workflow installs by its release tag, read against the newest GitHub
+# release of its project. A repository that releases several things under
+# one prefix each (`cargo-cyclonedx-0.5.9` beside `cyclonedx-bom-0.8.1`) is
+# read against its newest release of the prefix (`-` for none). A held tool
+# is pinned at the release another pin binds (the hold says which).
 readonly WATCHED_TOOLS="\
-Binaryen	WebAssembly/binaryen
-cargo-fuzz	rust-fuzz/cargo-fuzz"
+Binaryen	WebAssembly/binaryen	-	-
+cargo-fuzz	rust-fuzz/cargo-fuzz	-	-
+Trivy	aquasecurity/trivy	-	-
+cargo-auditable	rust-secure-code/cargo-auditable	-	the newest release the pinned taiki-e/install-action manifest carries
+cargo-cyclonedx	CycloneDX/cyclonedx-rust-cargo	cargo-cyclonedx-	the newest release the pinned taiki-e/install-action manifest carries
+syft	anchore/syft	-	the newest release the pinned taiki-e/install-action manifest carries"
 
-# release_pins: one "label<TAB>repository<TAB>pinned<TAB>hold" record per pin
-# read against a GitHub release, the CI tools first.
+# release_pins: one "label<TAB>repository<TAB>pinned<TAB>hold<TAB>prefix"
+# record per pin read against a GitHub release, the CI tools first.
 release_pins() {
-  local name repo version hold
+  local name repo version hold prefix
   while IFS=$'\t' read -r name repo version; do
-    printf '%s\t%s\t%s\t-\n' "$name" "$repo" "$version"
+    printf '%s\t%s\t%s\t-\t-\n' "$name" "$repo" "$version"
   done < <(ci_tools)
   while IFS=$'\t' read -r name repo hold; do
-    printf '%s\t%s\t%s\t%s\n' "$name" "$repo" "$(matrix_pin "$name")" "$hold"
+    printf '%s\t%s\t%s\t%s\t-\n' "$name" "$repo" "$(matrix_pin "$name")" "$hold"
   done <<< "$WATCHED_DOCS"
-  while IFS=$'\t' read -r name repo; do
-    printf '%s\t%s\t%s\t-\n' "$name" "$repo" "$(matrix_pin "$name")"
+  while IFS=$'\t' read -r name repo prefix hold; do
+    printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$repo" "$(matrix_pin "$name")" "$hold" "$prefix"
   done <<< "$WATCHED_TOOLS"
+}
+
+# newest_release_tag REPOSITORY: the tag of the newest release of
+# REPOSITORY, from the API, or, where the API refuses the read (an
+# organisation with an IP allow list answers 403 to the workflow's token),
+# from the redirect github.com serves for /releases/latest.
+newest_release_tag() {
+  local repo="$1" tag location
+  if tag="$(gh api "repos/$repo/releases/latest" --jq '.tag_name' 2>&1)"; then
+    printf '%s\n' "$tag"
+    return 0
+  fi
+  location="$(curl --silent --show-error --head --user-agent "$REGISTRY_UA" \
+    "https://github.com/$repo/releases/latest" | tr -d '\r' \
+    | awk 'tolower($1) == "location:" { print $2; exit }')" || {
+    printf '%s\n' "$tag"
+    return 1
+  }
+  case "$location" in
+    "https://github.com/$repo/releases/tag/"?*) printf '%s\n' "${location##*/releases/tag/}" ;;
+    *)
+      printf '%s\n' "$tag"
+      return 1
+      ;;
+  esac
 }
 
 stale=0
 unreadable=0
-while IFS=$'\t' read -r label repo pinned hold; do
+while IFS=$'\t' read -r label repo pinned hold prefix; do
   [[ -n "$label" ]] || continue
 
   if [[ -z "$pinned" ]]; then
@@ -632,15 +702,31 @@ while IFS=$'\t' read -r label repo pinned hold; do
     continue
   fi
 
-  if ! tag="$(gh api "repos/$repo/releases/latest" --jq '.tag_name' 2>&1)"; then
+  if [[ "$prefix" != "-" ]]; then
+    if ! tags="$(gh api --paginate "repos/$repo/releases" \
+      --jq '.[] | select(.draft | not) | select(.prerelease | not) | .tag_name' 2>&1)"; then
+      printf 'UNREADABLE %s: could not read the releases of %s (%s)\n' "$label" "$repo" "$tags"
+      unreadable=1
+      continue
+    fi
+    latest="$(sed -nE "s/^${prefix}v?([0-9]+(\.[0-9]+)+)$/\1/p" <<< "$tags" | newest_version "$pinned")"
+    tag="${prefix}${latest}"
+    if [[ -z "$latest" ]]; then
+      printf 'UNREADABLE %s: %s has no release tagged %sX.Y.Z\n' "$label" "$repo" "$prefix"
+      unreadable=1
+      continue
+    fi
+  elif ! tag="$(newest_release_tag "$repo")"; then
     printf 'UNREADABLE %s: could not read the newest release of %s (%s)\n' "$label" "$repo" "$tag"
     unreadable=1
     continue
+  else
+    # A tag may lead with the repository's name: lychee tags its releases
+    # lychee-vX.Y.Z. A `v` is dropped only before a digit, so Binaryen's
+    # version_133 stays whole.
+    latest="${tag#"${repo##*/}"-}"
+    [[ ! "$latest" =~ ^v[0-9] ]] || latest="${latest#v}"
   fi
-  # A tag may lead with the repository's name: lychee tags its releases
-  # lychee-vX.Y.Z.
-  latest="${tag#"${repo##*/}"-}"
-  latest="${latest#v}"
 
   if [[ "$pinned" = "$latest" ]]; then
     printf 'current    %s %s (%s)\n' "$label" "$pinned" "$repo"
@@ -856,6 +942,22 @@ if [[ -z "$images" ]]; then
 fi
 while IFS=$'\t' read -r label repository tag; do
   [[ -n "$label" ]] || continue
+  # A tag that names no version moves with every rebuild of the image, so the
+  # pin is its digest, read against the digest the tag resolves to now.
+  if ! [[ "$tag" =~ ^[0-9] ]]; then
+    pinned="$(matrix_first "$label" 'sha256:[0-9a-f]{64}')"
+    if ! now="$(registry_digest "$repository" "$tag")"; then
+      printf 'UNREADABLE %s: could not read the digest of %s:%s\n' "$label" "$repository" "$tag"
+      unreadable=1
+    elif [[ "$now" = "$pinned" ]]; then
+      printf 'current    %s %s:%s@%s\n' "$label" "$repository" "$tag" "$pinned"
+    else
+      printf 'STALE      %s: %s:%s pinned %s, the tag resolves to %s now\n' \
+        "$label" "$repository" "$tag" "$pinned" "$now"
+      stale=1
+    fi
+    continue
+  fi
   if ! tags="$(registry_tags "$repository")"; then
     printf 'UNREADABLE %s: could not read the tags of %s\n' "$label" "$repository"
     unreadable=1

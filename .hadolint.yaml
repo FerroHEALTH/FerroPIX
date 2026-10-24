@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+#
+# hadolint configuration, read by the CI job (.github/workflows/ci.yml) and by
+# a local `hadolint <Dockerfile>`. Every Dockerfile in the repository is held
+# to the same bar: a digest-pinned FROM from a trusted registry and no ignored
+# rule without a recorded reason.
+failure-threshold: warning
+trustedRegistries:
+  - gcr.io

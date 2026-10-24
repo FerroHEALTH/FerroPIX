@@ -37,6 +37,20 @@ and this project adheres to
   `export` action and an Export record, each stored before the answer. The
   console's client reads the dashboard typed and walks every document field
   by field, so a renamed field fails its build.
+- The operator console's image and release lane (#99).
+  `docker/console/Dockerfile` puts the static console binary and its site
+  bundle on the same distroless base, compiling nothing: user `65532`, port
+  `3000`, the bundle under `/site`, and a `HEALTHCHECK` on
+  `ferropix-console healthcheck`. A `v*` tag now builds, attests and
+  attaches the console's musl binaries and site bundle and pushes
+  `ghcr.io/ferrohealth/ferropix-console` for both platforms with SLSA
+  provenance and SPDX SBOMs (`release-console.yml`), checked with
+  `gh attestation verify`; the vulnerability record, the tag gate and the
+  weekly scan cover it beside the server image. `compose.yaml` gains the
+  `console` profile, signed in through the development issuer with the
+  client secret as a file secret. CI builds the console image from a
+  placeholder tree. The book's console page documents the image, its port
+  and its verification.
 - The PDQm Patient Demographics Supplier with the Match Operation Option
   (#70, #72, #73, `ferropix_server::pdqm`). ITI-78 answers
   `GET /fhir/Patient` and `POST /fhir/Patient/_search` alike with every
@@ -59,6 +73,27 @@ and this project adheres to
   `read`, `search-type`, the search parameters and `$match`. The migration
   `0013_search` installs `unaccent` into `pix` with the functions the
   search reads, and the grants move to `0014`.
+- The server image and the SLSA Build Level 3 release lanes (#74, #75,
+  #76). `docker/Dockerfile` puts the static musl binary on distroless static
+  pinned by digest, compiling nothing: user `65532`, ports `8080` and
+  `2575`, `/var/lib/ferropix` with its `0700` audit spool owned by the
+  runtime user, and a `HEALTHCHECK` on `ferropix healthcheck`. A `v*` tag
+  now builds the binary per architecture with `cargo auditable`
+  (`release-build.yml`), verifies those tarballs and pushes
+  `ghcr.io/ferrohealth/ferropix` for `linux/amd64` and `linux/arm64`
+  (`release-image.yml`), each with SLSA provenance and SPDX SBOMs a
+  consumer checks with `gh attestation verify`; records every vulnerability
+  finding of the image and the binaries joined with its OpenVEX judgement,
+  refusing a release with an unjudged one (`scripts/checks/vex-coverage.sh`);
+  and tags the image only after the HIGH and CRITICAL gate
+  (`scan-and-tag.yml`). `image-scan.yml` scans the published image each
+  week. `compose.yaml` runs the image beside PostgreSQL and a development
+  OpenID Provider with file secrets, a read-only root, every capability
+  dropped and ports on `127.0.0.1`; the quickstart configuration's issuer
+  moved to that provider. CI lints the Dockerfile with hadolint and runs the
+  quickstart to readiness on every change. `scripts/release/stage-dist.sh`
+  stages a release's binaries for a local build. The book's Deployment page
+  documents the image, its ports, its verification and the quickstart.
 - The PIXm Manager (#66, #68, #52, #69). `$ihe-pix` (ITI-83) answers by
   `GET` and by `POST` of a `Parameters` body, the two forms alike, in FHIR
   JSON and XML, from `store::xref::lookup` through `ihe-iti`'s

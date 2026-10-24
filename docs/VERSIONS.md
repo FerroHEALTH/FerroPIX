@@ -60,8 +60,8 @@ SHA-256. They are the versions FerroBRIDGE's console builds with.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| cargo-leptos | `0.3.11` | `.github/workflows/ci.yml` |
-| wasm-bindgen | `0.2.129` | `.github/workflows/ci.yml`, `Cargo.toml` |
+| cargo-leptos | `0.3.11` | `.github/workflows/ci.yml`, `.github/workflows/release-console.yml` |
+| wasm-bindgen | `0.2.129` | `.github/workflows/ci.yml`, `.github/workflows/release-console.yml`, `Cargo.toml` |
 | Binaryen | `version_133` | `scripts/release/console-tools.sh` |
 
 `scripts/checks/versions.sh` reads each pin back from the files its row
@@ -127,6 +127,36 @@ design.
 |---|---|---|
 | PostgreSQL test image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
 | Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.3@sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
+
+## The images and the release lanes
+
+The images' base, the images of the compose quickstart, the
+Dockerfile linter and the tools the release lanes install. Each image is
+pinned by tag and by the digest of its image index, resolved on 2026-10-24;
+the pin-freshness lane reads each against its registry, and the distroless
+base, whose `nonroot` tag names no version, against the digest that tag
+resolves to now. The quickstart's PostgreSQL is the testkit's pin, and its
+development OpenID Provider is the testkit's stub provider. Trivy is
+installed by the digest-pinned `aquasecurity/setup-trivy` at the version
+each workflow's `TRIVY_VERSION` names; cargo-auditable, cargo-cyclonedx and
+syft by the digest-pinned `taiki-e/install-action`, whose manifest holds
+each at the newest release it carries. No specification governs the
+choice: our own design, FerroBRIDGE's set.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99` | `docker/Dockerfile`, `docker/console/Dockerfile` |
+| PostgreSQL quickstart image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | `compose.yaml` |
+| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.3@sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8` | `compose.yaml` |
+| hadolint image | `v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d` | `.github/workflows/ci.yml` |
+| Trivy | `0.76.1` | `.github/workflows/release.yml`, `.github/workflows/scan-and-tag.yml`, `.github/workflows/image-scan.yml` |
+| cargo-auditable | `0.7.7` | `.github/workflows/release-build.yml`, `.github/workflows/release-console.yml` |
+| cargo-cyclonedx | `0.5.9` | `.github/workflows/release-build.yml` |
+| syft | `1.54.1` | `.github/workflows/release-build.yml`, `.github/workflows/release-image.yml`, `.github/workflows/release-console.yml` |
+
+`scripts/checks/versions.sh` reads each pin back from the files its row
+names, and holds the server image tag `compose.yaml` defaults to equal to
+the workspace version.
 
 ## Specifications
 

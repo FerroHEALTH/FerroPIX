@@ -193,10 +193,25 @@ The build order is the milestones:
   the book in step with the code run in CI's `conclusion`
   (`.claude/rules/docs-website.md`).
 - `assets/brand/`: the mark, the favicon set and the "Plum & Iron" tokens.
+- `docker/Dockerfile`: the server image (#75), one stage on distroless
+  static pinned by digest, copying the musl binary and the state tree the
+  release lane stages under `dist/` (`scripts/release/stage-dist.sh`); it
+  compiles nothing. `docker/console/Dockerfile`: the console image (#99),
+  the same base, copying the binary and the site bundle staged under
+  `dist/console/`. `compose.yaml`: the quickstart, the published image
+  beside PostgreSQL (its role made by `docker/postgres/`) and the
+  development issuer whose network namespace the server joins, with file
+  secrets and the hardening set, and the console under the `console`
+  profile.
 - `.github/`: CI with the single required `conclusion` check, CodeQL,
   Scorecard, SonarQube Cloud (advisory), the weekly pin freshness lane,
-  the weekly fuzz lane (`fuzz.yml`, advisory), Dependabot, the Docs workflow, the release lane (`release.yml`,
-  `release-crate.yml`) and `publish-crates.yml` through Trusted Publishing,
+  the weekly fuzz lane (`fuzz.yml`, advisory), the weekly published-image
+  scan (`image-scan.yml`), Dependabot, the Docs workflow, the release lane
+  (`release.yml` calling the reusable `release-build.yml`,
+  `release-image.yml`, `release-console.yml`, `release-crate.yml` and
+  `scan-and-tag.yml`, SLSA
+  Build Level 3, with the per-release vulnerability record,
+  `docs/release.md`) and `publish-crates.yml` through Trusted Publishing,
   the templates.
 - `.claude/`: the working discipline (rules, agents, skills, hooks, memory).
 

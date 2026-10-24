@@ -44,7 +44,7 @@ jobs:
     # anyway, and the post-merge push to main analyzes the merged result.
     if: github.event_name == 'push' || (github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read # PR decoration reads the pull-request metadata
@@ -80,7 +80,7 @@ jobs:
 
       - name: Install cargo-llvm-cov and cargo-nextest
         if: steps.token.outputs.present == 'true' && hashFiles('Cargo.toml') != ''
-        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-llvm-cov,cargo-nextest
 
@@ -90,12 +90,16 @@ jobs:
       # ihe-iti and nl-generic-functions is measured. --no-report accumulates
       # the profiles, the report step merges them into the single file Sonar
       # imports. --no-tests=pass keeps a member with no tests from failing the
-      # run. FERROPIX_E2E is unset, so the gated end-to-end tests skip, and
-      # sonar-project.properties leaves them out of coverage.
+      # run. FERROPIX_E2E is set, so the container cases start PostgreSQL and
+      # the stub provider on the runner's Docker and the server code they
+      # reach counts as covered (#174); the nextest overrides of the long
+      # cases apply here as in ci.yml. The usage report stays off.
       - name: Instrumented tests to lcov, one package at a time
         if: steps.token.outputs.present == 'true' && hashFiles('Cargo.toml') != ''
         env:
           CARGO_BUILD_JOBS: "2"
+          FERROPIX_E2E: "1"
+          FERROPIX__USAGE_REPORT__ENABLED: "false"
         run: |
           set -euo pipefail
           cargo llvm-cov clean --workspace

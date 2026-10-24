@@ -104,3 +104,43 @@ pub struct DomainPage {
     /// Its last feeds, the newest first, at most [`FEEDS`].
     pub feeds: Vec<Feed>,
 }
+
+/// The body of `POST {base}/operator/domains`, behind the administrator
+/// scope.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewDomain {
+    /// The domain's system, an absolute URI.
+    pub system: String,
+    /// The domain's name.
+    pub name: String,
+    /// What the domain is: `local` or `authoritative`.
+    pub kind: DomainKind,
+    /// The client id of its one Patient Identity Source.
+    pub source_client_id: String,
+    /// Whether its identifier values are sealed at rest; `true` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensitive: Option<bool>,
+    /// Why the domain is added.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// The body of `PATCH {base}/operator/domains/{id}`, behind the
+/// administrator scope: the fields it names change, the others stay.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DomainChange {
+    /// The new name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The client id of the new Patient Identity Source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_client_id: Option<String>,
+    /// `true` retires the domain, which then answers as unknown; a retired
+    /// domain stays retired.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub retire: bool,
+    /// Why the domain changes: required.
+    pub reason: String,
+}

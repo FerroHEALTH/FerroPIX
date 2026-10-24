@@ -8,11 +8,12 @@
 //! [`health`] holds the readiness document of `GET {base}/health/readiness`
 //! and the dependency report of `GET {base}/operator/dependencies`;
 //! [`overview`] the dashboard; [`search`] the two searches; [`person`] the
-//! person with its identifiers, records, history and pseudonyms; [`domain`]
-//! the identifier domains; [`matching`] the matching configuration in
-//! effect; [`actions`] the audit trail; and [`patient`] the values several
-//! of them share. No specification governs these documents: our own design,
-//! after FerroBRIDGE's operator API crate.
+//! person with its identifiers, records, history and pseudonyms; [`reveal`]
+//! the reveal of one of them; [`domain`] the identifier domains and their
+//! writes; [`matching`] the matching configuration in effect; [`actions`]
+//! the audit trail; and [`patient`] the values several of them share. No
+//! specification governs these documents: our own design, after
+//! FerroBRIDGE's operator API crate.
 
 pub mod actions;
 pub mod domain;
@@ -21,4 +22,5 @@ pub mod matching;
 pub mod overview;
 pub mod patient;
 pub mod person;
+pub mod reveal;
 pub mod search;

@@ -340,7 +340,6 @@ pub enum StewardAction {
 
 /// Returns the record of a steward action on `person` (`Patient/{id}`),
 /// ended in `outcome`: a `RESTful` read or update (BALP 1.1.4 §3:5.7.3).
-// TODO(#90): record a reveal as a privacy disclosure, the reason in purposeOfEvent.
 #[must_use]
 pub fn steward(call: &Call, action: StewardAction, person: &str, outcome: Outcome) -> Exchange {
     let (profile, subtype, code, client, server) = match action {
@@ -454,6 +453,118 @@ pub fn export(call: &Call, rows: usize, person: Option<&str>, outcome: Outcome) 
         },
         outcome,
         entities,
+    )
+}
+
+/// The `disclose` subtype of a privacy disclosure (BALP 1.1.4
+/// `IHE.BasicAudit.PrivacyDisclosure.Source`, `subtype:disclosure`).
+pub const DISCLOSE: Coded = Coded::fixed(
+    "http://terminology.hl7.org/CodeSystem/iso-21089-lifecycle",
+    "disclose",
+    "Disclose Record Lifecycle Event",
+);
+
+/// What a reveal disclosed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Disclosed<'a> {
+    /// `identifier` or `pseudonym`.
+    pub kind: &'static str,
+    /// The identifier's domain system, or the pseudonymisation domain's
+    /// namespace.
+    pub system: &'a str,
+    /// The steward's reason.
+    pub reason: &'a str,
+}
+
+impl std::fmt::Debug for Disclosed<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Disclosed")
+            .field("kind", &self.kind)
+            .field("system", &self.system)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Returns the record of a steward's reveal, a privacy disclosure at the
+/// source.
+///
+/// The reveal is of `disclosed` of the person `person` (`Patient/{id}`),
+/// ended in `outcome` (BALP 1.1.4 §3:5.7.7,
+/// `IHE.BasicAudit.PrivacyDisclosure.Source`).
+///
+/// FerroPIX is the source agent and the steward's client the recipient; the
+/// patient is the subject (§1:52.4.1.6) and the disclosed data an entity
+/// naming its kind and domain, never its value. `purposeOfEvent` carries the
+/// coded purposes of the steward's token, and the steward's reason, which is
+/// free text, is a `reason` detail of the data entity (no specification
+/// governs the reason's place: our own design).
+#[must_use]
+pub fn disclosure(
+    call: &Call,
+    person: &str,
+    disclosed: Disclosed<'_>,
+    outcome: Outcome,
+) -> Exchange {
+    call.exchange(
+        EventKind {
+            profile: "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.PrivacyDisclosure.Source",
+            event_type: EXPORT,
+            subtypes: vec![DISCLOSE, READ],
+            action: "R",
+            client: DESTINATION_ROLE,
+            server: SOURCE_ROLE,
+        },
+        outcome,
+        vec![
+            Entity::PatientReference(SecretString::from(person.to_owned())),
+            Entity::Described(Described {
+                what: None,
+                kind: SYSTEM_OBJECT,
+                role: None,
+                name: Some(disclosed.kind.to_owned()),
+                description: None,
+                details: vec![
+                    Detail::new("system", disclosed.system),
+                    Detail::new("reason", disclosed.reason),
+                ],
+                security_labels: Vec::new(),
+            }),
+        ],
+    )
+}
+
+/// Returns the record of an administrator's write of the identifier domain
+/// `system`, a creation when `created`, ended in `outcome`.
+///
+/// A `RESTful` create or update of a system object that names no patient; no
+/// BALP pattern describes a domain, so the record claims no profile (no
+/// specification governs this: our own design).
+#[must_use]
+pub fn domain_write(call: &Call, created: bool, system: &str, outcome: Outcome) -> Exchange {
+    let (subtype, code) = if created {
+        (CREATE, "C")
+    } else {
+        (UPDATE, "U")
+    };
+    call.exchange(
+        EventKind {
+            profile: "",
+            event_type: REST,
+            subtypes: vec![subtype],
+            action: code,
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        vec![Entity::Described(Described {
+            what: None,
+            kind: SYSTEM_OBJECT,
+            role: None,
+            name: Some(String::from("identifier_domain")),
+            description: None,
+            details: vec![Detail::new("system", system)],
+            security_labels: Vec::new(),
+        })],
     )
 }
 

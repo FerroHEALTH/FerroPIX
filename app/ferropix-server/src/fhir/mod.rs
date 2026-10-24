@@ -151,6 +151,7 @@ pub fn routes(
         backend.store.clone(),
         &backend.matching,
         audit.clone(),
+        smart.sources().clone(),
         public_base_url,
     ));
     let mut router = Router::new();
@@ -277,7 +278,6 @@ async fn pending_fhir() -> Response {
 }
 
 /// A route of the operator API that is not served yet.
-// TODO(#90): serve the reveal and the writes of the identifier domains.
 // TODO(#107): serve the review queue and the decisions.
 // TODO(#108): serve the merge preview, the merge and the unmerge.
 // TODO(#115): serve the pseudonymisation domains and the resolution.

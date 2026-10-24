@@ -252,13 +252,16 @@ impl Pix {
 #[cfg(test)]
 mod tests {
     use ferropix_operator_api::actions::{Action, ActionFilter, Actions};
-    use ferropix_operator_api::domain::{Domain, DomainPage, DomainQuery, Domains, Feed};
+    use ferropix_operator_api::domain::{
+        Domain, DomainChange, DomainPage, DomainQuery, Domains, Feed, NewDomain,
+    };
     use ferropix_operator_api::matching::{FieldWeights, Matching};
     use ferropix_operator_api::overview::{DayCount, HourFeeds, Overview, Queue, QueueEntry};
     use ferropix_operator_api::patient::{Address, Demographics, DomainRef, Name, Telecom};
     use ferropix_operator_api::person::{
         HistoryEntry, IdentifierRow, Link, Person, PseudonymRow, SourceRecord,
     };
+    use ferropix_operator_api::reveal::{Reveal, Revealed};
     use ferropix_operator_api::search::{
         DemographicsSearch, Hit, IdentifierSearch, MaskedIdentifier, Results,
     };
@@ -285,6 +288,7 @@ mod tests {
             ActionFilter,
             DomainQuery,
         ),
+        writes: (NewDomain, DomainChange, Reveal, Revealed),
     ) -> usize {
         let Overview {
             queue,
@@ -450,6 +454,8 @@ mod tests {
             record: _,
             candidate: _,
             merge: _,
+            domain: _,
+            pseudonym_domain: _,
             reason: _,
             request_id: _,
         } in actions
@@ -483,6 +489,33 @@ mod tests {
             },
             DomainQuery { after: _, limit: _ },
         ) = bodies;
+        let (
+            NewDomain {
+                system: _,
+                name: _,
+                kind: _,
+                source_client_id: _,
+                sensitive: _,
+                reason: _,
+            },
+            DomainChange {
+                name: _,
+                source_client_id: _,
+                retire: _,
+                reason: _,
+            },
+            Reveal {
+                target: _,
+                reason: _,
+                seconds: _,
+            },
+            Revealed {
+                value: _,
+                system: _,
+                seconds: _,
+                action: _,
+            },
+        ) = writes;
         seen
     }
 
@@ -579,6 +612,20 @@ mod tests {
                 DemographicsSearch::default(),
                 ActionFilter::default(),
                 DomainQuery::default(),
+            ),
+            (
+                serde_json::from_str(
+                    r#"{"system":"urn:oid:2.999.1.9","name":"Synthetic","kind":"local","source_client_id":"east-lab"}"#,
+                )
+                .expect("a new domain reads"),
+                serde_json::from_str(r#"{"retire":true,"reason":"closed"}"#)
+                    .expect("a domain change reads"),
+                serde_json::from_str(r#"{"target":{"record":"r-1"},"reason":"asked"}"#)
+                    .expect("a reveal reads"),
+                serde_json::from_str(
+                    r#"{"value":"SYNTHETIC-1","system":"urn:oid:2.999.1.1","seconds":15,"action":"a-1"}"#,
+                )
+                .expect("a revealed value reads"),
             ),
         );
         assert!(seen >= 4, "every document was walked: {seen}");

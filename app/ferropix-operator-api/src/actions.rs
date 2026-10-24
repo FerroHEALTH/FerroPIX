@@ -26,9 +26,9 @@ pub const EXPORT_NEXT: &str = "x-ferropix-next";
 pub struct Action {
     /// The action's id.
     pub id: String,
-    /// The action's kind: `view`, `reveal`, `export`, `feed`, `link`,
-    /// `merge`, `candidate`, `remove`, `resolve-duplicate` and the domain
-    /// writes.
+    /// The action's kind: `view`, `reveal`, `export`, `domain-create`,
+    /// `domain-update`, `feed`, `link`, `merge`, `candidate`, `remove` and
+    /// `resolve-duplicate`.
     pub kind: String,
     /// Who acted: a steward or a Source's client id.
     pub actor: String,
@@ -46,6 +46,13 @@ pub struct Action {
     /// The merge the action made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge: Option<String>,
+    /// The identifier domain the action wrote or whose identifier it
+    /// revealed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+    /// The pseudonymisation domain whose pseudonym the action revealed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pseudonym_domain: Option<String>,
     /// The reason given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,

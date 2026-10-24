@@ -9,7 +9,9 @@
 //! - [`search`]: by identifier and by demographics, both posted.
 //! - [`person`]: the person with its identifiers, records, history and
 //!   pseudonyms, which records a `view` action.
-//! - [`domains`]: the identifier domains.
+//! - [`reveal`]: one identifier or pseudonym unmasked, a privacy disclosure.
+//! - [`domains`]: the identifier domains and, behind the administrator
+//!   scope, their writes.
 //! - [`matching`]: the matching configuration in effect.
 //! - [`actions`]: the audit trail and its export.
 //!
@@ -28,6 +30,7 @@ pub mod domains;
 pub mod matching;
 pub mod overview;
 pub mod person;
+pub mod reveal;
 pub mod search;
 pub mod wire;
 
@@ -41,6 +44,7 @@ use sqlx::{Postgres, Transaction};
 use url::Url;
 
 use crate::audit::Audit;
+use crate::auth::source::Sources;
 use crate::auth::table::Route;
 use crate::config::section::matching::{BlockingKey, Matching};
 use crate::feed::demographics::DemographicsError;
@@ -61,6 +65,8 @@ pub struct Operator {
     blocking: Vec<BlockingKey>,
     /// The audit trail.
     audit: Audit,
+    /// Who may feed which domain, which a domain write replaces.
+    sources: Sources,
     /// The operator API's base, `{public_base_url}/operator`, which the audit
     /// records name as the endpoint.
     endpoint: Url,
@@ -68,9 +74,16 @@ pub struct Operator {
 
 impl Operator {
     /// Returns the routes' state over `store`, with `matching`, recording to
-    /// `audit`, for a server reached at `public_base_url`.
+    /// `audit`, replacing the domains of `sources` on a domain write, for a
+    /// server reached at `public_base_url`.
     #[must_use]
-    pub fn new(store: Store, matching: &Matching, audit: Audit, public_base_url: &Url) -> Self {
+    pub fn new(
+        store: Store,
+        matching: &Matching,
+        audit: Audit,
+        sources: Sources,
+        public_base_url: &Url,
+    ) -> Self {
         let master = public_base_url.as_str().trim_end_matches('/').to_owned();
         let endpoint =
             Url::parse(&format!("{master}/operator")).unwrap_or_else(|_| public_base_url.clone());
@@ -80,6 +93,7 @@ impl Operator {
             scorer: Scorer::new(matching),
             blocking: matching.blocking_keys.clone(),
             audit,
+            sources,
             endpoint,
         }
     }
@@ -136,6 +150,18 @@ pub fn handler(
         (Method::GET, "/operator/persons/{id}") => on(filter, move |request: Request| {
             let operator = Arc::clone(&operator);
             async move { person::answer(&operator, request).await }
+        }),
+        (Method::POST, "/operator/persons/{id}/reveal") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { reveal::answer(&operator, request).await }
+        }),
+        (Method::POST, "/operator/domains") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { domains::create(&operator, request).await }
+        }),
+        (Method::PATCH, "/operator/domains/{id}") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { domains::update(&operator, request).await }
         }),
         (Method::GET, "/operator/domains") => on(filter, move |request: Request| {
             let operator = Arc::clone(&operator);
@@ -256,6 +282,11 @@ pub struct Recorded {
     pub person: Option<uuid::Uuid>,
     /// The record the action concerns.
     pub record: Option<uuid::Uuid>,
+    /// The identifier domain the action wrote or whose identifier it
+    /// revealed.
+    pub domain: Option<uuid::Uuid>,
+    /// The pseudonymisation domain whose pseudonym the action revealed.
+    pub pseudonym_domain: Option<uuid::Uuid>,
     /// The reason given.
     pub reason: Option<String>,
     /// The request the action was made in.
@@ -275,14 +306,17 @@ where
     E: sqlx::PgExecutor<'c>,
 {
     let id = sqlx::query_scalar(
-        "INSERT INTO pix.steward_action (kind, actor, person_id, record_id, reason, request_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        "INSERT INTO pix.steward_action
+             (kind, actor, person_id, record_id, domain_id, pseudonym_domain_id, reason, request_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id",
     )
     .bind(recorded.kind)
     .bind(&recorded.actor)
     .bind(recorded.person)
     .bind(recorded.record)
+    .bind(recorded.domain)
+    .bind(recorded.pseudonym_domain)
     .bind(recorded.reason.as_deref())
     .bind(recorded.request_id.as_deref())
     .fetch_one(executor)

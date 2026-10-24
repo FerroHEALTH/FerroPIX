@@ -31,7 +31,8 @@ use crate::operator::{Operator, OperatorError, Recorded, record_action, wire};
 pub const CSV: &str = "text/csv; charset=utf-8";
 
 /// The header row of an export.
-const HEADER: &str = "id,kind,actor,at,person,record,candidate,merge,reason,request_id\r\n";
+const HEADER: &str =
+    "id,kind,actor,at,person,record,candidate,merge,domain,pseudonym_domain,reason,request_id\r\n";
 
 /// A filter whose values have been read.
 #[derive(Debug, Clone, Default)]
@@ -85,6 +86,8 @@ struct ActionRow {
     record_id: Option<Uuid>,
     candidate_id: Option<Uuid>,
     merge_id: Option<Uuid>,
+    domain_id: Option<Uuid>,
+    pseudonym_domain_id: Option<Uuid>,
     reason: Option<String>,
     request_id: Option<String>,
 }
@@ -100,6 +103,8 @@ impl From<ActionRow> for Action {
             record: row.record_id.map(|id| id.to_string()),
             candidate: row.candidate_id.map(|id| id.to_string()),
             merge: row.merge_id.map(|id| id.to_string()),
+            domain: row.domain_id.map(|id| id.to_string()),
+            pseudonym_domain: row.pseudonym_domain_id.map(|id| id.to_string()),
             reason: row.reason,
             request_id: row.request_id,
         }
@@ -196,7 +201,8 @@ async fn page(
     let rows: Vec<ActionRow> = sqlx::query_as(
         "SELECT id, kind, actor,
                 to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS at,
-                person_id, record_id, candidate_id, merge_id, reason, request_id
+                person_id, record_id, candidate_id, merge_id, domain_id,
+                pseudonym_domain_id, reason, request_id
          FROM pix.steward_action
          WHERE ($1::text IS NULL OR actor = $1)
            AND ($2::text IS NULL OR kind = $2)
@@ -238,6 +244,8 @@ pub fn csv(actions: &[Action]) -> String {
             action.record.as_deref(),
             action.candidate.as_deref(),
             action.merge.as_deref(),
+            action.domain.as_deref(),
+            action.pseudonym_domain.as_deref(),
             action.reason.as_deref(),
             action.request_id.as_deref(),
         ];
@@ -284,17 +292,21 @@ mod tests {
             record: None,
             candidate: None,
             merge: None,
+            domain: None,
+            pseudonym_domain: None,
             reason: Some(String::from("asked, \"twice\"\nby phone")),
             request_id: None,
         };
         let text = csv(&[action]);
         let mut lines = text.split("\r\n");
         assert_eq!(
-            Some("id,kind,actor,at,person,record,candidate,merge,reason,request_id"),
+            Some(
+                "id,kind,actor,at,person,record,candidate,merge,domain,pseudonym_domain,reason,request_id"
+            ),
             lines.next()
         );
         assert_eq!(
-            "a-1,view,'=steward,2026-10-24T10:00:00.000000Z,p-1,,,,\"asked, \"\"twice\"\"\nby phone\",",
+            "a-1,view,'=steward,2026-10-24T10:00:00.000000Z,p-1,,,,,,\"asked, \"\"twice\"\"\nby phone\",",
             text.split_once("\r\n")
                 .map(|(_, rest)| rest.trim_end())
                 .unwrap_or_default()

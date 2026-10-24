@@ -8,7 +8,9 @@
 #      each checked once the file exists.
 #   2. Corpora: every tree under docs/specs/ carries a PROVENANCE.md and is
 #      named in a row of the corpus table of docs/VERSIONS.md.
-#   3. Licence: every tracked first-party file names Cadasto B.V. in an
+#   3. Tool pins: each row REPEATED_ROWS names is carried word for word by
+#      every file its "Repeated in" cell names.
+#   4. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
 #      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE, Cargo.lock, JSON (which has no comment
 #      syntax), the raster images (PNG and ICO, which have none either) and
@@ -27,6 +29,17 @@ root="$(dirname "$0")/../.."
 pin() {
   awk -F'|' -v item="$1" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
     $2 == item { v = $3; gsub(/[[:space:]`]/, "", v); print v; exit }' docs/VERSIONS.md
+}
+
+# The rows whose pin each file their "Repeated in" cell names must carry
+# word for word: the build and test tools a workflow or a script installs.
+readonly REPEATED_ROWS=("cargo-leptos" "wasm-bindgen" "Binaryen")
+
+# Every backticked path of the "Repeated in" cell of the row whose first
+# cell is $1, one per line.
+repeats() {
+  awk -F'|' -v item="$1" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
+    $2 == item { n = split($4, part, "`"); for (i = 2; i <= n; i += 2) print part[i]; exit }' docs/VERSIONS.md
 }
 
 # The value of key $2 in the TOML file $1, read as a quoted string.
@@ -88,6 +101,14 @@ self_test() {
   # shellcheck disable=SC2016 # the backticks are Markdown in the fixture
   printf '| IHE PIXm package | 3.1.0 | `docs/specs/ihe-pixm/PROVENANCE.md` |\n' >> "$d/docs/VERSIONS.md"
   expect 0 "a vendored tree with its provenance and its row"
+  case_dir
+  mkdir -p "$d/scripts"
+  # shellcheck disable=SC2016 # the backticks are Markdown in the fixture
+  printf '| Binaryen | version_133 | `scripts/tools.sh` |\n' >> "$d/docs/VERSIONS.md"
+  printf '# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\nversion="version_133"\n' > "$d/scripts/tools.sh"
+  expect 0 "a tool pin its script repeats"
+  sed -i.bak 's/version_133/version_132/' "$d/scripts/tools.sh" && rm "$d/scripts/tools.sh.bak"
+  expect 1 "a tool pin its script does not repeat"
   rm -r "$work"
   if [[ "$failed" -ne 0 ]]; then
     exit 1
@@ -154,7 +175,17 @@ if [[ -d docs/specs ]]; then
   done
 fi
 
-# 3. Licence.
+# 3. The tool pins, each in every file its row names.
+for item in "${REPEATED_ROWS[@]}"; do
+  want="$(pin "$item")"
+  [[ -n "$want" ]] || continue
+  while IFS= read -r file; do
+    [[ -f "$file" ]] || continue
+    grep -qF -- "$want" "$file" || drift "$file does not carry the $item pin $want of docs/VERSIONS.md"
+  done < <(repeats "$item")
+done
+
+# 4. Licence.
 while IFS= read -r file; do
   case "$file" in
     LICENSE | */LICENSE | NOTICE | Cargo.lock | *.json | *.png | *.ico | docs/specs/* | */testdata/* | */fixtures/*) continue ;;
@@ -172,4 +203,4 @@ if [[ "$fail" -ne 0 ]]; then
   echo "versions: drift found; docs/VERSIONS.md is the source of truth" >&2
   exit 1
 fi
-echo "versions: OK (toolchain, corpora and licence headers agree)"
+echo "versions: OK (toolchain, corpora, tool pins and licence headers agree)"

@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+# The literals scripts/checks/stray-literals.sh reads as words that no
+# reader of the console sees as its text, each with the reason, and the
+# files it does not cover.
+
+skip app/ferropix-console/src/locale.rs    # the catalog mechanism: message ids
+skip app/ferropix-console/src/command.rs   # the process's own lines on the terminal, for the operator who runs it
+skip app/ferropix-console/src/config/      # the configuration's refusals, written to the terminal before any page exists
+
+allow ^(GET|POST) /                         # an HTTP request line naming the route a page reads
+allow ^ferrohealth-ui                       # a crate name and its version
+allow ^CARGO_                               # a variable cargo sets at build time
+allow ^S256$                                # the PKCE code challenge method (RFC 7636 §4.2)
+allow ^Basic \{\}$                          # the HTTP Basic authentication scheme (RFC 7617)
+allow ^__Host-$                             # the cookie name prefix of RFC 6265bis
+allow ^(DENY|no-cache|no-store)$            # an HTTP header value
+allow ^text/css; charset=utf-8$             # a media type
+allow ^attachment; filename=                # a Content-Disposition header value
+allow ^default-src                          # the Content-Security-Policy

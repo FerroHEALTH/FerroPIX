@@ -14,9 +14,9 @@
 #   scripts/checks/pin-freshness.sh
 #
 # The lint and install pins of .github/workflows/ci.yml (zizmor, shellcheck,
-# the actionlint image, yq) and the documentation toolchain of
-# docs/VERSIONS.md are read against the upstream project's newest GitHub
-# release. A corpus of docs/VERSIONS.md pinned by commit on a repository with
+# the actionlint image, yq, cargo-leptos), the documentation toolchain and
+# the console's Binaryen of docs/VERSIONS.md are read against the upstream
+# project's newest GitHub release. A corpus of docs/VERSIONS.md pinned by commit on a repository with
 # no releases is read against the newest commit of the branch it follows, a
 # corpus pinned by a release tag against the newest tag of that shape, a FHIR
 # package or implementation guide pinned by version against the versions its
@@ -50,11 +50,14 @@ readonly CI=.github/workflows/ci.yml
 readonly REGISTRY_UA=ferropix-pin-check
 # One "tool<TAB>upstream repository" record per line: a CI tool ci.yml pins
 # by version, read against the newest GitHub release of its project.
+# The wasm-bindgen CLI is not here: it equals the `wasm-bindgen` crate of
+# the root Cargo.toml, which Dependabot's cargo ecosystem watches.
 readonly CI_TOOLS="\
 zizmor	zizmorcore/zizmor
 shellcheck	koalaman/shellcheck
 actionlint	rhysd/actionlint
-yq	mikefarah/yq"
+yq	mikefarah/yq
+cargo-leptos	leptos-rs/cargo-leptos"
 # The most pages of one tag list the read follows before it gives up.
 readonly MAX_TAG_PAGES=200
 
@@ -428,11 +431,11 @@ self_test() {
     '          tool: shellcheck@0.9.0' '            rhysd/actionlint:1.7.1@sha256:00 -color' \
     '          YQ_VERSION: v4.5.6' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f1,3 | tr '\t' ' ' | paste -sd ';' -)"
-  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;yq 4.5.6" "$got" "the tool pins of a workflow"
+  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;yq 4.5.6;cargo-leptos " "$got" "the tool pins of a workflow"
   printf '%s\n' '          tool: cargo-nextest' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f3 | paste -sd ';' -)"
   rm "$work/ci.yml"
-  expect ";;;" "$got" "a workflow with no tool pin"
+  expect ";;;;" "$got" "a workflow with no tool pin"
   got="$(ci_tools | awk -F'\t' '$3 == "" { print $1 }' | paste -sd ';' -)"
   expect "" "$got" "the tools of $CI with no pin found"
 
@@ -523,6 +526,12 @@ matrix_pin() {
     }' "$MATRIX"
 }
 
+# One "matrix label<TAB>upstream repository" record per line: a build tool
+# of docs/VERSIONS.md a script installs by its release tag, read against the
+# newest GitHub release of its project.
+readonly WATCHED_TOOLS="\
+Binaryen	WebAssembly/binaryen"
+
 # release_pins: one "label<TAB>repository<TAB>pinned<TAB>hold" record per pin
 # read against a GitHub release, the CI tools first.
 release_pins() {
@@ -533,6 +542,9 @@ release_pins() {
   while IFS=$'\t' read -r name repo hold; do
     printf '%s\t%s\t%s\t%s\n' "$name" "$repo" "$(matrix_pin "$name")" "$hold"
   done <<< "$WATCHED_DOCS"
+  while IFS=$'\t' read -r name repo; do
+    printf '%s\t%s\t%s\t-\n' "$name" "$repo" "$(matrix_pin "$name")"
+  done <<< "$WATCHED_TOOLS"
 }
 
 stale=0

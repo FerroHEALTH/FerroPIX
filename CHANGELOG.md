@@ -14,6 +14,23 @@ and this project adheres to
 
 ### Added
 
+- Authorization of the FerroPIX server through `ferrohealth-smart` (#62):
+  `serve` reads the RFC 8414 metadata and key set of every
+  `[[auth.issuer]]` at start, and every route of `{base}/fhir` and
+  `{base}/operator` has a row in one permission table. A Consumer needs
+  `system/Patient.rs`, a Patient Identity Source `system/Patient.cud` with
+  its token's `client_id` equal to the domain's `source_client_id` and
+  listed by the issuer that signed it, a PMIR subscriber
+  `system/Subscription.cruds`, and the operator API `auth.steward_scope`
+  or, for its domain writes, `auth.admin_scope`; each IHE transaction also
+  admits its IUA scope (`ITI-83`, `ITI-104`, `ITI-78`, `ITI-119`). A
+  missing token answers `401` and a missing scope `403`, each an
+  `OperationOutcome` with a `security` issue, and a Source changing another
+  domain `403` with a `forbidden` issue; no refusal names a claim, the
+  token or a request value. `GET {base}/fhir/metadata` and
+  `{base}/fhir/.well-known/smart-configuration` name the token endpoint and
+  the scopes. The transaction routes answer `501` until their faces land.
+  Basic users now need the `[dev]` table beside `profile = "development"`.
 - The ITI TF-2 texts of the HL7 v2 transactions ITI-8, ITI-9, ITI-10,
   ITI-21 and ITI-22 (#84), pinned by checksum in `docs/VERSIONS.md` and
   fetched by `scripts/vendor/ihe-iti-tf.sh` into the local cache, never

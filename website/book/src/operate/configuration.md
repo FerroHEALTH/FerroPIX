@@ -10,12 +10,12 @@ the crates, which you configure in your own code.
 ## The server
 
 The server loads and checks every section below at start, and `serve` runs
-the HTTP listener with its health routes. The services behind the sections
+the HTTP listener with its health routes and the guard in front of the FHIR
+face and the operator API (`[auth]`). The services behind the sections
 are planned in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3):
 the store and its migrations
-([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), authorization
-([#62](https://github.com/FerroHEALTH/FerroPIX/issues/62)), the audit trail
+([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the audit trail
 ([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)), readiness and the
 usage report ([#64](https://github.com/FerroHEALTH/FerroPIX/issues/64)), and
 the PIXm and PDQm faces
@@ -28,7 +28,7 @@ keeps working when the service lands.
 
 | Command | What it does |
 |---|---|
-| `ferropix serve` | Serves until `SIGTERM` or `SIGINT`, then finishes the requests in flight within `server.drain_timeout_ms`. |
+| `ferropix serve` | Reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, and exits 0 when the server would start on it. Otherwise it prints the first error on one line and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`. Use it as the container health check. |
 | `ferropix db migrate` | Applies the pending migrations. Planned with the store ([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)); today it exits 2 and names the issue. |
@@ -166,8 +166,10 @@ entry leaves out takes the section's value.
 | `auth.issuer[].jwks_refresh_interval_seconds` | the section's | The shortest time between two fetches. |
 | `auth.issuer[].jwks_file` | the section's | A key set file. |
 
-`[auth.basic]` holds Basic users, for the development profile only. A Basic
-user's user-id also counts as a Source client id.
+`[auth.basic]` holds Basic users, for the development profile only, and
+only beside the `[dev]` table. A Basic user's user-id also counts as a
+Source client id. Who needs which scope is on the
+[Security and audit](security-and-audit.md#who-may-call-the-server) page.
 
 | Key | Default | What it sets |
 |---|---|---|

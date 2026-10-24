@@ -121,7 +121,10 @@ The build order is the milestones:
   (`src/config/`, one module per section, the redacting `Secret` and
   `SecretUrl`, `FERROPIX__` overrides, the production and development
   profiles), the `tracing` console and the family's `tower-http` stack with
-  the bounded drain (`src/http/`), and `quickstart.toml`.
+  the bounded drain (`src/http/`), the authorization over
+  `ferrohealth-smart` with its one permission table and the Source rule
+  (`src/auth/`), the FHIR face and the operator API routes behind it
+  (`src/fhir/`), and `quickstart.toml`.
 - `app/ferropix-console`: the operator console (#119), its own binary
   `ferropix-console`, `publish = false`: a Leptos islands app rendered on the
   server and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC

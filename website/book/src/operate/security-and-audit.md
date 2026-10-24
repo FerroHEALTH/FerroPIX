@@ -5,9 +5,59 @@
 
 A patient index handles the most identifying data in a health system, so
 both crates are built to keep it out of anywhere it was not sent. This page
-says what they guarantee today. The server's own access control and audit
-are planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
+says what the server and the crates guarantee today. The server's audit
+trail is planned in the
+[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
+([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)).
+
+## Who may call the server
+
+Every request to `{base}/fhir` and `{base}/operator` carries a bearer access
+token that one of the `[[auth.issuer]]` entries signed. At start, `serve`
+reads each issuer's RFC 8414 metadata and key set, and refuses to start
+when one cannot be read. A token is checked for its signature, issuer,
+audience and lifetime under RFC 9068. The scopes each caller needs:
+
+| Caller | Scope | Routes |
+|---|---|---|
+| PIXm or PDQm Consumer | `system/Patient.rs` | `$ihe-pix` by `GET` and `POST` (ITI-83), the Patient search and read (ITI-78), `$match` (ITI-119) |
+| Patient Identity Source | `system/Patient.cud`, and the token's `client_id` equal to the domain's `source_client_id` | the conditional update and delete of `Patient` (ITI-104) |
+| PMIR subscriber | `system/Subscription.cruds` | `Subscription` (ITI-94) |
+| Data steward | `auth.steward_scope` | the operator API |
+| Administrator | `auth.admin_scope` | the writes of identifier and pseudonymisation domains, and the reads beside them |
+
+Each IHE transaction also admits the scope its profile defines for an IUA
+grouping, the transaction's name (`ITI-83`, `ITI-104`, `ITI-78`,
+`ITI-119`). A `patient/` scope is refused: it reaches one patient's
+records, and a patient index answers about every patient. A Source's
+`client_id` counts only when the issuer that signed its token lists it in
+`clients`, so a Source of one domain cannot change another (PIXm 3.1.0
+§2:3.104.5).
+
+The answers:
+
+- No valid token: `401` with a `WWW-Authenticate: Bearer` challenge and an
+  `OperationOutcome` with a `security` issue.
+- A token without the scope: `403` with `error="insufficient_scope"` and a
+  `security` issue.
+- A Source changing a domain it does not feed: `403` with a `forbidden`
+  issue.
+
+No refusal names a claim, a scope, the token or a value of the request.
+`GET {base}/fhir/metadata` and `GET {base}/fhir/.well-known/smart-configuration`
+need no token: the capability statement names the SMART service, the token
+endpoint and the scopes, and the SMART discovery document lists the same
+scopes as `scopes_supported`. FerroPIX never forwards a caller's token.
+
+The transaction routes are guarded today and answer `501` until the faces
+behind them land
+([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
+[#70](https://github.com/FerroHEALTH/FerroPIX/issues/70),
+[#90](https://github.com/FerroHEALTH/FerroPIX/issues/90),
+[#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)).
+
+Basic users are for a run on your own machine: they need
+`profile = "development"` and the `[dev]` table.
 
 ## No identifying data where it was not sent
 

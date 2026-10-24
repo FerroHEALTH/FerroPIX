@@ -7,6 +7,8 @@
 //! the test-scoped relaxations of `clippy.toml` reach their helpers too.
 
 #[cfg(test)]
+mod auth;
+#[cfg(test)]
 mod book;
 #[cfg(test)]
 mod cli;

@@ -10,8 +10,10 @@
 //! serves them until the process is asked to stop. `main.rs` only hands in
 //! the arguments and returns the exit code.
 
+pub mod auth;
 pub mod cli;
 pub mod config;
+pub mod fhir;
 pub mod healthcheck;
 pub mod http;
 pub mod telemetry;
@@ -20,6 +22,7 @@ use std::error::Error;
 use std::fmt::Write as _;
 use std::io::IsTerminal as _;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::Parser;
 use tokio::net::TcpListener;
@@ -136,7 +139,7 @@ fn serve(settings: Settings) -> ExitCode {
         return ExitCode::from(EXIT_CONFIG);
     }
     runtime_then(|| async move {
-        match serve_settings(&settings).await {
+        match serve_settings(settings).await {
             Ok(()) => {
                 tracing::info!("ferropix stopped");
                 ExitCode::SUCCESS
@@ -149,27 +152,67 @@ fn serve(settings: Settings) -> ExitCode {
     })
 }
 
-/// Binds the listener `settings` names and serves until the process is
-/// asked to stop.
+/// Why `serve` could not run.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ServeError {
+    /// The resource server could not start.
+    #[error("the resource server could not start")]
+    Auth(#[source] auth::SmartError),
+    /// The listener could not be bound, or serving failed.
+    #[error("the listener could not serve")]
+    Io(#[source] std::io::Error),
+}
+
+/// Reads the authorization servers, binds the listener `settings` names and
+/// serves until the process is asked to stop.
 ///
 /// # Errors
-/// Returns the I/O error from binding, accepting or serving.
-pub async fn serve_settings(settings: &Settings) -> std::io::Result<()> {
+/// Returns [`ServeError::Auth`] when an authorization server cannot be read
+/// and [`ServeError::Io`] for the I/O error from binding, accepting or
+/// serving.
+pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     // TODO(#59): apply the pending migrations unless [db] migrate = false, and seed the domains.
-    let listener = TcpListener::bind(settings.server.listen).await?;
+    let Settings {
+        server,
+        auth,
+        domains,
+        pixm,
+        pdqm,
+        pmir,
+        operator,
+        ..
+    } = settings;
+    let smart = Arc::new(
+        auth::Smart::discover(auth, &domains)
+            .await
+            .map_err(ServeError::Auth)?,
+    );
+    let mounts = fhir::Mounts {
+        pixm: pixm.enabled,
+        remove_patient: pixm.remove_patient,
+        pdqm: pdqm.enabled,
+        pmir: pmir.enabled,
+        operator: operator.enabled,
+    };
+    let guarded = fhir::routes(&server.base_path, &server.public_base_url, mounts, &smart);
+    let listener = TcpListener::bind(server.listen)
+        .await
+        .map_err(ServeError::Io)?;
     tracing::info!(
-        listen = %listener.local_addr()?,
-        base_path = settings.server.base_path.as_str(),
+        listen = %listener.local_addr().map_err(ServeError::Io)?,
+        base_path = server.base_path.as_str(),
         version = env!("CARGO_PKG_VERSION"),
         "ferropix serving"
     );
     http::serve_until(
         listener,
-        http::router(&settings.server),
-        settings.server.drain_timeout,
+        http::router(&server, Some(guarded)),
+        server.drain_timeout,
         http::shutdown_signal(),
     )
     .await
+    .map_err(ServeError::Io)
 }
 
 /// Runs `job` on a multi-threaded runtime.

@@ -124,6 +124,12 @@ pub enum Error {
         /// What makes the setting a development one.
         rule: &'static str,
     },
+    /// A setting only the `[dev]` table admits is set without it.
+    #[error("{key} is admitted only beside the [dev] table")]
+    DevTableRequired {
+        /// The key.
+        key: String,
+    },
     /// `[dev] loopback` holds and a listener binds an address that is no
     /// loopback address.
     #[error("{key} binds an address that is no loopback address, which [dev] loopback refuses")]

@@ -61,7 +61,8 @@ impl Config {
     ///
     /// # Errors
     /// Returns [`Error::DevUnderProduction`] for a `[dev]` table under
-    /// production, [`Error::NotLoopback`] for a listener `[dev] loopback`
+    /// production, [`Error::DevTableRequired`] for Basic users without the
+    /// `[dev]` table, [`Error::NotLoopback`] for a listener `[dev] loopback`
     /// refuses, and every [`Error`] each section's resolution returns.
     pub fn resolve(&self) -> Result<Settings, Error> {
         if self.dev.is_some() && self.profile == Profile::Production {
@@ -71,6 +72,13 @@ impl Config {
         let telemetry = self.telemetry.resolve()?;
         let db = self.db.resolve(self.profile)?;
         let auth = self.auth.resolve(self.profile)?;
+        // NOTE: no specification governs this: our own design; a Basic user sends a
+        // reusable password, so it rides only with the [dev] table's loopback rule.
+        if self.auth.basic.is_some() && self.dev.is_none() {
+            return Err(Error::DevTableRequired {
+                key: String::from("auth.basic"),
+            });
+        }
         let domains = domain::resolve(&self.domain, &auth)?;
         let matching = self.matching.resolve()?;
         let pmir = self.pmir.resolve()?;

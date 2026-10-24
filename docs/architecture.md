@@ -674,6 +674,37 @@ The product scopes take the extension form SMART App Launch 2.2.0 gives
 token is never forwarded: the ATNA repository and the PMIR subscribers are
 called with FerroPIX's own client-credentials token.
 
+The permission table (`app/ferropix-server/src/auth/table.rs`) holds one
+row per route of section 6 and section 12.4, and the router mounts exactly
+its rows, so no route is reachable without one. Beside the SMART scopes,
+each IHE transaction admits the scope its profile defines for an IUA
+grouping (PIXm 3.1.0 §2:3.83.5.2, §2:3.104.5.2; PDQm 3.2.0 §2:3.78.5.2,
+§2:3.119.5.2). The rest is our own design, no specification governs it:
+
+- An operation or a search needs `s` and the read of `Patient/{id}` `r`;
+  ITI-104's conditional update needs `u`, which SMART App Launch 2.2.0
+  admits for an update that creates, and its delete `d`.
+- A `patient/` scope is refused behind the gate as a missing permission:
+  it reaches one patient's compartment, and a Master Patient Index has no
+  use for one.
+- A Source's `client_id` counts only when the issuer that signed the token
+  lists it in `clients`, so two authorization servers cannot each vouch
+  for a client of the same name; a Basic user of the development profile
+  counts by its user-id. Every domain an ITI-104 request's `identifier`
+  names must be the caller's; a domain FerroPIX does not know is left to
+  the transaction's handler.
+- A path under `{base}/fhir` or `{base}/operator` that no row names needs
+  a credential before the router answers `404`, so an anonymous probe
+  learns nothing of the router.
+- A refusal is an `OperationOutcome` with a `security` issue (`401`,
+  `403`), or a `forbidden` issue for a Source outside its domain, with a
+  fixed diagnostics text.
+- The discovery document and the `CapabilityStatement` name the first
+  issuer whose metadata names a `token_endpoint`; issuers none of which
+  names one refuse the start, and a development surface of Basic users
+  alone serves no discovery document.
+- Basic users need the `[dev]` table beside `profile = "development"`.
+
 **Audit** is BALP through `ihe-atna`. Every transaction writes the
 `AuditEvent` its profile prescribes for the Manager, the Supplier or the
 Registry (PIXm 3.1.0 §2:3.83.5.1.2, §2:3.104.5.1.2; PDQm 3.2.0 §2:3.78.5.1.2,

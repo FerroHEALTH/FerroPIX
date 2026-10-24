@@ -1224,15 +1224,18 @@ checksum = "7ffe8ec80408ba7026bae4480d6e4ea13380e056f4d6a0704c1698e5ef40b14d"
 dependencies = [
  "argon2",
  "aws-lc-rs",
+ "axum",
  "base64 0.23.1",
  "http",
  "jiff",
  "jsonwebtoken",
+ "reqwest",
  "secrecy",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tower",
  "tracing",
  "url",
 ]
@@ -1304,10 +1307,13 @@ dependencies = [
 name = "ferropix-server"
 version = "0.0.2"
 dependencies = [
+ "aws-lc-rs",
  "axum",
  "clap",
  "ferrohealth-smart",
+ "fhir-types",
  "http",
+ "jiff",
  "jsonwebtoken",
  "reqwest",
  "secrecy",
@@ -1323,6 +1329,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]
@@ -3565,6 +3572,7 @@ dependencies = [
  "base64 0.23.1",
  "bytes",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "http-body-util",

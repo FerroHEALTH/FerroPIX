@@ -3,9 +3,10 @@
 
 //! The `[usage_report]` section: the installation report to `FerroPULSE`.
 //!
-//! The report is on by default, kept off by `enabled = false` or an unset
-//! `state_dir`. No
-//! specification governs this: our own design, after the siblings' reports.
+//! The report is on by default, kept off by `enabled = false`, an unset
+//! `state_dir` or a CI environment, which
+//! [`crate::usage_report::reporter::prepare`] decides. No specification
+//! governs this: our own design, after the siblings' reports.
 
 use std::path::PathBuf;
 
@@ -59,7 +60,7 @@ impl Default for UsageReport {
 /// The `[usage_report]` section, resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsageReportSettings {
-    /// Whether the report is sent: on, and a state directory named.
+    /// Whether the deployment left the report on.
     pub enabled: bool,
     /// The collector.
     pub endpoint: url::Url,
@@ -90,7 +91,7 @@ impl UsageReport {
             });
         }
         Ok(UsageReportSettings {
-            enabled: self.enabled && self.state_dir.is_some(),
+            enabled: self.enabled,
             endpoint,
             state_dir: self.state_dir.clone(),
             deployment: self.deployment,
@@ -100,25 +101,31 @@ impl UsageReport {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::UsageReport;
     use crate::config::error::Error;
+    use crate::usage_report::reporter::{Off, prepare};
 
     #[test]
     fn the_report_is_off_without_a_state_directory_or_when_disabled() {
         let default = UsageReport::default().resolve().expect("resolves");
-        assert!(!default.enabled, "no state_dir keeps it off");
+        assert!(
+            matches!(prepare(&default, None), Err(Off::NoStateDir)),
+            "no state_dir keeps it off"
+        );
+        let dir = tempfile::tempdir().expect("tempdir");
         let on = UsageReport {
-            state_dir: Some(PathBuf::from("/var/lib/ferropix")),
+            state_dir: Some(dir.path().to_path_buf()),
             ..UsageReport::default()
         };
-        assert!(on.resolve().expect("resolves").enabled);
+        assert!(prepare(&on.resolve().expect("resolves"), None).is_ok());
         let off = UsageReport {
             enabled: false,
             ..on
         };
-        assert!(!off.resolve().expect("resolves").enabled);
+        assert!(matches!(
+            prepare(&off.resolve().expect("resolves"), None),
+            Err(Off::Switch)
+        ));
     }
 
     #[test]

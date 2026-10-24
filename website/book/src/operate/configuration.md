@@ -12,11 +12,10 @@ the crates, which you configure in your own code.
 The server loads and checks every section below at start, and `serve`
 starts the store (see [The store](#the-store)) and runs the HTTP listener
 with its health routes and the guard in front of the FHIR face and the
-operator API (`[auth]`). The other services behind the sections are planned
-in the
+operator API (`[auth]`), and the usage report
+([`[usage_report]`](#usage_report)). The other services behind the sections
+are planned in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3):
-the usage
-report ([#153](https://github.com/FerroHEALTH/FerroPIX/issues/153)), and
 the PIXm and PDQm faces
 ([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
 [#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)). A key whose
@@ -309,6 +308,34 @@ says.
 | `operator.enabled` | `false` | Whether the operator API is mounted under `{base}/operator`, behind the steward and administrator scopes. |
 
 ### `[usage_report]`
+
+`ferropix serve` sends an installation report to FerroPULSE, the
+FerroHEALTH collector: one report at each start (at most one per ten
+minutes) and one a day. It is on by default, and the server writes one line
+at every start saying whether it is on, what it carries and how to switch it
+off. It stays off when `enabled = false`
+(`FERROPIX__USAGE_REPORT__ENABLED=false`), when no `state_dir` is set, when
+that directory cannot be written, and when the environment sets
+`GITHUB_ACTIONS` or `CI` to `true` or `1`.
+
+A report carries:
+
+- a random instance id, kept in `state_dir/instance-id` so a restart is not
+  a new installation;
+- the version, the commit, the licence type (`non-commercial`), the
+  `deployment` you set, the uptime, and the CPUs and memory as ranges;
+- the profile, the services you switched on (`hl7v2`, `operator`, `pdqm`,
+  `pixm`, `pmir`), the number of identifier domains as a range (`0`, `1-2`,
+  `3-5`, `6-10`, `11-50`, `51+`), and whether the store and the audit spool
+  were ready;
+- once a day, the request count as a range, latency per route group
+  (`metadata`, `pix_query`, `pix_feed`, `pdq_query`, `pdq_match`,
+  `pmir_feed`, `pmir_subscription`, `operator`, `other`) with the server
+  errors of each, and the count of `4xx` answers.
+
+It never carries an identifier, a patient's data, a domain's system or name,
+a host name, a URL or a request path: a request is counted by the route
+template it matched, and the health routes are not counted.
 
 | Key | Default | What it sets |
 |---|---|---|

@@ -128,7 +128,8 @@ W3C Bitstring Status List 1.0	vc-bitstring-status-list	-"
 readonly UNWATCHED_SCRIPTS="\
 mitz.sh	VZVZ publishes no release feed for the Mitz architecture documents
 ihe-iti-tf.sh	the IHE ITI-20 Record Audit Event row reads the same ITI Technical Framework revision, and the script fails when an upstream byte of a Volume 1 or Volume 2 page moves
-ch.sh	the Swiss pins are the IHE revisions EPDV-EDI Annex 5 names, so a newer IHE release is no refresh of them; the script fails when an upstream byte moves"
+ch.sh	the Swiss pins are the IHE revisions EPDV-EDI Annex 5 names, so a newer IHE release is no refresh of them; the script fails when an upstream byte moves
+ferropulse-schemas.sh	FerroPULSE is a private repository of the same Licensor that the workflow token cannot read, and a change to its report contract is made together with the products that send it"
 
 # corpus_rows [MATRIX]: one "label<TAB>script" record per row of MATRIX whose
 # third cell names a scripts/vendor/ script, which is what makes it a corpus

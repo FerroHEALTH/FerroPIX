@@ -127,7 +127,9 @@ The build order is the milestones:
   (`src/fhir/`), the BALP audit trail over `ihe-atna` with its spool,
   its reservation layer and the record of each transaction
   (`src/audit/`), the readiness registry (`src/health.rs`), the request log
-  (`src/http/request_log.rs`), and `quickstart.toml`.
+  (`src/http/request_log.rs`), the usage report to FerroPULSE with the
+  window the request log fills (`src/usage_report/`, the schema under
+  `tests/fixtures/ferropulse/`), and `quickstart.toml`.
 - `app/ferropix-operator-api`: the health and operator documents as serde
   types (#64), which the server writes and the console reads, `publish =
   false`.

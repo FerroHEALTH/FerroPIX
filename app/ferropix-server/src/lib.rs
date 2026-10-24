@@ -20,12 +20,14 @@ pub mod healthcheck;
 pub mod http;
 pub mod store;
 pub mod telemetry;
+pub mod usage_report;
 
 use std::error::Error;
 use std::fmt::Write as _;
 use std::io::IsTerminal as _;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Instant;
 
 use clap::Parser;
 use tokio::net::TcpListener;
@@ -258,7 +260,9 @@ pub enum ServeError {
 /// The store passes the boot gate, applies the pending migrations unless
 /// `[db] migrate = false`, checks the sealing key and applies the domain
 /// seed before anything else starts; the Sources the guard admits are the
-/// domains the store then holds.
+/// domains the store then holds. Once the listener is bound, the usage report
+/// logs its boot line and, unless it is off, sends its start report and then
+/// one a day in the background, reading the window the request log fills.
 ///
 /// # Errors
 /// Returns [`ServeError::Store`] when the store refuses to start,
@@ -267,6 +271,7 @@ pub enum ServeError {
 /// start, and [`ServeError::Io`] for the I/O error from binding, accepting or
 /// serving.
 pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
+    let started = Instant::now();
     let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
         .await
         .map_err(ServeError::Store)?;
@@ -274,15 +279,29 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         .await
         .map_err(ServeError::Store)?;
     let Settings {
+        profile,
         server,
         auth,
         pixm,
         pdqm,
         pmir,
+        hl7v2,
         operator,
         audit,
+        usage_report: report_settings,
         ..
     } = settings;
+    let services = [
+        (hl7v2.is_some(), usage_report::payload::Service::Hl7v2),
+        (operator.enabled, usage_report::payload::Service::Operator),
+        (pdqm.enabled, usage_report::payload::Service::Pdqm),
+        (pixm.enabled, usage_report::payload::Service::Pixm),
+        (pmir.enabled, usage_report::payload::Service::Pmir),
+    ]
+    .into_iter()
+    .filter_map(|(on, service)| on.then_some(service))
+    .collect();
+    let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
     let smart = Arc::new(
         auth::Smart::discover(auth, &domains)
             .await
@@ -308,6 +327,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &health,
         &audit,
     );
+    let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = TcpListener::bind(server.listen)
         .await
         .map_err(ServeError::Io)?;
@@ -317,9 +337,20 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         version = env!("CARGO_PKG_VERSION"),
         "ferropix serving"
     );
+    let reporting = usage_report::reporter::start(
+        &report_settings,
+        usage_report::reporter::Sources {
+            facts,
+            health: health.clone(),
+            window: Arc::clone(&window),
+        },
+        started,
+        usage_report::ci_of(|name| std::env::var(name).ok()),
+    )
+    .await;
     let served = http::serve_until(
         listener,
-        http::router(&server, &health, Some(guarded)),
+        http::router(&server, &health, Some(guarded)).layer(axum::Extension(window)),
         server.drain_timeout,
         http::shutdown_signal(),
     )
@@ -327,6 +358,9 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     .map_err(ServeError::Io);
     if let Some(draining) = draining {
         draining.abort();
+    }
+    if let Some(reporting) = reporting {
+        reporting.abort();
     }
     store.close().await;
     served

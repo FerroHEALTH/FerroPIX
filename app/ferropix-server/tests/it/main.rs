@@ -26,3 +26,5 @@ mod secrets;
 mod serve;
 #[cfg(test)]
 mod support;
+#[cfg(test)]
+mod usage_report;

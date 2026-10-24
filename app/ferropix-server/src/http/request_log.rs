@@ -11,6 +11,7 @@
 //! caller and the domain are left on the response by the guard behind which
 //! they are known. No specification governs the log line: our own design.
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use axum::extract::{MatchedPath, Request};
@@ -18,6 +19,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 
 use crate::http::request_id;
+use crate::usage_report::window::Window;
 
 /// The `tracing` target of the request log.
 pub const TARGET: &str = "ferropix_server::request";
@@ -36,19 +38,29 @@ pub struct Caller(pub String);
 pub struct Written(pub Vec<String>);
 
 /// Logs `request` after it completes and returns its response untouched.
+///
+/// When the request carries the usage report's [`Window`] as an extension,
+/// the matched route template, the status and the latency are recorded into
+/// it too.
 pub async fn log(request: Request, next: Next) -> Response {
     let method = request.method().clone();
-    let route = request.extensions().get::<MatchedPath>().map_or_else(
-        || UNMATCHED.to_owned(),
-        |matched| matched.as_str().to_owned(),
-    );
+    let matched = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|matched| matched.as_str().to_owned());
+    let window = request.extensions().get::<Arc<Window>>().cloned();
     let request_id = request_id::of(request.headers())
         .unwrap_or_default()
         .to_owned();
     let started = Instant::now();
     let response = next.run(request).await;
-    let latency_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let elapsed = started.elapsed();
+    let latency_ms = elapsed.as_secs_f64() * 1000.0;
     let status = response.status();
+    if let Some(window) = window {
+        window.record(&method, matched.as_deref(), status, elapsed);
+    }
+    let route = matched.unwrap_or_else(|| UNMATCHED.to_owned());
     let caller = response
         .extensions()
         .get::<Caller>()

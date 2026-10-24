@@ -9,7 +9,6 @@
     reason = "the test seam: the vendored examples are read as JSON values for what they carry"
 )]
 
-use fhir_types::codec::Object;
 use http::StatusCode;
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pixm::identifier::{CrossReference, PatientReference, TargetIdentifier, TargetSystem};
@@ -21,7 +20,7 @@ use ihe_iti::server::format::Format;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
-use super::{example, examples, is_audit, record, verdict};
+use super::{encoded, example, examples, is_audit, record, verdict};
 use crate::pixm::{BLUE, FHIR_JSON, PROMPT, RED, RED_VALUE, client, manager, red_source, target};
 
 /// The vendored package under `docs/specs/`.
@@ -62,15 +61,7 @@ fn json(id: &str) -> Value {
 
 /// The example `id` in `format`.
 fn body(id: &str, format: Format) -> Vec<u8> {
-    let text = example(PACKAGE, id);
-    if format == Format::Xml {
-        let value: fhir_types::codec::Value = serde_json::from_str(&text).expect("JSON");
-        let object: &Object = value.as_object().expect("a resource");
-        return fhir_types::xml::to_xml(&fhir_types::r4::schema::SCHEMAS, object)
-            .expect("an XML form")
-            .into_bytes();
-    }
-    text.into_bytes()
+    encoded(PACKAGE, id, format)
 }
 
 /// The parameters of `parameters` named `name`.

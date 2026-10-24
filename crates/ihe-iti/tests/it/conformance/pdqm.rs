@@ -9,7 +9,7 @@
     reason = "the test seam: the vendored examples and the written answers are compared as JSON values"
 )]
 
-use fhir_types::codec::{Json, Object, Path};
+use fhir_types::codec::{Json, Path};
 use fhir_types::r4::bundle::Bundle;
 use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::patient::Patient;
@@ -30,7 +30,7 @@ use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{example, examples, is_audit, record, verdict};
+use super::{encoded, example, examples, is_audit, record, verdict};
 use crate::pdqm::{DOMAIN, FHIR_JSON, PROMPT, client, entry, schmidt, supplier};
 
 /// The vendored package under `docs/specs/`.
@@ -84,15 +84,7 @@ fn json(id: &str) -> Value {
 
 /// The example `id` in `format`.
 fn body(id: &str, format: Format) -> Vec<u8> {
-    let text = example(PACKAGE, id);
-    if format == Format::Xml {
-        let value: fhir_types::codec::Value = serde_json::from_str(&text).expect("JSON");
-        let object: &Object = value.as_object().expect("a resource");
-        return fhir_types::xml::to_xml(&fhir_types::r4::schema::SCHEMAS, object)
-            .expect("an XML form")
-            .into_bytes();
-    }
-    text.into_bytes()
+    encoded(PACKAGE, id, format)
 }
 
 /// The Bundle of the example `id`.
@@ -222,7 +214,7 @@ fn example_text(id: &str) -> String {
 }
 
 /// A stub Supplier that answers every match with `status` and the example.
-async fn matcher(status: u16, id: &str) -> MockServer {
+pub(super) async fn matcher(status: u16, id: &str) -> MockServer {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(MATCH))

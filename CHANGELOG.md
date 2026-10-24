@@ -14,6 +14,21 @@ and this project adheres to
 
 ### Added
 
+- The server's BALP audit trail through `ihe-atna` (#63). `serve` opens the
+  ITI-20 spool under `audit.spool_dir` and refuses to start on a directory
+  open to other users, unwritable or holding a foreign file, and sends the
+  records to `audit.url` over the FHIR Feed: a delivered record is removed,
+  a refused one quarantined. Every audited route takes its record's place
+  in the spool before it runs, so a full spool refuses the request with
+  `503` and a `transient` issue. The records of ITI-83 and ITI-104 (the
+  PIXm Query and Feed Manager audit profiles), ITI-78 and ITI-119 (the
+  PDQm Query and Match Supplier profiles) and of a steward's view or
+  decision are built from the token's caller, with the patient as the
+  subject and a search's raw request base64 in `entity.query`, one record
+  per person found. Readiness gains the `audit_spool` indicator, and the
+  dependency report names the repository with its last outcome. The PIXm
+  and PDQm packages now vendor the Manager and Supplier audit profiles and
+  examples.
 - The server's health family and request log (#64). `GET {base}/health/readiness`
   runs a registry of indicators, each bounded to two seconds, and answers
   `503` with a readiness document naming each one that is down; the

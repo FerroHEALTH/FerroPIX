@@ -19,6 +19,7 @@ use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
 use axum::Router;
 use axum::body::Body;
+use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::auth::guard::{NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
 use ferropix_server::auth::table::{Need, ROUTES, Route};
@@ -168,13 +169,19 @@ enabled = true
         .expect("the configuration resolves")
 }
 
-/// Returns the application of `settings` with every route mounted.
-pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>) {
+/// Returns the application of `settings` with every route mounted, its
+/// audit spool in the temporary directory returned beside it.
+pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let smart = Arc::new(
         Smart::discover(settings.auth, &settings.domains)
             .await
             .expect("the authorization server is read"),
     );
+    let spool = tempfile::tempdir().expect("a temporary directory");
+    let mut audit_settings = settings.audit.clone();
+    audit_settings.spool_dir = spool.path().join("spool");
+    let audit = Audit::open(&audit_settings, &settings.server.public_base_url)
+        .expect("the audit spool opens");
     let health = Registry::default();
     let guarded = fhir::routes(
         &settings.server.base_path,
@@ -182,8 +189,13 @@ pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>) {
         Mounts::all(),
         &smart,
         &health,
+        &audit,
     );
-    (router(&settings.server, &health, Some(guarded)), smart)
+    (
+        router(&settings.server, &health, Some(guarded)),
+        smart,
+        spool,
+    )
 }
 
 /// What one request answered.
@@ -275,7 +287,7 @@ pub(crate) fn bearer(token: &str) -> String {
 async fn every_guarded_route_answers_a_missing_token_401_with_a_security_issue() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     for route in guarded() {
         let answer = send(&app, route.method.clone(), &uri_of(route), None).await;
         let label = format!("{} {}", route.method, route.path);
@@ -290,7 +302,7 @@ async fn every_guarded_route_answers_a_missing_token_401_with_a_security_issue()
 async fn every_guarded_route_answers_a_token_without_its_scope_403_with_a_security_issue() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     let token = bearer(&issuer.token("east-lab", "openid system/Practitioner.cruds"));
     for route in guarded() {
         let answer = send(&app, route.method.clone(), &uri_of(route), Some(&token)).await;
@@ -310,7 +322,7 @@ async fn every_guarded_route_answers_a_token_without_its_scope_403_with_a_securi
 async fn every_guarded_route_admits_the_domains_source_holding_every_scope() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     let token = bearer(&issuer.token("east-lab", EVERY_SCOPE));
     for route in guarded() {
         let answer = send(&app, route.method.clone(), &uri_of(route), Some(&token)).await;
@@ -332,7 +344,7 @@ async fn every_guarded_route_admits_the_domains_source_holding_every_scope() {
 async fn a_source_feeding_another_domain_is_answered_403_with_a_forbidden_issue() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     let other = bearer(&issuer.token("west-lab", "system/Patient.cud"));
     let unlisted = bearer(&issuer.token("north-lab", "system/Patient.cud"));
     let sources: Vec<&Route> = ROUTES
@@ -362,7 +374,7 @@ async fn a_source_feeding_another_domain_is_answered_403_with_a_forbidden_issue(
 async fn a_patient_scope_is_refused_and_the_iua_scope_of_a_transaction_admits_it() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     let pix = "/fhir/Patient/$ihe-pix";
     let patient = bearer(&issuer.token("east-lab", "patient/Patient.rs"));
     let answer = send(&app, Method::POST, pix, Some(&patient)).await;
@@ -391,7 +403,7 @@ async fn a_patient_scope_is_refused_and_the_iua_scope_of_a_transaction_admits_it
 async fn an_unknown_path_under_the_guarded_surface_needs_a_token_and_health_does_not() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     let answer = send(&app, Method::GET, "/fhir/Practitioner", None).await;
     assert_eq!(StatusCode::UNAUTHORIZED, answer.status);
     let token = bearer(&issuer.token("east-lab", EVERY_SCOPE));
@@ -407,7 +419,7 @@ async fn an_unknown_path_under_the_guarded_surface_needs_a_token_and_health_does
 async fn the_discovery_document_and_the_capability_statement_name_the_token_endpoint_and_scopes() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, smart) = application(settings(&issuer, &secrets)).await;
+    let (app, smart, _spool) = application(settings(&issuer, &secrets)).await;
     let token_endpoint = format!("{}/token", issuer.server.uri());
     let discovery = send(
         &app,
@@ -484,7 +496,7 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
 async fn a_refusal_shows_no_token_subject_or_identifier_in_its_body_or_the_log() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
-    let (app, _) = application(settings(&issuer, &secrets)).await;
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
     let captured = Captured::default();
     let subscriber = tracing_subscriber::fmt()
         .json()
@@ -562,7 +574,7 @@ source_client_id = "dev-source"
         .expect("the configuration reads")
         .resolve()
         .expect("the development configuration resolves");
-    let (app, smart) = application(settings).await;
+    let (app, smart, _spool) = application(settings).await;
     assert_eq!(None, smart.token_endpoint());
     let discovery = send(
         &app,

@@ -408,6 +408,35 @@ pub static ROUTES: [Route; 37] = [
     ),
 ];
 
+/// The operator routes that read no person and change nothing a steward
+/// action records, so their requests take no place in the audit spool (our
+/// own design).
+const UNAUDITED_OPERATOR: [&str; 7] = [
+    "operator-overview",
+    "operator-dependencies",
+    "operator-domains",
+    "operator-domain",
+    "operator-pseudonym-domains",
+    "operator-matching",
+    "operator-actions",
+];
+
+impl Route {
+    /// Returns whether a request to this route writes a BALP record, and so
+    /// takes its place in the audit spool before it runs: every transaction
+    /// of the FHIR face and every steward action.
+    #[must_use]
+    pub fn audited(&self) -> bool {
+        match self.need {
+            Need::Public => false,
+            Need::Fhir { .. } => true,
+            Need::Steward | Need::Admin | Need::StewardOrAdmin => {
+                !UNAUDITED_OPERATOR.contains(&self.interaction)
+            }
+        }
+    }
+}
+
 /// Returns the row of `method` on the route `template` under `{base}`.
 #[must_use]
 pub fn find(method: &Method, template: &str) -> Option<&'static Route> {

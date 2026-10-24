@@ -14,7 +14,8 @@
 # and the ITI-119 `$match` artefacts the match client of crates/ihe-iti
 # reads: the OperationDefinition, the
 # input and output profiles, the Consumer and Supplier capability statements,
-# the Consumer's ITI-119 audit profile, and their examples. The package
+# the Consumer's ITI-119 audit profile, and their examples, with the
+# Supplier's ITI-78 and ITI-119 audit profiles and examples. The package
 # manifest is read for its name, version and licence and left out of the tree
 # (the dependency-manifest rule of scripts/vendor/lib/corpus.sh).
 #
@@ -50,8 +51,9 @@ want="$(awk '{ for (i = 1; i <= NF; i++) { t = $i; gsub(/[`,.;:]/, "", t); if (t
 # The artefacts of the ITI-78 Mobile Patient Demographics Query transaction, at
 # their upstream paths inside the package, with the Consumer's ITI-78 audit
 # (BALP) profile and example, and the artefacts of the ITI-119 Patient
-# Demographics Match with the Consumer's ITI-119 audit profile and example.
-# The Supplier audit profiles and their examples, the XML renderings and the
+# Demographics Match with the Consumer's ITI-119 audit profile and example,
+# and the Supplier's ITI-78 and ITI-119 audit profiles and examples, which
+# the server's own records are held to (#63). The XML renderings and the
 # OperationOutcome examples serve no reader here and are not taken.
 paths=(
   package/ImplementationGuide-ihe.iti.pdqm.json
@@ -80,6 +82,10 @@ paths=(
   package/example/Bundle-ex-match-output-error.json
   package/StructureDefinition-IHE.PDQm.Match.Audit.Consumer.json
   package/example/AuditEvent-ex-auditPdqmMatch-consumer.json
+  package/StructureDefinition-IHE.PDQm.Query.Audit.Supplier.json
+  package/example/AuditEvent-ex-auditPdqmQuery-supplier.json
+  package/StructureDefinition-IHE.PDQm.Match.Audit.Supplier.json
+  package/example/AuditEvent-ex-auditPdqmMatch-supplier.json
 )
 
 tmp="$(mktemp -d)"
@@ -147,7 +153,8 @@ change the pin in docs/VERSIONS.md and re-run the script.
   tests hold the query to the Supplier's Patient search parameters and decode
   the example response Bundle and Patients, and its ITI-119 \`\$match\`
   client, held to the operation, its input and output profiles and their
-  examples. The audit artefacts are kept as FerroFED vendors them
+  examples, and the BALP audit of \`app/ferropix-server\`, whose tests hold
+  the Supplier's ITI-78 and ITI-119 records to their profiles
 
 ## What is here
 
@@ -161,9 +168,10 @@ Query pattern, and its example. With them, the artefacts of ITI-119, Patient
 Demographics Match: the \`\$match\` OperationDefinition, the Consumer and
 Supplier match capability statements, the input Parameters, input Patient and
 output Bundle profiles, the IG's input and output examples, and the
-Consumer's ITI-119 audit profile and its example. The package's other files
-serve no reader here: the Supplier audit profiles and their examples, the
-OperationOutcome examples, the XML renderings, and the registry's validation
+Consumer's ITI-119 audit profile and its example. The audit records of the
+Supplier (§2:3.78.5.1.2, §2:3.119.5.1.2): the Query and Match Supplier audit
+profiles and their examples. The package's other files serve no reader here:
+the OperationOutcome examples, the XML renderings, and the registry's validation
 output. They are not taken.
 
 | File | sha256 |

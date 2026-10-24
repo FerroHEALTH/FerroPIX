@@ -5,10 +5,7 @@
 
 A patient index handles the most identifying data in a health system, so
 both crates are built to keep it out of anywhere it was not sent. This page
-says what the server and the crates guarantee today. The server's audit
-trail is planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
-([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)).
+says what the server and the crates guarantee today.
 
 ## Who may call the server
 
@@ -94,7 +91,40 @@ reaches it, and a request it cannot authenticate is not sent.
 `nl-generic-functions` has the same seam for the Generic Functions, behind
 its `authorizer` feature.
 
-## Audit
+## The server's audit trail
+
+The server writes a BALP `AuditEvent` for every transaction it answers as
+the PIXm Manager or the PDQm Supplier, and for every steward action:
+
+| Transaction | Audit profile |
+|---|---|
+| ITI-83 `$ihe-pix` | PIXm Query Manager (PIXm 3.1.0 §2:3.83.5.1.2) |
+| ITI-104 add, revise, remove | PIXm Feed Create, Update and Delete Manager (§2:3.104.5.1.2) |
+| ITI-78 search | PDQm Query Supplier (PDQm 3.2.0 §2:3.78.5.1.2) |
+| ITI-119 `$match` | PDQm Match Supplier (§2:3.119.5.1.2) |
+| A steward's view or decision | BALP Patient Read or Patient Update |
+
+Each record names the patient as its subject and, for a search, carries the
+raw request base64-encoded in `entity.query` (BALP 1.1.4 §1:52.4.1.4,
+§1:52.4.1.6). A search that found several people writes one record per
+person. The audit record is the only place outside the store where the
+server writes a patient identifier.
+
+The records wait in a spool under `audit.spool_dir`, one file readable by
+the server's user alone per record in a directory only that user may enter,
+and are sent to `audit.url` over the FHIR Feed. A delivered record is
+removed; one the repository refuses is moved to the `quarantine`
+subdirectory for you to inspect. Before a transaction runs, the server
+takes its record's place in the spool: when the spool is full, the request
+is refused with `503` and a `transient` issue before it changes anything.
+`GET {base}/health/readiness` reports `audit_spool` down when less than a
+tenth of either bound is left, and `GET {base}/operator/dependencies` shows
+whether the last delivery to the repository went through. The transactions
+write their records as their faces land
+([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
+[#70](https://github.com/FerroHEALTH/FerroPIX/issues/70)).
+
+## The crates' audit trail
 
 The audit trail is [`ihe-atna`](https://crates.io/crates/ihe-atna), the
 family's audit crate from FerroAUDIT: ATNA ITI-20 with its syslog sender,

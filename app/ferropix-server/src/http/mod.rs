@@ -113,12 +113,15 @@ where
 {
     let signalled = Arc::new(tokio::sync::Notify::new());
     let inner = Arc::clone(&signalled);
-    let server = axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown.await;
-            inner.notify_one();
-        })
-        .into_future();
+    let server = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown.await;
+        inner.notify_one();
+    })
+    .into_future();
     let mut server = std::pin::pin!(server);
     tokio::select! {
         result = &mut server => return result,

@@ -124,7 +124,9 @@ The build order is the milestones:
   the bounded drain (`src/http/`), the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it
-  (`src/fhir/`), the readiness registry (`src/health.rs`), the request log
+  (`src/fhir/`), the BALP audit trail over `ihe-atna` with its spool,
+  its reservation layer and the record of each transaction
+  (`src/audit/`), the readiness registry (`src/health.rs`), the request log
   (`src/http/request_log.rs`), and `quickstart.toml`.
 - `app/ferropix-operator-api`: the health and operator documents as serde
   types (#64), which the server writes and the console reads, `publish =

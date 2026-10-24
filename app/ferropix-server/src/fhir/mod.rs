@@ -21,6 +21,8 @@ use axum::routing::{MethodFilter, on};
 use ferropix_operator_api::health::Dependencies;
 use http::StatusCode;
 
+use crate::audit::Audit;
+use crate::audit::reserve::{self, Reserving};
 use crate::auth::guard::{self, Confine};
 use crate::auth::table::{self, Mount};
 use crate::auth::{Discovery, Smart};
@@ -84,6 +86,7 @@ pub fn routes(
     mounts: Mounts,
     smart: &Arc<Smart>,
     health: &Registry,
+    audit: &Audit,
 ) -> Router {
     let statement = Arc::new(capability::statement(public_base_url, smart));
     let configuration = smart.configuration().map(Arc::new);
@@ -111,8 +114,8 @@ pub fn routes(
                 })
             }
             "operator-dependencies" => {
-                let health = health.clone();
-                on(filter, move || dependencies(health.clone()))
+                let (health, audit) = (health.clone(), audit.clone());
+                on(filter, move || dependencies(health.clone(), audit.clone()))
             }
             _ if route.mount == Mount::Operator => on(filter, pending_operator),
             _ => on(filter, pending_fhir),
@@ -120,6 +123,10 @@ pub fn routes(
         router = router.route(route.path, handler);
     }
     router
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(Reserving::new(base, audit.clone())),
+            reserve::layer,
+        ))
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(Confine::new(base, Arc::clone(smart))),
             guard::confine,
@@ -142,19 +149,18 @@ fn discovery(configuration: Option<&Discovery>) -> Response {
 /// outcome of every upstream, behind the steward scope so an anonymous
 /// reader learns no endpoint (FerroFED's decision A83; no specification
 /// governs this: our own design).
-// TODO(#63): name the audit repository with its last outcome.
 // TODO(#104): name every PMIR subscriber with its last outcome.
-async fn dependencies(health: Registry) -> Response {
+async fn dependencies(health: Registry, audit: Audit) -> Response {
     let report = Dependencies {
         readiness: health.evaluate().await,
-        upstreams: Vec::new(),
+        upstreams: audit.upstream().into_iter().collect(),
     };
     body(StatusCode::OK, &report, "application/json")
 }
 
 /// A transaction of the FHIR face that is not served yet.
-// TODO(#66): serve ITI-83 and ITI-104.
-// TODO(#70): serve ITI-78 and ITI-119.
+// TODO(#66): serve ITI-83 and ITI-104, recording audit::records::pix_query and feed.
+// TODO(#70): serve ITI-78 and ITI-119, recording audit::records::pdq_search.
 // TODO(#101): serve ITI-93 and ITI-94.
 async fn pending_fhir() -> Response {
     respond(

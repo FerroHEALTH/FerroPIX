@@ -9,7 +9,7 @@ change the pin in docs/VERSIONS.md and re-run the script.
 - Source: <https://packages.fhir.org/ihe.iti.pdqm/3.2.0>, the FHIR package registry's copy of the IG published at
   <https://profiles.ihe.net/ITI/PDQm/3.2.0/>
 - Pin: package `ihe.iti.pdqm` version `3.2.0`, tarball sha256 `61e09fbee991ff7c131b6ba5474921001e07782209961f3e85cee5f3ebcaedc2`
-- Fetched: 2026-10-20
+- Fetched: 2026-10-24
 - Upstream licence: Creative Commons Attribution 4.0 International
   (`CC-BY-4.0`, the `license` of the package manifest, listed under What is
   left out;
@@ -18,14 +18,15 @@ change the pin in docs/VERSIONS.md and re-run the script.
   Committee, *Patient Demographics Query for Mobile (PDQm)* 3.2.0.
 - FHIR version: 4.0.1
 - Layout: the upstream paths inside the package, unchanged
-- Files: 26 of the package's 53, listed below
+- Files: 30 of the package's 53, listed below
 - Tree digest (sha256 over the sorted per-file `sha256  path` listing,
-  `PROVENANCE.md` excluded): `cfcd10d2402dcc4a3b659ac06b8242a3d5baadcd12d69cb0ef4c7e3e5c628a00`
+  `PROVENANCE.md` excluded): `e7fa2654cddf2ad2d248b31254b0e03e6e0302d30b6a687aed9583ea8eb87772`
 - Read by: the ITI-78 client of `crates/ihe-iti` (feature `pdqm`), whose
   tests hold the query to the Supplier's Patient search parameters and decode
   the example response Bundle and Patients, and its ITI-119 `$match`
   client, held to the operation, its input and output profiles and their
-  examples. The audit artefacts are kept as FerroFED vendors them
+  examples, and the BALP audit of `app/ferropix-server`, whose tests hold
+  the Supplier's ITI-78 and ITI-119 records to their profiles
 
 ## What is here
 
@@ -39,9 +40,10 @@ Query pattern, and its example. With them, the artefacts of ITI-119, Patient
 Demographics Match: the `$match` OperationDefinition, the Consumer and
 Supplier match capability statements, the input Parameters, input Patient and
 output Bundle profiles, the IG's input and output examples, and the
-Consumer's ITI-119 audit profile and its example. The package's other files
-serve no reader here: the Supplier audit profiles and their examples, the
-OperationOutcome examples, the XML renderings, and the registry's validation
+Consumer's ITI-119 audit profile and its example. The audit records of the
+Supplier (§2:3.78.5.1.2, §2:3.119.5.1.2): the Query and Match Supplier audit
+profiles and their examples. The package's other files serve no reader here:
+the OperationOutcome examples, the XML renderings, and the registry's validation
 output. They are not taken.
 
 | File | sha256 |
@@ -53,14 +55,18 @@ output. They are not taken.
 | `package/ImplementationGuide-ihe.iti.pdqm.json` | `05acdb5bf6b8e021b99b8fc845484c938dd3e2c4abba4e0c9b836979065c0c5f` |
 | `package/OperationDefinition-PDQmMatch.json` | `1cfc61f1d9373172f3050357d5a9f75ff642ae5eb58af68df27a7b4452e6c57f` |
 | `package/StructureDefinition-IHE.PDQm.Match.Audit.Consumer.json` | `3bef44c549f0d948f5469a1f876576a04f0d6ceedfb1421f2b4cf1c8182e9648` |
+| `package/StructureDefinition-IHE.PDQm.Match.Audit.Supplier.json` | `5404563e37b44aa90b7a9c517cd53ec98146172347cc73ba22eccea2e8632e3d` |
 | `package/StructureDefinition-IHE.PDQm.MatchInputPatient.json` | `82e1557949b25057e284f4886795bf5219ac9df62bfa00926bfd7295eda90de5` |
 | `package/StructureDefinition-IHE.PDQm.MatchParametersIn.json` | `08dec57c385a3c7fd808dfa0e52059224855199ce6a674f1f1bf98370651949b` |
 | `package/StructureDefinition-IHE.PDQm.MatchParametersOut.json` | `10d0969fb4e10bb4bf767ee237900f25a963ffe0c15a801a517900ae7f15d950` |
 | `package/StructureDefinition-IHE.PDQm.Patient.json` | `d184b3cfb58b91eecb87e6ee865c7108a779a2efe942a580c166776d8d704549` |
 | `package/StructureDefinition-IHE.PDQm.Query.Audit.Consumer.json` | `52742d6b2081eda2a3589cc985c12d3ac345325456e5929001ca2bd8c3903453` |
+| `package/StructureDefinition-IHE.PDQm.Query.Audit.Supplier.json` | `336e263f0954e1ad6513738992d844769a08d935507b7cca6ec9d036cbcc9023` |
 | `package/StructureDefinition-IHE.PDQm.QueryPatientResourceResponseMessage.json` | `0488cf89754f6c914463789758919bec63f3ce297dc6d11088c0eafe0f31f590` |
 | `package/example/AuditEvent-ex-auditPdqmMatch-consumer.json` | `00b8f8dd97084e4d48cc5a44fe65b7f7035a56b128f6fc98bbb21f9c28efce41` |
+| `package/example/AuditEvent-ex-auditPdqmMatch-supplier.json` | `a2af909935173e3c9250bf0acecbf999f3feded2d201846700ff5f8307b8d7a0` |
 | `package/example/AuditEvent-ex-auditPdqmQuery-consumer.json` | `9f6e1844440b6d2399204c1c6d701cd0106c2a847b9f4e9a26921c698ad97d38` |
+| `package/example/AuditEvent-ex-auditPdqmQuery-supplier.json` | `703d1c42c63a2218bdde4b21b7ef5c4db2c1a4999298fa2cb38fefe8815b9faf` |
 | `package/example/Bundle-ex-QueryPatientResourceResponseMessage.json` | `851a55358466f91e261ee90c3f03c3de605679f1b3d8abe19d082bf8da6a9f39` |
 | `package/example/Bundle-ex-match-output-empty.json` | `8ffaca0ec1518ef027278c7abcc5070b0e30002cc85489d59a99466c319d5365` |
 | `package/example/Bundle-ex-match-output-error.json` | `fff8f751b9f8c7556035c21056318b31fde449383d7fbd3c3348dcd8e675e3b8` |

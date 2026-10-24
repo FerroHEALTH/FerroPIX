@@ -15,8 +15,7 @@ face and the operator API (`[auth]`). The services behind the sections
 are planned in the
 [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3):
 the store and its migrations
-([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the audit trail
-([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)), the usage
+([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the usage
 report ([#153](https://github.com/FerroHEALTH/FerroPIX/issues/153)), and
 the PIXm and PDQm faces
 ([#66](https://github.com/FerroHEALTH/FerroPIX/issues/66),
@@ -251,6 +250,14 @@ facility listed twice is refused.
 | `audit.timeout_ms` | `5000` | How long one delivery may take. |
 | `audit.retry_max_ms` | `60000` | The longest wait between two delivery attempts. |
 
+`serve` opens the spool at start and refuses to start when the directory
+is open to its group or to other users, cannot be written, or holds a file
+the server did not write. Without `audit.url` the records stay in the spool
+until you name a repository, and the server warns at start. A request whose
+record has no room in the spool is refused with `503`, as the
+[Security and audit](security-and-audit.md#the-servers-audit-trail) page
+says.
+
 ### `[operator]`
 
 | Key | Default | What it sets |
@@ -299,6 +306,6 @@ reference on docs.rs has each constructor and builder method.
 | The HTTP client | the constructor, as a `reqwest::Client` | Built with `redirect::Policy::none()`, and with the mutual TLS identity where the profile asks for one (XCPD, Mitz). |
 | A timeout per exchange | each call, as a `Duration` | The bound of the whole exchange; with an audit feature it bounds the audit record as well. |
 | Access tokens | `.with_authorizer(…)` | An authorizer that makes the headers of each request (IUA ITI-72); see [Security and audit](security-and-audit.md#access-tokens). |
-| The audit recorder | `.audited(…)`, with `balp` or `atna` | The recorder that routes each record to your audit repository; see [Security and audit](security-and-audit.md#audit). |
+| The audit recorder | `.audited(…)`, with `balp` or `atna` | The recorder that routes each record to your audit repository; see [Security and audit](security-and-audit.md#the-crates-audit-trail). |
 | The PIXm invocation | `.invoked_by(Invocation::Post)` | `POST`, as every FerroHEALTH client calls a Manager, so the identifier stays out of the URL; leave the `GET` default only for a Manager that refuses the `POST` form ([Lookups use POST](../crates/ihe-iti.md#lookups-by-a-patient-identifier-use-post)). |
 | The mCSD budget | `budget::Budget` | The deadline and the caps on pages, bytes and entries of one walk; by default 200 pages, 64 MiB and 50,000 entries. |

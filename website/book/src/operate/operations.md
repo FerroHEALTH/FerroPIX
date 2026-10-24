@@ -16,11 +16,11 @@ installation report are planned in the
 | `GET {base}/health/readiness` | none | `200` while every readiness indicator is up, `503` while one is down, with a JSON document naming each indicator, its state and, when it is down, why. |
 | `GET {base}/operator/dependencies` | `auth.steward_scope` | `200` with the readiness document and the last outcome of every upstream the server sends to. |
 
-The readiness indicators are added with the subsystems they check: the
+The readiness indicator `audit_spool` is down when less than a tenth of
+the spool's record or byte bound is left. The other indicators are added
+with the subsystems they check: the
 database with the store
-([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the audit
-spool's headroom with the audit trail
-([#63](https://github.com/FerroHEALTH/FerroPIX/issues/63)), the MLLP
+([#59](https://github.com/FerroHEALTH/FerroPIX/issues/59)), the MLLP
 listener ([#85](https://github.com/FerroHEALTH/FerroPIX/issues/85)) and the
 PMIR feed sender's backlog
 ([#104](https://github.com/FerroHEALTH/FerroPIX/issues/104)). Each check

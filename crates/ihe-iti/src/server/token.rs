@@ -25,6 +25,7 @@ pub(crate) fn form(body: &[u8]) -> Vec<(String, String)> {
 /// `[ \r\n\t\S]+` of FHIR R4 datatypes.html#primitive, read as an XML Schema
 /// pattern, so of the whitespace only the space, the tab, the carriage
 /// return and the line feed. Emptiness is the caller's to judge.
+#[cfg(feature = "pixm-server")]
 pub(crate) fn fhir_string(text: &str) -> bool {
     !text.contains(['\u{b}', '\u{c}'])
 }
@@ -116,6 +117,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "pixm-server")]
     fn a_fhir_string_holds_no_vertical_tab_or_form_feed() {
         assert!(
             super::fhir_string("van Dam\r\n\t\u{85}"),

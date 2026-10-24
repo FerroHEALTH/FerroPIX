@@ -74,6 +74,8 @@ pub mod error;
 pub mod identifier;
 mod request;
 mod response;
+#[cfg(feature = "pixm-server")]
+pub mod server;
 
 use std::fmt;
 use std::sync::Arc;

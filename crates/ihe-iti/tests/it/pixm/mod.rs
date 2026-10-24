@@ -9,6 +9,8 @@ mod answers;
 mod authorized;
 mod contract;
 mod hygiene;
+#[cfg(feature = "pixm-server")]
+mod server;
 
 use std::path::PathBuf;
 use std::time::Duration;

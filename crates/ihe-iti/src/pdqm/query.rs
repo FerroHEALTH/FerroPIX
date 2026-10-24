@@ -54,7 +54,34 @@ pub enum DatePrefix {
 }
 
 impl DatePrefix {
-    fn code(self) -> &'static str {
+    /// The prefix a `date` search value opens with, and the rest of the
+    /// value; a value with no prefix is `eq` (FHIR R4 search, prefixes).
+    #[cfg(feature = "pdqm-server")]
+    pub(super) fn split(value: &str) -> (Self, &str) {
+        for prefix in [
+            Self::Ne,
+            Self::Gt,
+            Self::Lt,
+            Self::Ge,
+            Self::Le,
+            Self::Sa,
+            Self::Eb,
+            Self::Ap,
+            Self::Eq,
+        ] {
+            let code = if prefix == Self::Eq {
+                "eq"
+            } else {
+                prefix.code()
+            };
+            if let Some(rest) = value.strip_prefix(code) {
+                return (prefix, rest);
+            }
+        }
+        (Self::Eq, value)
+    }
+
+    pub(super) fn code(self) -> &'static str {
         match self {
             Self::Eq => "",
             Self::Ne => "ne",
@@ -85,7 +112,19 @@ pub enum Gender {
 }
 
 impl Gender {
-    fn code(self) -> &'static str {
+    /// The gender `code` names in `administrative-gender`, or `None`.
+    #[cfg(feature = "pdqm-server")]
+    pub(super) fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "male" => Some(Self::Male),
+            "female" => Some(Self::Female),
+            "other" => Some(Self::Other),
+            "unknown" => Some(Self::Unknown),
+            _ => None,
+        }
+    }
+
+    pub(super) fn code(self) -> &'static str {
         match self {
             Self::Male => "male",
             Self::Female => "female",
@@ -400,7 +439,7 @@ fn absolute_uri(text: &str) -> Result<&str, InvalidInput> {
 /// Whether `text` is a FHIR `date`: `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, with a
 /// month of 01 to 12 and a day of 01 to 31
 /// (<http://hl7.org/fhir/R4/datatypes.html#date>).
-fn fhir_date(text: &str) -> bool {
+pub(super) fn fhir_date(text: &str) -> bool {
     let mut parts = text.split('-');
     let year = parts.next();
     let month = parts.next();

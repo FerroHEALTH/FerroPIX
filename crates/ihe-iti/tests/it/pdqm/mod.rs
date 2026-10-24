@@ -11,6 +11,8 @@ mod contract;
 mod hygiene;
 mod matching;
 mod paging;
+#[cfg(feature = "pdqm-server")]
+mod server;
 
 use std::fmt::Write;
 use std::path::PathBuf;

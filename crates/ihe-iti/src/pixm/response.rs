@@ -142,7 +142,7 @@ fn target_identifier(
     if system == source.system() && value == source.value().expose_secret() {
         return Err(Malformation::SourceEchoed { index });
     }
-    Ok(TargetIdentifier::new(
+    Ok(TargetIdentifier::read(
         system.to_owned(),
         SecretString::from(value),
     ))
@@ -160,7 +160,7 @@ fn patient(
         .as_ref()
         .and_then(|reference| reference.value.as_deref())
         .filter(|reference| !reference.is_empty())
-        .map(|reference| PatientReference::new(SecretString::from(reference)))
+        .map(|reference| PatientReference::read(SecretString::from(reference)))
         .ok_or(Malformation::NoReference { index })
 }
 

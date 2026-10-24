@@ -12,6 +12,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- `ihe-atna` moves to 0.2.6, the FerroAUDIT release whose forwarder closes
+  a syslog connection with `close_notify` before it reconnects and adds
+  `Forwarder::stop`, so a product that pins 0.2.6 resolves `ihe-iti` beside
+  it. FerroPIX's server delivers its audit records over the FHIR Feed and
+  opens no syslog connection, so nothing else changes (#194, `ihe-iti`
+  0.0.50).
+
 ## [0.0.3] - 2026-10-24
 
 ### Added

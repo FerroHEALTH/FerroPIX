@@ -666,6 +666,31 @@ release_pins() {
   done <<< "$WATCHED_TOOLS"
 }
 
+# newest_release_tag REPOSITORY: the tag of the newest release of
+# REPOSITORY, from the API, or, where the API refuses the read (an
+# organisation with an IP allow list answers 403 to the workflow's token),
+# from the redirect github.com serves for /releases/latest.
+newest_release_tag() {
+  local repo="$1" tag location
+  if tag="$(gh api "repos/$repo/releases/latest" --jq '.tag_name' 2>&1)"; then
+    printf '%s\n' "$tag"
+    return 0
+  fi
+  location="$(curl --silent --show-error --head --user-agent "$REGISTRY_UA" \
+    "https://github.com/$repo/releases/latest" | tr -d '\r' \
+    | awk 'tolower($1) == "location:" { print $2; exit }')" || {
+    printf '%s\n' "$tag"
+    return 1
+  }
+  case "$location" in
+    "https://github.com/$repo/releases/tag/"?*) printf '%s\n' "${location##*/releases/tag/}" ;;
+    *)
+      printf '%s\n' "$tag"
+      return 1
+      ;;
+  esac
+}
+
 stale=0
 unreadable=0
 while IFS=$'\t' read -r label repo pinned hold prefix; do
@@ -691,15 +716,16 @@ while IFS=$'\t' read -r label repo pinned hold prefix; do
       unreadable=1
       continue
     fi
-  elif ! tag="$(gh api "repos/$repo/releases/latest" --jq '.tag_name' 2>&1)"; then
+  elif ! tag="$(newest_release_tag "$repo")"; then
     printf 'UNREADABLE %s: could not read the newest release of %s (%s)\n' "$label" "$repo" "$tag"
     unreadable=1
     continue
   else
     # A tag may lead with the repository's name: lychee tags its releases
-    # lychee-vX.Y.Z.
+    # lychee-vX.Y.Z. A `v` is dropped only before a digit, so Binaryen's
+    # version_133 stays whole.
     latest="${tag#"${repo##*/}"-}"
-    latest="${latest#v}"
+    [[ ! "$latest" =~ ^v[0-9] ]] || latest="${latest#v}"
   fi
 
   if [[ "$pinned" = "$latest" ]]; then

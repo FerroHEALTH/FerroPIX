@@ -61,6 +61,12 @@ and this project adheres to
   `{base}/fhir/.well-known/smart-configuration` name the token endpoint and
   the scopes. The transaction routes answer `501` until their faces land.
   Basic users now need the `[dev]` table beside `profile = "development"`.
+- The ITI TF-2 texts of the HL7 v2 transactions ITI-8, ITI-9, ITI-10,
+  ITI-21 and ITI-22 (#84), pinned by checksum in `docs/VERSIONS.md` and
+  fetched by `scripts/vendor/ihe-iti-tf.sh` into the local cache, never
+  committed, because each page reproduces HL7 tables whose rights HL7
+  reserves. The IHE citation guard checks a citation of them against the
+  cached pages, and the book's conformance page says so.
 - `ferropix-server`, the FerroPIX server crate with its binary `ferropix`
   (#58): `serve`, `config check`, `healthcheck`, and `db migrate`, which
   names the store issue (#59) until it runs. The configuration tree of

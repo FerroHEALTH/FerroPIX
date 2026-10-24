@@ -116,7 +116,7 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
@@ -141,6 +141,22 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/checks/comment-style.sh --all
+
+  # Every word the operator console draws is a message of its catalog under
+  # app/ferropix-console/locales/; a literal that reads as words is refused,
+  # and one no reader sees is allowed with its reason in
+  # scripts/checks/stray-literals.allow. It reads the checkout alone.
+  stray-literals:
+    name: stray-literals
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash scripts/checks/stray-literals.sh app/ferropix-console/src
 
   # The pin matrix, the vendored trees and the licence headers.
   versions:
@@ -458,14 +474,15 @@ jobs:
 
   # The operator console's browser half compiles for WebAssembly alone, so
   # the host clippy above never reads it; this lints the islands entry on its
-  # own target (.claude/rules/leptos-ui.md). The site bundle against its byte
-  # budget joins it with #99.
+  # own target, builds the release site bundle with the tools
+  # docs/VERSIONS.md pins, and holds its entry WebAssembly to the budget of
+  # .claude/rules/leptos-ui.md §4.
   console-wasm:
     name: console-wasm
     needs: detect
     if: needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -478,6 +495,24 @@ jobs:
           target: wasm32-unknown-unknown
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy -p ferropix-console --lib --target wasm32-unknown-unknown --locked -- -D warnings
+      - name: Install cargo-leptos
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-leptos@0.3.11
+      - name: Install the wasm-bindgen CLI
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: wasm-bindgen@0.2.129
+      # Pinned and checked against its SHA-256 before use, so cargo-leptos
+      # finds it on PATH and never downloads it itself.
+      - name: Install wasm-opt
+        run: |
+          bash scripts/release/console-tools.sh "$RUNNER_TEMP/console-tools"
+          echo "$RUNNER_TEMP/console-tools/bin" >> "$GITHUB_PATH"
+      - run: bash scripts/release/console-site.sh --release
+      # The sizes go to the job summary, and the step fails over the budget.
+      - name: Measure the bundle against its budget
+        run: bash scripts/checks/console-bundle.sh
 
   test:
     name: nextest
@@ -741,6 +776,7 @@ jobs:
       - shellcheck
       - self-tests
       - comment-style
+      - stray-literals
       - versions
       - file-length
       - todo-issues

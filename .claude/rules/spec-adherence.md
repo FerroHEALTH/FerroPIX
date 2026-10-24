@@ -5,9 +5,12 @@
 
 FerroPIX answers to these sources, never to memory and never to how another
 implementation behaves. Each is vendored under `docs/specs/` at the version
-`docs/VERSIONS.md` pins (the identity corpora arrive with the move from
-FerroFED, the ITI TF-2 HL7 v2 texts before the v2 transactions), and every
-spec-facing decision cites them section by section:
+`docs/VERSIONS.md` pins, and every spec-facing decision cites them section
+by section. The identity corpora arrived with the move from FerroFED. The
+ITI TF-2 texts of ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22 are vendored
+cache only by `scripts/vendor/ihe-iti-tf.sh` (their HL7 v2 tables keep them
+out of the tree; `docs/specs/ihe-iti-tf-hl7v2/PROVENANCE.md`), so run the
+script before reading or citing one:
 
 1. **The IHE IT Infrastructure (ITI) Technical Framework**: Volume 1 for the
    PIX, PDQ and PMIR profiles, their actors and options, and Volume 2 for

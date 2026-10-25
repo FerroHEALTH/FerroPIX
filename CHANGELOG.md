@@ -14,6 +14,13 @@ and this project adheres to
 
 ### Added
 
+- `ihe-iti` 0.0.54 carries the Responding Gateway side of ITI-55 in the
+  `xcpd` feature (#230): `xcpd::responding::query::read` reads a Cross
+  Gateway Patient Discovery request in each mode of ITI TF-2 §3.55.1,
+  `xcpd::responding::answer` writes the answer of the five cases of
+  §3.55.4.2.3, the `NS250` acknowledgement of a Deferred request and a SOAP
+  fault, and `xcpd::responding::audit::RespondingAuditEvent` is the
+  Responding Gateway audit message of §3.55.5.1.2.
 - Automatic probabilistic linking keeps its ground (#112): with
   `[matching] auto_link = true`, each record a `certain` pair moves gets a
   link of kind `probabilistic` with the score and the evidence the pair was

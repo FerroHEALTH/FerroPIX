@@ -14,38 +14,11 @@
 //! back as it was read, escaped again. No specification governs how a value
 //! that holds a carriage return is written: our own design writes a space.
 
-use ferrobridge_hl7v2::parse::{Component, Delimiters, Field, Location, Message, Repetition};
+use ferrobridge_hl7v2::parse::{
+    Component, Delimiters, ErrorCode, Field, Location, Message, Repetition,
+};
 
 use crate::hl7v2::stamped::Stamped;
-
-/// The table 0357 code an `ERR` segment carries in ERR-3.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Condition {
-    /// `101`, required field missing.
-    RequiredFieldMissing,
-    /// `102`, data type error.
-    DataType,
-    /// `200`, unsupported message type.
-    UnsupportedMessageType,
-    /// `204`, unknown key identifier (ITI TF-2 §3.9.4.2.2.6, Cases 3 to 5).
-    UnknownKey,
-    /// `207`, application error.
-    Application,
-}
-
-impl Condition {
-    /// Returns the code and its display.
-    #[must_use]
-    pub const fn code(self) -> (&'static str, &'static str) {
-        match self {
-            Self::RequiredFieldMissing => ("101", "Required field missing"),
-            Self::DataType => ("102", "Data type error"),
-            Self::UnsupportedMessageType => ("200", "Unsupported message type"),
-            Self::UnknownKey => ("204", "Unknown key identifier"),
-            Self::Application => ("207", "Application error"),
-        }
-    }
-}
 
 /// One `ERR` segment: where, which condition, and a text that quotes
 /// nothing from the message.
@@ -54,7 +27,7 @@ pub struct Fault {
     /// ERR-2, the location, when the fault has one.
     pub location: Option<Box<Location>>,
     /// ERR-3.
-    pub condition: Condition,
+    pub condition: ErrorCode,
     /// ERR-8, the user message.
     pub text: String,
 }
@@ -62,7 +35,7 @@ pub struct Fault {
 impl Fault {
     /// A fault at `location`.
     #[must_use]
-    pub fn at(location: Location, condition: Condition, text: impl Into<String>) -> Self {
+    pub fn at(location: Location, condition: ErrorCode, text: impl Into<String>) -> Self {
         Self {
             location: Some(Box::new(location)),
             condition,
@@ -72,7 +45,7 @@ impl Fault {
 
     /// A fault with no location.
     #[must_use]
-    pub fn anywhere(condition: Condition, text: impl Into<String>) -> Self {
+    pub fn anywhere(condition: ErrorCode, text: impl Into<String>) -> Self {
         Self {
             location: None,
             condition,
@@ -269,7 +242,7 @@ impl<'m> Writer<'m> {
             .as_ref()
             .map(|location| location.erl(self.delimiters.component))
             .unwrap_or_default();
-        let (code, display) = fault.condition.code();
+        let (code, display) = (fault.condition.code(), fault.condition.display());
         let condition = self.components(&[
             code.to_owned(),
             self.escape(display),
@@ -315,8 +288,9 @@ mod tests {
     use ferrobridge_hl7v2::decode::Charset;
     use ferrobridge_hl7v2::parse::lex::lex;
 
-    use super::{Condition, Fault, Writer, location};
+    use super::{Fault, Writer, location};
     use crate::hl7v2::stamped::Stamped;
+    use ferrobridge_hl7v2::parse::ErrorCode;
 
     const QUERY: &str = "MSH|^~\\&|CONSUMER|EAST|PIX|NORTH|20261025100000||QBP^Q23^QBP_Q21|Q-1|P|2.5||||||UNICODE UTF-8\rQPD|IHE PIX Query|TAG-1|A\\S\\1^^^EAST&2.999.1.1&ISO|^^^&2.999.1.2&ISO~^^^LAB\rRCP|I\r";
 
@@ -354,14 +328,14 @@ mod tests {
         let writer = Writer::of(&lexed.message);
         let fault = Fault::at(
             location("QPD", 1, 4, Some(2), None),
-            Condition::UnknownKey,
+            ErrorCode::UnknownKeyIdentifier,
             "a domain of QPD-4 is not recognized",
         );
         assert_eq!(
             writer.err(&fault),
             "ERR||QPD^1^4^2|204^Unknown key identifier^HL70357|E||||a domain of QPD-4 is not recognized"
         );
-        let anywhere = Fault::anywhere(Condition::Application, "a | b");
+        let anywhere = Fault::anywhere(ErrorCode::Application, "a | b");
         assert_eq!(
             writer.err(&anywhere),
             "ERR|||207^Application error^HL70357|E||||a \\F\\ b"

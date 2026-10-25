@@ -34,7 +34,7 @@ points at it.
 - `oauth-server-metadata` is retired and never published; the metadata
   module of `ferrohealth-smart` replaces it. Authentication and the SMART
   scopes come from `ferrohealth-smart`, and the policy decision belongs to
-  `ferrohealth-authz`, both FerroSMART's, never a local copy.
+  `ferrohealth-authz`, both FerroAUTH's, never a local copy.
 - FerroPIX serves FHIR and HL7 v2 together, on FerroBRIDGE's v2 parsing
   (`hl7v2-types` and its MLLP codec and parser), never a second parser.
 

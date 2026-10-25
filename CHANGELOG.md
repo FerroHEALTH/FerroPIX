@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-10-25
+
 ### Added
 
 - The XCPD Responding Gateway answers the asynchronous exchange of ITI TF-2

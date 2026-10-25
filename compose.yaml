@@ -100,7 +100,7 @@ services:
       - no-new-privileges:true
 
   ferropix:
-    image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-0.0.4}
+    image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-0.0.5}
     container_name: ferropix
     restart: unless-stopped
     network_mode: service:issuer
@@ -148,7 +148,7 @@ services:
   # provider only on loopback, and reaches the server there. The image's own
   # HEALTHCHECK runs `ferropix-console healthcheck`.
   console:
-    image: ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION:-0.0.4}
+    image: ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION:-0.0.5}
     profiles: [console]
     restart: unless-stopped
     network_mode: service:issuer

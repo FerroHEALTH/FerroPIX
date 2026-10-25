@@ -42,7 +42,8 @@ serde.workspace = true
 serde_json.workspace = true
 testcontainers.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["time", "rt", "net", "sync"] }
+# The MLLP sender (`mllp`) writes and reads a TCP stream.
+tokio = { workspace = true, features = ["time", "rt", "net", "sync", "io-util"] }
 
 [dev-dependencies]
 # The browser journeys run the console in process, against its release site

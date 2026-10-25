@@ -12,7 +12,32 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- The HL7 v2 face (#83): one MLLP Release 1 listener on `[hl7v2] listen`
+  over FerroBRIDGE's `ferrobridge-hl7v2` and `hl7v2-types`, pinned exactly,
+  with the frame ceiling, the idle and frame timeouts, the MSH-18 character
+  sets, the senders of `[[hl7v2.senders]]` (a message from another is
+  answered `AR`), a receipt per feed message so a message sent again is
+  acknowledged with its first code and not applied twice, the
+  `hl7v2_listener` readiness indicator and the drain on `SIGTERM` (#85).
+  ITI-8 ADT^A01, A04, A05 and A08 add or revise a patient and ADT^A40 merges
+  two, through the feed transaction ITI-104 goes through, so a v2 feed and a
+  FHIR feed of the same patient write the same version and join one person
+  (#86). ITI-9 QBP^Q23 answers RSP^K23 from the cross-reference ITI-83 reads,
+  with the six cases of ITI TF-2 §3.9.4.2.2.6 (#87). ITI-21 QBP^Q22 answers
+  RSP^K22 from the search ITI-78 runs, with the continuation protocol over a
+  pointer that lives ten minutes and QCN^J01 (#88). Every message writes the
+  Manager's or the Supplier's audit record before its answer leaves.
+  `[hl7v2.namespaces]` names a domain's HL7 namespace id, and a sender with
+  no `domain` may query and not feed. The usage report counts the face's
+  messages in the `hl7v2` group with `hl7v2_ae` and `hl7v2_ar`.
+
 ### Changed
+
+- `[hl7v2]` refuses a `default_charset` the decoder does not read and two
+  senders of one domain at load (ITI TF-2 §3.8.4.1.3: one Patient Identity
+  Source per domain) (#85).
 
 - The changelog guard passes a pull request that adds a bullet to the
   newest `## [X.Y.Z]` section while no `vX.Y.Z` tag exists, so a fix that
@@ -30,6 +55,14 @@ and this project adheres to
   effort, and a fixed release published within 7 days of the confirmed
   assessment for a Critical vulnerability, 30 days for High, 90 days for
   Medium and with the next release for Low.
+
+### Fixed
+
+- `ihe-iti`'s FHIR JSON body reader refuses a body that has no FHIR XML form
+  at all as it refuses one whose XML form reads back changed, so the
+  narrative the fuzzer found is still refused under `fhir-types` 0.1.128,
+  whose XML writer now refuses that narrative instead of writing it changed
+  (PIXm 3.1.0 §2:3.104.4.1.2; `ihe-iti` 0.0.51).
 
 ## [0.0.3] - 2026-10-24
 

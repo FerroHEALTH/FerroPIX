@@ -31,9 +31,9 @@ parts exist today.
   [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
   Its cross-reference in PostgreSQL, the
   [PIXm Manager](integrate/pixm-manager.md) and the
-  [PDQm Supplier](integrate/pdqm-supplier.md) run today; the PMIR Registry,
-  pseudonym minting, the HL7 v2 PIX and PDQ transactions and the container
-  image are planned, and the pages under Operate say which is which.
+  [PDQm Supplier](integrate/pdqm-supplier.md) run today, as does the
+  [HL7 v2 face](integrate/hl7v2-face.md) with ITI-8, ITI-9 and ITI-21; the
+  PMIR Registry and pseudonym minting are planned, and the pages under Operate say which is which.
 
 [What FerroPIX is](evaluate/what-ferropix-is.md) lists every capability with
 its status.

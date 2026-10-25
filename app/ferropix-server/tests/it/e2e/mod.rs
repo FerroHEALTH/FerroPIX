@@ -13,6 +13,7 @@ mod cli;
 mod feed;
 mod feeds;
 mod gate;
+mod hl7v2;
 mod indicator;
 mod leak;
 mod operator;

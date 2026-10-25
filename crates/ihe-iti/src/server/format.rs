@@ -126,12 +126,14 @@ impl Format {
                 let Value::Object(object) = value else {
                     return Err(BodyError::NotAResource);
                 };
-                // NOTE: PIXm 3.1.0 §2:3.104.4.1.2, the server writes FHIR XML too, so a
-                // JSON body whose XML form does not read back as itself is refused.
+                // NOTE: PIXm 3.1.0 §2:3.104.4.1.2, the server writes FHIR XML too, so a JSON
+                // body with no XML form, or one that does not read back as itself, is refused.
                 let schemas = &fhir_types::r4::schema::SCHEMAS;
-                if let Ok(xml) = fhir_types::xml::to_xml(schemas, &object)
-                    && fhir_types::xml::from_xml(schemas, &xml).ok().as_ref() != Some(&object)
-                {
+                let round_trips = fhir_types::xml::to_xml(schemas, &object)
+                    .ok()
+                    .and_then(|xml| fhir_types::xml::from_xml(schemas, &xml).ok())
+                    .is_some_and(|read| read == object);
+                if !round_trips {
                     return Err(BodyError::NoXmlForm);
                 }
                 object

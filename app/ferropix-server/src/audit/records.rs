@@ -12,6 +12,11 @@
 //! - ITI-78 and ITI-119: the PDQm Query and Match Supplier audit profiles,
 //!   on BALP Query (PDQm 3.2.0 §2:3.78.5.1.2, §2:3.119.5.1.2), one record
 //!   per person found and one with no patient when none was.
+//! - ITI-8, ITI-9 and ITI-21 over the HL7 v2 face: the Manager's and the
+//!   Supplier's audit messages of ITI TF-2 §3.8.5.1.2, §3.8.5.2.2,
+//!   §3.9.5.1.2 and §3.21.5.1.2, written as `AuditEvent`s: the DICOM event
+//!   id as `type`, the transaction as `subtype`, the sender as the source
+//!   agent and the message as the query entity of a query.
 //! - A steward action: a `RESTful` activity on the person (BALP 1.1.4
 //!   §3:5.7.3), a read for a view and an update for a decision; a steward's
 //!   search, a BALP Patient Query record per person found or a Query record
@@ -26,10 +31,10 @@ use std::net::IpAddr;
 
 use ferrohealth_smart::resource::{Access, Via};
 use ihe_atna::balp::{
-    APPLICATION, CREATE, CUSTODIAN, Coded, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE, Described,
-    Detail, Direction, EXPORT, Entity, EventKind, Exchange, IHE_TRANSACTIONS, NetworkAddress,
-    Outcome, Peer, READ, REQUEST_ID, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT, UPDATE, What,
-    request_text,
+    APPLICATION, CREATE, CUSTODIAN, Coded, DCM, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE,
+    Described, Detail, Direction, EXPORT, Entity, EventKind, Exchange, IHE_TRANSACTIONS,
+    NetworkAddress, Outcome, Peer, READ, REQUEST_ID, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT,
+    UPDATE, What, request_text,
 };
 use ihe_atna::user::{OnBehalfOf, User};
 use secrecy::{ExposeSecret, SecretString};
@@ -53,6 +58,24 @@ pub const ITI_78: Coded = Coded::fixed(
 
 /// The `ITI-119` subtype.
 pub const ITI_119: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-119", "Patient Demographics Match");
+
+/// The `ITI-8` subtype (ITI TF-2 §3.8.5.1.2: `EV("ITI-8", "IHE
+/// Transactions", "Patient Identity Feed")`).
+pub const ITI_8: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-8", "Patient Identity Feed");
+
+/// The `ITI-9` subtype (ITI TF-2 §3.9.5.1.2).
+pub const ITI_9: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-9", "PIX Query");
+
+/// The `ITI-21` subtype (ITI TF-2 §3.21.5.1.2).
+pub const ITI_21: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-21", "Patient Demographics Query");
+
+/// `EV(110110, DCM, "Patient Record")`, the event of a feed (ITI TF-2
+/// §3.8.5.1.2).
+pub const PATIENT_RECORD: Coded = Coded::fixed(DCM, "110110", "Patient Record");
+
+/// `EV(110112, DCM, "Query")`, the event of a query (ITI TF-2 §3.9.5.1.2,
+/// §3.21.5.1.2).
+pub const QUERY: Coded = Coded::fixed(DCM, "110112", "Query");
 
 /// Who called and where, as every record of one request names them.
 #[derive(Debug, Clone)]
@@ -266,6 +289,83 @@ pub fn feed(
         },
         outcome,
         vec![person_data(person), identifier.patient()],
+    )
+}
+
+/// Returns the record of an ITI-8 message that did `action` to `identifier`.
+///
+/// The message ended in `outcome`; ITI TF-2 §3.8.5.1.2 governs an add or a
+/// revision and §3.8.5.2.2 the two sides of a merge: `U` for the survivor,
+/// `D` for the subsumed identifier.
+#[must_use]
+pub fn v2_feed(call: &Call, action: Feed, identifier: &Identifier, outcome: Outcome) -> Exchange {
+    let code = match action {
+        Feed::Create => "C",
+        Feed::Update => "U",
+        Feed::Delete => "D",
+    };
+    call.exchange(
+        EventKind {
+            profile: "",
+            event_type: PATIENT_RECORD,
+            subtypes: vec![ITI_8],
+            action: code,
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        vec![identifier.patient()],
+    )
+}
+
+/// The query transaction of the HL7 v2 face a record is of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum V2Query {
+    /// ITI-9, the PIX Query.
+    Pix,
+    /// ITI-21, the Patient Demographics Query.
+    Pdq,
+}
+
+/// Returns the record of a v2 `query` that ended in `outcome`.
+///
+/// It carries the whole query message `message`, which the record writes
+/// base64-encoded (ITI TF-2 §3.9.5.1.2: "The complete query message
+/// (including MSH and QPD segments), base64 encoded"), and the patients the
+/// query concerned.
+///
+/// MSH-10 is the request id the call carries, its transaction entity.
+#[must_use]
+pub fn v2_query(
+    call: &Call,
+    query: V2Query,
+    message: SecretString,
+    identifiers: &[Identifier],
+    persons: &[String],
+    outcome: Outcome,
+) -> Exchange {
+    let subtype = match query {
+        V2Query::Pix => ITI_9,
+        V2Query::Pdq => ITI_21,
+    };
+    let mut entities = vec![Entity::Query(message)];
+    entities.extend(identifiers.iter().map(Identifier::patient));
+    entities.extend(
+        persons
+            .iter()
+            .map(|person| Entity::PatientReference(SecretString::from(person.clone()))),
+    );
+    call.exchange(
+        EventKind {
+            profile: "",
+            event_type: QUERY,
+            subtypes: vec![subtype],
+            action: "E",
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        entities,
     )
 }
 

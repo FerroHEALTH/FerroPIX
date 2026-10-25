@@ -713,7 +713,18 @@ transaction reads its text in full.
 - **Senders.** `[[hl7v2.senders]]` names each accepted sending application
   and facility (MSH-3, MSH-4) and the identifier domain it feeds, which is
   the v2 counterpart of a Source's client id: a message from an unlisted
-  sender is acknowledged `AR` and not applied.
+  sender is acknowledged `AR` and not applied. One sender feeds a domain
+  (ITI TF-2 §3.8.4.1.3), and a sender that names no domain may query and
+  not feed.
+- **Assigning authorities.** A universal id of type `ISO` names the domain
+  `urn:oid:<oid>`, one of type `URI` the domain of that system, and a
+  namespace id the domain `[hl7v2.namespaces]` maps it to; an answer writes
+  all three subcomponents (ITI TF-2 §3.9.4.2.2.5). No specification governs
+  the mapping to a FHIR system: our own design.
+- **One feed path.** An ITI-8 message is read as the ITI-104 message of the
+  same patient (PID through the HL7 v2-to-FHIR maps, an A40 as the Resolve
+  Duplicate message) and applied by the same feed transaction, and ITI-21
+  is read as the ITI-78 search it names, so the two faces cannot drift.
 - **ITI-8** (ADT A01, A04, A05, A08 add and revise, ITI TF-2 §3.8.4.1.1; A40
   merge, ITI TF-2 §3.8.4.2.1) writes a source record version from PID, with
   the domain from PID-3.4 checked against the sender's domain, and is

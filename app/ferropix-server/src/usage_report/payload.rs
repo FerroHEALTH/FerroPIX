@@ -251,10 +251,11 @@ pub struct Status {
 ///
 /// The declaration order is the order of the serialized names, so the
 /// report's `groups` object is written in name order.
-// TODO(#85): add the HL7 v2 message group and the acknowledgment counters once the MLLP listener lands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Group {
+    /// A message of the HL7 v2 face, from its frame to its answer.
+    Hl7v2,
     /// The capability statement and the SMART discovery document.
     Metadata,
     /// Every route of the operator API.
@@ -296,6 +297,21 @@ pub struct GroupStats {
 pub struct Counters {
     /// Responses with a 4xx status, over every counted group.
     pub responses_4xx: u64,
+    /// HL7 v2 messages answered `AE`.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub hl7v2_ae: u64,
+    /// HL7 v2 messages and frames answered `AR`.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub hl7v2_ar: u64,
+}
+
+/// Whether a counter is zero, so the report leaves it out.
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde's skip_serializing_if hands the field by reference"
+)]
+const fn is_zero(count: &u64) -> bool {
+    *count == 0
 }
 
 /// The window a daily report covers.

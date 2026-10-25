@@ -79,6 +79,16 @@ pub(crate) struct Harness {
     pub issuer: Issuer,
     /// The audit spool's parent directory.
     pub spool: tempfile::TempDir,
+    /// The store the router serves, which the HL7 v2 face shares.
+    pub store: Store,
+    /// The `[matching]` section the router scores with.
+    pub matching: ferropix_server::config::section::matching::Matching,
+    /// How the router answers a merged person.
+    pub deprecated: ferropix_server::config::section::profiles::Deprecated,
+    /// The public base URL the router is reached at.
+    pub public_base_url: url::Url,
+    /// The `[audit]` section the router records under.
+    pub audit_settings: ferropix_server::config::section::audit::AuditSettings,
     _postgres: Postgres,
     _secrets: Secrets,
 }
@@ -127,6 +137,11 @@ impl Harness {
             app: router(&settings.server, &health, Some(routes)),
             issuer,
             spool,
+            store,
+            matching: settings.matching.clone(),
+            deprecated: settings.pdqm.deprecated,
+            public_base_url: settings.server.public_base_url.clone(),
+            audit_settings: settings.audit.clone(),
             _postgres: postgres,
             _secrets: secrets,
         }

@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-10-25
+
 ### Added
 
 - The HL7 v2 face (#83): one MLLP Release 1 listener on `[hl7v2] listen`

@@ -4,8 +4,11 @@
 # The changelog guard (no specification governs it: our own design): a pull
 # request records its user-visible effect in CHANGELOG.md, under
 # [Unreleased], in the Keep a Changelog 1.1.0 layout. It passes when the
-# change adds at least one bullet to the [Unreleased] section, or cuts a
-# release: adds a `## [X.Y.Z]` section the fork did not have.
+# change adds at least one bullet to the [Unreleased] section, cuts a
+# release (adds a `## [X.Y.Z]` section the fork did not have), or adds a
+# bullet to the newest `## [X.Y.Z]` section while no `vX.Y.Z` tag exists: a
+# fix that lands between the release pull request and the tag records itself
+# in the section the tag's notes are taken from.
 #
 #   changelog-guard.sh <base-ref> [head-ref]
 #   changelog-guard.sh --self-test
@@ -30,6 +33,11 @@ unreleased() {
   awk '/^## \[Unreleased\]/ { p = 1; next } p && /^## \[/ { exit } p && /^- / { print }'
 }
 
+# The bullets of the `## [$1]` section of the CHANGELOG.md read on stdin.
+section() {
+  awk -v v="$1" 'index($0, "## [" v "]") == 1 { p = 1; next } p && /^## \[/ { exit } p && /^- / { print }'
+}
+
 # The self-test builds a stub repository in a temporary directory, with a copy
 # of this script in it, and runs the guard there as CI does: the base is
 # main's tip and the head is the branch.
@@ -48,7 +56,7 @@ self_test() {
   # caller's reaches it.
   stub_git() {
     git -C "$work" -c user.name=self-test -c user.email=self-test@example.org \
-      -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+      -c commit.gpgsign=false -c tag.gpgsign=false -c core.hooksPath=/dev/null "$@"
   }
   commit() {
     stub_git add -A
@@ -74,6 +82,7 @@ self_test() {
   printf '# Changelog\n\n## [Unreleased]\n\n## [0.0.1] - 2026-10-20\n\n### Added\n\n- Released.\n' > "$work/CHANGELOG.md"
   echo 'code' > "$work/code.txt"
   commit "the fork point"
+  stub_git tag v0.0.1
 
   branch entry
   echo 'more code' >> "$work/code.txt"
@@ -93,6 +102,17 @@ self_test() {
   perl -0pi -e 's/## \[Unreleased\]\n/## [Unreleased]\n\n### Fixed\n\n- From main.\n/' "$work/CHANGELOG.md"
   commit "main gains an entry after every branch forked"
 
+  # main cuts 0.0.2 and leaves it untagged; a fix records itself in the cut.
+  perl -0pi -e 's/## \[Unreleased\]\n\n### Fixed\n\n- From main\.\n/## [Unreleased]\n\n## [0.0.2] - 2026-10-21\n\n### Fixed\n\n- From main.\n/' "$work/CHANGELOG.md"
+  commit "main cuts 0.0.2"
+  branch late-fix
+  echo 'a late fix' >> "$work/code.txt"
+  perl -0pi -e 's/- From main\.\n/- From main.\n- A late fix.\n/' "$work/CHANGELOG.md"
+  commit "a fix recorded in the untagged cut section"
+  branch older
+  perl -0pi -e 's/- Released\.\n/- Released.\n- An addition to a tagged release.\n/' "$work/CHANGELOG.md"
+  commit "a bullet added to an older, tagged section"
+
   expect "a change that adds an entry" 0 entry
   expect "a change that edits a released section only" 1 released
   expect "a release cut" 0 release
@@ -102,6 +122,15 @@ self_test() {
     cat "$work/out" >&2
     exit 1
   }
+  expect "a bullet added to the untagged cut section" 0 late-fix
+  grep -q 'untagged release 0.0.2' "$work/out" || {
+    echo "changelog-guard: self-test failed: the pass did not name the untagged section." >&2
+    cat "$work/out" >&2
+    exit 1
+  }
+  expect "a bullet added to an older, tagged section" 1 older
+  stub_git tag v0.0.2 main
+  expect "a bullet added to the cut section once it is tagged" 1 late-fix
   echo "changelog-guard: self-test passed."
 }
 
@@ -131,6 +160,17 @@ if [[ -n "$added" ]]; then
   echo "changelog-guard: the change adds to [Unreleased]:"
   while IFS= read -r line; do echo "  $line"; done <<< "$added"
   exit 0
+fi
+newest="$(git show "$head:CHANGELOG.md" 2> /dev/null | versions | head -n 1 || true)"
+if [[ -n "$newest" ]] && ! git rev-parse -q --verify "refs/tags/v$newest" > /dev/null; then
+  before="$(git show "$fork:CHANGELOG.md" 2> /dev/null | section "$newest" || true)"
+  after="$(git show "$head:CHANGELOG.md" 2> /dev/null | section "$newest" || true)"
+  added="$(comm -13 <(sort <<< "$before") <(sort <<< "$after") | sed '/^$/d')"
+  if [[ -n "$added" ]]; then
+    echo "changelog-guard: the change adds to the untagged release $newest:"
+    while IFS= read -r line; do echo "  $line"; done <<< "$added"
+    exit 0
+  fi
 fi
 cut="$(comm -13 <(git show "$fork:CHANGELOG.md" 2> /dev/null | versions | sort) <(git show "$head:CHANGELOG.md" 2> /dev/null | versions | sort) | sed '/^$/d')"
 if [[ -n "$cut" ]]; then

@@ -18,10 +18,9 @@ set, the span export. The PIXm Manager, the PDQm Supplier and the operator
 API serve today
 ([The PIXm Manager](../integrate/pixm-manager.md),
 [The PDQm Supplier](../integrate/pdqm-supplier.md),
-[The operator API](operator-api.md)). The HL7 v2 listener behind
-`[hl7v2]` ([#85](https://github.com/FerroHEALTH/FerroPIX/issues/85)) and
-the PMIR Registry behind `[pmir]`
-([#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)) are built
+[The HL7 v2 face](../integrate/hl7v2-face.md),
+[The operator API](operator-api.md)). The PMIR Registry behind `[pmir]`
+([#101](https://github.com/FerroHEALTH/FerroPIX/issues/101)) is built
 next. A key whose
 service is not built yet is still checked, so a configuration you write today
 keeps working when the service lands.
@@ -284,16 +283,19 @@ stays the record. A system named twice is refused.
 |---|---|---|
 | `hl7v2.enabled` | `false` | Whether the MLLP listener runs. |
 | `hl7v2.listen` | `"0.0.0.0:2575"` | The socket address the listener binds. |
-| `hl7v2.default_charset` | `"ASCII"` | The HL7 table 0211 character set of a message with an empty MSH-18. |
+| `hl7v2.default_charset` | `"ASCII"` | The HL7 table 0211 character set of a message with an empty MSH-18: `ASCII`, `UNICODE UTF-8` or an `8859/n` part. |
 | `hl7v2.frame_limit_bytes` | `1048576` | The largest message one frame may carry. |
 | `hl7v2.idle_timeout_ms` | `300000` | How long a connection may sit idle between frames. |
 | `hl7v2.frame_timeout_ms` | `30000` | How long one frame may take to arrive. |
 | `hl7v2.senders[].application` | none | The sending application, MSH-3. |
 | `hl7v2.senders[].facility` | none | The sending facility, MSH-4. |
-| `hl7v2.senders[].domain` | none | The system of the identifier domain the sender feeds. |
+| `hl7v2.senders[].domain` | none | The system of the identifier domain the sender feeds; leave it out for a sender that only queries. |
+| `hl7v2.namespaces` | none | A table from a domain's system to its HL7 namespace id, the first subcomponent of an assigning authority. |
 
-A message from a sender not listed is refused. A sending application and
-facility listed twice is refused.
+A message from a sender not listed is answered `AR`. A sending application
+and facility listed twice, two senders of one domain, and one namespace id
+for two domains are refused at load. The drain on `SIGTERM` is
+`server.drain_timeout_ms`, the HTTP server's.
 
 ### `[audit]`
 

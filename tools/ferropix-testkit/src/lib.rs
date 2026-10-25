@@ -13,7 +13,8 @@
 //! into the FHIR R4 model; [`guard`] refuses a fixture that carries a BSN
 //! outside the synthetic range or a name outside the synthetic set; and
 //! [`pins`] reads the container image rows of `docs/VERSIONS.md`; [`otlp`]
-//! is the in-process OTLP collector the span export is tested against.
+//! is the in-process OTLP collector the span export is tested against;
+//! [`mllp`] is the MLLP sender the HL7 v2 face is driven with.
 //!
 //! No specification governs the test topology: our own design, after
 //! FerroFED's and FerroBRIDGE's testkits.
@@ -22,6 +23,7 @@
 pub mod containers;
 pub mod fixtures;
 pub mod guard;
+pub mod mllp;
 pub mod oidc;
 pub mod otlp;
 pub mod pins;

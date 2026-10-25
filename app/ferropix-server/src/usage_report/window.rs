@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
+use ferrobridge_hl7v2::ack::Code;
 use http::{Method, StatusCode};
 
 use crate::auth::table::{self, Mount};
@@ -146,6 +147,10 @@ pub struct Counts {
     pub groups: BTreeMap<Group, GroupCounts>,
     /// Responses with a 4xx status, over every counted group.
     pub responses_4xx: u64,
+    /// HL7 v2 messages answered `AE`.
+    pub hl7v2_ae: u64,
+    /// HL7 v2 messages and frames answered `AR`.
+    pub hl7v2_ar: u64,
 }
 
 impl Counts {
@@ -170,6 +175,8 @@ impl Counts {
                     .collect(),
                 counters: Counters {
                     responses_4xx: self.responses_4xx.min(MAX_COUNT),
+                    hl7v2_ae: self.hl7v2_ae.min(MAX_COUNT),
+                    hl7v2_ar: self.hl7v2_ar.min(MAX_COUNT),
                 },
             },
         }
@@ -181,6 +188,8 @@ impl Counts {
             self.groups.entry(*group).or_default().absorb(counts);
         }
         self.responses_4xx = self.responses_4xx.saturating_add(other.responses_4xx);
+        self.hl7v2_ae = self.hl7v2_ae.saturating_add(other.hl7v2_ae);
+        self.hl7v2_ar = self.hl7v2_ar.saturating_add(other.hl7v2_ar);
     }
 }
 
@@ -236,6 +245,20 @@ impl Window {
         if status.is_server_error() {
             entry.errors_5xx = entry.errors_5xx.saturating_add(1);
         }
+    }
+
+    /// Records one HL7 v2 message that took `elapsed` and was answered with
+    /// `code`, `None` for one left unanswered: its latency in the `hl7v2`
+    /// group, and an `AE` or `AR` in its counter. Nothing of the message
+    /// reaches the window.
+    pub fn record_message(&self, elapsed: Duration, code: Option<Code>) {
+        let mut counts = self.lock();
+        match code {
+            Some(Code::Error) => counts.hl7v2_ae = counts.hl7v2_ae.saturating_add(1),
+            Some(Code::Reject) => counts.hl7v2_ar = counts.hl7v2_ar.saturating_add(1),
+            Some(Code::Accept) | None => {}
+        }
+        counts.groups.entry(Group::Hl7v2).or_default().time(elapsed);
     }
 
     /// Takes the counts recorded so far and starts a fresh window.

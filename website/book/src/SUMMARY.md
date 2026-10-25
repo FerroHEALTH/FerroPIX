@@ -16,6 +16,7 @@
 - [Getting started](integrate/getting-started.md)
 - [The PIXm Manager](integrate/pixm-manager.md)
 - [The PDQm Supplier](integrate/pdqm-supplier.md)
+- [The HL7 v2 face](integrate/hl7v2-face.md)
 - [The published crates](crates/index.md)
   - [ihe-iti](crates/ihe-iti.md)
   - [nl-generic-functions](crates/nl-generic-functions.md)

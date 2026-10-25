@@ -55,6 +55,11 @@ ferropix-operator-api = { path = "../ferropix-operator-api" }
 # route of the FHIR face and the operator API, and `fetch` reads each
 # issuer's metadata and key set.
 ferrohealth-smart = { workspace = true, features = ["axum", "fetch"] }
+# The HL7 v2 face: the MLLP listener, the decoder, the parser over the
+# generated tables and the acknowledgment of FerroBRIDGE (CLAUDE.md, Scope:
+# never a second parser).
+ferrobridge-hl7v2.workspace = true
+hl7v2-types.workspace = true
 http.workspace = true
 # The date the capability statement carries.
 jiff.workspace = true

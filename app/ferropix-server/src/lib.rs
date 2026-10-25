@@ -18,6 +18,7 @@ pub mod feed;
 pub mod fhir;
 pub mod health;
 pub mod healthcheck;
+pub mod hl7v2;
 pub mod http;
 pub mod matching;
 pub mod operator;
@@ -379,6 +380,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let domains = store::seed::stored(&store)
         .await
         .map_err(ServeError::Store)?;
+    let services = services(&settings);
     let Settings {
         profile,
         server,
@@ -393,16 +395,6 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         usage_report: report_settings,
         ..
     } = settings;
-    let services = [
-        (hl7v2.is_some(), usage_report::payload::Service::Hl7v2),
-        (operator.enabled, usage_report::payload::Service::Operator),
-        (pdqm.enabled, usage_report::payload::Service::Pdqm),
-        (pixm.enabled, usage_report::payload::Service::Pixm),
-        (pmir.enabled, usage_report::payload::Service::Pmir),
-    ]
-    .into_iter()
-    .filter_map(|(on, service)| on.then_some(service))
-    .collect();
     let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
     let smart = Arc::new(
         auth::Smart::discover(auth, &domains)
@@ -412,9 +404,8 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let mounts = fhir::Mounts::of(&pixm, &pdqm, &pmir, &operator);
     let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
     let draining = audit.drain();
-    let health = health::Registry::default()
-        .and(Arc::new(store::indicator::Database::new(store.clone())))
-        .and(Arc::new(audit::Headroom(audit.clone())));
+    let listening = hl7v2::Listening::default();
+    let health = registry(&store, &audit, hl7v2.as_ref().map(|_| &listening));
     let guarded = fhir::routes(
         &server.base_path,
         &server.public_base_url,
@@ -424,20 +415,12 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &audit,
         &fhir::Backend {
             store: store.clone(),
-            matching,
+            matching: matching.clone(),
             deprecated: pdqm.deprecated,
         },
     );
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
-    let listener = TcpListener::bind(server.listen)
-        .await
-        .map_err(ServeError::Io)?;
-    tracing::info!(
-        listen = %listener.local_addr().map_err(ServeError::Io)?,
-        base_path = server.base_path.as_str(),
-        version = env!("CARGO_PKG_VERSION"),
-        "ferropix serving"
-    );
+    let listener = bind(&server).await?;
     let reporting = usage_report::reporter::start(
         &report_settings,
         usage_report::reporter::Sources {
@@ -449,22 +432,159 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         usage_report::ci_of(|name| std::env::var(name).ok()),
     )
     .await;
+    let (signal, stopped) = stop_signal();
+    let mllp = match &hl7v2 {
+        Some(settings) => Some(
+            start_mllp(
+                settings,
+                hl7v2::Face::new(
+                    &store,
+                    &matching,
+                    pdqm.deprecated,
+                    &server.public_base_url,
+                    &audit,
+                    settings,
+                )
+                .with_usage(Arc::clone(&window)),
+                server.drain_timeout,
+                listening,
+                stopped_by(stopped.clone()),
+            )
+            .await?,
+        ),
+        None => None,
+    };
     let served = http::serve_until(
         listener,
         http::router(&server, &health, Some(guarded)).layer(axum::Extension(window)),
         server.drain_timeout,
-        http::shutdown_signal(),
+        stopped_by(stopped),
     )
     .await
     .map_err(ServeError::Io);
-    if let Some(draining) = draining {
-        draining.abort();
+    signal.abort();
+    if let Some(mllp) = mllp {
+        drained(mllp).await;
     }
-    if let Some(reporting) = reporting {
-        reporting.abort();
+    for task in [draining, reporting].into_iter().flatten() {
+        task.abort();
     }
     store.close().await;
     served
+}
+
+/// Returns the readiness registry: the database, the audit spool's
+/// headroom and, when the HL7 v2 face runs, its listener.
+fn registry(
+    store: &store::Store,
+    audit: &audit::Audit,
+    listening: Option<&hl7v2::Listening>,
+) -> health::Registry {
+    let health = health::Registry::default()
+        .and(Arc::new(store::indicator::Database::new(store.clone())))
+        .and(Arc::new(audit::Headroom(audit.clone())));
+    match listening {
+        Some(listening) => health.and(Arc::new(listening.clone())),
+        None => health,
+    }
+}
+
+/// Binds the HTTP listener `server` names and logs the serving line.
+///
+/// # Errors
+/// Returns [`ServeError::Io`] when the listener cannot be bound.
+async fn bind(server: &config::section::server::ServerSettings) -> Result<TcpListener, ServeError> {
+    let listener = TcpListener::bind(server.listen)
+        .await
+        .map_err(ServeError::Io)?;
+    tracing::info!(
+        listen = %listener.local_addr().map_err(ServeError::Io)?,
+        base_path = server.base_path.as_str(),
+        version = env!("CARGO_PKG_VERSION"),
+        "ferropix serving"
+    );
+    Ok(listener)
+}
+
+/// Returns the services `settings` switch on, as the usage report names
+/// them.
+fn services(settings: &Settings) -> Vec<usage_report::payload::Service> {
+    [
+        (
+            settings.hl7v2.is_some(),
+            usage_report::payload::Service::Hl7v2,
+        ),
+        (
+            settings.operator.enabled,
+            usage_report::payload::Service::Operator,
+        ),
+        (settings.pdqm.enabled, usage_report::payload::Service::Pdqm),
+        (settings.pixm.enabled, usage_report::payload::Service::Pixm),
+        (settings.pmir.enabled, usage_report::payload::Service::Pmir),
+    ]
+    .into_iter()
+    .filter_map(|(on, service)| on.then_some(service))
+    .collect()
+}
+
+/// Waits for `SIGTERM` or `SIGINT` in a task of its own and returns the
+/// task and the flag it raises, which every listener drains on.
+fn stop_signal() -> (
+    tokio::task::JoinHandle<()>,
+    tokio::sync::watch::Receiver<bool>,
+) {
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let signal = tokio::spawn(async move {
+        http::shutdown_signal().await;
+        let _sent = stop.send(true);
+    });
+    (signal, stopped)
+}
+
+/// Completes once `stopped` is raised.
+async fn stopped_by(mut stopped: tokio::sync::watch::Receiver<bool>) {
+    let _changed = stopped.wait_for(|stop| *stop).await;
+}
+
+/// Waits for the MLLP listener's task to finish its drain, logging how it
+/// ended.
+async fn drained(mllp: tokio::task::JoinHandle<std::io::Result<()>>) {
+    match mllp.await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::error!(%error, "the MLLP listener failed"),
+        Err(error) => tracing::error!(%error, "the MLLP listener's task failed"),
+    }
+}
+
+/// Binds the MLLP listener `settings` names and serves `face` on it in a
+/// task of its own until `shutdown` completes, draining within `drain`.
+///
+/// # Errors
+/// Returns [`ServeError::Io`] when the listener cannot be bound.
+async fn start_mllp<F>(
+    settings: &config::section::hl7v2::Hl7v2Settings,
+    face: hl7v2::Face,
+    drain: std::time::Duration,
+    listening: hl7v2::Listening,
+    shutdown: F,
+) -> Result<tokio::task::JoinHandle<std::io::Result<()>>, ServeError>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let socket = TcpListener::bind(settings.listen)
+        .await
+        .map_err(ServeError::Io)?;
+    tracing::info!(
+        listen = %socket.local_addr().map_err(ServeError::Io)?,
+        "the MLLP listener is accepting"
+    );
+    Ok(tokio::spawn(hl7v2::serve_until(
+        socket,
+        Arc::new(face),
+        hl7v2::Listener::of(settings, drain),
+        listening,
+        shutdown,
+    )))
 }
 
 /// Runs `job` on a multi-threaded runtime.

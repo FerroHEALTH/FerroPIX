@@ -5,10 +5,10 @@
 #
 # Vendors the three IHE ITI Technical Framework Volume 1 chapters FerroFED's
 # country research cited into docs/specs/ihe-iti-tf/: XUA (ch. 13), XCA
-# (ch. 18) and XCPD (ch. 27), and the two Volume 2 transactions the XCPD code
-# cites by section into docs/specs/ihe-iti-tf-vol2/: Cross Gateway Query
-# [ITI-38], committed, and Cross Gateway Patient Discovery [ITI-55], fetched
-# into the git-ignored .vendor-cache/ihe-iti-tf-vol2/ alone. The five HL7 v2
+# (ch. 18) and XCPD (ch. 27), and the Volume 2 pages the XCPD code cites by
+# section into docs/specs/ihe-iti-tf-vol2/: Cross Gateway Query [ITI-38] and
+# Appendix V, committed, and Cross Gateway Patient Discovery [ITI-55],
+# fetched into the git-ignored .vendor-cache/ihe-iti-tf-vol2/ alone. The five HL7 v2
 # transactions of PIX and PDQ (ITI-8, ITI-9, ITI-10, ITI-21 and ITI-22) are
 # fetched into .vendor-cache/ihe-iti-tf-hl7v2/ alone, with their
 # PROVENANCE.md in docs/specs/ihe-iti-tf-hl7v2/. Every page is taken as
@@ -61,8 +61,8 @@ material, and these Volume 1 chapters reproduce no HL7 table. The Volume 2
 transaction text of ITI-38 and ITI-55 is the corpus
 \`docs/specs/ihe-iti-tf-vol2/\`, beside this one."
 
-# The Volume 2 transaction pages the identity code cites by section: Cross
-# Gateway Query [ITI-38], committed, and Cross Gateway Patient Discovery
+# The Volume 2 pages the identity code cites by section: Cross Gateway Query
+# [ITI-38] and Appendix V, committed, and Cross Gateway Patient Discovery
 # [ITI-55], cache only. General Introduction §9.1.2 reserves every right in
 # the HL7 tables IHE reproduces by permission, and the ITI-55 page carries the
 # HL7 Version 3 message information model tables of its two messages.
@@ -76,14 +76,22 @@ pin cache ITI-55.html "ITI TF Volume 2, the page states Revision 20.1, served on
   https://profiles.ihe.net/ITI/TF/Volume2/ITI-55.html \
   67dcce3339dd2fae07db50422c02f36e8d11053b5740aceef847361e33bfb801 "$hl7" \
   "Rendered HTML page whose bytes may change on a re-render."
+pin commit ch-V.html "ITI TF Volume 2, the page states Revision 20.0, served on 2026-10-25" \
+  https://profiles.ihe.net/ITI/TF/Volume2/ch-V.html \
+  4ce409b8f7d549a7ff30a587376f3b67afd67a3a43841c2a04ca4a9f3c6b7e33 "$ihe" \
+  "Rendered HTML page whose bytes may change on a re-render. The page links one figure, media/Figure_V.5.2-1.png, which is not taken."
 pinned_corpus ihe-iti-tf-vol2 "IHE ITI Technical Framework Volume 2 pages" \
-  "IHE ITI Technical Framework Volume 2, transactions ITI-38 and ITI-55" \
+  "IHE ITI Technical Framework Volume 2, transactions ITI-38 and ITI-55, and Appendix V" \
   "The Cross Gateway Query [ITI-38] and Cross Gateway Patient Discovery
 [ITI-55] transactions, whose sections the XCPD code cites and the IHE
-section citation guard (\`scripts/checks/ihe-citations.sh\`) checks. ITI-38 is IHE's own text, which the General Introduction §9
+section citation guard (\`scripts/checks/ihe-citations.sh\`) checks, and
+Appendix V, Web Services for IHE Transactions, whose synchronous and
+asynchronous exchange (V.5) and WS-Addressing rules (V.3.2.2) the XCPD
+Responding Gateway follows. ITI-38 and Appendix V are IHE's own text, which the General Introduction §9
 (<https://profiles.ihe.net/GeneralIntro/ch-9.html>) licenses for
-reproduction and distribution; it names the OASIS ebXML registry standards
-and reproduces none of their text. ITI-55 reproduces HL7 Version 3 tables,
+reproduction and distribution; ITI-38 names the OASIS ebXML registry
+standards and Appendix V the W3C, OASIS, WS-I and HL7 web services
+profiles, and neither reproduces a table of them. ITI-55 reproduces HL7 Version 3 tables,
 whose rights HL7 reserves (General Introduction §9.1.2), so it is cache
 only: the guard checks the ITI-55 citations against the cached page when a
 local run has fetched it, and counts them otherwise." \

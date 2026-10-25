@@ -32,6 +32,8 @@ use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid, PatientIdentifier};
 use ihe_iti::xcpd::request::{DiscoveryQuery, ProcessingCode, RespondingGateway};
 use secrecy::{ExposeSecret as _, SecretString};
 use tower::ServiceExt as _;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::decisions::{fed, patient};
 use super::pixm::{Harness, synthetic_seeds};
@@ -65,14 +67,19 @@ fn oid(text: &str) -> Oid {
     Oid::new(text).expect("an OID")
 }
 
-/// The `[xcpd]` section of the gateway: the hospital's domain first.
-fn settings() -> XcpdSettings {
+/// The `[xcpd]` section of the gateway: the hospital's domain first,
+/// delivering to `reply_endpoints` with a short wait between attempts.
+fn settings(reply_endpoints: &[String]) -> XcpdSettings {
     Xcpd {
         enabled: true,
         home_community_id: format!("urn:oid:{COMMUNITY}"),
         device: DEVICE.to_owned(),
         domains: vec![HOSPITAL_DOMAIN.to_owned(), LABORATORY_DOMAIN.to_owned()],
         initiating_communities: vec![format!("urn:oid:{INITIATING}")],
+        reply_endpoints: reply_endpoints.to_vec(),
+        delivery_attempts: 3,
+        delivery_initial_backoff_ms: 10,
+        ..Xcpd::default()
     }
     .resolve()
     .expect("the section resolves")
@@ -82,16 +89,24 @@ fn settings() -> XcpdSettings {
 /// Returns the gateway's router over the harness's store, scoring with
 /// `matching`, recording to the harness's spool.
 fn gateway(harness: &Harness, matching: &Matching) -> Router {
+    gateway_with(harness, matching, settings(&[]))
+}
+
+/// Returns the gateway's router over the harness's store as `xcpd` sets it.
+fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSettings) -> Router {
     let mut audit_settings = harness.audit_settings.clone();
     audit_settings.spool_dir = harness.spool.path().join("spool");
     let audit = Audit::open(&audit_settings, &harness.public_base_url).expect("the spool opens");
-    routes(Gateway::new(
-        &harness.store,
-        matching,
-        settings(),
-        &harness.public_base_url,
-        &audit,
-    ))
+    routes(
+        Gateway::new(
+            &harness.store,
+            matching,
+            xcpd,
+            &harness.public_base_url,
+            &audit,
+        )
+        .expect("the gateway starts"),
+    )
 }
 
 /// Feeds the store: Sanne Wolderink in the hospital, and two records of
@@ -155,6 +170,18 @@ fn request(community: &str, target: Option<&str>, priority: &str, parameters: &s
   </PRPA_IN201305UV02>
  </soap:Body>
 </soap:Envelope>"#
+    )
+}
+
+/// The query of `request` sent asynchronously, its answer wanted at
+/// `reply_to` (ITI TF-2 V.9.2.3).
+fn asynchronous(reply_to: &str, parameters: &str) -> String {
+    request(INITIATING, None, "I", parameters).replacen(
+        "</wsa:MessageID>",
+        &format!(
+            "</wsa:MessageID>\n  <wsa:ReplyTo><wsa:Address>{reply_to}</wsa:Address></wsa:ReplyTo>"
+        ),
+        1,
     )
 }
 
@@ -462,4 +489,112 @@ async fn no_identifier_or_name_reaches_a_log_line() {
     {
         assert!(!logged.contains(value), "{value} reached a log line");
     }
+}
+
+/// Waits until `stub` has received `count` requests and returns them.
+async fn received(stub: &MockServer, count: usize) -> Vec<wiremock::Request> {
+    for _ in 0..200 {
+        let requests = stub.received_requests().await.expect("recording is on");
+        if requests.len() >= count {
+            return requests;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    panic!("the stub did not receive {count} requests");
+}
+
+#[tokio::test]
+async fn an_asynchronous_query_is_accepted_and_its_answer_posted_to_its_reply_endpoint() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(synthetic_seeds()).await;
+    seeded(&harness).await;
+    let stub = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/replies"))
+        .respond_with(ResponseTemplate::new(500))
+        .up_to_n_times(1)
+        .mount(&stub)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/replies"))
+        .respond_with(ResponseTemplate::new(202))
+        .mount(&stub)
+        .await;
+    let app = gateway_with(
+        &harness,
+        &harness.matching,
+        settings(&[format!("{}/", stub.uri())]),
+    );
+    let reply_to = format!("{}/replies", stub.uri());
+    let sanne = named("Sanne", "Wolderink", "19660817", FEMALE);
+    let (status, body) = post(&app, SOAP, asynchronous(&reply_to, &sanne)).await;
+    assert_eq!(StatusCode::ACCEPTED, status, "{body}");
+    assert!(
+        body.is_empty(),
+        "no envelope on the request's exchange: {body}"
+    );
+    let requests = received(&stub, 2).await;
+    assert_eq!(2, requests.len(), "retried once after the 500");
+    let answer = String::from_utf8(requests[1].body.clone()).expect("UTF-8");
+    assert_eq!(
+        Some("application/soap+xml; charset=UTF-8"),
+        requests[1]
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+    );
+    assert!(
+        answer.contains(
+            "<wsa:RelatesTo>urn:uuid:7f6a1d2c-0000-4000-8000-000000000231</wsa:RelatesTo>"
+        ),
+        "{answer}"
+    );
+    assert!(
+        answer.contains(&format!(
+            r#"<wsa:To soap:mustUnderstand="1">{reply_to}</wsa:To>"#
+        )),
+        "{answer}"
+    );
+    assert_eq!(1, events(&answer), "Case 1: {answer}");
+    assert!(
+        harness
+            .audit_texts()
+            .iter()
+            .any(|record| record.contains("ITI-55") && record.contains(&reply_to)),
+        "the record names the ReplyTo as the source"
+    );
+}
+
+#[tokio::test]
+async fn a_reply_endpoint_not_configured_is_refused_and_nothing_is_posted() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(synthetic_seeds()).await;
+    seeded(&harness).await;
+    let stub = MockServer::start().await;
+    let app = gateway_with(
+        &harness,
+        &harness.matching,
+        settings(&[String::from("https://ig.example.org/")]),
+    );
+    let sanne = named("Sanne", "Wolderink", "19660817", FEMALE);
+    let (status, fault) = post(
+        &app,
+        SOAP,
+        asynchronous(&format!("{}/replies", stub.uri()), &sanne),
+    )
+    .await;
+    assert_eq!(StatusCode::BAD_REQUEST, status);
+    assert!(fault.contains("Fault"), "{fault}");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        stub.received_requests()
+            .await
+            .expect("recording is on")
+            .is_empty(),
+        "no answer posted"
+    );
 }

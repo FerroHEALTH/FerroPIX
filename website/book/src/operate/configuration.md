@@ -306,9 +306,16 @@ for two domains are refused at load. The drain on `SIGTERM` is
 | `xcpd.device` | none | The OID of the gateway's device, the sender of every answer. |
 | `xcpd.domains` | none | The `urn:oid:` systems of the domains whose identifiers an answer carries; the first a patient holds is its `Patient.id`. |
 | `xcpd.initiating_communities` | `[]` | The `homeCommunityId`s of the initiating communities answered; a query from another is answered with Case 5. |
+| `xcpd.reply_endpoints` | `[]` | The URL prefixes an asynchronous request's `ReplyTo` may start with, each `https`, or `http` on a loopback host. |
+| `xcpd.delivery_attempts` | `5` | The most attempts to post one asynchronous answer. |
+| `xcpd.delivery_initial_backoff_ms` | `1000` | The wait before the first retry. |
+| `xcpd.delivery_max_backoff_ms` | `60000` | The longest wait between two attempts. |
+| `xcpd.delivery_timeout_ms` | `10000` | How long one attempt may take. |
 
-A value that is no OID, a domain that is no `urn:oid:` system, and a domain
-or community listed twice are refused at load. See
+A value that is no OID, a domain that is no `urn:oid:` system, a domain or
+community listed twice, a reply endpoint that is neither `https` nor `http`
+on a loopback host or that carries userinfo, and a zero delivery bound are
+refused at load. See
 [The XCPD Responding Gateway](../integrate/xcpd-gateway.md).
 
 ### `[audit]`

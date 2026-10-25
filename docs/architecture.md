@@ -770,9 +770,10 @@ ITI TF-2 text prescribes.
 
 ### 7.1 The XCPD Responding Gateway
 
-ITI-55 (ITI TF-2 §3.55) is answered synchronously at `POST {base}/xcpd`
-behind `[xcpd]`, read and written by `ihe-iti`'s `xcpd::responding`
-(D32). The ITI-55 text is vendored cache only, as section 7 says.
+ITI-55 (ITI TF-2 §3.55) is answered at `POST {base}/xcpd` behind
+`[xcpd]`, read and written by `ihe-iti`'s `xcpd::responding` (D32). The
+ITI-55 text is vendored cache only, as section 7 says; Appendix V, the
+web services text, is committed beside ITI-38.
 
 - **The match.** An identifier of the query in a domain the store holds is
   looked up in the cross-reference; with none found, the demographics are
@@ -784,8 +785,16 @@ behind `[xcpd]`, read and written by `ihe-iti`'s `xcpd::responding`
   `urn:oid:` system because an `II` root is an OID (ITI TF-2 Appendix E);
   the first held is `Patient.id`, the rest `OtherIDs` (Table
   3.55.4.2.2.2-1), and a person holding none is left out.
-- **Refusals.** A Deferred request is `NS250` (§3.55.4.1.3) until the
-  Deferred Response Option lands (#232); an unlisted initiating community
+- **The asynchronous exchange.** The Responding Gateway "shall support
+  Asynchronous Web Services Exchange" (§3.55.6). A request whose `ReplyTo`
+  is not the anonymous address is accepted `202` with no envelope
+  (WS-Addressing 1.0 SOAP Binding §5.2.2), and the answer is posted to the
+  `ReplyTo` with `RelatesTo` and `To` (Appendix V.9.2.4), retried with a
+  doubling wait and a bound. The `ReplyTo` must start with a configured
+  `[xcpd] reply_endpoints` prefix, so a request cannot steer the server's
+  outbound posts (D33). The pending answer lives in memory.
+- **Refusals.** A Deferred request is `NS250` (§3.55.4.1.3): the Deferred
+  Response Option is not offered (D33); an unlisted initiating community
   and an ambiguous identifier are Case 5 `AnswerNotAvailable`, another
   target community Case 5 (§3.55.4.1.3.2), a store fault Case 5
   `InternalError`.
@@ -1780,3 +1789,4 @@ The milestones carry the order; every issue cites the section it builds.
 | D30 | The reveal's record | the `reveal` steward action and the BALP Privacy Disclosure record in one transaction committed only once the record is stored, the value answered after the commit; the action and the record name the domain, never the value; the steward's reason a `reason` detail of the disclosed entity, `purposeOfEvent` left to the token's coded purposes; 15 seconds shown by default, 30 at most | BALP 1.1.4 §3:5.7.7 and its `PrivacyDisclosure.Source` profile fix the event, the agents and the patient; where a free-text reason goes, and the order of the writes, no specification governs: our own design (D10) |
 | D31 | The domain writes | an administrator adds a `local` or `authoritative` domain whose Source an issuer lists, renames it, gives it another Source or retires it; a retired domain stays retired; the guard takes the store's Sources at the commit | PIXm 3.1.0 §2:3.104.5 has the Manager check the Source of every change; the master domain is the server's own, and an unretire would revive identifiers PIXm already answers as unknown (§2:3.83.4.2.2.3) |
 | D32 | The XCPD Responding Gateway | synchronous ITI-55 over the cross-reference and the scorer; the answering domains and the initiating communities listed in `[xcpd]`; no bearer token on the SOAP endpoint | ITI TF-2 §3.55.4.1.3.1 leaves matching to the gateway; ITI TF-1 Table 27.1.3-1 groups the gateways with ATNA, whose mutual TLS the deployment terminates; which domains answer and which communities are served no specification governs: our own design |
+| D33 | XCPD's asynchronous exchange and the Deferred Response Option | the asynchronous exchange answered, posted only to a `ReplyTo` under a configured prefix with bounded retry held in memory; the Deferred Response Option not offered, a Deferred request answered `NS250` | ITI TF-2 §3.55.6 requires Asynchronous Web Services Exchange of the Responding Gateway, and §3.55.4.1.3 prescribes `NS250` for a gateway without the Deferred Response Option, which is a named option; restricting the reply endpoints and the retry bounds no specification governs: our own design, against a request steering the server's posts |

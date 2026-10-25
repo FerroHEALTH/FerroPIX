@@ -227,6 +227,26 @@ The message carries the query parameters, which name the patient, as a
 `AuditEvent::message` writes it as the DICOM PS3.15 audit message the
 Initiating Gateway's table fills, in `ihe-atna`'s ATNA model.
 
+`ihe_iti::xcpd::responding` is the Responding Gateway's side of ITI-55.
+`responding::query::read` reads a `PRPA_IN201305UV02` from its SOAP 1.2
+envelope in any of the three modes of §3.55.1: the WS-Addressing
+`MessageID`, a non-anonymous `ReplyTo` (an asynchronous exchange), the
+`CorrelationTimeToLive`, the sender's and the target community, the
+reverse-query assigning authority, the `responsePriorityCode` and every
+parameter of Table 3.55.4.1.2.2-1. It refuses a request that names neither an
+identifier nor a name and a birth time, with a typed `Refusal` that quotes
+nothing. `responding::answer::envelope` writes the `PRPA_IN201306UV02` of
+the case your matcher decided (Cases 1 to 5 of §3.55.4.2.3): one
+`RegistrationEvent` per match with the custodian's `homeCommunityId` and
+the Health Data Locator code, the `DetectedIssueEvent` of a request for more
+attributes or of an error, the `RelatesTo` of the request and the copy of its
+query. `answer::deferred_refused` writes the `NS250` acknowledgement of a
+Deferred request you do not take, and `answer::fault` a SOAP 1.2 fault.
+`responding::audit::RespondingAuditEvent` is the Responding Gateway audit
+message (§3.55.5.1.2); with `atna` its `message` writes the DICOM audit
+message. Matching, and the asynchronous exchange on the `ReplyTo`, are the
+deployment's.
+
 The XML is read and written with `quick-xml`, which the FHIR features
 compile already through `fhir-types`; `xcpd` adds only `uuid` for the
 message ids and `jiff` for the creation time, and no other feature but

@@ -13,6 +13,7 @@ mod answers;
 mod audit;
 mod contract;
 mod hygiene;
+mod responding;
 
 use std::path::PathBuf;
 use std::time::Duration;

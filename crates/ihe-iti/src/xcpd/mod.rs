@@ -81,6 +81,7 @@ pub mod discovery;
 pub mod error;
 pub mod identifier;
 pub mod request;
+pub mod responding;
 mod response;
 pub mod security;
 

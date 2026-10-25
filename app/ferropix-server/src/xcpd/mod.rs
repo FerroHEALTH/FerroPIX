@@ -601,6 +601,20 @@ mod tests {
     use super::requested;
 
     #[test]
+    fn the_vendored_soap_binding_holds_the_section_the_gateway_cites() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/specs/w3c-ws-addressing/ws-addr-soap-1.0.html"
+        );
+        let text = std::fs::read_to_string(path).expect("the vendored Recommendation reads");
+        assert!(text.contains("5.2.2 SOAP 1.2"), "§5.2.2 is in the text");
+        assert!(
+            text.contains("SHOULD NOT"),
+            "§5.2.2 says the response SHOULD NOT be the outbound message"
+        );
+    }
+
+    #[test]
     fn case_three_asks_for_the_scored_attributes_the_query_left_out() {
         assert_eq!(
             vec![

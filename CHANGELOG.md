@@ -12,6 +12,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- The W3C Web Services Addressing 1.0 SOAP Binding Recommendation is vendored
+  by `scripts/vendor/w3c-ws-addressing.sh` (#241), so the XCPD Responding
+  Gateway's citation of its §5.2.2 is checked against the text in the
+  repository.
+
 ### Fixed
 
 - The IHE citation guard reads the seventh-level headings profiles.ihe.net

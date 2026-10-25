@@ -38,9 +38,10 @@ values from `tokens.css` here verbatim.
 | `ferropix-icon-dark.svg` | the icon for a dark ground: the card and the tab in plum-light (`#C084FC`), the person and the identifiers in `#F3E8FF` |
 | `favicon.svg` | the tightened mark on a plum tile, for browser tabs; intrinsic size 64 |
 | `favicon-32.png`, `favicon-16.png`, `favicon.ico` | raster favicons |
+| `ferropix-lockup-auto.svg` | the mark and the wordmark side by side, switching between the light and dark tones on `prefers-color-scheme`, for the README and any page that serves one file to both themes |
 | `tokens.css` | the palette as CSS custom properties |
 
-The lockups and the social card follow when the product needs them.
+The social card follows when the product needs it.
 
 ## Where the palette applies
 

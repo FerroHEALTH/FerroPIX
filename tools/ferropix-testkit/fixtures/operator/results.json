@@ -1,0 +1,60 @@
+{
+  "total": 2,
+  "offset": 0,
+  "persons": [
+    {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+      "status": "active",
+      "leading": {
+        "names": [
+          {
+            "family": "Proefsma",
+            "given": [
+              "Ada"
+            ]
+          }
+        ],
+        "birth_date": "1980-02-29",
+        "gender": "female"
+      },
+      "identifiers": [
+        {
+          "domain": {
+            "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+            "system": "urn:oid:2.999.1.1",
+            "name": "Synthetic hospital",
+            "kind": "local"
+          },
+          "masked": "•••••••711"
+        }
+      ]
+    },
+    {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e",
+      "status": "active",
+      "leading": {
+        "names": [
+          {
+            "family": "Testrup",
+            "given": [
+              "Bram"
+            ]
+          }
+        ],
+        "birth_date": "1975-06-14",
+        "gender": "male"
+      },
+      "identifiers": [
+        {
+          "domain": {
+            "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+            "system": "urn:oid:2.999.1.1",
+            "name": "Synthetic hospital",
+            "kind": "local"
+          },
+          "masked": "•••••••802"
+        }
+      ]
+    }
+  ]
+}

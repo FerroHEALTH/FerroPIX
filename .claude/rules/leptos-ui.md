@@ -8,22 +8,22 @@ paths: ["app/ferropix-console/**"]
 # Leptos console rules (`app/ferropix-console`)
 
 **FerroUI leads the UI.** The console draws with `ferrohealth-ui`, pinned
-exactly in the root `[workspace.dependencies]` (today `=0.3.6`, a row of
+exactly in the root `[workspace.dependencies]` (today `=0.3.7`, a row of
 `docs/VERSIONS.md`), and the FerroUI repository (FerroHEALTH/FerroUI) is the
 source for its components, design, tokens, icons, accessibility bar,
 interaction contract, words and quality control. Read these first, at the git
-tag that matches the pin (today `v0.3.6`), and on `main` only while the
+tag that matches the pin (today `v0.3.7`), and on `main` only while the
 console moves to the next release:
 
-- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.6/docs/consoles.md):
+- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/docs/consoles.md):
   the consumer guide, what the library owns and what a console owns.
-- [`.claude/rules/leptos-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.6/.claude/rules/leptos-ui.md):
+- [`.claude/rules/leptos-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/.claude/rules/leptos-ui.md):
   the component rules of every FerroHEALTH console. The section numbers this
-  file cites (FerroUI §N) are those of the `v0.3.6` copy.
-- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.6/crates/ferrohealth-ui/CLAUDE.md):
+  file cites (FerroUI §N) are those of the `v0.3.7` copy.
+- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/crates/ferrohealth-ui/CLAUDE.md):
   the interaction contract and islands mode.
-- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.6/design/COMPONENTS.md)
-  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.3.6/design/consoles/ferropix):
+- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/design/COMPONENTS.md)
+  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.3.7/design/consoles/ferropix):
   every component by its ID, the family rules, and this console's pages as
   reviewed. FerroUI's `design/` is the only design source; a design folder
   anywhere else is stale and is never synced from.

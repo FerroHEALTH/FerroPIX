@@ -41,6 +41,8 @@ pub struct PixSettings {
     pub base: Url,
     /// How long one call to the server may take.
     pub timeout: Duration,
+    /// The scope of an administrator at the server.
+    pub admin_scope: String,
 }
 
 /// The resolved `[session]`.
@@ -154,7 +156,11 @@ impl Config {
             listen,
             site_root: self.server.site_root.clone(),
             locale,
-            pix: PixSettings { base, timeout },
+            pix: PixSettings {
+                base,
+                timeout,
+                admin_scope: self.pix.admin_scope.clone(),
+            },
             session,
             oidc,
         })

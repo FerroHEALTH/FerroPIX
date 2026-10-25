@@ -1,0 +1,14 @@
+{
+  "readiness": {
+    "state": "up",
+    "indicators": {
+      "database": {
+        "state": "up"
+      },
+      "hl7v2_listener": {
+        "state": "up"
+      }
+    }
+  },
+  "upstreams": []
+}

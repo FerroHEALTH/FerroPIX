@@ -24,6 +24,10 @@ pub struct Refreshed {
     pub expires_in: Option<Duration>,
     /// The new refresh token, when the provider rotated it.
     pub refresh_token: Option<SecretString>,
+    /// The scopes the provider granted the new access token, when it named
+    /// them; otherwise they are the scopes granted before (RFC 6749 §5.1,
+    /// §6).
+    pub scopes: Option<Vec<String>>,
 }
 
 impl fmt::Debug for Refreshed {
@@ -120,6 +124,9 @@ impl Sessions {
         if let Some(rotated) = refreshed.refresh_token {
             session.refresh_token = Some(rotated);
         }
+        if let Some(scopes) = refreshed.scopes {
+            session.scopes = scopes;
+        }
         Ok(true)
     }
 }
@@ -168,6 +175,7 @@ mod tests {
             grant(&sessions, &id).as_deref()
         );
         let refreshed = Refreshed {
+            scopes: None,
             access_token: SecretString::from("synthetic-access-2"),
             expires_in: Some(Duration::from_secs(3600)),
             refresh_token: None,
@@ -185,6 +193,7 @@ mod tests {
             .establish(expired("synthetic-refresh-1"))
             .expect("room");
         let refreshed = Refreshed {
+            scopes: None,
             access_token: SecretString::from("synthetic-access-2"),
             expires_in: Some(Duration::ZERO),
             refresh_token: Some(SecretString::from("synthetic-refresh-2")),
@@ -260,6 +269,7 @@ mod tests {
         assert!(sessions.refresh_due(&id, MARGIN).expect("usable").is_none());
         assert!(sessions.access_token(&id).expect("usable").is_some());
         let refreshed = Refreshed {
+            scopes: None,
             access_token: SecretString::from("synthetic-access-2"),
             expires_in: Some(Duration::from_secs(10)),
             refresh_token: None,
@@ -273,6 +283,7 @@ mod tests {
         let shown = format!(
             "{:?} {:?}",
             Refreshed {
+                scopes: None,
                 access_token: SecretString::from("synthetic-access-2"),
                 expires_in: None,
                 refresh_token: Some(SecretString::from("synthetic-refresh-2")),

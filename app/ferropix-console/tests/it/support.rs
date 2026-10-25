@@ -268,9 +268,19 @@ pub(crate) fn offline(server: &str) -> String {
     )
 }
 
+/// The administrator scope the console's default `[pix] admin_scope` names.
+pub(crate) const ADMIN_SCOPE: &str = "__ferropix.admin";
+
 /// Begins a signed-in session for the synthetic steward in `state`'s store,
-/// as a completed sign-in would, and returns its `name=value` cookie.
+/// as a completed sign-in granting the administrator scope would, and
+/// returns its `name=value` cookie.
 pub(crate) fn steward_session(state: &ConsoleState) -> String {
+    session_with(state, &["openid", "__ferropix.steward", ADMIN_SCOPE])
+}
+
+/// Begins a signed-in session whose sign-in granted `scopes`, and returns
+/// its `name=value` cookie.
+pub(crate) fn session_with(state: &ConsoleState, scopes: &[&str]) -> String {
     let id = state
         .sessions()
         .establish(ferropix_console::session::SignedIn {
@@ -279,6 +289,7 @@ pub(crate) fn steward_session(state: &ConsoleState) -> String {
             refresh_token: None,
             id_token: None,
             operator: Some(String::from(OPERATOR_NAME)),
+            scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
         })
         .expect("a session begins");
     format!("ferropix_console_session={}", id.as_str())

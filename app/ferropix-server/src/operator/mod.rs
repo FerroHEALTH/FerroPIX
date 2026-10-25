@@ -12,7 +12,9 @@
 //! - [`reveal`]: one identifier or pseudonym unmasked, a privacy disclosure.
 //! - [`domains`]: the identifier domains and, behind the administrator
 //!   scope, their writes.
-//! - [`matching`]: the matching configuration in effect.
+//! - [`sources`]: the systems allowed to feed, read from the configuration.
+//! - [`matching`]: the matching configuration in effect, and
+//!   [`configuration`] its settings with where each came from.
 //! - [`actions`]: the audit trail and its export.
 //!
 //! Every answer is a [`ferropix_operator_api`] document in JSON, never kept
@@ -25,6 +27,7 @@
 //! governs the API: our own design.
 
 pub mod actions;
+pub mod configuration;
 pub mod demographics;
 pub mod domains;
 pub mod matching;
@@ -32,6 +35,7 @@ pub mod overview;
 pub mod person;
 pub mod reveal;
 pub mod search;
+pub mod sources;
 pub mod wire;
 
 use std::sync::Arc;
@@ -52,6 +56,16 @@ use crate::matching::scorer::Scorer;
 use crate::store::seal::{IdentifierValue, SealError, Sealer};
 use crate::store::{Store, StoreError};
 
+/// What the configuration says beyond the matching section: where each
+/// setting came from, and the HL7 v2 senders.
+#[derive(Debug, Clone, Default)]
+pub struct Configured {
+    /// Where each setting came from.
+    pub origins: crate::config::origin::Origins,
+    /// The HL7 v2 senders, empty when the face is off.
+    pub senders: Vec<crate::config::section::hl7v2::Sender>,
+}
+
 /// What every operator route reads.
 #[derive(Debug, Clone)]
 pub struct Operator {
@@ -70,16 +84,20 @@ pub struct Operator {
     /// The operator API's base, `{public_base_url}/operator`, which the audit
     /// records name as the endpoint.
     endpoint: Url,
+    /// The rest of the configuration the operator API shows.
+    configured: Configured,
 }
 
 impl Operator {
-    /// Returns the routes' state over `store`, with `matching`, recording to
-    /// `audit`, replacing the domains of `sources` on a domain write, for a
-    /// server reached at `public_base_url`.
+    /// Returns the routes' state over `store`, with `matching` and the rest
+    /// of the configuration `configured`, recording to `audit`, replacing the
+    /// domains of `sources` on a domain write, for a server reached at
+    /// `public_base_url`.
     #[must_use]
     pub fn new(
         store: Store,
         matching: &Matching,
+        configured: Configured,
         audit: Audit,
         sources: Sources,
         public_base_url: &Url,
@@ -95,6 +113,7 @@ impl Operator {
             audit,
             sources,
             endpoint,
+            configured,
         }
     }
 }
@@ -174,6 +193,18 @@ pub fn handler(
         (Method::GET, "/operator/matching") => on(filter, move || {
             let operator = Arc::clone(&operator);
             async move { matching::answer(&operator) }
+        }),
+        (Method::GET, "/operator/sources") => on(filter, move || {
+            let operator = Arc::clone(&operator);
+            async move { sources::list(&operator).await }
+        }),
+        (Method::GET, "/operator/sources/{id}") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { sources::one(&operator, request).await }
+        }),
+        (Method::GET, "/operator/configuration") => on(filter, move || {
+            let operator = Arc::clone(&operator);
+            async move { configuration::answer(&operator) }
         }),
         (Method::GET, "/operator/actions") => on(filter, move |request: Request| {
             let operator = Arc::clone(&operator);

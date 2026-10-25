@@ -45,7 +45,7 @@ lockstep with every FerroHEALTH console on each release
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| FerroUI (`ferrohealth-ui`) | `=0.3.6` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.3.6` |
+| FerroUI (`ferrohealth-ui`) | `=0.3.7` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.3.7` |
 
 ## The console's build tools
 

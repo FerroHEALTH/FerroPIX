@@ -1,0 +1,43 @@
+{
+  "queue": {
+    "open": 7,
+    "waiting_over_week": 2,
+    "deferred": 1
+  },
+  "records_created_24h": 10,
+  "records_linked_24h": 4,
+  "versions_fed_today": 31,
+  "subscriptions_in_error": 1,
+  "queue_depth": [
+    {
+      "day": "2026-10-24",
+      "open": 5
+    },
+    {
+      "day": "2026-10-25",
+      "open": 7
+    }
+  ],
+  "feeds_per_hour": [
+    {
+      "hour": "2026-10-25T08:00:00Z",
+      "fhir": 3,
+      "v2": 2,
+      "pmir": 0
+    },
+    {
+      "hour": "2026-10-25T09:00:00Z",
+      "fhir": 1,
+      "v2": 4,
+      "pmir": 1
+    }
+  ],
+  "oldest": [
+    {
+      "candidate": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+      "created_at": "2026-10-17T10:00:00Z",
+      "score": 0.81,
+      "grade": "probable"
+    }
+  ]
+}

@@ -18,7 +18,7 @@
 use crate::journeys::browser::{Journey, WINDOW, with_journey};
 use crate::journeys::journeys_enabled;
 use crate::journeys::sign_in::sign_in;
-use crate::journeys::stack::{PREFERENCE_PREFIX, STEWARD, Stack};
+use crate::journeys::stack::{PREFERENCE_PREFIX, STEWARD, Server, Stack};
 use crate::journeys::{SCREENS, SIGN_IN_SCREENS};
 
 /// The pseudo-locale's tag.
@@ -67,9 +67,20 @@ return Array.from(found).join('\n');
 "#;
 
 /// The words that are the same in every language and so are never
-/// stretched: the maker's legal name, and the steward's name, which the
-/// provider sent and the console draws as it came.
-const KEPT: [&str; 2] = ["Cadasto B.V.", STEWARD];
+/// stretched: the maker's legal name, the steward's name, which the
+/// provider sent and the console draws as it came, and the data the filled
+/// stand-in serves, drawn as the server sent it.
+const KEPT: [&str; 9] = [
+    "Cadasto B.V.",
+    STEWARD,
+    "Ada Proefsma",
+    "Synthetic hospital",
+    "Synthetic Steward",
+    "Synthetic check",
+    "EAST|ADT",
+    "AA",
+    "AE",
+];
 
 /// Whether the page scrolls sideways: the overflow in CSS pixels and the
 /// innermost elements that reach past the viewport, or an empty string when
@@ -122,12 +133,10 @@ async fn read(journey: &Journey, stack: &Stack, path: &str, width: u32) -> Vec<S
     findings
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn every_screen_in_the_pseudo_locale_stretches_every_word_and_keeps_its_layout() {
-    if !journeys_enabled() {
-        return;
-    }
-    let stack = Stack::start().await;
+/// Reads every screen `answers` draws in the pseudo-locale at both widths,
+/// and fails with every defect.
+async fn every_screen(answers: Server) {
+    let stack = Stack::start_with(answers).await;
     with_journey(async |journey| {
         journey.open(&stack.url("/sign-in")).await;
         journey
@@ -151,10 +160,26 @@ async fn every_screen_in_the_pseudo_locale_stretches_every_word_and_keeps_its_la
         }
         assert!(
             findings.is_empty(),
-            "the pseudo-locale found {} defects:\n{}",
+            "the pseudo-locale over the {answers:?} screens found {} defects:\n{}",
             findings.len(),
             findings.join("\n")
         );
     })
     .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn every_screen_in_the_pseudo_locale_stretches_every_word_and_keeps_its_layout() {
+    if !journeys_enabled() {
+        return;
+    }
+    every_screen(Server::Refusing).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn every_filled_screen_in_the_pseudo_locale_stretches_every_word_and_keeps_its_layout() {
+    if !journeys_enabled() {
+        return;
+    }
+    every_screen(Server::Filled).await;
 }

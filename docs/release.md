@@ -23,12 +23,20 @@ On the branch `release/vX.Y.Z`:
    `compose.yaml` defaults to (`${FERROPIX_VERSION:-X.Y.Z}`) to the same
    version (the console image line takes the same default);
   `scripts/checks/versions.sh` refuses them apart.
-3. **Cut the changelog.** Rename `## [Unreleased]` to
+3. **Take the console screenshots again.** The book's screenshots name the
+   release they show, so the guard in the testkit fails after the bump until
+   they are taken at the new version: build the site bundle
+   (`scripts/release/console-site.sh --release`), install the browser
+   (`scripts/release/journey-tools.sh target/journey-tools`), and run
+   `FERROPIX_SCREENSHOTS=1 cargo nextest run -p ferropix-testkit -E
+   'test(the_book_shows_every_console_page)'`. Look at the images before you
+   commit them.
+4. **Cut the changelog.** Rename `## [Unreleased]` to
    `## [X.Y.Z] - YYYY-MM-DD` and open a fresh, empty `## [Unreleased]` above
    it. The date is the day of the cut: the release notes count the support
    period from it. Read the section as the release notes, and reread the
    reason of a Security section (§ Security entries).
-4. **The gates pass.** The crate-version guard checks that the product
+5. **The gates pass.** The crate-version guard checks that the product
    line, the crate lines, the lock and the changelog section agree.
 
 ## Security entries

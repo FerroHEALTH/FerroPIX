@@ -42,6 +42,36 @@ and this project adheres to
   root. `deploy/helm/validate.sh` (CI's `helm-chart` job) lints, renders and
   holds it to the Kubernetes schemas with `kubeconform`, and
   `deploy/helm/kind-check.sh` installs it on a kind cluster.
+- The operator API's sources and configuration (#120, #121).
+  `GET /operator/sources` lists every system allowed to feed (each FHIR
+  client an issuer lists, each Basic user of the development profile and
+  each `[[hl7v2.senders]]` entry) with its channel, its admission, the
+  domains that name it and its last activity, and
+  `GET /operator/sources/{id}` one source with its last 20 messages, never
+  a value. `GET /operator/configuration` shows the matching configuration in
+  file mode, each setting with where its value came from: the file, the
+  environment, the default, or built in. FerroPIX keeps no configuration
+  store, so both are read-only and changed in the file.
+- The operator console's pages drawn from the operator API (#89): the
+  dashboard with its stat cards, the queue depth and feed charts, the
+  listeners and the oldest pairs (#92); search by identifier and by
+  demographics with graded results, the top bar's field read by the shape
+  of what was typed (#93); the patient record with its identifiers, records
+  side by side, history and pseudonyms, and the audited reveal (#94); the
+  identifier domains with the administrator's editor, drawn only when the
+  provider granted the token `[pix] admin_scope` (#95); the audit trail
+  with posted filters and the CSV export (#96); the sources and the
+  configuration in file mode (#120, #121). A refused call shows the
+  server's issue in place.
+- The console's browser journeys over the filled screens (#98): the WCAG 2.2
+  AA battery runs over every screen drawn from synthetic operator API
+  documents as well as over its refused state, in both themes and at
+  320 px; `/` focuses the top bar's search, `j` and `k` walk the results
+  and Enter opens the person; a dialog closed with Escape gives the focus
+  back to its button. The book's console page shows every page in the light
+  theme with its dark capture, taken behind `FERROPIX_SCREENSHOTS` at 1440
+  and 390 px, and a guard fails when a route has no capture or the captures
+  name another release.
 
 ### Changed
 
@@ -56,7 +86,8 @@ and this project adheres to
 - `[hl7v2]` refuses a `default_charset` the decoder does not read and two
   senders of one domain at load (ITI TF-2 §3.8.4.1.3: one Patient Identity
   Source per domain) (#85).
-
+- The operator console moves to FerroUI 0.3.7, whose setting rows mark a
+  value the environment set or nothing set.
 - The changelog guard passes a pull request that adds a bullet to the
   newest `## [X.Y.Z]` section while no `vX.Y.Z` tag exists, so a fix that
   lands between the release pull request and the tag records itself in the

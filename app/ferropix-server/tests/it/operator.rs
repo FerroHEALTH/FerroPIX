@@ -12,6 +12,7 @@
 )]
 
 use axum::body::Body;
+use ferropix_operator_api::configuration::{Configuration, Mode, Origin};
 use ferropix_operator_api::matching::Matching;
 use ferropix_server::auth::table::{Need, ROUTES};
 use http::{Method, Request, StatusCode, header};
@@ -21,7 +22,7 @@ use crate::auth::{Issuer, application, bearer, send, settings};
 use crate::support::Secrets;
 
 /// The operator routes this build serves, by interaction.
-pub(crate) const SERVED: [&str; 12] = [
+pub(crate) const SERVED: [&str; 15] = [
     "operator-reveal",
     "operator-domain-create",
     "operator-domain-update",
@@ -32,6 +33,9 @@ pub(crate) const SERVED: [&str; 12] = [
     "operator-domains",
     "operator-domain",
     "operator-matching",
+    "operator-sources",
+    "operator-source",
+    "operator-configuration",
     "operator-actions",
     "operator-actions-export",
 ];
@@ -112,7 +116,7 @@ async fn every_served_operator_route_refuses_a_token_without_its_product_scope()
         }
         checked += 1;
     }
-    assert_eq!(13, checked, "every served route was driven");
+    assert_eq!(16, checked, "every served route was driven");
 }
 
 #[tokio::test]
@@ -211,6 +215,54 @@ async fn the_matching_document_names_the_thresholds_keys_and_every_field_and_is_
         assert_eq!(3, document.blocking_keys.len());
         assert_eq!(10, document.fields.len());
         assert!(document.fields.iter().all(|field| !field.configured));
+    }
+}
+
+#[tokio::test]
+async fn the_configuration_is_shown_in_file_mode_with_each_origin_and_is_never_cached() {
+    let issuer = Issuer::start().await;
+    let secrets = Secrets::new();
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
+    for scope in ["__ferropix.steward", "__ferropix.admin"] {
+        let token = bearer(&issuer.token("east-lab", scope));
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/operator/configuration")
+                    .header(header::AUTHORIZATION, &token)
+                    .body(Body::empty())
+                    .expect("a legal request"),
+            )
+            .await
+            .expect("the router answers");
+        assert_eq!(StatusCode::OK, response.status(), "{scope}");
+        assert_eq!(
+            Some("no-store"),
+            response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok())
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .expect("the body reads");
+        let document: Configuration = serde_json::from_slice(&bytes).expect("the document reads");
+        assert_eq!(Mode::File, document.mode);
+        let names: Vec<&str> = document.sections.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["thresholds", "weights", "blocking", "rules"]);
+        let rules = document.sections.last().expect("the rules");
+        assert!(
+            rules
+                .settings
+                .iter()
+                .all(|rule| rule.origin == Origin::BuiltIn)
+        );
+        assert_eq!(
+            20,
+            document.sections[1].settings.len(),
+            "m and u of every field"
+        );
     }
 }
 

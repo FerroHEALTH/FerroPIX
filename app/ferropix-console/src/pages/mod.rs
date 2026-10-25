@@ -12,18 +12,22 @@
 //! the page reads. A page never draws data the server did not send.
 
 pub mod about;
+pub mod dashboard;
 pub mod not_found;
+pub mod patient;
 pub mod preferences;
+pub mod registry;
 pub mod screens;
 pub mod search;
 pub mod sign_in;
+pub mod trail;
 
 use ferrohealth_ui::i18n::Arg;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, link_button};
 use ferrohealth_ui::view::notice::{Announce, notice};
-use ferrohealth_ui::view::refusal::{Refusal, refusal};
+use ferrohealth_ui::view::refusal::{Issue, Refusal, Severity, refusal};
 use ferrohealth_ui::view::surface::{card, cluster, definitions, disclosure, stack};
 use ferrohealth_ui::view::time::timestamp;
 use leptos::prelude::*;
@@ -72,9 +76,27 @@ fn probe_refusal(probe: &Probe, what: &str) -> Refusal {
             (None, tr_with(Msg::UnreachableOther, &[("what", what)]))
         }
     };
+    let issues = probe
+        .issues
+        .iter()
+        .map(|issue| {
+            let severity = match issue.severity.as_str() {
+                "fatal" => Severity::Fatal,
+                "warning" => Severity::Warning,
+                "information" => Severity::Information,
+                _ => Severity::Error,
+            };
+            let shown = Issue::new(severity, issue.code.clone());
+            match &issue.diagnostics {
+                Some(text) => shown.text(text.clone()),
+                None => shown,
+            }
+        })
+        .collect();
     Refusal {
         status,
         summary,
+        issues,
         ..Refusal::default()
     }
 }
@@ -134,7 +156,6 @@ pub fn server_state(probe: Option<&Probe>, needs: Needs, route: &str) -> AnyView
         return ().into_any();
     };
     if probe.is_up() {
-        // TODO(#89): read the operator API and draw the page from its document.
         return notice(
             Tone::Info,
             Announce::Status,
@@ -158,4 +179,40 @@ pub fn server_state(probe: Option<&Probe>, needs: Needs, route: &str) -> AnyView
         {technical_detail(probe)}
     })
     .into_any()
+}
+
+/// The words of a steward action's or a source message's kind as the server
+/// names it, or the name itself for a kind the console does not know.
+#[must_use]
+pub fn action_words(kind: &str) -> String {
+    let words = match kind {
+        "view" => Msg::ActionView,
+        "export" => Msg::ActionExport,
+        "reveal" => Msg::ActionReveal,
+        "domain-create" => Msg::ActionDomainCreate,
+        "domain-update" => Msg::ActionDomainUpdate,
+        "feed" => Msg::ActionFeed,
+        "remove" => Msg::ActionRemove,
+        "resolve-duplicate" => Msg::ActionResolveDuplicate,
+        "merge" => Msg::ActionMerge,
+        "unmerge" => Msg::ActionUnmerge,
+        "decide" => Msg::ActionDecide,
+        "message" => Msg::ActionMessage,
+        other => return other.to_owned(),
+    };
+    tr(words)
+}
+
+/// The words of an administrative gender code (the FHIR R4 `ValueSet`
+/// `administrative-gender`), or the code itself for one outside it.
+#[must_use]
+pub fn gender_words(code: &str) -> String {
+    let words = match code {
+        "female" => Msg::GenderFemale,
+        "male" => Msg::GenderMale,
+        "other" => Msg::GenderOther,
+        "unknown" => Msg::GenderUnknown,
+        other => return other.to_owned(),
+    };
+    tr(words)
 }

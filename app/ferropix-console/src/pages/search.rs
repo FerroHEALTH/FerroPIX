@@ -28,8 +28,23 @@ use ferrohealth_ui::widget::date::{DateField, DateWords};
 use crate::app::{
     SEARCH, SEARCH_DEMOGRAPHICS, current_path, current_query, framed, page_context, preferences,
 };
-use crate::locale::{Msg, tr};
+use crate::document::{Document, Prefill, Segment};
+use crate::locale::{Msg, tr, tr_with};
+use crate::pages::patient::full_name;
 use crate::pages::{Needs, server_state, title};
+use ferrohealth_ui::island::WorkList;
+use ferrohealth_ui::table::view::{
+    Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
+};
+use ferrohealth_ui::tone::Tone;
+use ferrohealth_ui::view::status::badge;
+use ferrohealth_ui::view::surface::or_none;
+use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
+use ferrohealth_ui::widget::identifier::{Domain, Masked, identifier_list};
+use ferrohealth_ui::widget::worklist::{WorkRow, row};
+use ferropix_operator_api::domain::Domains;
+use ferropix_operator_api::patient::Grade;
+use ferropix_operator_api::search::Results;
 
 /// The submit of a search form.
 fn submit() -> AnyView {
@@ -41,13 +56,36 @@ fn submit() -> AnyView {
     .into_any()
 }
 
-/// The form of a search by one identifier.
-fn by_identifier() -> AnyView {
-    let domain = Field::new("domain", tr(Msg::Domain)).view(view! {
-        <select id="domain" name="domain" class=SELECT disabled>
-            <option value="">{tr(Msg::DomainsNotKnown)}</option>
-        </select>
-    });
+/// The form of a search by one identifier, its domain chosen from
+/// `domains` when the server sent them.
+fn by_identifier(domains: Option<&Domains>) -> AnyView {
+    let choices: Vec<(String, String)> = domains
+        .map(|domains| {
+            domains
+                .domains
+                .iter()
+                .filter(|domain| domain.retired_at.is_none())
+                .map(|domain| (domain.system.clone(), domain.name.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let domain = if choices.is_empty() {
+        Field::new("domain", tr(Msg::Domain)).view(view! {
+            <select id="domain" name="domain" class=SELECT disabled>
+                <option value="">{tr(Msg::DomainsNotKnown)}</option>
+            </select>
+        })
+    } else {
+        let options = choices
+            .into_iter()
+            .map(|(system, name)| view! { <option value=system>{name}</option> })
+            .collect_view();
+        Field::new("domain", tr(Msg::Domain)).view(view! {
+            <select id="domain" name="domain" class=SELECT required>
+                {options}
+            </select>
+        })
+    };
     let identifier = Field::new("identifier", tr(Msg::Identifier))
         .trailing(Inner::HoldToShow(
             HoldWords::of_page().named(tr(Msg::IdentifierHold)),
@@ -71,8 +109,8 @@ fn by_identifier() -> AnyView {
     .into_any()
 }
 
-/// A text field of the demographics form.
-fn text_field(id: &'static str, words: Msg, hint: Option<Msg>) -> AnyView {
+/// A text field of the demographics form, holding `value`.
+fn text_field(id: &'static str, words: Msg, hint: Option<Msg>, value: Option<&String>) -> AnyView {
     let field = Field::new(id, tr(words));
     let field = match hint {
         Some(hint) => field.help(tr(hint)),
@@ -80,13 +118,13 @@ fn text_field(id: &'static str, words: Msg, hint: Option<Msg>) -> AnyView {
     };
     let described = hint.map(|_| help_id(id));
     field.view(view! {
-        <input id=id name=id type="text" class=INPUT autocomplete="off" aria-describedby=described />
+        <input id=id name=id type="text" class=INPUT autocomplete="off" aria-describedby=described value=value.cloned().unwrap_or_default() />
     })
 }
 
 /// The birth date, FerroUI's date field (R23) with its picker (R25), which
-/// allows no day after today.
-fn birth_date() -> AnyView {
+/// allows no day after today, holding `value`.
+fn birth_date(value: Option<&String>) -> AnyView {
     let date = jiff::Timestamp::now()
         .to_zoned(jiff::tz::TimeZone::UTC)
         .date();
@@ -98,13 +136,13 @@ fn birth_date() -> AnyView {
     // NOTE: no specification governs this: our own design; a clock outside the
     // calendar's years leaves the field a plain text field, its format stated.
     let Some(today) = today else {
-        return text_field("born", Msg::BirthDate, Some(Msg::BirthDateHint));
+        return text_field("born", Msg::BirthDate, Some(Msg::BirthDateHint), value);
     };
     let field = DateField {
         id: String::from("born"),
         name: String::from("born"),
         label: tr(Msg::BirthDate),
-        value: String::new(),
+        value: value.cloned().unwrap_or_default(),
         help: None,
         error: None,
         today,
@@ -121,8 +159,8 @@ fn birth_date() -> AnyView {
     view! { <DatePicker field /> }.into_any()
 }
 
-/// The form of a search by demographics.
-fn by_demographics() -> AnyView {
+/// The form of a search by demographics, holding what `prefill` carried.
+fn by_demographics(prefill: &Prefill) -> AnyView {
     let genders = [
         ("", Msg::GenderAny),
         ("female", Msg::GenderFemale),
@@ -156,11 +194,11 @@ fn by_demographics() -> AnyView {
         <form method="post" action=SEARCH_DEMOGRAPHICS class="fui-form">
             <input type="hidden" name="segment" value="demographics" />
             <div class="fui-form-grid">
-                {text_field("family", Msg::FamilyName, None)}
-                {text_field("given", Msg::GivenNames, None)}
-                {birth_date()}
+                {text_field("family", Msg::FamilyName, None, prefill.family.as_ref())}
+                {text_field("given", Msg::GivenNames, None, None)}
+                {birth_date(prefill.born.as_ref())}
                 {gender}
-                {text_field("postal", Msg::PostalCode, None)}
+                {text_field("postal", Msg::PostalCode, None, None)}
             </div>
             <div class="fui-form-foot">{exact} {submit()}</div>
         </form>
@@ -177,6 +215,16 @@ fn by_demographics() -> AnyView {
 pub fn SearchPage() -> impl IntoView {
     let demographics = current_path() == SEARCH_DEMOGRAPHICS;
     let searched = current_query().split('&').any(|pair| pair == "searched");
+    let document = page_context().document;
+    let (domains, results, prefill) = match document {
+        Some(Document::Search {
+            domains,
+            results,
+            prefill,
+        }) => (domains.ok(), results, prefill),
+        _ => (None, None, Prefill::default()),
+    };
+    let demographics = demographics || matches!(results, Some((Segment::Demographics, _)));
     let segments = segmented_links(
         tr(Msg::SearchBy),
         vec![
@@ -186,11 +234,25 @@ pub fn SearchPage() -> impl IntoView {
         usize::from(demographics),
     );
     let form = if demographics {
-        by_demographics()
+        by_demographics(&prefill)
     } else {
-        by_identifier()
+        by_identifier(domains.as_ref())
     };
-    let outcome = searched.then(|| {
+    let answered = results.map(|(segment, results)| match results {
+        Ok(results) => results_table(segment, &results),
+        Err(probe) => server_state(
+            Some(&probe),
+            Needs {
+                what: Msg::WhatSearch,
+                away: false,
+            },
+            match segment {
+                Segment::Identifier => "POST /operator/search/identifier",
+                Segment::Demographics => "POST /operator/search/demographics",
+            },
+        ),
+    });
+    let outcome = (searched && answered.is_none()).then(|| {
         let probe = page_context().probe;
         let needs = Needs {
             what: Msg::WhatSearch,
@@ -212,9 +274,125 @@ pub fn SearchPage() -> impl IntoView {
             {page_header(tr(Msg::Search), Some(tr(Msg::SearchSub)), ActionGroup::none())}
             {stack(view! {
                 {card(tr(Msg::FindPatient), view! { {segments} {form} })}
+                {answered}
                 {outcome}
             })}
         }
         .into_any(),
     )
+}
+
+/// The words of a grade.
+fn grade(grade: Grade) -> String {
+    tr(match grade {
+        Grade::Certain => Msg::GradeCertain,
+        Grade::Probable => Msg::GradeProbable,
+        Grade::Possible => Msg::GradePossible,
+        Grade::CertainlyNot => Msg::GradeCertainlyNot,
+    })
+}
+
+/// The results of a search, each row opening its patient; a demographics
+/// search adds each person's score and grade.
+#[must_use]
+pub fn results_table(segment: Segment, results: &Results) -> AnyView {
+    if results.persons.is_empty() {
+        return list_card(ListCard {
+            title: tr(Msg::Results),
+            count: Some(0_u64.into()),
+            order: None,
+            tabs: None,
+            actions: None,
+            body: list_empty(tr(Msg::ResultsEmpty), None),
+            pager: None,
+        });
+    }
+    let mut columns = vec![
+        Column::text("name", tr(Msg::FullName)).role(Role::Title),
+        Column::text("born", tr(Msg::BirthDate)).role(Role::Sub),
+        Column::text("gender", tr(Msg::Gender)),
+        Column::text("identifiers", tr(Msg::ColIdentifiers)).role(Role::Wide),
+    ];
+    if segment == Segment::Demographics {
+        columns.push(Column::text("grade", tr(Msg::ColGrade)));
+    }
+    let rows = results
+        .persons
+        .iter()
+        .enumerate()
+        .map(|(index, hit)| {
+            let leading = hit.leading.clone().unwrap_or_default();
+            let name = full_name(&leading).unwrap_or_else(|| tr(Msg::NoName));
+            let born = leading
+                .birth_date
+                .clone()
+                .map_or_else(|| or_none(String::new()), IntoAny::into_any);
+            let gender = leading.gender.as_deref().map_or_else(
+                || or_none(String::new()),
+                |code| crate::pages::gender_words(code).into_any(),
+            );
+            let chips: Vec<Masked> = hit
+                .identifiers
+                .iter()
+                .map(|identifier| Masked {
+                    domain: Domain::new(identifier.domain.name.clone())
+                        .system(identifier.domain.system.clone()),
+                    tail: identifier
+                        .masked
+                        .0
+                        .trim_start_matches('\u{2022}')
+                        .trim()
+                        .to_owned(),
+                })
+                .collect();
+            let graded = (segment == Segment::Demographics).then(|| {
+                let words = match (hit.grade, hit.score) {
+                    (Some(found), Some(score)) => tr_with(
+                        Msg::GradeScore,
+                        &[
+                            ("grade", grade(found).into()),
+                            ("score", format!("{score:.2}").into()),
+                        ],
+                    ),
+                    (Some(found), None) => grade(found),
+                    _ => String::from("\u{2013}"),
+                };
+                columns
+                    .get(4)
+                    .map(|column| cell(column, badge(Tone::Info, words)))
+            });
+            row(WorkRow {
+                key: &hit.id,
+                focused: index == 0,
+                class: None,
+                cells: view! {
+                    {title_cell(Some(&format!("/patients/{}", hit.id)), name, None)}
+                    {columns.get(1).map(|column| cell(column, born))}
+                    {columns.get(2).map(|column| cell(column, gender))}
+                    {columns.get(3).map(|column| cell(column, identifier_list(&chips)))}
+                    {graded}
+                }
+                .into_any(),
+            })
+        })
+        .collect_view()
+        .into_any();
+    list_card(ListCard {
+        title: tr(Msg::Results),
+        count: Some(u64::from(results.total).into()),
+        order: None,
+        tabs: None,
+        actions: None,
+        body: {
+            let table = data_table(DataTable {
+                caption: &tr(Msg::Results),
+                columns: &columns,
+                sorting: Sorting::default(),
+                body: Body::Rows(rows),
+            })
+            .into_any();
+            view! { <WorkList>{table}</WorkList> }.into_any()
+        },
+        pager: None,
+    })
 }

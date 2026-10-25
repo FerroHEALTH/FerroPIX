@@ -95,6 +95,11 @@ pub struct PageContext {
     pub capability: Option<Capability>,
     /// The prefix every preference cookie's name takes.
     pub prefix: String,
+    /// The operator API document the page is drawn from, when it reads one.
+    pub document: Option<crate::document::Document>,
+    /// Whether the provider granted the steward the server's administrator
+    /// scope, so the page draws an administrator's forms.
+    pub admin: bool,
 }
 
 impl PageContext {
@@ -106,6 +111,8 @@ impl PageContext {
             probe: None,
             capability: None,
             prefix,
+            document: None,
+            admin: false,
         }
     }
 }
@@ -414,6 +421,7 @@ pub fn framed(content: AnyView) -> AnyView {
         },
         choices: Vec::new(),
         links: Vec::new(),
+        // TODO(#204): pass the shortcut legend once FerroUI carries it.
         shortcuts: None,
         sign_out: Some(String::from(SIGN_OUT)),
     });

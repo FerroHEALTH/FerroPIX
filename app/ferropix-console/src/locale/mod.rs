@@ -487,6 +487,393 @@ messages! {
     ForeignRequestRefused = "foreign-request-refused",
     /// The answer to a preference post that names no preference the console offers.
     PreferenceRefused = "preference-refused",
+    /// The disclosure of a trail row's references.
+    ActionDetail = "action-detail",
+    /// The state of an active domain, person or record.
+    Active = "state-active",
+    /// An address.
+    Address = "address",
+    /// A source admitted as a Basic user.
+    AdmissionBasic = "admission-basic",
+    /// A source an issuer vouches for.
+    AdmissionIssuer = "admission-issuer",
+    /// A registered HL7 v2 sender.
+    AdmissionSender = "admission-sender",
+    /// The trail filter form's submit.
+    ApplyFilters = "apply-filters",
+    /// A built-in rule's description.
+    BuiltInRule = "built-in-rule",
+    /// The FHIR channel.
+    ChannelFhir = "channel-fhir",
+    /// The HL7 v2 channel.
+    ChannelV2 = "channel-v2",
+    /// The PMIR channel.
+    ChannelPmir = "channel-pmir",
+    /// The action column.
+    ColAction = "col-action",
+    /// The actor column.
+    ColActor = "col-actor",
+    /// The admission column.
+    ColAdmission = "col-admission",
+    /// The channel column.
+    ColChannel = "col-channel",
+    /// The creation time.
+    ColCreated = "col-created",
+    /// The detail column.
+    ColDetail = "col-detail",
+    /// The domain column.
+    ColDomain = "col-domain",
+    /// The domains column.
+    ColDomains = "col-domains",
+    /// The grade column.
+    ColGrade = "col-grade",
+    /// The identifiers column.
+    ColIdentifiers = "col-identifiers",
+    /// The kind column.
+    ColKind = "col-kind",
+    /// The last activity column.
+    ColLastActivity = "col-last-activity",
+    /// The last fed column.
+    ColLastFed = "col-last-fed",
+    /// The link column.
+    ColLink = "col-link",
+    /// The name column.
+    ColName = "col-name",
+    /// The namespace column.
+    ColNamespace = "col-namespace",
+    /// The outcome column.
+    ColOutcome = "col-outcome",
+    /// The person column.
+    ColPerson = "col-person",
+    /// The reason column.
+    ColReason = "col-reason",
+    /// The records column.
+    ColRecords = "col-records",
+    /// Whether values are sealed at rest.
+    ColSensitive = "col-sensitive",
+    /// The source column.
+    ColSource = "col-source",
+    /// The state column.
+    ColState = "col-state",
+    /// The system column.
+    ColSystem = "col-system",
+    /// The time column.
+    ColTime = "col-time",
+    /// The value column.
+    ColValue = "col-value",
+    /// The line when no configuration file was read.
+    ConfigurationNoFile = "configuration-no-file",
+    /// A count, formatted for the language.
+    Count = "count",
+    /// The action id detail.
+    DetailAction = "detail-action",
+    /// The candidate detail.
+    DetailCandidate = "detail-candidate",
+    /// The identifier domain detail.
+    DetailDomain = "detail-domain",
+    /// The merge detail.
+    DetailMerge = "detail-merge",
+    /// The pseudonymisation domain detail.
+    DetailPseudonymDomain = "detail-pseudonym-domain",
+    /// The record detail.
+    DetailRecord = "detail-record",
+    /// The domain page's definition card.
+    DomainDefinition = "domain-definition",
+    /// The empty domain listing.
+    DomainsEmpty = "domains-empty",
+    /// A steward or system action on the timeline.
+    EventAction = "event-action",
+    /// A record linked on the timeline.
+    EventLinked = "event-linked",
+    /// A merge on the timeline.
+    EventMerged = "event-merged",
+    /// A record unlinked on the timeline.
+    EventUnlinked = "event-unlinked",
+    /// A reverted merge on the timeline.
+    EventUnmerged = "event-unmerged",
+    /// A version on the timeline.
+    EventVersion = "event-version",
+    /// The trail export's submit.
+    ExportCsv = "export-csv",
+    /// A feed that created a record.
+    FeedCreated = "feed-created",
+    /// A feed that revised a record.
+    FeedRevised = "feed-revised",
+    /// An empty feed listing or chart.
+    FeedsEmpty = "feeds-empty",
+    /// The feed activity chart.
+    FeedsPerHour = "feeds-per-hour",
+    /// The feed chart's summary.
+    FeedsSummary = "feeds-summary",
+    /// The trail filter's start date.
+    FilterFrom = "filter-from",
+    /// The trail filter's end date.
+    FilterTo = "filter-to",
+    /// The trail filter card.
+    Filters = "filters",
+    /// A person's name.
+    FullName = "full-name",
+    /// The certain grade.
+    GradeCertain = "grade-certain",
+    /// The certainly-not grade.
+    GradeCertainlyNot = "grade-certainly-not",
+    /// The possible grade.
+    GradePossible = "grade-possible",
+    /// The probable grade.
+    GradeProbable = "grade-probable",
+    /// A grade with its score.
+    GradeScore = "grade-score",
+    /// The empty history.
+    HistoryEmpty = "history-empty",
+    /// The note under a cut history.
+    HistoryTruncated = "history-truncated",
+    /// The empty identifiers tab.
+    IdentifiersEmpty = "identifiers-empty",
+    /// The authoritative domain kind.
+    KindAuthoritative = "kind-authoritative",
+    /// The local domain kind.
+    KindLocal = "kind-local",
+    /// The master domain kind.
+    KindMaster = "kind-master",
+    /// A domain's last feeds.
+    LastFeeds = "last-feeds",
+    /// A source's last messages.
+    LastMessages = "last-messages",
+    /// The demographics the person shows.
+    LeadingDemographics = "leading-demographics",
+    /// A deterministic link.
+    LinkDeterministic = "link-deterministic",
+    /// A feed link.
+    LinkFeed = "link-feed",
+    /// A link a merge moved.
+    LinkMerge = "link-merge",
+    /// A probabilistic link.
+    LinkProbabilistic = "link-probabilistic",
+    /// A link the source made.
+    LinkSource = "link-source",
+    /// A steward's link.
+    LinkSteward = "link-steward",
+    /// A listener that is down.
+    ListenerDown = "listener-down",
+    /// The outbound feed sender.
+    ListenerFeed = "listener-feed",
+    /// The HTTP listener.
+    ListenerHttp = "listener-http",
+    /// The MLLP listener.
+    ListenerMllp = "listener-mllp",
+    /// A listener that is not running.
+    ListenerOff = "listener-off",
+    /// A listener that is up.
+    ListenerUp = "listener-up",
+    /// The listeners card.
+    Listeners = "listeners",
+    /// The state of a merged person.
+    Merged = "merged",
+    /// The survivor of a merged person.
+    MergedInto = "merged-into",
+    /// The line of a merge event.
+    MergedIntoLine = "merged-into-line",
+    /// The empty messages listing.
+    MessagesEmpty = "messages-empty",
+    /// A result without a name.
+    NoName = "no-name",
+    /// A domain the person has no pseudonym in.
+    NoPseudonym = "no-pseudonym",
+    /// The trail's next page.
+    OlderActions = "older-actions",
+    /// The oldest pairs card.
+    OldestInQueue = "oldest-in-queue",
+    /// The way to the queue.
+    OpenQueue = "open-queue",
+    /// The patient tabs' name.
+    PatientTabs = "patient-tabs",
+    /// A percentage.
+    Percent = "percent",
+    /// Values kept plain at rest.
+    Plain = "plain",
+    /// The empty pseudonyms tab.
+    PseudonymsEmpty = "pseudonyms-empty",
+    /// The queue depth chart.
+    QueueDepth = "queue-depth",
+    /// The empty queue chart.
+    QueueDepthEmpty = "queue-depth-empty",
+    /// The queue chart's summary.
+    QueueDepthSummary = "queue-depth-summary",
+    /// The empty oldest card.
+    QueueEmpty = "queue-empty",
+    /// The queue chart's series.
+    QueueOpen = "queue-open",
+    /// A record's version and channel.
+    RecordLine = "record-line",
+    /// The empty records tab.
+    RecordsEmpty = "records-empty",
+    /// A removed record.
+    Removed = "removed",
+    /// The line of an unmerge event.
+    RestoredLine = "restored-line",
+    /// The search results.
+    Results = "results",
+    /// The empty results.
+    ResultsEmpty = "results-empty",
+    /// A retired domain.
+    Retired = "retired",
+    /// The reveal action.
+    Reveal = "reveal",
+    /// When a revealed value hides.
+    RevealHidden = "reveal-hidden",
+    /// The reveal reason field.
+    RevealReason = "reveal-reason",
+    /// The note under a revealed value.
+    RevealRecorded = "reveal-recorded",
+    /// The revealed value notice.
+    Revealed = "revealed",
+    /// A score.
+    Score = "score",
+    /// Values sealed at rest.
+    Sealed = "sealed",
+    /// The blocking keys section.
+    SectionBlocking = "section-blocking",
+    /// The blocking section's intro.
+    SectionBlockingIntro = "section-blocking-intro",
+    /// The rules section.
+    SectionRules = "section-rules",
+    /// The rules section's intro.
+    SectionRulesIntro = "section-rules-intro",
+    /// The thresholds section.
+    SectionThresholds = "section-thresholds",
+    /// The thresholds section's intro.
+    SectionThresholdsIntro = "section-thresholds-intro",
+    /// The weights section.
+    SectionWeights = "section-weights",
+    /// The weights section's intro.
+    SectionWeightsIntro = "section-weights-intro",
+    /// The source page's definition card.
+    SourceDefinition = "source-definition",
+    /// The empty sources listing.
+    SourcesEmpty = "sources-empty",
+    /// The auto-link rate stat.
+    StatAutoLink = "stat-auto-link",
+    /// The records created beside the rate.
+    StatCreated = "stat-created",
+    /// The versions fed stat.
+    StatFedToday = "stat-fed-today",
+    /// Subscriptions in error.
+    StatInError = "stat-in-error",
+    /// The open queue stat.
+    StatOpenQueue = "stat-open-queue",
+    /// The subscriptions stat.
+    StatSubscriptions = "stat-subscriptions",
+    /// Pairs waiting over a week.
+    StatWaitingOverWeek = "stat-waiting-over-week",
+    /// A subsumed record.
+    Subsumed = "subsumed",
+    /// The history tab.
+    TabHistory = "tab-history",
+    /// The identifiers tab.
+    TabIdentifiers = "tab-identifiers",
+    /// The pseudonyms tab.
+    TabPseudonyms = "tab-pseudonyms",
+    /// The records tab.
+    TabRecords = "tab-records",
+    /// A contact point.
+    Telecom = "telecom",
+    /// The empty trail.
+    TrailEmpty = "trail-empty",
+    /// What the listeners card shows.
+    WhatListeners = "what-listeners",
+    /// What a reveal shows.
+    WhatReveal = "what-reveal",
+    /// A domain write saved.
+    DomainSaved = "domain-saved",
+    /// What a refused domain write shows.
+    WhatDomainWrite = "what-domain-write",
+    /// The create form's disclosure and submit.
+    DomainCreate = "domain-create",
+    /// The change form's disclosure and submit.
+    DomainChange = "domain-change",
+    /// The note that the server records a domain write with its reason.
+    DomainAdminNote = "domain-admin-note",
+    /// The note drawn in place of the domain forms without the
+    /// administrator scope.
+    DomainAdminOnly = "domain-admin-only",
+    /// The link threshold.
+    SettingLinkAt = "setting-link-at",
+    /// The review threshold.
+    SettingReviewAt = "setting-review-at",
+    /// The possible threshold.
+    SettingPossibleAt = "setting-possible-at",
+    /// The automatic link switch.
+    SettingAutoLink = "setting-auto-link",
+    /// The blocking keys.
+    SettingBlockingKeys = "setting-blocking-keys",
+    /// A field's agreement weight.
+    SettingAgreement = "setting-agreement",
+    /// A field's chance agreement weight.
+    SettingChance = "setting-chance",
+    /// The family name field.
+    FieldFamilyName = "field-family-name",
+    /// The given names field.
+    FieldGivenNames = "field-given-names",
+    /// The birth date field.
+    FieldBirthDate = "field-birth-date",
+    /// The gender field.
+    FieldGender = "field-gender",
+    /// The postal code field.
+    FieldPostalCode = "field-postal-code",
+    /// The address field.
+    FieldAddress = "field-address",
+    /// The telephone field.
+    FieldTelephone = "field-telephone",
+    /// The email field.
+    FieldEmail = "field-email",
+    /// The mother's maiden name field.
+    FieldMothersMaidenName = "field-mothers-maiden-name",
+    /// The local identifier field.
+    FieldLocalIdentifier = "field-local-identifier",
+    /// The authoritative identifier rule.
+    RuleAuthoritative = "rule-authoritative",
+    /// What the authoritative identifier rule holds.
+    RuleAuthoritativeText = "rule-authoritative-text",
+    /// The hard conflict rule.
+    RuleHardConflict = "rule-hard-conflict",
+    /// What the hard conflict rule holds.
+    RuleHardConflictText = "rule-hard-conflict-text",
+    /// The local domains rule.
+    RuleLocalDomains = "rule-local-domains",
+    /// What the local domains rule holds.
+    RuleLocalDomainsText = "rule-local-domains-text",
+    /// A steward viewed a person.
+    ActionView = "action-view",
+    /// A steward exported the trail.
+    ActionExport = "action-export",
+    /// A steward revealed a value.
+    ActionReveal = "action-reveal",
+    /// An administrator added a domain.
+    ActionDomainCreate = "action-domain-create",
+    /// An administrator changed a domain.
+    ActionDomainUpdate = "action-domain-update",
+    /// A source fed a record.
+    ActionFeed = "action-feed",
+    /// A source removed a record.
+    ActionRemove = "action-remove",
+    /// A source resolved a duplicate.
+    ActionResolveDuplicate = "action-resolve-duplicate",
+    /// A steward merged two persons.
+    ActionMerge = "action-merge",
+    /// A steward undid a merge.
+    ActionUnmerge = "action-unmerge",
+    /// A steward decided a pair.
+    ActionDecide = "action-decide",
+    /// An HL7 v2 message was received.
+    ActionMessage = "action-message",
+    /// The sensitive switch.
+    DomainSensitive = "domain-sensitive",
+    /// The sensitive switch's help.
+    DomainSensitiveHelp = "domain-sensitive-help",
+    /// The retire switch.
+    DomainRetire = "domain-retire",
+    /// The retire switch's help.
+    DomainRetireHelp = "domain-retire-help",
 }
 
 /// The console's message `msg` in the page's locale.
@@ -553,160 +940,4 @@ pub fn chosen(preferences: &Preferences, headers: &http::HeaderMap, configured: 
 }
 
 #[cfg(test)]
-mod tests {
-    use std::borrow::Cow;
-    use std::collections::HashMap;
-    use std::path::Path;
-
-    use ferrohealth_ui::i18n::Locale;
-    use ferrohealth_ui::theme::{Language, Preferences};
-    use fluent_templates::fluent_bundle::FluentValue;
-
-    use super::{Msg, PSEUDO_TAG, catalog, choices, chosen, negotiated, pseudo, stretch, tr_in};
-
-    fluent_templates::static_loader! {
-        static THROWAWAY = {
-            locales: "./tests/locales",
-            fallback_language: "qaa",
-            customise: |bundle| bundle.set_use_isolating(false),
-        };
-    }
-
-    /// Every placeable the catalog at `path` names, each set to a number, so
-    /// a message that selects a form by one formats whole.
-    fn placeables(path: &Path) -> HashMap<Cow<'static, str>, FluentValue<'static>> {
-        let source = std::fs::read_to_string(path).expect("the catalog");
-        source
-            .split("{ $")
-            .skip(1)
-            .filter_map(|rest| rest.split([' ', '}']).next())
-            .map(|name| (Cow::Owned(name.to_owned()), FluentValue::from(3)))
-            .collect()
-    }
-
-    #[test]
-    fn every_catalog_directory_is_a_language_holding_every_message_and_no_other() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("locales");
-        let mut found: Vec<String> = std::fs::read_dir(&root)
-            .expect("the locales directory")
-            .map(|entry| {
-                entry
-                    .expect("an entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect();
-        found.sort();
-        let mut shipped: Vec<String> = catalog().locales().map(ToString::to_string).collect();
-        shipped.sort();
-        assert_eq!(found, shipped, "a catalog directory is a language");
-        assert!(
-            found.contains(&String::from("en")),
-            "English is the reference"
-        );
-        for tag in found {
-            let language = tag.parse().expect("a language");
-            let path = root.join(&tag).join("ferropix-console.ftl");
-            let args = placeables(&path);
-            for msg in Msg::ALL {
-                let words = catalog().try_lookup_with_args(&language, msg.id(), &args);
-                assert!(
-                    words.is_some_and(|words| !words.trim().is_empty()),
-                    "{tag} holds {}",
-                    msg.id()
-                );
-            }
-            let source = std::fs::read_to_string(&path).expect("the catalog");
-            let mut held: Vec<&str> = source
-                .lines()
-                .filter_map(|line| line.split_once(" ="))
-                .map(|(id, _)| id)
-                .filter(|id| id.starts_with(|c: char| c.is_ascii_lowercase()) && !id.contains(' '))
-                .filter(|id| !id.starts_with("number-"))
-                .collect();
-            held.sort_unstable();
-            let mut declared: Vec<&str> = Msg::ALL.iter().map(|msg| msg.id()).collect();
-            declared.sort_unstable();
-            assert_eq!(
-                declared, held,
-                "{tag} holds every message once and no other"
-            );
-            assert!(
-                source.contains("number-group ="),
-                "{tag} names its digit group mark"
-            );
-            assert!(
-                source.contains("number-decimal ="),
-                "{tag} names its decimal mark"
-            );
-        }
-    }
-
-    #[test]
-    fn a_throwaway_catalog_changes_the_words_with_no_code_change() {
-        let english = Locale::english();
-        assert_eq!(
-            "Page not found",
-            tr_in(catalog(), &english, Msg::NotFoundTitle)
-        );
-        let throwaway = Locale::parse("qaa").expect("a private-use language");
-        assert_eq!(
-            "Qage qot qound",
-            tr_in(&*THROWAWAY, &throwaway, Msg::NotFoundTitle)
-        );
-        assert_eq!(
-            "Back to the dashboard",
-            tr_in(catalog(), &throwaway, Msg::NotFoundBack),
-            "the shipped catalog falls back to English"
-        );
-    }
-
-    #[test]
-    fn the_pseudo_locale_accents_and_lengthens_every_string() {
-        assert_eq!("[Págé ~~~]", stretch("Page"));
-        assert_eq!(
-            "[Báçk tö thé dáshböárd ~~~~~ ~~~~]",
-            stretch("Back to the dashboard"),
-            "the padding breaks into words of at most five"
-        );
-        let words = tr_in(catalog(), &pseudo(), Msg::NotFoundTitle);
-        assert_eq!(stretch("Page not found"), words, "a console word stretches");
-        assert_eq!(
-            Some(stretch("Series")),
-            catalog().try_lookup(&PSEUDO_TAG.parse().expect("a language"), "chart-series"),
-            "a library word stretches too, so the library's own words follow the page"
-        );
-        assert_eq!(
-            PSEUDO_TAG,
-            pseudo().tag(),
-            "<html lang> names the pseudo-locale"
-        );
-    }
-
-    #[test]
-    fn only_a_language_cookie_naming_the_pseudo_locale_chooses_it() {
-        assert!(
-            choices().iter().all(|locale| locale.tag() != PSEUDO_TAG),
-            "the language preference never offers the pseudo-locale"
-        );
-        let mut asking = http::HeaderMap::new();
-        asking.insert(
-            http::header::ACCEPT_LANGUAGE,
-            http::HeaderValue::from_static("qps"),
-        );
-        assert_eq!(
-            "en",
-            negotiated(&asking, Locale::english()).tag(),
-            "a browser asking for it is drawn in the configured language"
-        );
-        let cookie = Preferences {
-            language: Language::Chosen(String::from(PSEUDO_TAG)),
-            ..Preferences::default()
-        };
-        assert_eq!(
-            PSEUDO_TAG,
-            chosen(&cookie, &http::HeaderMap::new(), Locale::english()).tag()
-        );
-    }
-}
+mod tests;

@@ -5,7 +5,8 @@
 
 The operator API is what the operator console reads: the dashboard, the two
 searches, a person with everything the index holds about them, the
-identifier domains, the matching configuration and the audit trail. It is
+identifier domains, the sources, the matching configuration and the audit
+trail. It is
 mounted under `{base}/operator` when `[operator] enabled = true`, and every
 route needs a bearer token with a product scope
 ([Security and audit](security-and-audit.md)). No specification governs the
@@ -30,7 +31,10 @@ Every answer carries `Cache-Control: no-store`. A refusal is a FHIR
 | `GET /operator/domains/{id}` | steward or administrator | One domain with its last 20 feeds: time, channel, and whether the feed created or revised a record. |
 | `POST /operator/domains` | administrator | A new identifier domain. |
 | `PATCH /operator/domains/{id}` | administrator | A domain renamed, given another Source, or retired. |
+| `GET /operator/sources` | steward or administrator | Every system allowed to feed: each FHIR client an issuer lists in its `clients`, each Basic user of the development profile and each `[[hl7v2.senders]]` entry, with its channel, how it is admitted, the domains that name it and its last activity. |
+| `GET /operator/sources/{id}` | steward or administrator | One source with its last 20 messages: time, channel, what it asked and its outcome (`applied`, or the HL7 v2 acknowledgment code). An HL7 v2 sender's id is its facility and application joined by `.`. |
 | `GET /operator/matching` | steward or administrator | The thresholds, automatic linking, the blocking keys and every field's weights in effect, the configured ones marked. |
+| `GET /operator/configuration` | steward or administrator | The matching configuration in file mode: the thresholds, the weights, the blocking keys and the built-in deterministic rules, each setting with where its value came from (`file`, `environment`, `default`, `built_in`) and the file named once. |
 | `GET /operator/actions` | steward | A page of the audit trail, the newest first. |
 | `POST /operator/actions/export` | steward | The same filter answered as CSV. |
 
@@ -151,5 +155,15 @@ formula starts with `'`.
 
 The server stores the BALP record before it sends the answer, and answers
 `503` with a `transient` issue when it cannot. A search writes no steward
-action: its BALP record is the trail. The dashboard, the domain reads, the
-matching configuration and the trail name no patient and record nothing.
+action: its BALP record is the trail. The dashboard, the domain and source
+reads, the matching configuration and the trail name no patient and record
+nothing.
+
+## Sources and configuration are set in the file
+
+FerroPIX keeps no configuration store. A source is admitted by the file:
+an issuer's `clients`, a Basic user, or an `[[hl7v2.senders]]` entry. The
+matching settings are read from `[matching]` at start. So the operator API
+shows both read-only, and you change them in the file; a change takes effect
+at the next start. An environment variable `FERROPIX__…` wins over the file,
+and the configuration document says which setting it set.

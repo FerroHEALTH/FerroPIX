@@ -286,6 +286,7 @@ pub(crate) async fn over(
         store: store.clone(),
         matching: matching.resolve().expect("the section resolves"),
         deprecated,
+        configured: ferropix_server::operator::Configured::default(),
     };
     let (app, _, spool) = application_with(settings, &backend).await;
     (app, issuer, spool, secrets)

@@ -53,6 +53,8 @@ pub struct Settings {
     pub usage_report: UsageReportSettings,
     /// The development table, under the development profile.
     pub dev: Option<Dev>,
+    /// Where each setting came from.
+    pub origins: crate::config::origin::Origins,
 }
 
 impl Config {
@@ -116,6 +118,7 @@ impl Config {
             operator: self.operator.clone(),
             usage_report,
             dev: self.dev.clone(),
+            origins: self.origins.clone(),
         })
     }
 }

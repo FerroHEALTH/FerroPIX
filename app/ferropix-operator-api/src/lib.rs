@@ -10,12 +10,15 @@
 //! [`overview`] the dashboard; [`search`] the two searches; [`person`] the
 //! person with its identifiers, records, history and pseudonyms; [`reveal`]
 //! the reveal of one of them; [`domain`] the identifier domains and their
-//! writes; [`matching`] the matching configuration in effect; [`actions`]
+//! writes; [`source`] the systems allowed to feed; [`matching`] the matching
+//! configuration in effect and [`configuration`] its settings with their
+//! origins; [`actions`]
 //! the audit trail; and [`patient`] the values several of them share. No
 //! specification governs these documents: our own design, after
 //! FerroBRIDGE's operator API crate.
 
 pub mod actions;
+pub mod configuration;
 pub mod domain;
 pub mod health;
 pub mod matching;
@@ -24,3 +27,4 @@ pub mod patient;
 pub mod person;
 pub mod reveal;
 pub mod search;
+pub mod source;

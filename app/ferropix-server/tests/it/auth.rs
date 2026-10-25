@@ -189,6 +189,7 @@ pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
         store: ferropix_server::store::Store::lazy(&settings.db).expect("the store is described"),
         matching: settings.matching.clone(),
         deprecated: settings.pdqm.deprecated,
+        configured: ferropix_server::operator::Configured::default(),
     }
 }
 

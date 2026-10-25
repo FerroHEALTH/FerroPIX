@@ -1,0 +1,21 @@
+{
+  "mode": "file",
+  "file": "ferropix.toml",
+  "sections": [
+    {
+      "name": "thresholds",
+      "settings": [
+        {
+          "key": "matching.link_at",
+          "value": "0.95",
+          "origin": "environment"
+        },
+        {
+          "key": "matching.review_at",
+          "value": "0.7",
+          "origin": "default"
+        }
+      ]
+    }
+  ]
+}

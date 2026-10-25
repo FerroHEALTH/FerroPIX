@@ -12,12 +12,13 @@ use ferropix_operator_api::overview::{FEED_HOURS, Overview, QUEUE_DAYS};
 use ferropix_operator_api::patient::PersonStatus;
 use ferropix_operator_api::person::{IdentifierHandle, Person, RecordState};
 use ferropix_operator_api::search::Results;
+use ferropix_operator_api::source::{Admission, SourcePage, Sources};
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::{HOSPITAL_DOMAIN, LABORATORY_DOMAIN};
 use http::{Method, StatusCode, header};
 
 use super::BSN_SYSTEM;
-use super::pixm::{Answer, Harness, LAB, feed_both, synthetic_seeds};
+use super::pixm::{Answer, Harness, LAB, SOURCE, feed_both, synthetic_seeds};
 
 /// Asserts `answer` is a `200` no cache keeps and reads its body as `T`.
 pub(crate) fn document<T: serde::de::DeserializeOwned>(answer: &Answer, label: &str) -> T {
@@ -279,6 +280,53 @@ async fn the_domains_are_paged_by_system_and_a_domain_shows_its_feeds() {
         "domain",
     );
     assert_eq!(1, page.feeds.len());
+}
+
+#[tokio::test]
+async fn the_sources_name_their_admission_their_domains_and_their_activity() {
+    if !e2e_enabled() {
+        return;
+    }
+    let fed = Fed::start().await;
+    let answer = get(&fed.harness, "/operator/sources").await;
+    assert_eq!(
+        Some("no-store"),
+        answer
+            .headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok())
+    );
+    let listed: Sources = document(&answer, "sources");
+    let lab = listed
+        .sources
+        .iter()
+        .find(|source| source.id == SOURCE)
+        .expect("the Source of the seeded domains");
+    assert!(matches!(lab.admission, Admission::IdentityProvider { .. }));
+    assert!(lab.domains.contains(&HOSPITAL_DOMAIN.to_owned()));
+    assert!(lab.last_activity.is_some(), "the feeds are its activity");
+    let sender = listed
+        .sources
+        .iter()
+        .find(|source| source.id == "EAST.ADT")
+        .expect("the HL7 v2 sender");
+    assert_eq!(sender.name, "EAST|ADT");
+    assert!(matches!(
+        sender.admission,
+        Admission::RegisteredSender { .. }
+    ));
+    assert!(sender.last_activity.is_none());
+    let one = get(&fed.harness, &format!("/operator/sources/{SOURCE}")).await;
+    fed.holds_no_identifier(&one.body, "a source's messages");
+    let page: SourcePage = document(&one, "source");
+    assert_ne!(0, page.messages.len(), "the feeds are its messages");
+    assert!(
+        page.messages
+            .iter()
+            .all(|message| message.outcome == "applied")
+    );
+    let missing = get(&fed.harness, "/operator/sources/nobody").await;
+    assert_eq!(StatusCode::NOT_FOUND, missing.status);
 }
 
 #[tokio::test]

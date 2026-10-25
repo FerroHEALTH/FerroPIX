@@ -1,0 +1,28 @@
+{
+  "source": {
+    "id": "EAST.ADT",
+    "name": "EAST|ADT",
+    "channel": "v2",
+    "admission": {
+      "kind": "registered_sender",
+      "application": "ADT",
+      "facility": "EAST"
+    },
+    "domains": ["urn:oid:2.999.1.1"],
+    "last_activity": "2026-10-25T09:00:00Z"
+  },
+  "messages": [
+    {
+      "at": "2026-10-25T09:00:00Z",
+      "channel": "v2",
+      "action": "message",
+      "outcome": "AA"
+    },
+    {
+      "at": "2026-10-25T08:40:00Z",
+      "channel": "v2",
+      "action": "message",
+      "outcome": "AE"
+    }
+  ]
+}

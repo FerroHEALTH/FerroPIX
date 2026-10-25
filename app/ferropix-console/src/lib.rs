@@ -24,6 +24,9 @@
 //! server drew, every one of them FerroUI's; the target, never a Cargo
 //! feature, chooses between them.
 #![doc(test(attr(deny(warnings))))]
+// NOTE: the Rust reference, "The recursion_limit attribute": a page's nested view types
+// pass the default query depth of 128 when a test build lays them out.
+#![recursion_limit = "256"]
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod app;
@@ -34,6 +37,8 @@ pub mod command;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod document;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod healthcheck;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod locale;
@@ -43,6 +48,8 @@ pub mod oidc;
 pub mod pages;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pix;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod posts;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod preferences;
 #[cfg(not(target_arch = "wasm32"))]

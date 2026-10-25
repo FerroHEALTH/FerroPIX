@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The WCAG 2.2 Level AA battery over every screen's refused state, walked
-//! in a real browser over what it painted (<https://www.w3.org/TR/WCAG22/>).
+//! The WCAG 2.2 Level AA battery over every screen, walked in a real browser
+//! over what it painted (<https://www.w3.org/TR/WCAG22/>).
 //!
-//! Every screen draws its refused state while the server serves no operator
-//! API (#90), so this is the battery over those states; each screen's
-//! filled state joins it when its screen lands. Per screen, in the light and
+//! The battery runs twice: over every screen's refused state, against a
+//! stand-in that serves no operator API, and over its filled state, against
+//! one that serves the synthetic documents. Per screen, in the light and
 //! the dark theme: every text meets its contrast bar (SC 1.4.3), every
 //! control's edge or fill meets 3:1 against what is behind it (SC 1.4.11),
 //! the keyboard reaches every control and every stop draws a focus ring
@@ -21,7 +21,7 @@ use crate::journeys::browser::{Journey, WINDOW, with_journey};
 use crate::journeys::journeys_enabled;
 use crate::journeys::preferences::choose;
 use crate::journeys::sign_in::sign_in;
-use crate::journeys::stack::Stack;
+use crate::journeys::stack::{Server, Stack};
 use crate::journeys::{SCREENS, SIGN_IN_SCREENS};
 
 /// The two themes a steward can choose between.
@@ -418,12 +418,10 @@ async fn reflow(journey: &Journey, stack: &Stack, path: &str) -> Option<String> 
     (!over.is_empty()).then(|| format!("{path} at {REFLOW_WIDTH} px scrolls sideways by {over}"))
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn every_screens_refused_state_passes_the_aa_battery_in_both_themes() {
-    if !journeys_enabled() {
-        return;
-    }
-    let stack = Stack::start().await;
+/// Runs the whole battery over every screen `answers` draws, in both themes
+/// and at the reflow width, and fails with every finding.
+async fn every_screen(answers: Server) {
+    let stack = Stack::start_with(answers).await;
     with_journey(async |journey| {
         let mut findings = Vec::new();
         for path in SIGN_IN_SCREENS {
@@ -443,12 +441,28 @@ async fn every_screens_refused_state_passes_the_aa_battery_in_both_themes() {
         journey.resize(WINDOW.0, WINDOW.1).await;
         assert!(
             findings.is_empty(),
-            "the AA battery found {} failures:\n{}",
+            "the AA battery over the {answers:?} screens found {} failures:\n{}",
             findings.len(),
             findings.join("\n")
         );
     })
     .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn every_screens_refused_state_passes_the_aa_battery_in_both_themes() {
+    if !journeys_enabled() {
+        return;
+    }
+    every_screen(Server::Refusing).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn every_screens_filled_state_passes_the_aa_battery_in_both_themes() {
+    if !journeys_enabled() {
+        return;
+    }
+    every_screen(Server::Filled).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

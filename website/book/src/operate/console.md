@@ -220,7 +220,7 @@ redirect_uri = "https://console.example.org/auth/callback"
 | Section | What it sets |
 |---|---|
 | `[server]` | Where the console listens, where its site bundle is, and the language a page falls back to. |
-| `[pix]` | The FerroPIX server's base URL and how long one call to it may take. |
+| `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[auth] admin_scope` names (default `__ferropix.admin`). |
 | `[session]` | Whether the cookies are `Secure` (only off on loopback), and the sign-in and session timeouts and bounds. |
 | `[oidc]` | The OpenID Provider stewards sign in at. Without it the console offers no sign-in. |
 
@@ -233,6 +233,11 @@ session lives on the console's server; the browser holds one opaque
 `HttpOnly`, `SameSite=Lax` cookie and never a token. The console calls the
 FerroPIX server with the steward's own access token, so the server records
 the steward as the actor of every call, and renews it before it expires.
+The console draws an administrator's forms, such as adding or changing an
+identifier domain, only when the provider granted the token `[pix]
+admin_scope`: the scopes the token answer names, or the scopes the console
+asked for when the answer names none (RFC 6749 §5.1). Ask for the scope in
+`[oidc] scopes`. The server checks the scope again on every write.
 Sign out ends the session and, when the provider publishes one, signs the
 steward out there too.
 

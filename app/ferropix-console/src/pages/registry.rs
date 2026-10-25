@@ -285,6 +285,12 @@ fn domain_field(id: &'static str, words: Msg, required: bool) -> AnyView {
     })
 }
 
+/// The note drawn in place of an administrator's form for a steward the
+/// provider did not grant the administrator scope.
+fn admin_only() -> AnyView {
+    view! { <p class="fui-help">{tr(Msg::DomainAdminOnly)}</p> }.into_any()
+}
+
 /// The administrator's form that creates a domain.
 fn create_form() -> AnyView {
     let kinds = [
@@ -354,11 +360,12 @@ fn change_form(domain: &Domain) -> AnyView {
 /// The table of identifier domains, the create form, and the outcome of a
 /// create just posted.
 #[must_use]
-pub fn domains(domains: &Domains, written: Option<&Read<()>>) -> AnyView {
+pub fn domains(domains: &Domains, written: Option<&Read<()>>, admin: bool) -> AnyView {
+    let editor = if admin { create_form() } else { admin_only() };
     stack(view! {
         {written_notice(written)}
         {domain_table(domains)}
-        {create_form()}
+        {editor}
     })
     .into_any()
 }
@@ -448,7 +455,7 @@ fn domain_state(domain: &Domain) -> AnyView {
 /// The page of one domain: its definition, its last feeds, the change form
 /// while it is not retired, and the outcome of a change just posted.
 #[must_use]
-pub fn domain(page: &DomainPage, written: Option<&Read<()>>) -> AnyView {
+pub fn domain(page: &DomainPage, written: Option<&Read<()>>, admin: bool) -> AnyView {
     let domain = &page.domain;
     let facts = definitions(vec![
         (
@@ -507,7 +514,13 @@ pub fn domain(page: &DomainPage, written: Option<&Read<()>>) -> AnyView {
         })
         .into_any()
     };
-    let change = domain.retired_at.is_none().then(|| change_form(domain));
+    let change = domain.retired_at.is_none().then(|| {
+        if admin {
+            change_form(domain)
+        } else {
+            admin_only()
+        }
+    });
     stack(view! {
         {written_notice(written)}
         {card(tr(Msg::DomainDefinition), facts)}

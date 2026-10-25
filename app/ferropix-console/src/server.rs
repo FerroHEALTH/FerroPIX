@@ -262,8 +262,15 @@ async fn gate(
             .insert(PageContext::signed_out(prefix));
         return next.run(request).await;
     }
-    let (token, operator) = match held(&state, request.headers()) {
-        Ok(Held::SignedIn { token, operator }) => (token, operator),
+    let (token, operator, admin) = match held(&state, request.headers()) {
+        Ok(Held::SignedIn {
+            token,
+            operator,
+            scopes,
+        }) => {
+            let admin = scopes.contains(&state.settings().pix.admin_scope);
+            (token, operator, admin)
+        }
         Ok(Held::Ended) => return Redirect::to(&format!("{SIGN_IN}/expired")).into_response(),
         Ok(Held::Absent) => return Redirect::to(SIGN_IN).into_response(),
         Err(error) => {
@@ -295,6 +302,7 @@ async fn gate(
             capability,
             prefix,
             document,
+            admin,
         });
     }
     next.run(request).await

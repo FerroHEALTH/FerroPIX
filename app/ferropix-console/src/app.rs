@@ -97,6 +97,9 @@ pub struct PageContext {
     pub prefix: String,
     /// The operator API document the page is drawn from, when it reads one.
     pub document: Option<crate::document::Document>,
+    /// Whether the provider granted the steward the server's administrator
+    /// scope, so the page draws an administrator's forms.
+    pub admin: bool,
 }
 
 impl PageContext {
@@ -109,6 +112,7 @@ impl PageContext {
             capability: None,
             prefix,
             document: None,
+            admin: false,
         }
     }
 }

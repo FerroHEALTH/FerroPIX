@@ -330,9 +330,11 @@ pub fn Domains() -> impl IntoView {
         Msg::WhatDomains,
         "GET /operator/domains",
     );
-    let body = match page_context().document {
+    let context = page_context();
+    let admin = context.admin;
+    let body = match context.document {
         Some(Document::Domains { domains, written }) => Some(drawn(&domains, &screen, |domains| {
-            crate::pages::registry::domains(domains, written.as_ref())
+            crate::pages::registry::domains(domains, written.as_ref(), admin)
         })),
         _ => None,
     };
@@ -357,13 +359,15 @@ pub fn Domain() -> impl IntoView {
     )
     .under(vec![Crumb::new(tr(Msg::Domains), DOMAINS)]);
     let mut title = domain;
-    screen.body = match page_context().document {
+    let context = page_context();
+    let admin = context.admin;
+    screen.body = match context.document {
         Some(Document::Domain { page, written }) => {
             if let Ok(page) = &page {
                 title.clone_from(&page.domain.name);
             }
             Some(drawn(&page, &screen, |page| {
-                crate::pages::registry::domain(page, written.as_ref())
+                crate::pages::registry::domain(page, written.as_ref(), admin)
             }))
         }
         _ => None,

@@ -28,7 +28,7 @@ use http::StatusCode;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::support::{console, get_with, offline, post_form, send, steward_session};
+use crate::support::{console, get_with, offline, post_form, send, session_with, steward_session};
 
 /// The person every patient case reads.
 const PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
@@ -471,6 +471,32 @@ async fn the_domains_and_a_domain_draw_their_definition_and_feeds_with_no_value(
         page(&empty, "/domains")
             .await?
             .contains("No identifier domains yet")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_domain_editor_is_drawn_only_for_a_sign_in_granted_the_administrator_scope()
+-> Result<(), Box<dyn Error>> {
+    let listing = Domains {
+        domains: Vec::new(),
+        next: None,
+    };
+    let filled = server(&[("GET", "/operator/domains", serde_json::to_string(&listing)?)]).await;
+    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
+    let admin = steward_session(&state);
+    let (_, drawn) = send(&service, get_with("/domains", &admin)?).await?;
+    assert!(drawn.contains("Add a domain"), "the administrator's form");
+    assert!(drawn.contains("action=\"/domains\""), "it posts");
+    let steward = session_with(&state, &["openid", "__ferropix.steward"]);
+    let (_, drawn) = send(&service, get_with("/domains", &steward)?).await?;
+    assert!(
+        !drawn.contains("action=\"/domains\""),
+        "no form for a steward without the administrator scope"
+    );
+    assert!(
+        drawn.contains("needs the administrator scope"),
+        "the note says why"
     );
     Ok(())
 }

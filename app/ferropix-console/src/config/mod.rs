@@ -100,6 +100,9 @@ pub struct Pix {
     pub base_url: String,
     /// How long one call to the server may take, in milliseconds.
     pub timeout_ms: u64,
+    /// The scope the server's `[auth] admin_scope` names: the console draws
+    /// an administrator's forms only when the provider granted it.
+    pub admin_scope: String,
 }
 
 impl Default for Pix {
@@ -107,6 +110,7 @@ impl Default for Pix {
         Self {
             base_url: String::from("http://127.0.0.1:8080/"),
             timeout_ms: 30_000,
+            admin_scope: String::from("__ferropix.admin"),
         }
     }
 }

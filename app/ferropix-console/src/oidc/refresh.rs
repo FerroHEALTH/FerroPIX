@@ -110,6 +110,10 @@ pub async fn refresh(
         access_token: SecretString::from(tokens.access_token),
         expires_in: tokens.expires_in.map(Duration::from_secs),
         refresh_token: tokens.refresh_token.map(SecretString::from),
+        scopes: tokens
+            .scope
+            .as_deref()
+            .map(|scope| super::exchange::granted(Some(scope), &[])),
     })
 }
 

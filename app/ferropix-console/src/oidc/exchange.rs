@@ -157,6 +157,18 @@ pub(super) struct TokenResponse {
     pub(super) refresh_token: Option<String>,
     /// The ID Token.
     id_token: Option<String>,
+    /// The scopes granted, when they differ from those requested.
+    pub(super) scope: Option<String>,
+}
+
+/// The scopes a token answer granted: those it names, or, when it names
+/// none, those `requested` (RFC 6749 §5.1: the `scope` member may be left
+/// out when it is identical to the scope the client requested).
+pub(super) fn granted(answered: Option<&str>, requested: &[String]) -> Vec<String> {
+    answered.map_or_else(
+        || requested.to_vec(),
+        |scope| scope.split_whitespace().map(str::to_owned).collect(),
+    )
 }
 
 /// The token endpoint's error answer (RFC 6749 §5.2), of which the console
@@ -225,6 +237,7 @@ pub async fn exchange(
         ("code_verifier", pending.verifier().expose_secret()),
     ];
     let tokens = token_request(client, oidc, &grant).await?;
+    let scopes = granted(tokens.scope.as_deref(), &oidc.scopes);
     let id_token = tokens.id_token.ok_or(ExchangeError::NoIdToken)?;
     let operator = verify_id_token(client, oidc, pending, &id_token).await?;
     Ok(SignedIn {
@@ -233,6 +246,7 @@ pub async fn exchange(
         refresh_token: tokens.refresh_token.map(SecretString::from),
         id_token: Some(SecretString::from(id_token)),
         operator,
+        scopes,
     })
 }
 
@@ -385,4 +399,21 @@ async fn key_set(client: &reqwest::Client, oidc: &OidcSettings) -> Result<JwkSet
         .await
         .map_err(|source| ExchangeError::KeySetTransport { source })?;
     serde_json::from_slice(&body).map_err(|source| ExchangeError::KeySetBody { source })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::granted;
+
+    #[test]
+    fn a_token_answer_without_a_scope_granted_what_was_requested() {
+        let requested = vec![String::from("openid"), String::from("__ferropix.admin")];
+        assert_eq!(requested, granted(None, &requested));
+        assert_eq!(
+            vec![String::from("openid")],
+            granted(Some("openid"), &requested),
+            "a narrower grant is the grant"
+        );
+        assert_eq!(Vec::<String>::new(), granted(Some("  "), &requested));
+    }
 }

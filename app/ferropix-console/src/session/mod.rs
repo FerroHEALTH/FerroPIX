@@ -205,6 +205,8 @@ struct Session {
     id_token: Option<SecretString>,
     /// The operator's name as the provider gave it.
     operator: Option<String>,
+    /// The scopes the provider granted the access token.
+    scopes: Vec<String>,
 }
 
 /// What a completed sign-in leaves the session.
@@ -225,6 +227,8 @@ pub struct SignedIn {
     /// The operator's name, from the verified ID Token's `name` or
     /// `preferred_username` claim (OpenID Connect Core 1.0 §5.1).
     pub operator: Option<String>,
+    /// The scopes the provider granted the access token (RFC 6749 §5.1).
+    pub scopes: Vec<String>,
 }
 
 impl fmt::Debug for SignedIn {
@@ -232,6 +236,7 @@ impl fmt::Debug for SignedIn {
         f.debug_struct("SignedIn")
             .field("expires_in", &self.expires_in)
             .field("operator", &self.operator)
+            .field("scopes", &self.scopes)
             .finish_non_exhaustive()
     }
 }
@@ -376,6 +381,7 @@ impl Sessions {
                 refresh_gate: Arc::default(),
                 id_token: signed_in.id_token,
                 operator: signed_in.operator,
+                scopes: signed_in.scopes,
             },
         );
         Ok(id)
@@ -420,6 +426,22 @@ impl Sessions {
             .get(id)
             .filter(|session| live(&self.settings, session, now))
             .and_then(|session| session.operator.clone()))
+    }
+
+    /// The scopes the provider granted the access token of the live session
+    /// `id`, empty for a session that is not live.
+    ///
+    /// # Errors
+    /// Returns [`SessionError::Poisoned`] when the store is unusable.
+    pub fn scopes(&self, id: &SessionId) -> Result<Vec<String>, SessionError> {
+        let now = Instant::now();
+        let store = self.lock()?;
+        Ok(store
+            .sessions
+            .get(id)
+            .filter(|session| live(&self.settings, session, now))
+            .map(|session| session.scopes.clone())
+            .unwrap_or_default())
     }
 
     /// How many entries each pool holds.
@@ -513,6 +535,7 @@ mod tests {
             refresh_token: None,
             id_token: Some(SecretString::from("synthetic-id-token")),
             operator: Some(String::from("Synthetic Operator")),
+            scopes: vec![String::from("openid")],
         }
     }
 

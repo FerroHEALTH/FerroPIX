@@ -19,6 +19,8 @@ pub enum Held {
         token: AccessToken,
         /// The steward's name as the provider gave it.
         operator: Option<String>,
+        /// The scopes the provider granted the steward's access token.
+        scopes: Vec<String>,
     },
     /// A session cookie whose session has ended.
     Ended,
@@ -38,6 +40,7 @@ pub fn held(state: &ConsoleState, headers: &HeaderMap) -> Result<Held, SessionEr
         Some(token) => Ok(Held::SignedIn {
             token: AccessToken::new(token),
             operator: state.sessions().operator(&id)?,
+            scopes: state.sessions().scopes(&id)?,
         }),
         None => Ok(Held::Ended),
     }

@@ -58,7 +58,8 @@ and this project adheres to
   demographics with graded results, the top bar's field read by the shape
   of what was typed (#93); the patient record with its identifiers, records
   side by side, history and pseudonyms, and the audited reveal (#94); the
-  identifier domains with the administrator's editor (#95); the audit trail
+  identifier domains with the administrator's editor, drawn only when the
+  provider granted the token `[pix] admin_scope` (#95); the audit trail
   with posted filters and the CSV export (#96); the sources and the
   configuration in file mode (#120, #121). A refused call shows the
   server's issue in place.

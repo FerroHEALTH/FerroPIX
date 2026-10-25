@@ -791,8 +791,11 @@ messages! {
     DomainCreate = "domain-create",
     /// The change form's disclosure and submit.
     DomainChange = "domain-change",
-    /// The note that a domain write needs the administrator scope.
+    /// The note that the server records a domain write with its reason.
     DomainAdminNote = "domain-admin-note",
+    /// The note drawn in place of the domain forms without the
+    /// administrator scope.
+    DomainAdminOnly = "domain-admin-only",
     /// The sensitive switch.
     DomainSensitive = "domain-sensitive",
     /// The sensitive switch's help.

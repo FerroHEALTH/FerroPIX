@@ -3,8 +3,9 @@
 
 //! The keyboard paths of the console, against the filled stand-in: `/`
 //! focuses the top bar's search from anywhere, `j` and `k` walk the search
-//! results and Enter opens the person, and a modal dialog gives the focus
-//! back to the control that opened it when Escape closes it (WCAG 2.2 SC
+//! results and Enter opens the person, a reveal shows the value with its
+//! countdown and the trail lists the disclosure, and a modal dialog gives
+//! the focus back to the control that opened it when Escape closes it (WCAG 2.2 SC
 //! 2.1.1 and SC 2.4.3; WAI-ARIA Authoring Practices, the grid and the dialog
 //! (modal) patterns). No specification governs the keys themselves: our own
 //! design, on FerroUI's search box and work-list.
@@ -24,6 +25,9 @@ const SEARCH_FIELD: &str = "pix-search";
 
 /// A synthetic identifier typed into the search.
 const TYPED: &str = "SYNTH-4711";
+
+/// The synthetic value the filled stand-in reveals.
+const REVEALED: &str = "SYNTH-4711";
 
 /// The id of the active element, or an empty text.
 const ACTIVE_ID: &str = "return document.activeElement ? document.activeElement.id : '';";
@@ -169,6 +173,60 @@ async fn a_dialog_closed_with_escape_gives_the_focus_back_to_its_button() {
                 .expect("the active element"),
             "the focus is back on the button that opened the dialog"
         );
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reveal_shows_the_value_with_its_countdown_and_the_trail_shows_the_disclosure() {
+    if !journeys_enabled() {
+        return;
+    }
+    let stack = Stack::start_with(Server::Filled).await;
+    with_journey(async |journey| {
+        sign_in(journey, &stack).await;
+        journey
+            .open(&stack.url(&format!("/patients/{FILLED_PERSON}")))
+            .await;
+        let reason = journey
+            .element(By::Id("reason-0"), "the reveal's reason")
+            .await;
+        reason
+            .send_keys("Synthetic check")
+            .await
+            .expect("the field takes the reason");
+        journey
+            .keys(&reason, Key::Enter, "the revealed value")
+            .await;
+        let address = journey
+            .address_carrying(&format!("/patients/{FILLED_PERSON}"), "the record again")
+            .await;
+        assert!(
+            !address.contains(REVEALED),
+            "the value stays out of the address"
+        );
+        journey.element(By::Css("code"), "the revealed value").await;
+        let page = journey
+            .evaluate("return document.body.innerText;")
+            .await
+            .expect("the page's text");
+        assert!(page.contains(REVEALED), "the value is shown");
+        journey
+            .element(By::Css("[role='timer']"), "the countdown")
+            .await;
+        journey
+            .element(
+                By::Css("[role='status']"),
+                "the countdown's live announcement",
+            )
+            .await;
+        journey.open(&stack.url("/audit")).await;
+        let trail = journey
+            .evaluate("return document.body.innerText;")
+            .await
+            .expect("the trail's text");
+        assert!(trail.contains("reveal"), "the trail lists the disclosure");
+        assert!(!trail.contains(REVEALED), "the trail never shows the value");
     })
     .await;
 }

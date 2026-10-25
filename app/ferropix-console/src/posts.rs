@@ -53,10 +53,34 @@ fn field(pairs: &[(String, String)], name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// The steward's token and name when the request holds a live session.
-fn signed_in(state: &ConsoleState, headers: &HeaderMap) -> Option<(AccessToken, Option<String>)> {
+/// Who a live session holds: the steward's name and whether the provider
+/// granted the server's administrator scope.
+#[derive(Debug)]
+struct Steward {
+    /// The steward's name as the provider gave it.
+    name: Option<String>,
+    /// Whether the administrator scope was granted.
+    admin: bool,
+}
+
+/// The steward's token and who they are when the request holds a live
+/// session.
+fn signed_in(state: &ConsoleState, headers: &HeaderMap) -> Option<(AccessToken, Steward)> {
     match held(state, headers) {
-        Ok(Held::SignedIn { token, operator }) => Some((token, operator)),
+        Ok(Held::SignedIn {
+            token,
+            operator,
+            scopes,
+        }) => {
+            let admin = scopes.contains(&state.settings().pix.admin_scope);
+            Some((
+                token,
+                Steward {
+                    name: operator,
+                    admin,
+                },
+            ))
+        }
         _ => None,
     }
 }
@@ -67,12 +91,13 @@ async fn drawn(
     state: ConsoleState,
     mut parts: http::request::Parts,
     token: &AccessToken,
-    operator: Option<String>,
+    steward: Steward,
     document: Document,
 ) -> Response {
     let probe = state.pix().probe(token).await;
     parts.extensions.insert(PageContext {
-        operator,
+        operator: steward.name,
+        admin: steward.admin,
         probe: Some(probe),
         capability: None,
         prefix: state.sessions().preference_prefix(),
@@ -131,7 +156,7 @@ pub async fn search(Extension(state): Extension<ConsoleState>, request: Request)
         Ok(read) => read,
         Err(answer) => return *answer,
     };
-    let Some((token, operator)) = signed_in(&state, &parts.headers) else {
+    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
         return Redirect::to(parts.uri.path()).into_response();
     };
     let pix = state.pix();
@@ -181,7 +206,7 @@ pub async fn search(Extension(state): Extension<ConsoleState>, request: Request)
         results: Some((segment, results)),
         prefill,
     };
-    drawn(state, parts, &token, operator, document).await
+    drawn(state, parts, &token, steward, document).await
 }
 
 /// Searches by the demographics `pairs` posts, or those `prefill` carries.
@@ -268,11 +293,11 @@ pub async fn trail(Extension(state): Extension<ConsoleState>, request: Request) 
         Ok(read) => read,
         Err(answer) => return *answer,
     };
-    let Some((token, operator)) = signed_in(&state, &parts.headers) else {
+    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
         return Redirect::to(parts.uri.path()).into_response();
     };
     let document = crate::document::trail(state.pix(), &token, filter_of(&pairs)).await;
-    drawn(state, parts, &token, operator, document).await
+    drawn(state, parts, &token, steward, document).await
 }
 
 /// Serves the trail's export: the filter posted to the operator API's
@@ -347,7 +372,7 @@ pub async fn reveal(Extension(state): Extension<ConsoleState>, request: Request)
         return StatusCode::NOT_FOUND.into_response();
     };
     let page = format!("/patients/{person}");
-    let Some((token, operator)) = signed_in(&state, &parts.headers) else {
+    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
         return Redirect::to(&page).into_response();
     };
     let target = match (field(&pairs, "target").as_deref(), field(&pairs, "id")) {
@@ -383,7 +408,7 @@ pub async fn reveal(Extension(state): Extension<ConsoleState>, request: Request)
         person: person_read,
         revealed: Some(revealed),
     };
-    drawn(state, parts, &token, operator, document).await
+    drawn(state, parts, &token, steward, document).await
 }
 
 /// Serves a domain create: the administrator's form posted to the
@@ -396,7 +421,7 @@ pub async fn domain_create(
         Ok(read) => read,
         Err(answer) => return *answer,
     };
-    let Some((token, operator)) = signed_in(&state, &parts.headers) else {
+    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
         return Redirect::to(parts.uri.path()).into_response();
     };
     let kind = match field(&pairs, "kind").as_deref() {
@@ -417,7 +442,7 @@ pub async fn domain_create(
         domains: pix.read("operator/domains?limit=200", &token).await,
         written: Some(written.map(|_| ())),
     };
-    drawn(state, parts, &token, operator, document).await
+    drawn(state, parts, &token, steward, document).await
 }
 
 /// Serves a domain change: the administrator's form patched to the
@@ -439,7 +464,7 @@ pub async fn domain_change(
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let Some((token, operator)) = signed_in(&state, &parts.headers) else {
+    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
         return Redirect::to(parts.uri.path()).into_response();
     };
     let change = DomainChange {
@@ -455,7 +480,7 @@ pub async fn domain_change(
         page: pix.read(&route, &token).await,
         written: Some(written.map(|_| ())),
     };
-    drawn(state, parts, &token, operator, document).await
+    drawn(state, parts, &token, steward, document).await
 }
 
 #[cfg(test)]

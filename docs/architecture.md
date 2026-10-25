@@ -238,7 +238,9 @@ state.
 
 One schema, `pix`, one migration set under `app/ferropix-server/migrations/`
 (`sqlx migrate`, one concern per file, the grants in the last file of the
-set, which a unit test holds), embedded in the binary and applied in order by `db migrate` or at the
+set, which a unit test holds; a released migration is never edited or
+renumbered, so a migration added after a release is followed by the grants
+again), embedded in the binary and applied in order by `db migrate` or at the
 start of `serve`, under the migrator's advisory lock, with its bookkeeping in
 `pix._sqlx_migrations`; the migrator creates the schema, and `btree_gist`
 is installed into `pix`, so the runtime role needs no other schema. Every
@@ -252,7 +254,7 @@ row reads in order without a sequence.
 | `source_record_version` | `id`, `record_id`, `version`, `demographics` (jsonb), `received_at`, `channel` (`fhir`, `v2`, `pmir`), `request_id`, `block_phonetic`, `block_postal` | write-once; every feed inserts one; the demographics hold no identifier (the fed `Patient` without `identifier`, `link`, `contained`, `text`, `id` and `meta`), and the two text blocking keys of section 5.2 are indexed columns |
 | `carried_identifier` | `id`, `record_id`, `version`, `domain_id`, `identifier_hmac`, `identifier_sealed` or `identifier_value`, `key_id` | every identifier a version carries in a domain the store knows, the record's own included, found and sealed as a record's own; kept, never deleted, rewritten only by `db reseal` |
 | `person` | `id`, `status` (`active`, `merged`), `merged_into`, `created_at` | the Patient Master Identity; `id` is the FHIR `Patient.id` |
-| `link` | `id`, `record_id`, `person_id`, `kind`, `score`, `valid` (`tstzrange`), `made_by` (an actor), `made_at`, `reason`, `ended_by_action` | `UNIQUE (record_id, valid WITHOUT OVERLAPS)` over `btree_gist`, so a record is in one person at any instant and the history is the table |
+| `link` | `id`, `record_id`, `person_id`, `kind`, `score`, `evidence` (jsonb, a `probabilistic` link's alone), `valid` (`tstzrange`), `made_by` (an actor), `made_at`, `reason`, `ended_by_action` | `UNIQUE (record_id, valid WITHOUT OVERLAPS)` over `btree_gist`, so a record is in one person at any instant and the history is the table |
 | `candidate` | `id`, `record_a`, `record_b`, `a_version`, `b_version`, `score`, `grade`, `evidence` (jsonb), `status` (`open`, `linked`, `not-a-match`, `deferred`), `decided_by`, `decided_at`, `reason`, `deferred_until` | the review queue; a `not-a-match` pair is not queued again until either record changes |
 | `merge` | `id`, `survivor_id`, `merged_id`, `kind` (`steward`, `source`, `deterministic`, `probabilistic`), `made_by`, `made_at`, `reason`, `reverted_at`, `reverted_by`, `revert_reason` | one row per merge |
 | `merge_effect` | `merge_id`, `record_id`, `from_person`, `link_closed`, `link_opened` | what the merge moved, which the revert replays backwards |
@@ -483,7 +485,9 @@ grade and nothing of the evidence.
 means a `certain` pair is still a candidate at the top of the queue: a
 deployment decides, with its own data, when the scorer has earned the
 right to link alone. With `auto_link = true` a `certain` pair merges the
-two persons, the younger into the older, with `kind = probabilistic`. The
+two persons, the younger into the older, with `kind = probabilistic`, and
+each moved record's link is of kind `probabilistic` and keeps the score
+and the evidence; the merge is an `auto-link` system action. The
 deterministic tier links alone always, because an authoritative identifier
 is the Source's statement. A feed refreshes the open candidate of a pair it
 scores again with the new versions, score and evidence, and leaves a
@@ -1745,7 +1749,7 @@ The milestones carry the order; every issue cites the section it builds.
 | D25 | The operator API's paging | the domains by a cursor of the last system, the trail by a cursor of the last action id, the two searches by an offset; at most 200, 200 and 50 a page, an export at most 10,000 actions with the cursor of the rest in a header | no specification governs it; a search's persons are ranked by score, so an offset is their only stable order, and the other lists keep a cursor as ITI-78 does (D22) |
 | D26 | What an operator read records | a person view a `view` steward action and a BALP Patient Read record; a search one BALP Patient Query record per person found, or a Query record, and no steward action; an export an `export` steward action and an Export record; the dashboard, the domains, the matching configuration and the trail nothing; each written before the answer, a request refused before it runs writing none | no specification governs it; BALP 1.1.4 §1:52.4.1.6 wants a record per patient for an access, and a steward action per search would bury the trail the console reads (D8) |
 | D27 | An identifier search over an identifier two persons carry | every person listed, each masked | no specification governs it; ITI-83 answers the ambiguity alone, and the steward is the one who resolves it |
-| D28 | The dashboard's counts | a record linked in 24 hours is one whose person holds another record; "today" is the UTC day; the queue depth is the open candidates at the end of each UTC day | no specification governs it; the console draws a rate and two series from counts the store holds without a log |
+| D28 | The dashboard's counts | a record linked in 24 hours is one created in that time that the scorer linked alone, with a `probabilistic` link opened in that time (#112); "today" is the UTC day; the queue depth is the open candidates at the end of each UTC day | no specification governs it; the console draws a rate and two series from counts the store holds without a log |
 | D29 | The trail export | `text/csv` (RFC 4180), a cell a spreadsheet would read as a formula prefixed with `'` | no specification governs it; a steward's reason is free text and the export is opened in a spreadsheet |
 | D30 | The reveal's record | the `reveal` steward action and the BALP Privacy Disclosure record in one transaction committed only once the record is stored, the value answered after the commit; the action and the record name the domain, never the value; the steward's reason a `reason` detail of the disclosed entity, `purposeOfEvent` left to the token's coded purposes; 15 seconds shown by default, 30 at most | BALP 1.1.4 §3:5.7.7 and its `PrivacyDisclosure.Source` profile fix the event, the agents and the patient; where a free-text reason goes, and the order of the writes, no specification governs: our own design (D10) |
 | D31 | The domain writes | an administrator adds a `local` or `authoritative` domain whose Source an issuer lists, renames it, gives it another Source or retires it; a retired domain stays retired; the guard takes the store's Sources at the commit | PIXm 3.1.0 §2:3.104.5 has the Manager check the Source of every change; the master domain is the server's own, and an unretire would revive identifiers PIXm already answers as unknown (§2:3.83.4.2.2.3) |

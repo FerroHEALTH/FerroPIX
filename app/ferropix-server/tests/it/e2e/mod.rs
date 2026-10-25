@@ -8,6 +8,7 @@
 //! when the gate is unset. Every identifier and name is synthetic, and every
 //! key is generated when the case runs.
 
+mod autolink;
 mod blocking;
 mod cli;
 mod decisions;

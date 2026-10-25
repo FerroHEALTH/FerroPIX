@@ -14,6 +14,11 @@ and this project adheres to
 
 ### Added
 
+- Automatic probabilistic linking keeps its ground (#112): with
+  `[matching] auto_link = true`, each record a `certain` pair moves gets a
+  link of kind `probabilistic` with the score and the evidence the pair was
+  graded on, and the merge is an `auto-link` system action. The book's
+  Matching page explains the switch and how to earn it.
 - A steward's merge and its revert in the operator API (#108).
   `GET /operator/merges/preview` answers the whole effect of a merge or a
   revert and writes nothing; `POST /operator/merges` merges two persons with
@@ -46,6 +51,9 @@ and this project adheres to
   the server runs on both; a product that takes `ihe-iti` moves to
   `ihe-atna = "=0.2.10"` with it, and one that takes `nl-generic-functions`
   with `nuts-auth` to `ferrohealth-smart = "=0.7.0"` (#225).
+- The dashboard's auto-link rate counts only the records the scorer
+  linked alone in the last 24 hours, where it counted every record whose
+  patient held another record, a deterministic link included (#112).
 - The operator console draws with FerroUI 0.4.0 (#215). The top bar's
   search still submits to the search page, which lists every match in the
   page; whether it answers under the field as you type waits on what a

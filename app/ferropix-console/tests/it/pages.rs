@@ -335,8 +335,12 @@ async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_th
     assert!(page.contains("method=\"post\""), "the search posts");
     drop(logging);
     let logged = captured.text();
-    for secret in [typed, "Voorbeeld", "1970-01-01"] {
-        assert!(!logged.contains(secret), "a log line carries {secret}");
+    for (what, value) in [
+        ("the identifier", typed),
+        ("the family name", "Voorbeeld"),
+        ("the birth date", "1970-01-01"),
+    ] {
+        assert!(!logged.contains(value), "a log line carries {what}");
     }
     Ok(())
 }

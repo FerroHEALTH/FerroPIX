@@ -519,17 +519,14 @@ async fn no_token_code_or_verifier_reaches_a_log_line_or_a_page() -> Result<(), 
         .map(|(_, value)| value.into_owned())
         .ok_or("a verifier")?;
     let logged = captured.text();
-    for secret in [
-        OPERATOR_TOKEN,
-        id_token.as_str(),
-        verifier.as_str(),
-        "synthetic-code",
+    for (what, value) in [
+        ("the access token", OPERATOR_TOKEN),
+        ("the ID Token", id_token.as_str()),
+        ("the PKCE verifier", verifier.as_str()),
+        ("the authorization code", "synthetic-code"),
     ] {
-        assert!(
-            !logged.contains(secret),
-            "a log line carries {secret}: {logged}"
-        );
-        assert!(!page.contains(secret), "the page carries {secret}");
+        assert!(!logged.contains(value), "a log line carries {what}");
+        assert!(!page.contains(value), "the page carries {what}");
     }
     Ok(())
 }

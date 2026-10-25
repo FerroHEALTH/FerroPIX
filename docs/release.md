@@ -63,7 +63,8 @@ never checked again.
   the release rereads it.
 
 `scripts/checks/changelog-structure.sh` holds every section to the six Keep a
-Changelog types, each at most once.
+Changelog types, each at most once, and refuses a blank line between two
+bullets of an `[Unreleased]` list, which would split it in the notes.
 
 ## Preflight
 

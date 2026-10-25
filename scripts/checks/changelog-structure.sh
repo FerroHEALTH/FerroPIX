@@ -11,7 +11,14 @@
 #   2. a subsection header outside the canonical type set
 #      (Added / Changed / Deprecated / Removed / Fixed / Security), plus any
 #      type a product adds deliberately in CHANGELOG_EXTRA_TYPES (comma-separated,
-#      empty by default; e.g. "Upgrade notes").
+#      empty by default; e.g. "Upgrade notes");
+#   3. a blank line between two bullets of one subsection of [Unreleased],
+#      which splits its list in two in the release notes the section becomes.
+#      A released section is published as it stands and keeps its form.
+#
+# Usage:
+#   changelog-structure.sh [<file>]
+#   changelog-structure.sh --self-test
 #
 # Wired into the CI changelog-guard job; runs unconditionally (the
 # `no-changelog` escape label waives the entry REQUIREMENT, never the
@@ -20,7 +27,41 @@ set -euo pipefail
 
 # shellcheck source=scripts/lib/guard-args.sh
 . "$(dirname "$0")/../lib/guard-args.sh"
-guard_known_flags "[<file>]" "" "$@"
+guard_known_flags "[<file>] | --self-test" "--self-test" "$@"
+
+# The self-test runs this script over small changelogs in a temporary
+# directory: a clean one, and one of each refusal.
+self_test() {
+  local work status
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' RETURN
+  expect() {
+    status=0
+    bash "$0" "$work/$1.md" > /dev/null 2>&1 || status=$?
+    if [[ "$status" -ne "$2" ]]; then
+      echo "changelog-structure: self-test failed: $1 exited $status, wanted $2." >&2
+      exit 1
+    fi
+  }
+  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '  wrapped' '- two' '' '### Fixed' '' '- three' > "$work/clean.md"
+  expect clean 0
+  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '' '- two' > "$work/split.md"
+  expect split 1
+  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '  wrapped' '' '- two' > "$work/split-wrapped.md"
+  expect split-wrapped 1
+  printf '%s\n' '## [Unreleased]' '' '## [0.0.1] - 2026-01-01' '' '### Added' '' '- one' '' '- two' > "$work/released.md"
+  expect released 0
+  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '### Added' '' '- two' > "$work/duplicate.md"
+  expect duplicate 1
+  printf '%s\n' '## [Unreleased]' '' '### Notes' '' '- one' > "$work/unknown.md"
+  expect unknown 1
+  echo "changelog-structure: self-test OK."
+}
+
+if [[ "${1:-}" == "--self-test" ]]; then
+  self_test
+  exit 0
+fi
 
 file="${1:-CHANGELOG.md}"
 
@@ -42,8 +83,21 @@ awk -v path="$file" -v q="'" -v extra="${CHANGELOG_EXTRA_TYPES:-}" '
     sub(/^## \[/, "", section)
     sub(/\].*$/, "", section)
     delete seen
+    listing = 0; blank = 0
     next
   }
+  # Inside a subsection, a bullet after a blank line that follows a bullet or
+  # its wrapped lines splits the list.
+  section != "" && /^- / {
+    if (listing && blank && section == "Unreleased") {
+      errors[++n] = path ":" blank ": a blank line splits the list of " q \
+        "### " subsection q " in [" section "]: remove it"
+    }
+    listing = 1; blank = 0
+    next
+  }
+  section != "" && /^[[:space:]]*$/ { if (listing && !blank) blank = FNR; next }
+  section != "" && /^  / && listing && !blank { next }
   # A subsection heading inside a section: check the type, then the duplicate.
   /^### / && section != "" {
     heading = $0
@@ -61,7 +115,11 @@ awk -v path="$file" -v q="'" -v extra="${CHANGELOG_EXTRA_TYPES:-}" '
         "adding a second header"
     }
     seen[heading] = 1
+    subsection = heading
+    listing = 0; blank = 0
   }
+  # Any other line ends the list.
+  { listing = 0; blank = 0 }
   END {
     if (n > 0) {
       print "changelog structure check FAILED:" > "/dev/stderr"

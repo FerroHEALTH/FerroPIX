@@ -108,8 +108,8 @@ async fn the_overview_counts_the_records_the_links_and_the_feeds_of_the_store() 
     let overview: Overview = document(&get(&fed.harness, "/operator/overview").await, "overview");
     assert_eq!(2, overview.records_created_24h);
     assert_eq!(
-        2, overview.records_linked_24h,
-        "the BSN joined the two records"
+        0, overview.records_linked_24h,
+        "the BSN joined the two records, and no scorer linked them alone"
     );
     assert_eq!(2, overview.versions_fed_today);
     assert_eq!(QUEUE_DAYS, overview.queue_depth.len());

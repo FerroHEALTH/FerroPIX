@@ -38,6 +38,8 @@ pub(super) enum LinkKind {
     Deterministic,
     /// Moved by a person merge.
     Merge,
+    /// The scorer graded the pair certain with `auto_link` on.
+    Probabilistic,
 }
 
 impl LinkKind {
@@ -47,6 +49,7 @@ impl LinkKind {
             Self::Feed => "feed",
             Self::Deterministic => "deterministic",
             Self::Merge => "merge",
+            Self::Probabilistic => "probabilistic",
         }
     }
 }
@@ -233,12 +236,18 @@ async fn probabilistic(
                 (survivor, other.person)
             };
             lock_persons(connection, &[older, younger]).await?;
-            merge(
-                connection,
-                younger,
-                older,
-                MergeKind::Probabilistic,
+            let recording = Recording {
                 context,
+                kind: "auto-link",
+                candidate: None,
+                reason: None,
+            };
+            merge_moving(
+                connection,
+                (younger, older),
+                MergeKind::Probabilistic,
+                recording,
+                Moved::Scored(&scored),
             )
             .await?;
             linked.merged.push(younger);
@@ -433,6 +442,16 @@ pub(super) async fn merge(
         .map(|_merged| ())
 }
 
+/// What the links a merge moves are reopened as.
+#[derive(Debug, Clone, Copy)]
+enum Moved<'a> {
+    /// Links of kind `merge`.
+    Merge,
+    /// Links of kind `probabilistic`, with the score and the evidence that
+    /// joined the persons.
+    Scored(&'a Scored),
+}
+
 /// Merges `merged` into `survivor`, both locked and active: the merged
 /// person points at the survivor, each of its open links is closed and
 /// reopened on the survivor with a `merge_effect` row, the candidates the
@@ -445,7 +464,34 @@ pub(super) async fn merge_recorded(
     kind: MergeKind,
     recording: Recording<'_>,
 ) -> Result<Merged, FeedError> {
+    merge_moving(
+        connection,
+        (merged, survivor),
+        kind,
+        recording,
+        Moved::Merge,
+    )
+    .await
+}
+
+/// Merges as [`merge_recorded`] does, the moved links reopened as `moved`
+/// says.
+async fn merge_moving(
+    connection: &mut PgConnection,
+    (merged, survivor): (PersonId, PersonId),
+    kind: MergeKind,
+    recording: Recording<'_>,
+    moved: Moved<'_>,
+) -> Result<Merged, FeedError> {
     let context = recording.context;
+    let (link_kind, score, evidence) = match moved {
+        Moved::Merge => (LinkKind::Merge, None, None),
+        Moved::Scored(scored) => (
+            LinkKind::Probabilistic,
+            Some(scored.score),
+            Some(serde_json::to_string(&scored.evidence).map_err(|_json| FeedError::Evidence)?),
+        ),
+    };
     let merge: Uuid = sqlx::query_scalar(
         "INSERT INTO pix.merge (survivor_id, merged_id, kind, made_by, reason)
          VALUES ($1, $2, $3, $4, $5) RETURNING id",
@@ -496,13 +542,15 @@ pub(super) async fn merge_recorded(
     .map_err(store)?;
     for (closed, record) in closed {
         let opened: Uuid = sqlx::query_scalar(
-            "INSERT INTO pix.link (record_id, person_id, kind, valid, made_by)
-             VALUES ($1, $2, $3, tstzrange(clock_timestamp(), NULL), $4)
+            "INSERT INTO pix.link (record_id, person_id, kind, score, evidence, valid, made_by)
+             VALUES ($1, $2, $3, $4, $5::jsonb, tstzrange(clock_timestamp(), NULL), $6)
              RETURNING id",
         )
         .bind(record)
         .bind(survivor.uuid())
-        .bind(LinkKind::Merge.as_str())
+        .bind(link_kind.as_str())
+        .bind(score)
+        .bind(evidence.as_deref())
         .bind(&context.actor)
         .fetch_one(&mut *connection)
         .await
@@ -520,6 +568,18 @@ pub(super) async fn merge_recorded(
         .await
         .map_err(store)?;
     }
+    close_candidates(connection, survivor, &context.actor).await?;
+    // TODO(#104): queue the PMIR merge message for each matching subscription.
+    Ok(Merged { merge, action })
+}
+
+/// Closes as linked every open or deferred candidate whose two records are
+/// both in `survivor`, decided by `actor`.
+async fn close_candidates(
+    connection: &mut PgConnection,
+    survivor: PersonId,
+    actor: &str,
+) -> Result<(), FeedError> {
     sqlx::query(
         "UPDATE pix.candidate c
          SET status = 'linked', decided_by = $2, decided_at = now(), deferred_until = NULL
@@ -530,12 +590,11 @@ pub(super) async fn merge_recorded(
                        WHERE l.record_id = c.record_b AND upper_inf(l.valid) AND l.person_id = $1)",
     )
     .bind(survivor.uuid())
-    .bind(&context.actor)
+    .bind(actor)
     .execute(&mut *connection)
     .await
     .map_err(store)?;
-    // TODO(#104): queue the PMIR merge message for each matching subscription.
-    Ok(Merged { merge, action })
+    Ok(())
 }
 
 /// Records the pair of `me` and `other` as an open candidate, or refreshes

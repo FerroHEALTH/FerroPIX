@@ -45,14 +45,11 @@ pub async fn read(operator: &Operator) -> Result<Overview, OperatorError> {
              (SELECT count(*) FROM pix.candidate WHERE status = 'deferred'),
              (SELECT count(*) FROM pix.source_record
               WHERE created_at >= now() - interval '24 hours'),
-             (SELECT count(*) FROM pix.source_record r
-              JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-              WHERE r.created_at >= now() - interval '24 hours'
-                AND EXISTS (
-                    SELECT 1 FROM pix.link o
-                    WHERE o.person_id = l.person_id AND upper_inf(o.valid)
-                      AND o.record_id <> r.id
-                )),
+             (SELECT count(DISTINCT l.record_id) FROM pix.link l
+              JOIN pix.source_record r ON r.id = l.record_id
+              WHERE l.kind = 'probabilistic'
+                AND lower(l.valid) >= now() - interval '24 hours'
+                AND r.created_at >= now() - interval '24 hours'),
              (SELECT count(*) FROM pix.source_record_version
               WHERE received_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),
              (SELECT count(*) FROM pix.subscription WHERE status = 'error')",

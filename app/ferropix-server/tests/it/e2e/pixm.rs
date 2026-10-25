@@ -96,6 +96,15 @@ pub(crate) struct Harness {
 impl Harness {
     /// Starts PostgreSQL, the store with `seeds`, and the router.
     pub(crate) async fn start(seeds: Vec<DomainSeed>) -> Self {
+        Self::start_with(seeds, |_matching| {}).await
+    }
+
+    /// Starts as [`Harness::start`] does, with the `[matching]` section
+    /// `tweak` changes.
+    pub(crate) async fn start_with(
+        seeds: Vec<DomainSeed>,
+        tweak: impl FnOnce(&mut ferropix_server::config::section::matching::Matching),
+    ) -> Self {
         let postgres = postgres().await.expect("PostgreSQL starts");
         let url = app_role(&postgres).await;
         let store = Store::start(
@@ -109,6 +118,7 @@ impl Harness {
         let secrets = Secrets::new();
         let mut settings = crate::auth::settings(&issuer, &secrets);
         settings.domains = seeds;
+        tweak(&mut settings.matching);
         let smart = Arc::new(
             Smart::discover(settings.auth, &settings.domains)
                 .await

@@ -28,8 +28,8 @@ pub struct Overview {
     pub queue: Queue,
     /// The source records created in the last 24 hours.
     pub records_created_24h: u64,
-    /// Of those, the records whose person holds another record too: linked
-    /// to another domain's record without a steward.
+    /// Of those, the records the scorer linked alone, with `auto_link` on:
+    /// a `probabilistic` link opened in the same 24 hours.
     pub records_linked_24h: u64,
     /// The record versions received since midnight UTC, on every channel.
     pub versions_fed_today: u64,

@@ -108,6 +108,23 @@ against the `Patient` you send, as `search.score`, and its grade as the
 §2:3.119.4.2.2.4). A person graded `certainly-not` is no match and is left
 out of the answer.
 
+## Automatic linking
+
+`[matching] auto_link` is `false` by default, so a `certain` pair is a
+candidate at the top of the review queue and a steward decides it. Turn it
+on only once your own data shows the scorer has earned it: load your
+records, run `ferropix matching estimate` (below), set the weights it
+prints, and read the scores of the candidates your stewards link and hold
+apart against `link_at`.
+
+With `auto_link = true`, a `certain` pair links in the feed that scored it:
+the younger patient merges into the older, and each record that moves gets
+a link of kind `probabilistic` that keeps the score and the evidence the
+pair was graded on. The merge is recorded as an `auto-link` action of the
+Source's client and can be reverted like any other merge. The dashboard's
+auto-link rate counts these links alone: the records created in the last 24
+hours that the scorer linked, over all the records created in that time.
+
 ## Blocking
 
 A pair is scored only when the two records share a blocking key, so a feed

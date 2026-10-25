@@ -41,10 +41,11 @@ and this project adheres to
 
 ### Changed
 
-- `nl-generic-functions` 0.0.29 takes `ferrohealth-smart = "=0.7.0"`, the
-  family's newest pin, and the server runs on it; a product that takes
-  `nl-generic-functions` with `nuts-auth` moves to `ferrohealth-smart =
-  "=0.7.0"` with it (#225).
+- `ihe-iti` 0.0.53 takes `ihe-atna = "=0.2.10"` and `nl-generic-functions`
+  0.0.29 takes `ferrohealth-smart = "=0.7.0"`, the family's newest pins, and
+  the server runs on both; a product that takes `ihe-iti` moves to
+  `ihe-atna = "=0.2.10"` with it, and one that takes `nl-generic-functions`
+  with `nuts-auth` to `ferrohealth-smart = "=0.7.0"` (#225).
 - The operator console draws with FerroUI 0.4.0 (#215). The top bar's
   search still submits to the search page, which lists every match in the
   page; whether it answers under the field as you type waits on what a

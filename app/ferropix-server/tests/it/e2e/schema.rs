@@ -15,7 +15,7 @@ use uuid::Uuid;
 use super::{BSN_SYSTEM, app_role, bsn, create, domain, fresh_key, seeds, settings};
 
 /// Every relation of schema `pix`, the migrator's bookkeeping included.
-const RELATIONS: [&str; 17] = [
+const RELATIONS: [&str; 18] = [
     "_sqlx_migrations",
     "candidate",
     "carried_identifier",
@@ -24,6 +24,7 @@ const RELATIONS: [&str; 17] = [
     "link",
     "merge",
     "merge_effect",
+    "outbox",
     "person",
     "pseudonym",
     "pseudonym_domain",
@@ -36,7 +37,7 @@ const RELATIONS: [&str; 17] = [
 ];
 
 /// The constraints the model rests on.
-const CONSTRAINTS: [&str; 16] = [
+const CONSTRAINTS: [&str; 18] = [
     "carried_identifier_key",
     "merge_kind_check",
     "identifier_domain_system_key",
@@ -53,6 +54,8 @@ const CONSTRAINTS: [&str; 16] = [
     "merge_persons_check",
     "pseudonym_value_key",
     "seal_key_singleton_check",
+    "outbox_channel_check",
+    "outbox_settled_check",
 ];
 
 #[tokio::test]

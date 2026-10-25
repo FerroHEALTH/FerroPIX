@@ -20,6 +20,7 @@ use axum::body::Body;
 use ferropix_server::audit::Audit;
 use ferropix_server::config::section::matching::Matching;
 use ferropix_server::config::section::xcpd::{Xcpd, XcpdSettings};
+use ferropix_server::outbox::{self, Channels, Wake};
 use ferropix_server::xcpd::{Gateway, routes};
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::{HOSPITAL_DOMAIN, LABORATORY_DOMAIN};
@@ -99,19 +100,44 @@ fn gateway(harness: &Harness, matching: &Matching) -> Router {
 
 /// Returns the gateway's router over the harness's store as `xcpd` sets it.
 pub(super) fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSettings) -> Router {
+    let wake = Wake::default();
+    let gateway = gateway_only(harness, matching, xcpd, &wake);
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let _sender = outbox::start(
+        harness.store.clone(),
+        Channels {
+            xcpd: Some(gateway.channel()),
+        },
+        wake,
+        stopped,
+    );
+    tokio::spawn(async move {
+        let _held = stop;
+        std::future::pending::<()>().await;
+    });
+    routes(gateway)
+}
+
+/// Returns the gateway over the harness's store as `xcpd` sets it, woken by
+/// `wake`, with no outbox sender started.
+pub(super) fn gateway_only(
+    harness: &Harness,
+    matching: &Matching,
+    xcpd: XcpdSettings,
+    wake: &Wake,
+) -> Gateway {
     let mut audit_settings = harness.audit_settings.clone();
     audit_settings.spool_dir = harness.spool.path().join("spool");
     let audit = Audit::open(&audit_settings, &harness.public_base_url).expect("the spool opens");
-    routes(
-        Gateway::new(
-            &harness.store,
-            matching,
-            xcpd,
-            &harness.public_base_url,
-            &audit,
-        )
-        .expect("the gateway starts"),
+    Gateway::new(
+        &harness.store,
+        matching,
+        xcpd,
+        &harness.public_base_url,
+        &audit,
+        wake.clone(),
     )
+    .expect("the gateway starts")
 }
 
 /// Feeds the store: Sanne Wolderink in the hospital, and two records of

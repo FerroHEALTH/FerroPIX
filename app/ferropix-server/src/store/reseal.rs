@@ -9,6 +9,8 @@
 //! HMAC of every record, and of every identifier a version carries, and the
 //! sealed value of every sealed one in batches,
 //! one transaction each, so it resumes where an interrupted run stopped.
+//! The payloads waiting in the outbox are sealed the same way and are
+//! rewritten after the identifiers.
 //! When no row is left under the old key it records the new key as the
 //! store's and drops the pending mark; the old key opens nothing afterwards.
 //! No specification governs the rotation: our own design.
@@ -123,6 +125,13 @@ pub async fn run(store: &Store, old: &Sealer, batch: i64) -> Result<ResealReport
             tracing::info!(?table, rewritten, "identifiers resealed in a batch");
         }
     }
+    loop {
+        let rewritten = reseal_outbox_batch(store, old, new, batch).await?;
+        if rewritten == 0 {
+            break;
+        }
+        tracing::info!(rewritten, "outbox payloads resealed in a batch");
+    }
     finish(store, to).await?;
     tracing::info!(from = %from, to = %to, records, "the store is resealed");
     Ok(ResealReport { from, to, records })
@@ -215,11 +224,46 @@ async fn rewrite_batch(
     Ok(rewritten)
 }
 
+/// Reseals one batch of outbox payloads written under `old`, each sealed for
+/// its own row id, and returns how many it rewrote.
+async fn reseal_outbox_batch(
+    store: &Store,
+    old: &Sealer,
+    new: &Sealer,
+    batch: i64,
+) -> Result<u64, StoreError> {
+    let mut transaction = store.pool().begin().await?;
+    let rows: Vec<(Uuid, Vec<u8>)> = sqlx::query_as(
+        "SELECT id, payload_sealed FROM pix.outbox WHERE key_id = $1 ORDER BY id LIMIT $2 FOR UPDATE",
+    )
+    .bind(old.key_id().as_bytes().as_slice())
+    .bind(batch)
+    .fetch_all(&mut *transaction)
+    .await?;
+    let mut rewritten: u64 = 0;
+    for (id, sealed) in rows {
+        let payload = old.open(id, &sealed)?;
+        sqlx::query("UPDATE pix.outbox SET payload_sealed = $2, key_id = $3 WHERE id = $1")
+            .bind(id)
+            .bind(new.seal(id, &payload)?)
+            .bind(new.key_id().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await?;
+        rewritten = rewritten.saturating_add(1);
+    }
+    transaction.commit().await?;
+    Ok(rewritten)
+}
+
 /// Records `to` as the store's key once no row is written under another.
 async fn finish(store: &Store, to: KeyId) -> Result<(), StoreError> {
     let mut transaction = store.pool().begin().await?;
-    for table in TABLES {
-        let left: Option<Vec<u8>> = sqlx::query_scalar(table.left())
+    for statement in TABLES
+        .map(Table::left)
+        .into_iter()
+        .chain(["SELECT key_id FROM pix.outbox WHERE key_id <> $1 LIMIT 1"])
+    {
+        let left: Option<Vec<u8>> = sqlx::query_scalar(statement)
             .bind(to.as_bytes().as_slice())
             .fetch_optional(&mut *transaction)
             .await?;

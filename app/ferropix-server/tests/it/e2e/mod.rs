@@ -21,6 +21,7 @@ mod leak;
 mod merges;
 mod operator;
 mod operator_writes;
+mod outbox;
 mod pdqm_match;
 mod pdqm_search;
 mod pixm;

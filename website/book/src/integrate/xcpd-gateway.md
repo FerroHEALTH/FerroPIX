@@ -77,8 +77,13 @@ the request's `MessageID` and `To` naming the endpoint.
 - **Delivery:** a `2xx` answer from the endpoint ends the delivery. Any other
   status, a timeout (`delivery_timeout_ms`) or a refused connection is tried
   again after `delivery_initial_backoff_ms`, doubling up to
-  `delivery_max_backoff_ms`, at most `delivery_attempts` times in all. The
-  answer is held in memory, so a restart drops an answer not yet delivered.
+  `delivery_max_backoff_ms`, at most `delivery_attempts` times in all; an
+  answer whose attempts are spent is abandoned and the log says so.
+- **Durability:** the answer is written to the outbox in PostgreSQL, its
+  payload sealed under the store's key, before the request is accepted with
+  `202`. A restart delivers what the outbox still holds, and on `SIGTERM`
+  the sender finishes the answer in flight within `[server]
+  drain_timeout_ms`.
 - **Mutual TLS:** with `client_certificate_file` and `client_key_file` set,
   the delivery presents that certificate to the reply endpoint, as the
   mutual TLS of an ATNA Secure Node asks. `reply_trust_file` adds the PEM

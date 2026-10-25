@@ -14,6 +14,13 @@ and this project adheres to
 
 ### Added
 
+- A durable outbox for outbound messages (#239): an XCPD asynchronous answer
+  is written to `pix.outbox`, its payload sealed under the store's key,
+  before the request is accepted with `202`, so a restart delivers it; the
+  sender retries with a doubling wait, abandons a message whose attempts are
+  spent, and finishes the message in flight on `SIGTERM` within the drain;
+  `db reseal` rewrites the waiting payloads. ITI-10 will deliver through the
+  same outbox.
 - The W3C Web Services Addressing 1.0 SOAP Binding Recommendation is vendored
   by `scripts/vendor/w3c-ws-addressing.sh` (#241), so the XCPD Responding
   Gateway's citation of its §5.2.2 is checked against the text in the

@@ -52,6 +52,8 @@ pub struct Backend {
     pub matching: Matching,
     /// `[pdqm] deprecated`.
     pub deprecated: Deprecated,
+    /// The rest of the configuration the operator API shows.
+    pub configured: crate::operator::Configured,
 }
 
 /// Which switches of the configuration are on.
@@ -150,6 +152,7 @@ pub fn routes(
     let operator = Arc::new(crate::operator::Operator::new(
         backend.store.clone(),
         &backend.matching,
+        backend.configured.clone(),
         audit.clone(),
         smart.sources().clone(),
         public_base_url,

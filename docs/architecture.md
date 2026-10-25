@@ -1225,8 +1225,19 @@ in the body or the session; every answer is `no-store`.
 | `GET /operator/merges/preview`, `POST /operator/merges`, `POST /operator/merges/{id}/revert` | the merge preview, the merge, the unmerge |
 | `GET`, `POST`, `PATCH /operator/domains…` | the identifier domains (writes behind the admin scope) |
 | `GET`, `POST /operator/pseudonym-domains…`, `POST /operator/pseudonyms/resolve` | the pseudonymisation domains and the resolutions |
+| `GET /operator/sources`, `GET /operator/sources/{id}` | the systems allowed to feed, read from the configuration, with their domains and their last messages |
 | `GET /operator/matching` | the thresholds and weights in effect |
+| `GET /operator/configuration` | the matching configuration with each setting's origin, file mode |
 | `GET /operator/actions`, `POST /operator/actions/export` | the audit trail and its export |
+
+FerroPIX keeps no configuration store, so the console runs in file mode
+(FerroUI 0.3.7 `design/COMPONENTS.md` rule 13): Configuration and every
+Settings tab are read-only views of the file, each setting marked when the
+environment set it or nothing did. A source's admission is configuration
+(an issuer's `clients`, a Basic user, an `[[hl7v2.senders]]` entry), so the
+sources are read from it too and are added or retired in the file, never
+written through the API; the domains that name a source are read from the
+domains. No specification governs this: our own design (#120, #121).
 
 ### 12.5 Design quality, stated
 

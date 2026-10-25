@@ -16,6 +16,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::config::error::{Error, ParseFault, Stage};
+use crate::config::origin::Origins;
 use crate::config::{CONFIG_PATH_ENV, Config, ENV_PREFIX};
 
 /// One `FERROPIX__` variable, with the key it addresses.
@@ -54,7 +55,13 @@ impl Config {
         let environment: BTreeMap<String, String> = std::env::vars()
             .filter(|(name, _)| name.starts_with(ENV_PREFIX))
             .collect();
-        Self::from_sources(text.as_deref(), &environment)
+        let name = named
+            .as_deref()
+            .and_then(Path::file_name)
+            .map(|name| name.to_string_lossy().into_owned());
+        let mut config = Self::from_sources(text.as_deref(), &environment)?;
+        config.origins = config.origins.clone().with_file(name);
+        Ok(config)
     }
 
     /// Reads `text` as TOML and applies `environment` over it.
@@ -93,7 +100,12 @@ impl Config {
             }
             let merged = toml::to_string(&table).map_err(|source| Error::Assemble { source })?;
             let error = match toml::from_str::<Self>(&merged) {
-                Ok(config) => return Ok(config),
+                Ok(mut config) => {
+                    let set: Vec<String> =
+                        overrides.iter().map(|item| item.path.join(".")).collect();
+                    config.origins = Origins::of(&file, &set);
+                    return Ok(config);
+                }
                 Err(error) => error,
             };
             let retyped = error

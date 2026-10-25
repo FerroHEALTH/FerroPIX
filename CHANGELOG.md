@@ -42,6 +42,16 @@ and this project adheres to
   root. `deploy/helm/validate.sh` (CI's `helm-chart` job) lints, renders and
   holds it to the Kubernetes schemas with `kubeconform`, and
   `deploy/helm/kind-check.sh` installs it on a kind cluster.
+- The operator API's sources and configuration (#120, #121).
+  `GET /operator/sources` lists every system allowed to feed (each FHIR
+  client an issuer lists, each Basic user of the development profile and
+  each `[[hl7v2.senders]]` entry) with its channel, its admission, the
+  domains that name it and its last activity, and
+  `GET /operator/sources/{id}` one source with its last 20 messages, never
+  a value. `GET /operator/configuration` shows the matching configuration in
+  file mode, each setting with where its value came from: the file, the
+  environment, the default, or built in. FerroPIX keeps no configuration
+  store, so both are read-only and changed in the file.
 
 ### Changed
 

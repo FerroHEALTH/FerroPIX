@@ -72,6 +72,27 @@ impl Sources {
         *held = map(domains);
     }
 
+    /// Returns the Source clients each issuer may vouch for, by issuer.
+    #[must_use]
+    pub fn clients(&self) -> &BTreeMap<String, BTreeSet<String>> {
+        &self.clients
+    }
+
+    /// Returns the user-ids of the Basic users of the development profile.
+    #[must_use]
+    pub fn basic_users(&self) -> &BTreeSet<String> {
+        &self.basic_users
+    }
+
+    /// Returns the `source_client_id` of each unretired domain, by system.
+    #[must_use]
+    pub fn domains(&self) -> BTreeMap<String, String> {
+        self.domains
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
     /// Returns whether `client` may be a Source: an issuer lists it in its
     /// `clients`, or it is a Basic user.
     #[must_use]

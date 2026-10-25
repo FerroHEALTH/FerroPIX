@@ -13,6 +13,7 @@
 
 pub mod error;
 mod load;
+pub mod origin;
 pub mod secret;
 pub mod section;
 pub mod settings;
@@ -78,4 +79,7 @@ pub struct Config {
     /// The development table, admitted under `profile = "development"` only
     /// (`[dev]`).
     pub dev: Option<section::dev::Dev>,
+    /// Where each setting came from, recorded as the tree is read.
+    #[serde(skip)]
+    pub origins: origin::Origins,
 }

@@ -140,7 +140,7 @@ const fn row(
 /// operator API (§12.4), with what it requires.
 // NOTE: SMART App Launch 2.2.0, Scopes and Launch Context: "u" admits an
 // update that creates, so ITI-104's conditional update needs `u` alone.
-pub static ROUTES: [Route; 37] = [
+pub static ROUTES: [Route; 40] = [
     row(
         Method::GET,
         "/fhir/metadata",
@@ -387,6 +387,27 @@ pub static ROUTES: [Route; 37] = [
     ),
     row(
         Method::GET,
+        "/operator/sources",
+        "operator-sources",
+        Mount::Operator,
+        Need::StewardOrAdmin,
+    ),
+    row(
+        Method::GET,
+        "/operator/sources/{id}",
+        "operator-source",
+        Mount::Operator,
+        Need::StewardOrAdmin,
+    ),
+    row(
+        Method::GET,
+        "/operator/configuration",
+        "operator-configuration",
+        Mount::Operator,
+        Need::StewardOrAdmin,
+    ),
+    row(
+        Method::GET,
         "/operator/matching",
         "operator-matching",
         Mount::Operator,
@@ -411,13 +432,16 @@ pub static ROUTES: [Route; 37] = [
 /// The operator routes that read no person and change nothing a steward
 /// action records, so their requests take no place in the audit spool (our
 /// own design).
-const UNAUDITED_OPERATOR: [&str; 7] = [
+const UNAUDITED_OPERATOR: [&str; 10] = [
     "operator-overview",
     "operator-dependencies",
     "operator-domains",
     "operator-domain",
     "operator-pseudonym-domains",
     "operator-matching",
+    "operator-sources",
+    "operator-source",
+    "operator-configuration",
     "operator-actions",
 ];
 

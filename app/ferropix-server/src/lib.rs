@@ -393,6 +393,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         audit,
         matching,
         usage_report: report_settings,
+        origins,
         ..
     } = settings;
     let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
@@ -417,6 +418,13 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
             store: store.clone(),
             matching: matching.clone(),
             deprecated: pdqm.deprecated,
+            configured: operator::Configured {
+                origins: origins.clone(),
+                senders: hl7v2
+                    .as_ref()
+                    .map(|h| h.senders.clone())
+                    .unwrap_or_default(),
+            },
         },
     );
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));

@@ -4,7 +4,7 @@
 # No roadmap board
 
 FerroPIX has no GitHub Project (v2) board, and none is created. It keeps its
-plan on the tracker alone, as FerroSMART does (FerroHEALTH/FerroSMART#24).
+plan on the tracker alone, as FerroAUTH does (FerroHEALTH/FerroAUTH#24).
 
 - **The tracker is the issue list** (`issue-workflow.md`): the native issue
   type and the organisation's `Priority` and `Effort` fields carry type,

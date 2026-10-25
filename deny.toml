@@ -25,7 +25,7 @@ version = 2
 # Dev-dependencies are compiled here and in CI, so their licences are read too.
 include-dev = true
 # Permissive licences a BUSL-1.1 project can depend on and its Apache 2.0
-# Change License admits, the set FerroSMART carries. A licence joins the day a
+# Change License admits, the set FerroAUTH carries. A licence joins the day a
 # dependency needs it.
 allow = [
   "Apache-2.0",

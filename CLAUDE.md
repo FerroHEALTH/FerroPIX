@@ -4,7 +4,9 @@
 # CLAUDE.md
 
 **FerroPIX** is the FerroHEALTH family's Master Patient Index over IHE PIX,
-PIXm, PDQ and PDQm, in pure Rust. It holds the patient identity
+PIXm, PDQ, PDQm, PMIR and HL7 v2, in pure Rust, and the one product that
+owns identity and the IHE profiles; the other products reach it only over
+those protocols (`.claude/memory/family-architecture.md`). It holds the patient identity
 cross-reference and mints the pseudonymous identifiers the clinical domain
 uses, so identifying data stays outside the clinical record. FerroEHR
 resolves `ehr_id` through it (PIXm `$ihe-pix` ITI-83 and PDQm ITI-78), and
@@ -29,8 +31,9 @@ FerroPIX in prose, `ferropix` in identifiers.
   (`hl7v2-types` and its MLLP codec and parser), never a second parser.
 - The ATNA and BALP audit senders live in FerroHEALTH/FerroAUDIT as the crate
   `ihe-atna`; FerroPIX audits the Manager side through it.
-  `oauth-server-metadata` is retired; authorization comes from
-  `ferrohealth-smart` (FerroSMART).
+  `oauth-server-metadata` is retired; authentication and the SMART scopes
+  come from `ferrohealth-smart`, and the policy decision belongs to
+  `ferrohealth-authz`, both FerroSMART's, never a local copy.
 - **The server and the console (owner, 2026-10-21):** FerroPIX is a
   standalone server with its cross-reference in PostgreSQL, and it ships
   two OCI images, the server (`ghcr.io/ferrohealth/ferropix`) and the

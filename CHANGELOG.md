@@ -14,6 +14,15 @@ and this project adheres to
 
 ### Added
 
+- A steward's merge and its revert in the operator API (#108).
+  `GET /operator/merges/preview` answers the whole effect of a merge or a
+  revert and writes nothing; `POST /operator/merges` merges two persons with
+  the versions the steward read, and `POST /operator/merges/{id}/revert`
+  reverts the survivor's latest merge, replaying its moves backwards and
+  making the merged person active again. A person that changed since the
+  preview is `409`, and a revert out of order is `409` with the merge to
+  revert first in its preview. Each is one steward action with its reason
+  and one BALP record.
 - The HL7 v2 face refuses ITI-22, the Patient Demographics and Visit
   Query, by name: a QBP^ZV1 is acknowledged `AR` with ERR code `200` and a
   text that points to ITI-21, since FerroPIX keeps no visit data and the

@@ -18,6 +18,7 @@
 //! - [`actions`]: the audit trail and its export.
 //! - [`candidates`]: the review queue, one candidate and the steward's
 //!   decision.
+//! - [`merges`]: a steward's merge, its revert and the preview of either.
 //!
 //! Every answer is a [`ferropix_operator_api`] document in JSON, never kept
 //! by a cache (`Cache-Control: no-store`); a refusal is an
@@ -34,6 +35,7 @@ pub mod configuration;
 pub mod demographics;
 pub mod domains;
 pub mod matching;
+pub mod merges;
 pub mod overview;
 pub mod person;
 pub mod reveal;
@@ -207,6 +209,18 @@ pub fn handler(
                 async move { candidates::decide(&operator, request).await }
             })
         }
+        (Method::GET, "/operator/merges/preview") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { merges::preview(&operator, request).await }
+        }),
+        (Method::POST, "/operator/merges") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { merges::create(&operator, request).await }
+        }),
+        (Method::POST, "/operator/merges/{id}/revert") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { merges::revert(&operator, request).await }
+        }),
         (Method::GET, "/operator/matching") => on(filter, move || {
             let operator = Arc::clone(&operator);
             async move { matching::answer(&operator) }

@@ -21,7 +21,13 @@ use super::pixm::{Answer, Harness, synthetic_seeds};
 /// The `Patient` body of `value` in `system` with the given demographics,
 /// at a postal code of its birth date's day, so two pairs never share a
 /// blocking key.
-fn patient(system: &str, value: &str, family: &str, given: &str, birth: &str) -> Document {
+pub(super) fn patient(
+    system: &str,
+    value: &str,
+    family: &str,
+    given: &str,
+    birth: &str,
+) -> Document {
     let day = birth.rsplit('-').next().unwrap_or("00");
     serde_json::from_str(&format!(
         r#"{{"resourceType":"Patient","identifier":[{{"system":"{system}","value":"{value}"}}],"name":[{{"family":"{family}","given":["{given}"]}}],"gender":"female","birthDate":"{birth}","address":[{{"postalCode":"99{day}ZZ"}}]}}"#
@@ -30,7 +36,7 @@ fn patient(system: &str, value: &str, family: &str, given: &str, birth: &str) ->
 }
 
 /// Feeds `body` as `value` in `system` and asserts it was taken.
-async fn fed(harness: &Harness, system: &str, value: &str, body: &Document) {
+pub(super) async fn fed(harness: &Harness, system: &str, value: &str, body: &Document) {
     let answer = harness.feed(system, value, body).await;
     assert!(
         answer.status == StatusCode::CREATED || answer.status == StatusCode::OK,
@@ -60,7 +66,7 @@ async fn pair(harness: &Harness, n: usize, family: &str) {
 }
 
 /// Reads the queue at `query`.
-async fn queue(harness: &Harness, query: &str) -> Candidates {
+pub(super) async fn queue(harness: &Harness, query: &str) -> Candidates {
     document(
         &get(harness, &format!("/operator/candidates{query}")).await,
         "the queue",
@@ -68,7 +74,7 @@ async fn queue(harness: &Harness, query: &str) -> Candidates {
 }
 
 /// Reads the candidate `id`.
-async fn candidate(harness: &Harness, id: &str) -> Candidate {
+pub(super) async fn candidate(harness: &Harness, id: &str) -> Candidate {
     document(
         &get(harness, &format!("/operator/candidates/{id}")).await,
         "the candidate",

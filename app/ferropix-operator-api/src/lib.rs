@@ -23,6 +23,7 @@ pub mod configuration;
 pub mod domain;
 pub mod health;
 pub mod matching;
+pub mod merge;
 pub mod overview;
 pub mod patient;
 pub mod person;

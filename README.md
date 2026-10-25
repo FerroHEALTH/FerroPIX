@@ -6,6 +6,11 @@
 
 **The master patient index: who the patient is, under every identifier, and where their records are.**
 
+[Documentation](https://ferropix.eu/docs/) ·
+[Quick start](#quick-start) ·
+[What ships today](#what-ships-today) ·
+[Licensing](https://ferropix.eu/docs/evaluate/licensing.html)
+
 <!-- badges:begin -->
 **Project**<br>
 [![Release](https://img.shields.io/github/v/release/FerroHEALTH/FerroPIX?sort=semver&logo=github&label=release)](https://github.com/FerroHEALTH/FerroPIX/releases/latest)
@@ -29,11 +34,6 @@
 [![PMIR 1.6.0 examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpmir.json)](conformance/pmir/pass-list.txt)
 [![Audit record examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Faudit.json)](conformance/audit/pass-list.txt)
 <!-- badges:end -->
-
-[Documentation](https://ferropix.eu/docs/) ·
-[Quick start](#quick-start) ·
-[What ships today](#what-ships-today) ·
-[Licensing](https://ferropix.eu/docs/evaluate/licensing.html)
 
 </div>
 

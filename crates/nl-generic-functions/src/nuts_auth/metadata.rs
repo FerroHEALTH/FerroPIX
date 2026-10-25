@@ -59,10 +59,14 @@ pub(super) fn read(
     if !issuer.is_identical_to(named) {
         return Err(MetadataError::Issuer);
     }
-    let token_endpoint = endpoint(raw.token_endpoint.as_deref(), issuer)
+    let token_endpoint = endpoint("token_endpoint", raw.token_endpoint.as_deref(), issuer)
         .map_err(|refused| refused.unwrap_or(MetadataError::TokenEndpoint))?;
-    let definition_endpoint = endpoint(raw.presentation_definition_endpoint.as_deref(), issuer)
-        .map_err(|refused| refused.unwrap_or(MetadataError::DefinitionEndpoint))?;
+    let definition_endpoint = endpoint(
+        "presentation_definition_endpoint",
+        raw.presentation_definition_endpoint.as_deref(),
+        issuer,
+    )
+    .map_err(|refused| refused.unwrap_or(MetadataError::DefinitionEndpoint))?;
     let admits = raw
         .vp_formats
         .as_ref()
@@ -95,9 +99,13 @@ pub(super) fn read(
 
 /// The endpoint `text` names, or `Err(None)` when it is absent or no URL and
 /// `Err(Some(_))` when it is a URL the grant does not send to.
-fn endpoint(text: Option<&str>, issuer: &Issuer) -> Result<Url, Option<MetadataError>> {
+fn endpoint(
+    member: &'static str,
+    text: Option<&str>,
+    issuer: &Issuer,
+) -> Result<Url, Option<MetadataError>> {
     issuer
-        .endpoint(text.ok_or(None)?)
+        .endpoint(member, text.ok_or(None)?)
         .map_err(|refused| match refused {
             EndpointError::OtherOrigin => Some(MetadataError::OtherOrigin),
             EndpointError::Insecure => Some(MetadataError::InsecureEndpoint),

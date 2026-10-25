@@ -35,6 +35,14 @@ and this project adheres to
 
 ### Changed
 
+- `nl-generic-functions` 0.0.27 takes `ferrohealth-smart = "=0.5.0"` and
+  drops its private copies of the RFC 8414 issuer checks the Nuts grant
+  makes: the canonical issuer text, the issuer comparison, the endpoint on
+  the issuer's origin and the refusal of JSON that repeats a name now come
+  from the crate's `metadata` module. The grant keeps its own refusal of an
+  endpoint with userinfo or a fragment. A product that takes
+  `nl-generic-functions` moves to `ferrohealth-smart = "=0.5.0"` with it
+  (#198).
 - `[hl7v2]` refuses a `default_charset` the decoder does not read and two
   senders of one domain at load (ITI TF-2 §3.8.4.1.3: one Patient Identity
   Source per domain) (#85).

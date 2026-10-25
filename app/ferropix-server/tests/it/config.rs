@@ -52,6 +52,14 @@ fn every_section_loads_and_resolves() {
         Some(1),
         settings.hl7v2.as_ref().map(|hl7v2| hl7v2.senders.len())
     );
+    assert_eq!(
+        Some("urn:oid:2.999.60.1"),
+        settings
+            .xcpd
+            .as_ref()
+            .map(|xcpd| xcpd.community.to_string())
+            .as_deref()
+    );
     assert!(settings.audit.url.is_some());
     assert!(settings.operator.enabled);
     assert!(settings.usage_report.enabled);
@@ -79,6 +87,7 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[pmir.feed]", "[pmir.feed]\n"),
         ("[hl7v2]", "[hl7v2]\n"),
         ("[[hl7v2.senders]]", "[[hl7v2.senders]]\n"),
+        ("[xcpd]", "[xcpd]\n"),
         ("[audit]", "[audit]\n"),
         ("[operator]", "[operator]\n"),
         ("[usage_report]", "[usage_report]\n"),

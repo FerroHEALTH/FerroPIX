@@ -16,6 +16,7 @@ pub mod profiles;
 pub mod server;
 pub mod telemetry;
 pub mod usage_report;
+pub mod xcpd;
 
 use std::net::{IpAddr, SocketAddr};
 

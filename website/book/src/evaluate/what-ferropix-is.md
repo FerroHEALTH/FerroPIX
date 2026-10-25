@@ -36,7 +36,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | PDQm, the demographics query and match | ITI-78 search and read, ITI-119 `$match` | Client, in `ihe-iti` (`pdqm`), and the server's PDQm Supplier with the Match Operation Option ([The PDQm Supplier](../integrate/pdqm-supplier.md)). |
 | PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`). The PMIR Registry is planned. |
 | mCSD, the care services directory | ITI-90, ITI-91 | Client and replica, in `ihe-iti` (`mcsd`). |
-| XCPD, cross-community patient discovery | ITI-55 | Initiating Gateway, in `ihe-iti` (`xcpd`). |
+| XCPD, cross-community patient discovery | ITI-55 | Initiating Gateway and the Responding Gateway's messages, in `ihe-iti` (`xcpd`), and the server's synchronous Responding Gateway behind `[xcpd]` ([The XCPD Responding Gateway](../integrate/xcpd-gateway.md)). The Deferred Response Option is planned. |
 | IUA, access tokens on each request | ITI-72 | The authorizer seam of the `ihe-iti` clients. |
 | The persisted cross-reference | identifier domains, one source per domain, linking and merge | Planned. |
 | Pseudonym minting | a UUID per patient and pseudonymisation domain | Planned. |

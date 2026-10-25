@@ -17,6 +17,7 @@ use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
 use crate::config::section::server::ServerSettings;
 use crate::config::section::telemetry::TelemetrySettings;
 use crate::config::section::usage_report::UsageReportSettings;
+use crate::config::section::xcpd::XcpdSettings;
 use crate::config::section::{is_loopback_address, operator::Operator};
 use crate::config::{Config, Profile};
 
@@ -45,6 +46,8 @@ pub struct Settings {
     pub pmir: Pmir,
     /// The HL7 v2 face, when it is on.
     pub hl7v2: Option<Hl7v2Settings>,
+    /// The XCPD Responding Gateway, when it is on.
+    pub xcpd: Option<XcpdSettings>,
     /// The BALP audit trail.
     pub audit: AuditSettings,
     /// The operator API switch.
@@ -85,6 +88,7 @@ impl Config {
         let matching = self.matching.resolve()?;
         let pmir = self.pmir.resolve()?;
         let hl7v2 = self.hl7v2.resolve()?;
+        let xcpd = self.xcpd.resolve()?;
         let audit = self.audit.resolve(self.profile)?;
         let usage_report = self.usage_report.resolve()?;
         if self.dev.as_ref().is_some_and(|dev| dev.loopback) {
@@ -114,6 +118,7 @@ impl Config {
             pdqm: self.pdqm.clone(),
             pmir,
             hl7v2,
+            xcpd,
             audit,
             operator: self.operator.clone(),
             usage_report,

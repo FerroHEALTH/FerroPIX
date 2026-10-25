@@ -26,6 +26,7 @@ pub mod pdqm;
 pub mod store;
 pub mod telemetry;
 pub mod usage_report;
+pub mod xcpd;
 
 use std::error::Error;
 use std::fmt::Write as _;
@@ -389,6 +390,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         pdqm,
         pmir,
         hl7v2,
+        xcpd,
         operator,
         audit,
         matching,
@@ -416,6 +418,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &audit,
         &backend(&store, &matching, pdqm.deprecated, origins, hl7v2.as_ref()),
     );
+    let guarded = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit);
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = bind(&server).await?;
     let reporting = usage_report::reporter::start(
@@ -468,6 +471,28 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     }
     store.close().await;
     served
+}
+
+/// Returns `guarded` with the XCPD Responding Gateway's route when `[xcpd]`
+/// is on.
+fn with_xcpd(
+    guarded: axum::Router,
+    settings: Option<config::section::xcpd::XcpdSettings>,
+    store: &store::Store,
+    matching: &config::section::matching::Matching,
+    server: &config::section::server::ServerSettings,
+    audit: &audit::Audit,
+) -> axum::Router {
+    match settings {
+        Some(settings) => guarded.merge(xcpd::routes(xcpd::Gateway::new(
+            store,
+            matching,
+            settings,
+            &server.public_base_url,
+            audit,
+        ))),
+        None => guarded,
+    }
 }
 
 /// Returns what the FHIR routes and the operator API read: the store, the

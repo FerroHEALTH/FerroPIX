@@ -14,6 +14,13 @@ and this project adheres to
 
 ### Added
 
+- The server answers ITI-55 as an XCPD Responding Gateway (#231) at
+  `POST {base}/xcpd`, behind `[xcpd]`: a shared identifier is looked up in
+  the cross-reference and demographics are scored by the matcher, settling
+  the five cases of ITI TF-2 §3.55.4.2.3; the answer carries the patient's
+  identifiers in the `[xcpd] domains`, a Deferred request is refused with
+  `NS250`, a query from an initiating community not listed is Case 5, and
+  every query writes the Responding Gateway audit record of §3.55.5.1.2.
 - `ihe-iti` 0.0.54 carries the Responding Gateway side of ITI-55 in the
   `xcpd` feature (#230): `xcpd::responding::query::read` reads a Cross
   Gateway Patient Discovery request in each mode of ITI TF-2 §3.55.1,

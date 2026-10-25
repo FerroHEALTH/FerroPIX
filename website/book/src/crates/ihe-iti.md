@@ -16,9 +16,9 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `pdqm` | Patient Demographics Query for Mobile, PDQm | ITI-78, ITI-119 | Patient Demographics Consumer |
 | `pmir` | Patient Master Identity Registry, PMIR | ITI-93, ITI-94 | Patient Identity Subscriber and Consumer |
 | `mcsd` | Mobile Care Services Discovery, mCSD | ITI-90, ITI-91 | Query Client and Update Client |
-| `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway |
+| `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway, and the Responding Gateway's messages with no HTTP server |
 | `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side |
-| `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of the Initiating Gateway |
+| `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
 | `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
 

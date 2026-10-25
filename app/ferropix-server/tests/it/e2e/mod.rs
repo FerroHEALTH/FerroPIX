@@ -28,6 +28,7 @@ mod reseal;
 mod schema;
 mod sealing;
 mod supplier;
+mod xcpd;
 
 use base64::Engine as _;
 use ferropix_server::config::secret::SecretUrl;

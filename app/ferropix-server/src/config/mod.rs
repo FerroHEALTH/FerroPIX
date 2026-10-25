@@ -70,6 +70,8 @@ pub struct Config {
     pub pmir: section::profiles::Pmir,
     /// The HL7 v2 face (`[hl7v2]`).
     pub hl7v2: section::hl7v2::Hl7v2,
+    /// The XCPD Responding Gateway (`[xcpd]`).
+    pub xcpd: section::xcpd::Xcpd,
     /// The BALP audit trail (`[audit]`).
     pub audit: section::audit::Audit,
     /// The operator API (`[operator]`).

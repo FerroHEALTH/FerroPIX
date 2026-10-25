@@ -17,6 +17,10 @@
 //!   §3.9.5.1.2 and §3.21.5.1.2, written as `AuditEvent`s: the DICOM event
 //!   id as `type`, the transaction as `subtype`, the sender as the source
 //!   agent and the message as the query entity of a query.
+//! - ITI-55 as the XCPD Responding Gateway: the audit message of ITI TF-2
+//!   §3.55.5.1.2 written as an `AuditEvent` the same way, with the
+//!   `QueryByParameter` as the query entity, the initiating community as its
+//!   `ihe:homeCommunityID` detail and one patient per patient answered.
 //! - A steward action: a `RESTful` activity on the person (BALP 1.1.4
 //!   §3:5.7.3), a read for a view and an update for a decision; a steward's
 //!   search, a BALP Patient Query record per person found or a Query record
@@ -68,6 +72,18 @@ pub const ITI_9: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-9", "PIX Query");
 
 /// The `ITI-21` subtype (ITI TF-2 §3.21.5.1.2).
 pub const ITI_21: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-21", "Patient Demographics Query");
+
+/// The `ITI-55` subtype (ITI TF-2 §3.55.5.1.2: `EV("ITI-55", "IHE
+/// Transactions", "Cross Gateway Patient Discovery")`).
+pub const ITI_55: Coded = Coded::fixed(
+    IHE_TRANSACTIONS,
+    "ITI-55",
+    "Cross Gateway Patient Discovery",
+);
+
+/// The detail type of the community a query names (ITI TF-2 §3.55.5.1.2:
+/// `ihe:homeCommunityID`, a literal string).
+pub const HOME_COMMUNITY_DETAIL: &str = "ihe:homeCommunityID";
 
 /// `EV(110110, DCM, "Patient Record")`, the event of a feed (ITI TF-2
 /// §3.8.5.1.2).
@@ -360,6 +376,50 @@ pub fn v2_query(
             profile: "",
             event_type: QUERY,
             subtypes: vec![subtype],
+            action: "E",
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        entities,
+    )
+}
+
+/// Returns the record of an ITI-55 query a Responding Gateway answered,
+/// ended in `outcome` (ITI TF-2 §3.55.5.1.2).
+///
+/// It carries the query's `QueryByParameter` element `query`, which the
+/// record writes base64-encoded, with the initiating `community` as its
+/// `ihe:homeCommunityID` detail when the query named one, and `patients`,
+/// the identifier of each patient whose demographics the answer returned.
+/// The detail sits on a system object beside the query entity, which carries
+/// no detail; no specification governs that place: our own design.
+#[must_use]
+pub fn xcpd_query(
+    call: &Call,
+    query: SecretString,
+    community: Option<&str>,
+    patients: &[Identifier],
+    outcome: Outcome,
+) -> Exchange {
+    let mut entities = vec![Entity::Query(query)];
+    if let Some(community) = community {
+        entities.push(Entity::Described(Described {
+            what: None,
+            kind: SYSTEM_OBJECT,
+            role: None,
+            name: Some(String::from("query")),
+            description: None,
+            details: vec![Detail::new(HOME_COMMUNITY_DETAIL, community)],
+            security_labels: Vec::new(),
+        }));
+    }
+    entities.extend(patients.iter().map(Identifier::patient));
+    call.exchange(
+        EventKind {
+            profile: "",
+            event_type: QUERY,
+            subtypes: vec![ITI_55],
             action: "E",
             client: SOURCE_ROLE,
             server: DESTINATION_ROLE,

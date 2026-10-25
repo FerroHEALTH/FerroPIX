@@ -297,6 +297,20 @@ and facility listed twice, two senders of one domain, and one namespace id
 for two domains are refused at load. The drain on `SIGTERM` is
 `server.drain_timeout_ms`, the HTTP server's.
 
+### `[xcpd]`
+
+| Key | Default | What it sets |
+|---|---|---|
+| `xcpd.enabled` | `false` | Whether `POST {base}/xcpd` answers ITI-55 as the XCPD Responding Gateway. |
+| `xcpd.home_community_id` | none | The community's `homeCommunityId`, `urn:oid:` and an OID. |
+| `xcpd.device` | none | The OID of the gateway's device, the sender of every answer. |
+| `xcpd.domains` | none | The `urn:oid:` systems of the domains whose identifiers an answer carries; the first a patient holds is its `Patient.id`. |
+| `xcpd.initiating_communities` | `[]` | The `homeCommunityId`s of the initiating communities answered; a query from another is answered with Case 5. |
+
+A value that is no OID, a domain that is no `urn:oid:` system, and a domain
+or community listed twice are refused at load. See
+[The XCPD Responding Gateway](../integrate/xcpd-gateway.md).
+
 ### `[audit]`
 
 | Key | Default | What it sets |

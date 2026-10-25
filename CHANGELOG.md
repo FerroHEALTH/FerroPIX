@@ -56,6 +56,14 @@ and this project adheres to
   assessment for a Critical vulnerability, 30 days for High, 90 days for
   Medium and with the next release for Low.
 
+### Fixed
+
+- `ihe-iti`'s FHIR JSON body reader refuses a body that has no FHIR XML form
+  at all as it refuses one whose XML form reads back changed, so the
+  narrative the fuzzer found is still refused under `fhir-types` 0.1.128,
+  whose XML writer now refuses that narrative instead of writing it changed
+  (PIXm 3.1.0 §2:3.104.4.1.2; `ihe-iti` 0.0.51).
+
 ## [0.0.3] - 2026-10-24
 
 ### Added

@@ -14,6 +14,10 @@ and this project adheres to
 
 ### Changed
 
+- The operator console draws with FerroUI 0.4.0 (#215). The top bar's
+  search still submits to the search page, which lists every match in the
+  page; whether it answers under the field as you type waits on what a
+  search typed that way records in the audit trail (#214).
 - `ihe-iti` 0.0.52 takes `ihe-atna = "=0.2.7"` and `fhir-types` 0.1.128 or
   later, and `nl-generic-functions` 0.0.28 takes `ferrohealth-smart =
   "=0.6.0"`, the family's newest pins, so a product on those lines (FerroEHR)

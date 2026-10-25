@@ -414,18 +414,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &smart,
         &health,
         &audit,
-        &fhir::Backend {
-            store: store.clone(),
-            matching: matching.clone(),
-            deprecated: pdqm.deprecated,
-            configured: operator::Configured {
-                origins: origins.clone(),
-                senders: hl7v2
-                    .as_ref()
-                    .map(|h| h.senders.clone())
-                    .unwrap_or_default(),
-            },
-        },
+        &backend(&store, &matching, pdqm.deprecated, origins, hl7v2.as_ref()),
     );
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = bind(&server).await?;
@@ -479,6 +468,27 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     }
     store.close().await;
     served
+}
+
+/// Returns what the FHIR routes and the operator API read: the store, the
+/// matching settings, the deprecated PDQm search parameters, and where each
+/// setting came from with the HL7 v2 senders.
+fn backend(
+    store: &store::Store,
+    matching: &config::section::matching::Matching,
+    deprecated: config::section::profiles::Deprecated,
+    origins: config::origin::Origins,
+    hl7v2: Option<&config::section::hl7v2::Hl7v2Settings>,
+) -> fhir::Backend {
+    fhir::Backend {
+        store: store.clone(),
+        matching: matching.clone(),
+        deprecated,
+        configured: operator::Configured {
+            origins,
+            senders: hl7v2.map(|h| h.senders.clone()).unwrap_or_default(),
+        },
+    }
 }
 
 /// Returns the readiness registry: the database, the audit spool's

@@ -147,10 +147,7 @@ pub async fn read_all(operator: &Operator) -> Result<Vec<Source>, OperatorError>
                 application: sender.application.clone(),
                 facility: sender.facility.clone(),
             },
-            domains: Some(sender.domain.clone())
-                .filter(|domain| !domain.trim().is_empty())
-                .into_iter()
-                .collect(),
+            domains: sender.feeds().map(str::to_owned).into_iter().collect(),
             last_activity: None,
         });
     }

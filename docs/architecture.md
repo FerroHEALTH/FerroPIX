@@ -740,9 +740,16 @@ transaction reads its text in full.
   as ITI-78 over the QPD-3 parameters (ITI TF-2 §3.21.4.1.2.3), with
   continuation (DSC, ITI TF-2 §3.21.4.1.3.3) over a server-side cursor
   bounded in time.
-- **ITI-22** (ITI TF-2 §3.22) holds visit data FerroPIX does not keep;
-  whether it is answered as a demographics-only query or refused is decided
-  when its issue reads the text, and recorded there.
+- **ITI-22** (QBP^ZV1, ITI TF-2 §3.22) is refused: FerroPIX does not act
+  as its Patient Demographics Supplier. Every patient its RSP^ZV2 returns
+  is a PID-PV1 group with PV1-2 Patient Class required
+  (ITI TF-2 §3.22.4.2.2.7, Table 3.22-9; Cases 1 and 2 of
+  §3.22.4.2.2.11), and the Supplier shall support at least one of the PV1
+  query fields (Table 3.22-4, §3.22.4.1.3.2). FerroPIX keeps no visit, so
+  it could only answer a PV1 it made up and a visit field it cannot search.
+  A QBP^ZV1 is acknowledged `AR` with ERR code `200`, unsupported message
+  type (HL7 table 0357), and the text names ITI-21, the demographics query
+  over the same search (#199).
 - **ITI-10** (ITI TF-2 §3.10.4.1) is an outbound notification to configured
   consumers after a cross-reference change; it is the v2 counterpart of the
   ITI-93 sender and shares its outbox.

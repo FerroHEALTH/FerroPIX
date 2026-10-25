@@ -12,6 +12,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- The HL7 v2 face refuses ITI-22, the Patient Demographics and Visit
+  Query, by name: a QBP^ZV1 is acknowledged `AR` with ERR code `200` and a
+  text that points to ITI-21, since FerroPIX keeps no visit data and the
+  transaction returns a PV1 per patient (ITI TF-2 §3.22.4.2.2.7) (#199).
+
 ### Changed
 
 - The operator console draws with FerroUI 0.4.0 (#215). The top bar's

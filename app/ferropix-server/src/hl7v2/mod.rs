@@ -222,6 +222,17 @@ impl Face {
                 pdq::query(self, message, sender, &call, &self.text(raw), stamped).await
             }
             (Some("QCN"), Some("J01")) => pdq::cancel(self, message, sender, stamped),
+            // NOTE: ITI TF-2 §3.22.4.2.2.7 and Table 3.22-4: a Supplier answers a PV1 per patient and
+            // searches at least one visit field, and FerroPIX keeps no visit data.
+            (Some("QBP"), Some("ZV1")) => acknowledge(
+                message,
+                Code::Reject,
+                &[Fault::anywhere(
+                    ErrorCode::UnsupportedMessageType,
+                    "ITI-22 is not answered: this Supplier keeps no visit data; query with ITI-21",
+                )],
+                stamped,
+            ),
             _ => acknowledge(
                 message,
                 Code::Reject,

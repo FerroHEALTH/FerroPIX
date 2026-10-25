@@ -52,13 +52,24 @@ and this project adheres to
   file mode, each setting with where its value came from: the file, the
   environment, the default, or built in. FerroPIX keeps no configuration
   store, so both are read-only and changed in the file.
+- The operator console's pages drawn from the operator API (#89): the
+  dashboard with its stat cards, the queue depth and feed charts, the
+  listeners and the oldest pairs (#92); search by identifier and by
+  demographics with graded results, the top bar's field read by the shape
+  of what was typed (#93); the patient record with its identifiers, records
+  side by side, history and pseudonyms, and the audited reveal (#94); the
+  identifier domains with the administrator's editor (#95); the audit trail
+  with posted filters and the CSV export (#96); the sources and the
+  configuration in file mode (#120, #121). A refused call shows the
+  server's issue in place.
 
 ### Changed
 
 - `[hl7v2]` refuses a `default_charset` the decoder does not read and two
   senders of one domain at load (ITI TF-2 §3.8.4.1.3: one Patient Identity
   Source per domain) (#85).
-
+- The operator console moves to FerroUI 0.3.7, whose setting rows mark a
+  value the environment set or nothing set.
 - The changelog guard passes a pull request that adds a bullet to the
   newest `## [X.Y.Z]` section while no `vX.Y.Z` tag exists, so a fix that
   lands between the release pull request and the tag records itself in the

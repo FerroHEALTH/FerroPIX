@@ -10,14 +10,29 @@ a client of the FerroPIX server that keeps no patient data of its own. It is
 drawn with FerroUI, the component library every FerroHEALTH console shares,
 in the FerroPIX brand ({{dep:ferrohealth-ui}}).
 
-The console is built and runs from source today. It reads the FerroPIX
-server's [operator API](operator-api.md), whose documents it compiles
-against; the pages that draw them are planned in the
-[v0.0.4 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/4).
-Until a page draws its document, it says that it cannot be shown: the
-server refused the connection, did not answer in time, refused the console,
-or answers but serves no operator API yet. A page never shows a row the
-server did not send. The console ships as its own container image,
+The console reads the FerroPIX server's [operator API](operator-api.md),
+whose documents it compiles against, once per page before it draws it, with
+your own access token. A page never shows a row the server did not send:
+when the server refused the connection, did not answer in time or refused
+the console, the page says so in place, with the server's issue, and one
+refused part never blanks a page.
+
+## The pages
+
+| Page | What it shows |
+|---|---|
+| Dashboard, `/` | The open queue with the pairs waiting more than seven days, the share of records linked automatically over 24 hours, the versions fed today and the subscriptions in error; the queue's depth and the feeds per hour by channel as charts, each with its figures table; the HTTP and MLLP listeners and the feed sender; the oldest pairs in the queue. |
+| Search, `/search` | By identifier (the domain chosen from the server's domains, the value masked as you type) and by demographics, each posted, so nothing you type reaches an address. The results open each patient; a demographics search adds the grade and score. The top bar's field reads what you typed: a date or a name searches by demographics with the field filled, anything else is an identifier searched in every domain. |
+| Patient, `/patients/{person}` | The leading demographics, then four tabs: the identifiers per domain, masked, each with its reveal; the source records side by side, each field marked against the leading demographics; the history on a timeline; the pseudonyms, masked. A reveal asks your reason, is recorded by the server as a privacy disclosure, and shows the value for the seconds Your preferences set. |
+| Sources, `/sources` | Every system allowed to feed, its channel, how it is admitted, the domains that name it and its last activity, and one source's last messages. Sources are set in the server's configuration file. |
+| Identifier domains, `/domains` | Every domain with its system, kind, Source, record count and last feed, and one domain with its last feeds. An administrator adds a domain, renames one, gives it another Source or retires it, each with a reason; the server's refusal shows in place. |
+| Configuration, `/configuration` | The matching thresholds, field weights, blocking keys and the built-in deterministic rules, read-only, each value marked when the environment set it or nothing did. |
+| Audit trail, `/audit` | The steward actions, newest first, under posted filters (actor, kind, person, dates), each row with its reason, its references and its request id, and the export of the filtered rows as CSV, itself an audited action. |
+
+The review queue, compare and decide, merge and unmerge and the
+pseudonymisation domains follow with the
+[v0.0.5 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/5);
+until then those pages say the server serves no operator API for them yet. The console ships as its own container image,
 published by the release lane from the first tagged release
 ([The image](#the-image)).
 

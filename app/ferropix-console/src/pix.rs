@@ -20,7 +20,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use http::StatusCode;
+use http::{Method, StatusCode};
 use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 
@@ -111,6 +111,30 @@ pub struct Probe {
     pub at: String,
     /// The request id the call carried.
     pub request_id: String,
+    /// The issues of the `OperationOutcome` a refusal carried, whose
+    /// diagnostics the server writes without a value from the request.
+    pub issues: Vec<ServerIssue>,
+}
+
+/// One issue of the `OperationOutcome` the server refused a call with.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct ServerIssue {
+    /// `severity`.
+    pub severity: String,
+    /// `code`.
+    pub code: String,
+    /// `diagnostics`.
+    #[serde(default)]
+    pub diagnostics: Option<String>,
+}
+
+/// The issues of an `OperationOutcome`, the only part a refusal's body is
+/// read for.
+#[derive(Debug, Default, serde::Deserialize)]
+struct Outcome {
+    /// `issue`.
+    #[serde(default)]
+    issue: Vec<ServerIssue>,
 }
 
 impl Probe {
@@ -189,51 +213,143 @@ impl Pix {
     /// Returns the [`Probe`] of a call that was refused, did not answer, or
     /// answered with a body that is not the document.
     pub async fn overview(&self, token: &AccessToken) -> Result<Overview, Probe> {
-        match self.get(OVERVIEW, token).await {
-            (probe, Some(text)) if probe.is_up() => {
-                serde_json::from_str(&text).map_err(|_unread| Probe {
-                    reach: Reach::Unreachable(Failure::Other),
-                    ..probe
-                })
-            }
+        self.read(OVERVIEW, token).await
+    }
+
+    /// Reads the operator API document at `route`, under the server's base,
+    /// as `T`, or the call that did not bring one back.
+    ///
+    /// # Errors
+    /// Returns the [`Probe`] of a call that was refused, did not answer, or
+    /// answered with a body that is not the document.
+    pub async fn read<T: serde::de::DeserializeOwned>(
+        &self,
+        route: &str,
+        token: &AccessToken,
+    ) -> Result<T, Probe> {
+        match self.get(route, token).await {
+            (probe, Some(text)) if probe.is_up() => document(&text, probe),
+            (probe, _) => Err(probe),
+        }
+    }
+
+    /// Posts `body` as JSON to the operator API at `route` and reads the
+    /// answer as `T`, or the call that did not bring one back.
+    ///
+    /// # Errors
+    /// Returns the [`Probe`] of a call that was refused, did not answer, or
+    /// answered with a body that is not the document.
+    pub async fn post<B: serde::Serialize + Sync, T: serde::de::DeserializeOwned>(
+        &self,
+        route: &str,
+        body: &B,
+        token: &AccessToken,
+    ) -> Result<T, Probe> {
+        match self.send(Method::POST, route, Some(body), token).await {
+            (probe, Some(text)) if probe.is_up() => document(&text, probe),
+            (probe, _) => Err(probe),
+        }
+    }
+
+    /// Patches the operator API document at `route` with the JSON of `body`
+    /// and reads the answer as `T`, or the call that did not bring one back.
+    ///
+    /// # Errors
+    /// Returns the [`Probe`] of a call that was refused, did not answer, or
+    /// answered with a body that is not the document.
+    pub async fn patch<B: serde::Serialize + Sync, T: serde::de::DeserializeOwned>(
+        &self,
+        route: &str,
+        body: &B,
+        token: &AccessToken,
+    ) -> Result<T, Probe> {
+        match self.send(Method::PATCH, route, Some(body), token).await {
+            (probe, Some(text)) if probe.is_up() => document(&text, probe),
+            (probe, _) => Err(probe),
+        }
+    }
+
+    /// Posts `body` as JSON to the operator API at `route` and returns the
+    /// answer as text, the trail's CSV export.
+    ///
+    /// # Errors
+    /// Returns the [`Probe`] of a call that was refused or did not answer.
+    pub async fn post_text<B: serde::Serialize + Sync>(
+        &self,
+        route: &str,
+        body: &B,
+        token: &AccessToken,
+    ) -> Result<String, Probe> {
+        match self.send(Method::POST, route, Some(body), token).await {
+            (probe, Some(text)) if probe.is_up() => Ok(text),
             (probe, _) => Err(probe),
         }
     }
 
     /// `GET {base}/{route}` with the steward's token: the call's [`Probe`]
     /// and, for a `2xx` answer within [`BODY_LIMIT`], its body as text.
-    async fn get(&self, route: &'static str, token: &AccessToken) -> (Probe, Option<String>) {
+    async fn get(&self, route: &str, token: &AccessToken) -> (Probe, Option<String>) {
+        self.send::<()>(Method::GET, route, None, token).await
+    }
+
+    /// `method {base}/{route}` with the steward's token and, for a body, the
+    /// JSON of `body`: the call's [`Probe`] and, for a `2xx` answer within
+    /// [`BODY_LIMIT`], its body as text.
+    async fn send<B: serde::Serialize + Sync>(
+        &self,
+        method: Method,
+        route: &str,
+        body: Option<&B>,
+        token: &AccessToken,
+    ) -> (Probe, Option<String>) {
         let request_id = uuid::Uuid::new_v4().to_string();
         let at = jiff::Timestamp::now()
             .round(jiff::Unit::Second)
             .map_or_else(|_| jiff::Timestamp::now().to_string(), |at| at.to_string());
+        let shown = route.split('?').next().unwrap_or(route).to_owned();
         let probe = |reach| Probe {
-            route: format!("GET /{route}"),
+            route: format!("{method} /{shown}"),
             reach,
             at: at.clone(),
             request_id: request_id.clone(),
+            issues: Vec::new(),
         };
         let Ok(url) = self.base.join(route) else {
             return (probe(Reach::Unreachable(Failure::Other)), None);
         };
-        let sent = self
+        let mut request = self
             .http
-            .get(url)
+            .request(method.clone(), url)
             .bearer_auth(token.0.expose_secret())
-            .header(REQUEST_ID, &request_id)
-            .send()
-            .await;
-        let response = match sent {
+            .header(REQUEST_ID, &request_id);
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        let response = match request.send().await {
             Ok(response) => response,
             Err(error) => {
-                tracing::warn!(route, %request_id, failure = ?Failure::of(&error), "the FerroPIX server did not answer");
+                tracing::warn!(route = shown.as_str(), %request_id, failure = ?Failure::of(&error), "the FerroPIX server did not answer");
                 return (probe(Reach::Unreachable(Failure::of(&error))), None);
             }
         };
         let status = response.status();
         if !status.is_success() {
-            tracing::warn!(route, %request_id, %status, "the FerroPIX server refused a call");
-            return (probe(Reach::Refused(status)), None);
+            tracing::warn!(route = shown.as_str(), %request_id, %status, "the FerroPIX server refused a call");
+            let issues = response
+                .text()
+                .await
+                .ok()
+                .filter(|text| text.len() <= BODY_LIMIT)
+                .and_then(|text| serde_json::from_str::<Outcome>(&text).ok())
+                .unwrap_or_default()
+                .issue;
+            return (
+                Probe {
+                    issues,
+                    ..probe(Reach::Refused(status))
+                },
+                None,
+            );
         }
         let too_long = response.content_length().is_some_and(|length| {
             usize::try_from(length).map_or(true, |length| length > BODY_LIMIT)
@@ -247,6 +363,15 @@ impl Pix {
             Err(error) => (probe(Reach::Unreachable(Failure::of(&error))), None),
         }
     }
+}
+
+/// Reads `text` as the document `T`; a body that is not one is the call's
+/// failure.
+fn document<T: serde::de::DeserializeOwned>(text: &str, probe: Probe) -> Result<T, Probe> {
+    serde_json::from_str(text).map_err(|_unread| Probe {
+        reach: Reach::Unreachable(Failure::Other),
+        ..probe
+    })
 }
 
 #[cfg(test)]

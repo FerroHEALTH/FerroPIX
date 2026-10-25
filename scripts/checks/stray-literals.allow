@@ -16,5 +16,7 @@ allow ^Basic \{\}$                          # the HTTP Basic authentication sche
 allow ^__Host-$                             # the cookie name prefix of RFC 6265bis
 allow ^(DENY|no-cache|no-store)$            # an HTTP header value
 allow ^text/css; charset=utf-8$             # a media type
+allow ^text/csv; charset=utf-8$             # a media type
+allow ^A[AER]$                              # an HL7 v2 acknowledgment code (HL7 table 0008), shown as the server sent it
 allow ^attachment; filename=                # a Content-Disposition header value
 allow ^default-src                          # the Content-Security-Policy

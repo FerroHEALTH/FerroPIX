@@ -44,7 +44,10 @@ const PAGES: [(&str, &str); 13] = [
     ("/sources", "Sources"),
     ("/sources/lab-lis", "lab-lis"),
     ("/domains", "Identifier domains"),
-    ("/domains/hospital-mrn", "hospital-mrn"),
+    (
+        "/domains/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+        "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+    ),
     ("/pseudonym-domains", "Pseudonymisation domains"),
     ("/configuration", "Configuration"),
     ("/audit", "Audit trail"),
@@ -103,8 +106,21 @@ async fn the_dashboard_says_what_the_console_keeps_while_the_server_is_away()
     Ok(())
 }
 
+/// The pages that read a document of the operator API before they are
+/// drawn.
+const READING: [&str; 8] = [
+    "/",
+    "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "/sources",
+    "/sources/lab-lis",
+    "/domains",
+    "/domains/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+    "/configuration",
+    "/audit",
+];
+
 #[tokio::test]
-async fn a_server_that_answers_without_an_operator_api_gets_the_notice_and_the_route()
+async fn a_server_whose_operator_api_refuses_a_page_is_named_and_an_unserved_page_gets_the_notice()
 -> Result<(), Box<dyn Error>> {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -121,15 +137,22 @@ async fn a_server_that_answers_without_an_operator_api_gets_the_notice_and_the_r
     for (route, _) in PAGES {
         let (response, page) = send(&service, get_with(route, &cookie)?).await?;
         assert_eq!(StatusCode::OK, response.status(), "{route}");
-        assert!(
-            page.contains("serves no operator API yet"),
-            "{route} says the server serves no operator API yet"
-        );
+        assert!(page.contains("Server up"), "{route}'s status pill says so");
         assert!(
             page.contains("/operator/"),
             "{route} names the route it reads"
         );
-        assert!(page.contains("Server up"), "{route}'s status pill says so");
+        if READING.contains(&route) {
+            assert!(
+                page.contains("refused the console") && page.contains("404"),
+                "{route} names the refused call and its status"
+            );
+        } else {
+            assert!(
+                page.contains("serves no operator API yet"),
+                "{route} says the server serves no operator API for it yet"
+            );
+        }
     }
     let (_, queue) = send(&service, get_with("/queue", &cookie)?).await?;
     assert!(queue.contains("GET /operator/candidates"));
@@ -193,7 +216,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("FerroPIX 0.0.3"), "the server's version");
     assert!(page.contains("4.0.1"), "the FHIR version");
-    assert!(page.contains("ferrohealth-ui 0.3.6"), "the library");
+    assert!(page.contains("ferrohealth-ui 0.3.7"), "the library");
     assert!(page.contains("Cadasto B.V."), "the maker");
     assert!(page.contains("The CapabilityStatement"), "the card");
     assert!(
@@ -221,27 +244,56 @@ async fn about_without_a_server_says_its_version_is_not_known() -> Result<(), Bo
 }
 
 #[tokio::test]
-async fn a_search_posts_sends_nothing_on_and_carries_nothing_typed_into_the_address()
+async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_the_address()
 -> Result<(), Box<dyn Error>> {
     let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/health"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/operator/search/identifier"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(r#"{"total":0,"offset":0,"persons":[]}"#),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/operator/search/demographics"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(r#"{"total":0,"offset":0,"persons":[]}"#),
+        )
+        .mount(&server)
+        .await;
     let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
     let cookie = steward_session(&state);
     // A synthetic identifier that fails the eleven-proof of every scheme it could resemble.
     let typed = "999999991";
-    let (response, _) = send(
+    let (response, page) = send(
         &service,
         post_form(
             "/search",
             &cookie,
-            &format!("segment=identifier&domain=&identifier={typed}"),
+            &format!("segment=identifier&domain=urn%3Aoid%3A2.999.1.1&identifier={typed}"),
         )?,
     )
     .await?;
-    assert_eq!(StatusCode::SEE_OTHER, response.status());
-    let location = crate::support::header(&response, "location").to_owned();
-    assert_eq!("/search?searched", location);
-    assert!(!location.contains(typed));
-    let (response, _) = send(
+    assert_eq!(
+        StatusCode::OK,
+        response.status(),
+        "the results are drawn in place"
+    );
+    assert!(
+        response.headers().get("location").is_none(),
+        "no redirect names a field"
+    );
+    assert!(page.contains("No patient matches"), "the empty results");
+    assert!(
+        !page.contains(typed),
+        "the page does not repeat what was typed"
+    );
+    let (response, page) = send(
         &service,
         post_form(
             "/search/demographics",
@@ -250,19 +302,29 @@ async fn a_search_posts_sends_nothing_on_and_carries_nothing_typed_into_the_addr
         )?,
     )
     .await?;
-    assert_eq!(
-        "/search/demographics?searched",
-        crate::support::header(&response, "location")
-    );
+    assert_eq!(StatusCode::OK, response.status());
+    assert!(page.contains("No patient matches"));
     let received = server.received_requests().await.unwrap_or_default();
-    assert!(
-        received
-            .iter()
-            .all(|request| request.url.path() == "/health"),
-        "nothing typed was sent to the server"
-    );
-    let (_, page) = send(&service, get_with("/search?searched", &cookie)?).await?;
-    assert!(page.contains("Nothing was searched"));
+    for request in &received {
+        assert!(
+            request
+                .url
+                .query()
+                .is_none_or(|query| !query.contains(typed)),
+            "nothing typed reaches a query string"
+        );
+        assert!(
+            !request.url.path().contains(typed),
+            "nothing typed reaches a path"
+        );
+    }
+    let identifier = received
+        .iter()
+        .find(|request| request.url.path() == "/operator/search/identifier")
+        .expect("the identifier search reached the server");
+    let body = String::from_utf8_lossy(&identifier.body);
+    assert!(body.contains(typed), "the identifier travels in the body");
+    let (_, page) = send(&service, get_with("/search", &cookie)?).await?;
     assert!(
         page.contains("type=\"password\""),
         "the identifier is masked as it is typed"

@@ -95,6 +95,8 @@ pub struct PageContext {
     pub capability: Option<Capability>,
     /// The prefix every preference cookie's name takes.
     pub prefix: String,
+    /// The operator API document the page is drawn from, when it reads one.
+    pub document: Option<crate::document::Document>,
 }
 
 impl PageContext {
@@ -106,6 +108,7 @@ impl PageContext {
             probe: None,
             capability: None,
             prefix,
+            document: None,
         }
     }
 }

@@ -7,12 +7,12 @@
 //! its merge and unmerge, the sources, the identifier domains, the
 //! pseudonymisation domains, the configuration and the audit trail.
 //!
-//! Each draws its header as the design does, and under it the state the
-//! FerroPIX server leaves it in ([`super::server_state`]): the operator API
-//! is #90 and the server it belongs to #57, so no page here draws a row the
+//! Each draws its header as the design does, and under it the document the
+//! gate read for it ([`crate::document`]), or the state the FerroPIX server
+//! left it in ([`super::server_state`]): a page never draws a row the
 //! server did not send. An id in a route is checked before the server is
-//! asked: a person and a candidate are UUIDs FerroPIX minted, and a source
-//! or a domain is a short name; anything else is the not-found page, so no
+//! asked: a person, a candidate and a domain are UUIDs FerroPIX minted, and
+//! a source is a short name; anything else is the not-found page, so no
 //! business identifier is ever read from an address.
 
 use ferrohealth_ui::view::action::ActionGroup;
@@ -21,6 +21,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::app::{DOMAINS, QUEUE, SEARCH, SOURCES, framed, page_context};
+use crate::document::{Document, Read};
 use crate::locale::{Msg, tr, tr_with};
 use crate::pages::not_found::NotFound;
 use crate::pages::{Needs, server_state, title};
@@ -46,6 +47,15 @@ pub fn is_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
+/// The page drawn from `read` by `draw`, or the refusal of the call that
+/// did not bring the document.
+fn drawn<T>(read: &Read<T>, screen: &Screen, draw: impl FnOnce(&T) -> AnyView) -> AnyView {
+    match read {
+        Ok(document) => draw(document),
+        Err(probe) => server_state(Some(probe), screen.needs, &screen.route),
+    }
+}
+
 /// The route parameter `name`, when the route names one.
 fn param(name: &str) -> Option<String> {
     use_params_map().with_untracked(|params| params.get(name))
@@ -65,6 +75,8 @@ struct Screen {
     needs: Needs,
     /// The operator API route it reads, as a steward may repeat it.
     route: String,
+    /// The page drawn from the server's document, when the server sent it.
+    body: Option<AnyView>,
 }
 
 impl Screen {
@@ -77,7 +89,13 @@ impl Screen {
             mono: false,
             needs: Needs { what, away: false },
             route: route.into(),
+            body: None,
         }
+    }
+
+    /// This screen drawn from `body` in place of its state.
+    fn with(self, body: Option<AnyView>) -> Self {
+        Self { body, ..self }
     }
 
     /// This screen under the ancestors `crumbs`.
@@ -99,7 +117,9 @@ impl Screen {
             },
             ActionGroup::none(),
         );
-        let state = server_state(probe.as_ref(), self.needs, &self.route);
+        let state = self
+            .body
+            .unwrap_or_else(|| server_state(probe.as_ref(), self.needs, &self.route));
         framed(
             view! {
                 {title(self.title)}
@@ -118,7 +138,13 @@ impl Screen {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Dashboard() -> impl IntoView {
-    // TODO(#92): draw the stat cards, the charts and the listeners from the overview.
+    let body = match page_context().document {
+        Some(Document::Dashboard {
+            overview,
+            dependencies,
+        }) => Some(crate::pages::dashboard::dashboard(&overview, &dependencies)),
+        _ => None,
+    };
     let mut screen = Screen::new(
         Msg::Dashboard,
         Msg::DashboardSub,
@@ -126,7 +152,7 @@ pub fn Dashboard() -> impl IntoView {
         "GET /operator/overview",
     );
     screen.needs.away = true;
-    screen.view()
+    screen.with(body).view()
 }
 
 /// The review queue at `/queue` (design 02, 02.9).
@@ -183,6 +209,18 @@ fn patient_screen(title: Msg, subtitle: Msg, what: Msg, route: &str, below: bool
     let mut screen =
         Screen::new(title, subtitle, what, route.replace("{person}", &person)).under(crumbs);
     if !below {
+        let tab = crate::app::current_query()
+            .split('&')
+            .find_map(|pair| pair.strip_prefix("tab="))
+            .unwrap_or_default()
+            .to_owned();
+        screen.body = match page_context().document {
+            Some(Document::Person { person, revealed }) => Some(match person {
+                Ok(found) => crate::pages::patient::patient(&found, &tab, revealed.as_ref()),
+                Err(probe) => server_state(Some(&probe), screen.needs, &screen.route),
+            }),
+            _ => None,
+        };
         screen.title = tr_with(Msg::PersonId, &[("person", person.into())]);
         screen.mono = true;
     }
@@ -196,7 +234,6 @@ fn patient_screen(title: Msg, subtitle: Msg, what: Msg, route: &str, below: bool
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Patient() -> impl IntoView {
-    // TODO(#94): draw the identifiers, the records side by side, the history and the pseudonyms.
     patient_screen(
         Msg::Patient,
         Msg::PatientSub,
@@ -242,32 +279,28 @@ pub fn Unmerge() -> impl IntoView {
 
 /// The sources at `/sources` (design 33).
 #[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
 pub fn Sources() -> impl IntoView {
-    // TODO(#120): draw the sources from the operator API.
-    Screen::new(
+    let screen = Screen::new(
         Msg::Sources,
         Msg::SourcesSub,
         Msg::WhatSources,
         "GET /operator/sources",
-    )
-    .view()
+    );
+    let body = match page_context().document {
+        Some(Document::Sources(read)) => {
+            Some(drawn(&read, &screen, crate::pages::registry::sources))
+        }
+        _ => None,
+    };
+    screen.with(body).view()
 }
 
 /// One source at `/sources/{source}` (design 33.1).
 #[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
 pub fn Source() -> impl IntoView {
     let Some(source) = param("source").filter(|name| is_name(name)) else {
         return view! { <NotFound /> }.into_any();
     };
-    // TODO(#120): draw the source's definition and its last messages.
     let mut screen = Screen::new(
         Msg::Sources,
         Msg::SourceSub,
@@ -275,6 +308,10 @@ pub fn Source() -> impl IntoView {
         format!("GET /operator/sources/{source}"),
     )
     .under(vec![Crumb::new(tr(Msg::Sources), SOURCES)]);
+    screen.body = match page_context().document {
+        Some(Document::Source(read)) => Some(drawn(&read, &screen, crate::pages::registry::source)),
+        _ => None,
+    };
     screen.title = source;
     screen.mono = true;
     screen.view()
@@ -287,14 +324,19 @@ pub fn Source() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Domains() -> impl IntoView {
-    // TODO(#95): draw the table of identifier domains.
-    Screen::new(
+    let screen = Screen::new(
         Msg::Domains,
         Msg::DomainsSub,
         Msg::WhatDomains,
         "GET /operator/domains",
-    )
-    .view()
+    );
+    let body = match page_context().document {
+        Some(Document::Domains { domains, written }) => Some(drawn(&domains, &screen, |domains| {
+            crate::pages::registry::domains(domains, written.as_ref())
+        })),
+        _ => None,
+    };
+    screen.with(body).view()
 }
 
 /// One identifier domain at `/domains/{domain}` (design 20).
@@ -304,10 +346,9 @@ pub fn Domains() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Domain() -> impl IntoView {
-    let Some(domain) = param("domain").filter(|name| is_name(name)) else {
+    let Some(domain) = param("domain").filter(|id| is_uuid(id)) else {
         return view! { <NotFound /> }.into_any();
     };
-    // TODO(#95): draw the domain's definition, its feed activity and its last feeds.
     let mut screen = Screen::new(
         Msg::Domains,
         Msg::DomainSub,
@@ -315,7 +356,19 @@ pub fn Domain() -> impl IntoView {
         format!("GET /operator/domains/{domain}"),
     )
     .under(vec![Crumb::new(tr(Msg::Domains), DOMAINS)]);
-    screen.title = domain;
+    let mut title = domain;
+    screen.body = match page_context().document {
+        Some(Document::Domain { page, written }) => {
+            if let Ok(page) = &page {
+                title.clone_from(&page.domain.name);
+            }
+            Some(drawn(&page, &screen, |page| {
+                crate::pages::registry::domain(page, written.as_ref())
+            }))
+        }
+        _ => None,
+    };
+    screen.title = title;
     screen.mono = true;
     screen.view()
 }
@@ -339,19 +392,20 @@ pub fn PseudonymDomains() -> impl IntoView {
 
 /// The configuration at `/configuration` (design 25).
 #[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
 pub fn Configuration() -> impl IntoView {
-    // TODO(#121): draw the running revision, its tabs and its history.
-    Screen::new(
+    let screen = Screen::new(
         Msg::Configuration,
         Msg::ConfigurationSub,
         Msg::WhatConfiguration,
         "GET /operator/configuration",
-    )
-    .view()
+    );
+    let body = match page_context().document {
+        Some(Document::Configuration(read)) => {
+            Some(drawn(&read, &screen, crate::pages::registry::configuration))
+        }
+        _ => None,
+    };
+    screen.with(body).view()
 }
 
 /// The audit trail at `/audit` (design 13).
@@ -361,14 +415,19 @@ pub fn Configuration() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Audit() -> impl IntoView {
-    // TODO(#96): draw the steward actions with their filters and export.
-    Screen::new(
+    let screen = Screen::new(
         Msg::Audit,
         Msg::AuditSub,
         Msg::WhatAudit,
         "GET /operator/actions",
-    )
-    .view()
+    );
+    let body = match page_context().document {
+        Some(Document::Trail { filter, actions }) => Some(drawn(&actions, &screen, |actions| {
+            crate::pages::trail::trail(&filter, actions)
+        })),
+        _ => None,
+    };
+    screen.with(body).view()
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@
 use std::sync::Arc;
 
 use axum::Extension;
-use axum::extract::{Form, Request};
+use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
@@ -181,12 +181,17 @@ pub fn router(state: ConsoleState) -> axum::Router {
             crate::preferences::SIDEBAR_ROUTE,
             post(crate::preferences::sidebar),
         )
-        .route(SEARCH, post(search))
+        .route(SEARCH, post(crate::posts::search))
+        .route(crate::app::AUDIT, post(crate::posts::trail))
+        .route(crate::pages::trail::EXPORT, post(crate::posts::export))
+        .route("/patients/{person}/reveal", post(crate::posts::reveal))
+        .route(crate::app::DOMAINS, post(crate::posts::domain_create))
+        .route("/domains/{domain}", post(crate::posts::domain_change))
         .route(
             crate::pages::about::METADATA_DOWNLOAD,
             get(capability_download),
         )
-        .route(crate::app::SEARCH_DEMOGRAPHICS, post(search))
+        .route(crate::app::SEARCH_DEMOGRAPHICS, post(crate::posts::search))
         .leptos_routes_with_context(&options, routes, context.clone(), {
             let options = options.clone();
             move || crate::app::document(options.clone())
@@ -279,30 +284,35 @@ async fn gate(
         } else {
             None
         };
+        let document = if probe.is_up() {
+            crate::document::load(state.pix(), &token, &path).await
+        } else {
+            None
+        };
         request.extensions_mut().insert(PageContext {
             operator,
             probe: Some(probe),
             capability,
             prefix,
+            document,
         });
     }
     next.run(request).await
 }
 
-/// Serves a search post: the FerroPIX server serves no search yet, so
-/// nothing is sent on, and the browser goes back to the search page that
-/// says so, with nothing it typed in the address.
-async fn search(Form(post): Form<Vec<(String, String)>>) -> Response {
-    // TODO(#93): post the search to the server's operator API and draw its answer.
-    let demographics = post
-        .iter()
-        .any(|(name, value)| name == "segment" && value == "demographics");
-    let page = if demographics {
-        crate::app::SEARCH_DEMOGRAPHICS
-    } else {
-        SEARCH
+/// Draws the page at the address of `parts`, whose extensions carry the
+/// [`PageContext`] a form post's handler read, as a `GET` of it renders.
+pub async fn render(state: ConsoleState, parts: http::request::Parts) -> Response {
+    let options = leptos_options(state.settings());
+    let context = move || {
+        leptos::context::provide_context(state.clone());
+        provide_request_context();
     };
-    Redirect::to(&format!("{page}?searched")).into_response()
+    let handler = leptos_axum::render_app_to_stream_with_context(context, {
+        let options = options.clone();
+        move || crate::app::document(options.clone())
+    });
+    handler(Request::from_parts(parts, axum::body::Body::empty())).await
 }
 
 /// Serves the server's `CapabilityStatement` as a file, About's Download:

@@ -4,7 +4,10 @@
 # CLAUDE.md
 
 **FerroPIX** is the FerroHEALTH family's Master Patient Index over IHE PIX,
-PIXm, PDQ and PDQm, in pure Rust. It holds the patient identity
+PIXm, PDQ, PDQm and PMIR, with the HL7 v2 identity feed and queries (ITI-8,
+ITI-9, ITI-21), in pure Rust, and the one product that owns identity and
+the IHE profiles; the other products reach it only over
+those protocols (`.claude/memory/family-architecture.md`). It holds the patient identity
 cross-reference and mints the pseudonymous identifiers the clinical domain
 uses, so identifying data stays outside the clinical record. FerroEHR
 resolves `ehr_id` through it (PIXm `$ihe-pix` ITI-83 and PDQm ITI-78), and
@@ -29,8 +32,9 @@ FerroPIX in prose, `ferropix` in identifiers.
   (`hl7v2-types` and its MLLP codec and parser), never a second parser.
 - The ATNA and BALP audit senders live in FerroHEALTH/FerroAUDIT as the crate
   `ihe-atna`; FerroPIX audits the Manager side through it.
-  `oauth-server-metadata` is retired; authorization comes from
-  `ferrohealth-smart` (FerroSMART).
+  `oauth-server-metadata` is retired; authentication and the SMART scopes
+  come from `ferrohealth-smart`, and the policy decision belongs to
+  `ferrohealth-authz`, both FerroAUTH's, never a local copy.
 - **The server and the console (owner, 2026-10-21):** FerroPIX is a
   standalone server with its cross-reference in PostgreSQL, and it ships
   two OCI images, the server (`ghcr.io/ferrohealth/ferropix`) and the
@@ -357,9 +361,12 @@ pull request under their own `CLAUDE.md`.
   of `fhir-types`, `hl7v2-types` and the MLLP codec and parser FerroPIX
   reuses.
 - **FerroTERM** (`../FerroTERM`): the FHIR terminology server.
-- **FerroSMART** (`../FerroSMART`): the shared SMART and OAuth 2.0 crate,
-  `ferrohealth-smart`.
-- **FerroAUDIT**: the shared audit crate, `ihe-atna` (ATNA and BALP).
+- **FerroAUTH** (`../FerroSMART`, the repository renamed from FerroSMART on
+  2026-10-25): the shared authentication and authorization crates,
+  `ferrohealth-smart` (OAuth 2.0, SMART, the authenticated subject) and
+  `ferrohealth-authz` (the policy decision).
+- **FerroAUDIT**: the shared audit crates, `ihe-atna` (the whole audit
+  trail, ATNA and BALP) and `ehds-logging` (the EHDS access record).
 - **FerroUI** (`../FerroUI`): the shared console component library,
   `ferrohealth-ui`, which the operator console draws with, pinned exactly
   and moved in lockstep with the other consoles; a component it lacks is

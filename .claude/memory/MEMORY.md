@@ -3,14 +3,20 @@
 
 # Memory index
 
+- [Family architecture](family-architecture.md): the FerroHEALTH family
+  is five separate servers that reach each other only over published
+  protocols, plus shared crates for cross-cutting work; nothing is
+  hand-written that a shared crate or another product provides; owner
+  2026-10-25
 - [Memory lives in the repo](memory-lives-in-repo.md): every learning is a
   tracked file here, never a per-user note
-- [What FerroPIX is](product-scope.md): the family's Master Patient Index,
-  owning `ihe-iti` and `nl-generic-functions`, FHIR and HL7 v2 together;
-  v0.0.1 setup, v0.0.2 the move, v0.0.3 the server; owner 2026-10-20
-- [Built in FerroFED first, then moved](build-in-fed-first.md): the identity
-  protocols were built in FerroFED, shaped to move; the move is v0.0.2, one
-  step per crate with history (FerroFED#367)
+- [What FerroPIX is](product-scope.md): the family's Master Patient Index
+  and the one product that owns identity and the IHE profiles, owning
+  `ihe-iti` and `nl-generic-functions`, FHIR and HL7 v2 together; owner
+  2026-10-20 and 2026-10-25
+- [Built in FerroFED first, then moved](build-in-fed-first.md): history; the
+  identity protocols moved here in v0.0.2 (FerroFED#367) and the rule is
+  retired, since identity is FerroPIX's lane alone
 - [Corpora move with the crates](corpora-move-with-crates.md): every corpus
   the moved crates read comes here with its script and provenance; each
   FerroFED swap PR removes the copies nothing there reads; owner 2026-10-20
@@ -44,9 +50,8 @@
   poll at most every 60 seconds
 - [FerroUI lockstep](ferroui-lockstep.md): the operator console
   `ferropix-console` (owner 2026-10-21, built on FerroUI 0.3.2 in v0.0.3) is
-  in the library's FerroPIX brand,
-  moves in lockstep with the others, and every gap is filed and built in
-  FerroUI
+  in the library's FerroPIX brand, reactive like every console, moves in
+  lockstep with the others, and every gap is filed and built in FerroUI
 - [The book stays current](book-same-pr.md): ferropix.eu documents only what
   the code does, changes in the same PR, links the tracker for the planned,
   never types a moving version; owner 2026-10-21

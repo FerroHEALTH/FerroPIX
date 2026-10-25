@@ -1,6 +1,6 @@
 ---
 name: build-in-fed-first
-description: "The identity protocols were built in FerroFED first, shaped to move here, because FerroPIX had nothing built (owner 2026-10-01); the owner called the move on 2026-10-20 (FerroFED#367) and it is v0.0.2, copied with history, never piecemeal"
+description: "History: the identity protocols were built in FerroFED first, shaped to move here (owner 2026-10-01); the move was v0.0.2 (FerroFED#367), released; the rule is retired, since identity and the IHE profiles are FerroPIX's lane alone (owner 2026-10-25)"
 metadata:
   type: project
 ---
@@ -30,6 +30,11 @@ dependency for the published version in one PR per crate. The harness fakes
 in FerroFED stay until a pinned FerroPIX image passes its track 2 and #735,
 and FerroEHR#3380 wires to FerroPIX last.
 
-**How to apply:** the move is milestone v0.0.2 and happens in one step per
-crate, with history; nothing moves piecemeal, and nothing moves in v0.0.1.
-A separate analysis scopes it; follow its issues.
+**The rule is retired.** The move was milestone v0.0.2, released, one step
+per crate with history. Under the family architecture of 2026-10-25
+([[family-architecture]]) identity and the IHE profiles are FerroPIX's lane:
+FerroFED reaches FerroPIX over its published protocols as a client and
+builds no identity capability of its own.
+
+**How to apply:** an identity capability FerroFED or another product needs
+is filed and built here, never built elsewhere first to move later.

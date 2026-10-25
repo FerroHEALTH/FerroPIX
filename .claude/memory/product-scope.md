@@ -1,6 +1,6 @@
 ---
 name: product-scope
-description: "What FerroPIX is (owner, 2026-10-20): the family's Master Patient Index over IHE PIX, PIXm, PDQ and PDQm, owning ihe-iti and nl-generic-functions, serving FHIR and HL7 v2 together; v0.0.1 setup, v0.0.2 the move, v0.0.3 the server"
+description: "What FerroPIX is (owner, 2026-10-20 and 2026-10-25): the family's Master Patient Index over IHE PIX, PIXm, PDQ, PDQm and PMIR, the one product that owns identity and the IHE profiles, owning ihe-iti and nl-generic-functions, serving FHIR and HL7 v2 together; v0.0.1 setup, v0.0.2 the move, v0.0.3 the server"
 metadata:
   type: project
 ---
@@ -11,7 +11,14 @@ metadata:
 The owner's statement of 2026-10-20: FerroPIX is the FerroHEALTH family's
 Master Patient Index over IHE PIX, PIXm, PDQ and PDQm. It holds the patient
 identity cross-reference and mints the pseudonymous identifiers the clinical
-domain uses. FerroEHR resolves `ehr_id` through it (FerroHEALTH/FerroEHR#3380:
+domain uses.
+
+The family architecture of 2026-10-25 ([[family-architecture]]) makes
+identity and the IHE profiles FerroPIX's lane: the others reach it over
+IHE PIXm, PDQm and PMIR and over the HL7 v2 identity feed and queries
+(ITI-8, ITI-9, ITI-21) on MLLP, as clients, and no other
+product implements an IHE identity profile of its own. FerroPIX in turn
+reaches the other products only over their published protocols. FerroEHR resolves `ehr_id` through it (FerroHEALTH/FerroEHR#3380:
 PIXm `$ihe-pix` ITI-83 and PDQm ITI-78), and FerroFED's identity binding
 points at it.
 
@@ -22,15 +29,18 @@ points at it.
   features) and `nl-generic-functions` (BSN and the BSNk pseudonyms, NVI
   localization, and Mitz and Nuts, which travel with the crate). FerroFED
   pins both by exact version.
-- The ATNA and BALP audit senders are not FerroPIX's: they go to the shared
-  FerroHEALTH/FerroAUDIT repository as the crate `ihe-atna`, set up by
-  another worker. FerroPIX audits the Manager side through it.
+- The audit trail is not FerroPIX's: it lives in the shared
+  FerroHEALTH/FerroAUDIT repository as the crate `ihe-atna`. FerroPIX
+  audits the Manager side through it.
 - `oauth-server-metadata` is retired and never published; the metadata
-  module of `ferrohealth-smart` replaces it.
+  module of `ferrohealth-smart` replaces it. Authentication and the SMART
+  scopes come from `ferrohealth-smart`, and the policy decision belongs to
+  `ferrohealth-authz`, both FerroAUTH's, never a local copy.
 - FerroPIX serves FHIR and HL7 v2 together, on FerroBRIDGE's v2 parsing
   (`hl7v2-types` and its MLLP codec and parser), never a second parser.
 
-**The milestones:**
+**The milestones as first planned** (v0.0.1 to v0.0.4 are released; the
+current build order is the tracker's milestones and `CLAUDE.md`):
 
 - **v0.0.1:** the repository setup. No code moves.
 - **v0.0.2:** the move. `ihe-iti` without the `atna` and `balp`

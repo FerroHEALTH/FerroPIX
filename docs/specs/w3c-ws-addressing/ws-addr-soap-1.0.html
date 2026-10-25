@@ -1,0 +1,1541 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en-US" xmlns="http://www.w3.org/1999/xhtml" xml:lang=
+"en-US">
+<head>
+<meta name="generator" content=
+"HTML Tidy for Linux/x86 (vers 1 September 2005), see www.w3.org" />
+<meta http-equiv="Content-Type" content=
+"text/html; charset=utf-8" />
+<title>Web Services Addressing 1.0 - SOAP Binding</title>
+
+<style type="text/css">
+/*<![CDATA[*/
+code           { font-family: monospace; }
+
+div.constraint,
+div.issue,
+div.note,
+div.notice     { margin-left: 2em; }
+
+dt.label       { display: run-in; }
+
+li, p           { margin-top: 0.3em;
+                 margin-bottom: 0.3em; }
+
+.diff-chg       { background-color: yellow; }
+.diff-del       { background-color: red; text-decoration: line-through;}
+.diff-add       { background-color: lime; }
+
+table          { empty-cells: show; }
+
+table caption {
+        font-weight: normal;
+        font-style: italic;
+        text-align: left;
+        margin-bottom: .5em;
+}
+
+div.issue {
+  color: red;
+}
+
+div.exampleInner pre { margin-left: 1em;
+                       margin-top: 0em; margin-bottom: 0em}
+div.exampleOuter {border: 4px double gray;
+                  margin: 0em; padding: 0em}
+div.exampleInner { background-color: #d5dee3;
+                   border-top-width: 4px;
+                   border-top-style: double;
+                   border-top-color: #d3d3d3;
+                   border-bottom-width: 4px;
+                   border-bottom-style: double;
+                   border-bottom-color: #d3d3d3;
+                   padding: 4px; margin: 0em }
+div.exampleWrapper { margin: 4px }
+div.exampleHeader { font-weight: bold;
+                    margin: 4px}
+/*]]>*/
+</style>
+<link rel="stylesheet" type="text/css" href="https://www.w3.org/StyleSheets/TR/W3C-REC.css" />
+<link rel="alternate" title="PDF" href="ws-addr-soap.pdf" type=
+"application/pdf" />
+<link rel="alternate" title="PostScript" href="ws-addr-soap.ps"
+type="application/postscript" />
+<link rel="alternate" title="XML" href="ws-addr-soap.xml" type=
+"text/xml" />
+<link rel="alternate" title="plain text" href="ws-addr-soap.txt"
+type="text/plain" />
+<link rel="contents" href="#contents" />
+</head>
+<body>
+<div class="head">
+<p><a href="https://www.w3.org/"><img src="https://www.w3.org/Icons/w3c_home" alt="W3C" height="48" width=
+"72" /></a></p>
+<h1>Web Services Addressing 1.0 - SOAP Binding</h1>
+<h2>W3C Recommendation 9 May 2006</h2>
+<dl>
+<dt>This version:</dt>
+<dd><a href="https://www.w3.org/TR/2006/REC-ws-addr-soap-20060509">http://www.w3.org/TR/2006/REC-ws-addr-soap-20060509</a></dd>
+<dt>Latest version:</dt>
+<dd><a href="https://www.w3.org/TR/ws-addr-soap">http://www.w3.org/TR/ws-addr-soap</a></dd>
+<dt>Previous versions:</dt>
+<dd><a href="https://www.w3.org/TR/2006/PR-ws-addr-soap-20060321">http://www.w3.org/TR/2006/PR-ws-addr-soap-20060321</a></dd>
+<dt>Editors:</dt>
+<dd>Martin Gudgin, Microsoft Corp</dd>
+<dd>Marc Hadley, Sun Microsystems, Inc</dd>
+<dd>Tony Rogers, Computer Associates International, Inc</dd>
+</dl>
+<p>Please refer to the <a href="https://www.w3.org/2006/05/ws-addr-errata.html"><strong>errata</strong></a>
+for this document, which may include some normative
+corrections.</p>
+<p>This document is also available in these non-normative formats:
+<a href="ws-addr-soap.pdf">PDF</a>, <a href=
+"ws-addr-soap.ps">PostScript</a>, <a href=
+"ws-addr-soap.xml">XML</a>, and&nbsp;<a href=
+"ws-addr-soap.txt">plain text</a>.</p>
+<p>See also <a href="https://www.w3.org/2003/03/Translations/byTechnology?technology=ws-addr-soap">
+<strong>translations</strong></a>.</p>
+<p class="copyright"><a href="https://www.w3.org/Consortium/Legal/ipr-notice#Copyright">Copyright</a>&nbsp;©&nbsp;2006&nbsp;<a href="https://www.w3.org/"><acronym title="World Wide Web Consortium">W3C</acronym></a><sup>®</sup>
+(<a href="http://www.csail.mit.edu/"><acronym title=
+"Massachusetts Institute of Technology">MIT</acronym></a>, <a href=
+"http://www.ercim.org/"><acronym title=
+"European Research Consortium for Informatics and Mathematics">ERCIM</acronym></a>,
+<a href="http://www.keio.ac.jp/">Keio</a>), All Rights Reserved.
+W3C <a href="https://www.w3.org/Consortium/Legal/ipr-notice#Legal_Disclaimer">liability</a>,
+<a href="https://www.w3.org/Consortium/Legal/ipr-notice#W3C_Trademarks">trademark</a>
+and <a href="https://www.w3.org/Consortium/Legal/copyright-documents">document
+use</a> rules apply.</p>
+</div>
+<hr />
+<div>
+<h2><a name="abstract" id="abstract">Abstract</a></h2>
+<p>Web Services Addressing provides transport-neutral mechanisms to
+address Web services and messages. Web Services Addressing 1.0 -
+SOAP Binding (this document) defines the binding of the abstract
+properties defined in Web Services Addressing 1.0 - Core to SOAP
+Messages.</p>
+</div>
+<div>
+<h2><a name="status" id="status">Status of this Document</a></h2>
+<p><em>This section describes the status of this document at the
+time of its publication. Other documents may supersede this
+document. A list of current W3C publications and the latest
+revision of this technical report can be found in the <a href="https://www.w3.org/TR/">W3C technical reports index</a> at
+http://www.w3.org/TR/.</em></p>
+<p>This is the <a href="https://www.w3.org/2005/10/Process-20051014/tr.html#RecsW3C">Recommendation</a>
+of the Web Services Addressing 1.0 - SOAP Binding specification. It
+has been produced by the <a href="https://www.w3.org/2002/ws/addr/">Web Services Addressing Working
+Group</a> (WG), which is part of the <a href="https://www.w3.org/2002/ws/Activity">W3C Web Services
+Activity</a>.</p>
+<p>This document has been reviewed by W3C Members, by software
+developers, and by other W3C groups and interested parties, and is
+endorsed by the Director as a W3C Recommendation. It is a stable
+document and may be used as reference material or cited from
+another document. W3C's role in making the Recommendation is to
+draw attention to the specification and to promote its widespread
+deployment. This enhances the functionality and interoperability of
+the Web.</p>
+<p>The Working Group made the following editorial changes to the
+Proposed Recommendation in response to comments: normative and
+informative references are now more clearly distinguished, and some
+typographical errors were fixed. An <a href="https://www.w3.org/2002/ws/addr/5/08/impl-report/">implementation
+report</a> showing that the Candidate Recommendation exit criteria
+have been met and exceeded is available, along with a <a href="https://www.w3.org/2002/ws/addr/testsuite/">test suite</a>. A
+<a href="diff.html">diff-marked version against the previous
+version of this document</a> is available.</p>
+<p>Please report errors in this document to the public <a href=
+"mailto:public-ws-addressing-comments@w3.org">public-ws-addressing-comments@w3.org</a>
+mailing list (<a href=
+"http://lists.w3.org/Archives/Public/public-ws-addressing-comments/">public
+archive</a>).</p>
+<p>This document was produced by a group operating under the
+<a href="https://www.w3.org/Consortium/Patent-Policy-20040205/">5
+February 2004 W3C Patent Policy</a>. W3C maintains a <a href="https://www.w3.org/2004/01/pp-impl/36696/status#specs">public list
+of any patent disclosures</a> made in connection with the
+deliverables of the group; that page also includes instructions for
+disclosing a patent. An individual who has actual knowledge of a
+patent which the individual believes contains <a href="https://www.w3.org/Consortium/Patent-Policy-20040205/#def-essential">
+Essential Claim(s)</a> must disclose the information in accordance
+with <a href="https://www.w3.org/Consortium/Patent-Policy-20040205/#sec-Disclosure">
+section 6 of the W3C Patent Policy</a>.</p>
+</div>
+<hr />
+<div class="toc">
+<h2><a name="contents" id="contents">Table of Contents</a></h2>
+<p class="toc">1. <a href="#intro">Introduction</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;1.1 <a href="#notation">Notational
+Conventions</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;1.2 <a href=
+"#namespaces">Namespaces</a><br />
+2. <a href="#s12feature">SOAP 1.2 Addressing 1.0 Feature</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;2.1 <a href="#s12featurename">Feature
+Name</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;2.2 <a href=
+"#s12featuredesc">Description</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;2.3 <a href=
+"#s12featureprops">Properties</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;2.4 <a href=
+"#s12featureinteractions">Interactions with Other SOAP
+Features</a><br />
+3. <a href="#s12module">SOAP 1.2 Addressing 1.0 Module</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;3.1 <a href="#s12modulename">Module
+Name</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;3.2 <a href=
+"#s12moduledesc">Description</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3.2.1 <a href=
+"#id2269329">Sending Messages</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3.2.2 <a href=
+"#id2269357">Receiving Messages</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;3.3 <a href="#additionalinfoset">Additional
+Infoset Items</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;3.4 <a href="#bindrefp">Binding Message
+Addressing Properties</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;3.5 <a href=
+"#soaphdrvtransport">Relationship between SOAP Headers and
+transport-level properties</a><br />
+4. <a href="#s11ext">SOAP 1.1 Addressing 1.0 Extension</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;4.1 <a href="#s11extname">Extension
+Name</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;4.2 <a href=
+"#s11extdesc">Description</a><br />
+5. <a href="#addressesinsoap">Addresses in SOAP</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;5.1 <a href="#anonaddress">Use of Anonymous
+Address in SOAP Response Endpoints</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1.1 <a href=
+"#id2269957">SOAP 1.1/HTTP</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1.2 <a href=
+"#id2269974">SOAP 1.2</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;5.2 <a href="#nonanonaddress">Use of
+Non-Anonymous Addresses in SOAP Response Endpoints</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2.1 <a href=
+"#id2270013">SOAP 1.1/HTTP</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2.2 <a href=
+"#id2270037">SOAP 1.2</a><br />
+6. <a href="#faults">Faults</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;6.1 <a href="#id2270167">SOAP 1.2 Fault
+Binding</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;6.2 <a href="#id2270287">SOAP 1.1 Fault
+Binding</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;6.3 <a href="#faultdetailelements">Fault
+Detail Elements</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.3.1 <a href=
+"#id2270439">Problem Header QName</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.3.2 <a href=
+"#id2270483">Problem IRI</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.3.3 <a href=
+"#id2270525">Problem Action</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.3.4 <a href=
+"#id2270599">Retry After</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;6.4 <a href="#soapfaults">Predefined
+Faults</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1 <a href=
+"#invalidmapfault">Invalid Addressing Header</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.1
+<a href="#id2270702">wsa:InvalidAddress</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.2
+<a href="#id2270712">wsa:InvalidEPR</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.3
+<a href="#id2270723">wsa:InvalidCardinality</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.4
+<a href="#id2270735">wsa:MissingAddressInEPR</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.5
+<a href="#id2270747">wsa:DuplicateMessageID</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.6
+<a href="#id2270759">wsa:ActionMismatch</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.7
+<a href="#id2270777">wsa:OnlyAnonymousAddressSupported</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.1.8
+<a href="#id2270788">wsa:OnlyNonAnonymousAddressSupported</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.2 <a href=
+"#missingmapfault">Message Addressing Header Required</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.3 <a href=
+"#destinationfault">Destination Unreachable</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.4 <a href=
+"#actionfault">Action Not Supported</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.4.5 <a href=
+"#unavailablefault">Endpoint Unavailable</a><br />
+7. <a href="#securityconsiderations">Security
+Considerations</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;7.1 <a href="#id2271048">Establishing EPR
+Trust</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;7.2 <a href="#id2271093">Additional
+Security Considerations</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;7.3 <a href="#id2271124">Additional
+Considerations for SOAP Intermediaries</a><br />
+8. <a href="#conformance">Conformance</a><br />
+9. <a href="#references">References</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;9.1 <a href=
+"#Normative-References">Normative References</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;9.2 <a href="#Informative-References">Other
+References</a><br /></p>
+<h3><a name="appendix" id="appendix">Appendix</a></h3>
+<p class="toc">A. <a href="#acknowledgments">Acknowledgements</a>
+(Non-Normative)<br /></p>
+</div>
+<hr />
+<div class="body">
+<div class="div1">
+<h2><a name="intro" id="intro"></a>1. Introduction</h2>
+<p>Web Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>] defines a set of
+abstract properties and an XML Infoset [<cite><a href=
+"#XMLInfoSet">XML Information Set</a></cite>] representation
+thereof to reference Web service endpoints and to facilitate
+end-to-end addressing of endpoints in messages. Web Services
+Addressing 1.0 - SOAP Binding (this document) defines the binding
+of the abstract properties defined in Web Services Addressing 1.0 -
+Core to SOAP Messages.</p>
+<p>The following example illustrates the use of these mechanisms in
+a SOAP 1.2 message being sent from
+http://example.com/business/client1 to
+http://example.com/fabrikam/Purchasing:</p>
+<div class="exampleOuter">
+<p style="text-align: left" class="exampleHead"><i><span>Example
+1-1.</span> Use of message addressing properties in a SOAP 1.2
+message.</i></p>
+<div class="exampleInner">
+<pre>
+(01) &lt;S:Envelope xmlns:S="http://www.w3.org/2003/05/soap-envelope"      
+                xmlns:wsa="http://www.w3.org/2005/08/addressing"&gt;
+(02)   &lt;S:Header&gt;
+(03)    &lt;wsa:MessageID&gt;http://example.com/6B29FC40-CA47-1067-B31D-00DD010662DA&lt;/wsa:MessageID&gt;
+(04)    &lt;wsa:ReplyTo&gt;
+(05)      &lt;wsa:Address&gt;http://example.com/business/client1&lt;/wsa:Address&gt;
+(06)    &lt;/wsa:ReplyTo&gt;
+(07)    &lt;wsa:To&gt;http://example.com/fabrikam/Purchasing&lt;/wsa:To&gt;
+(08)    &lt;wsa:Action&gt;http://example.com/fabrikam/SubmitPO&lt;/wsa:Action&gt;
+(09)   &lt;/S:Header&gt;
+(10)   &lt;S:Body&gt;
+(11)     ...
+(12)   &lt;/S:Body&gt;
+(13) &lt;/S:Envelope&gt;
+</pre></div>
+<p>Lines (02) to (09) represent the header of the SOAP message
+where the mechanisms defined in the specification are used. The
+body is represented by lines (10) to (12).</p>
+<p>Lines (03) to (08) contain the message addressing properties
+serialized as SOAP header blocks. Specifically, line (03) specifies
+the identifier for this message and lines (04) to (06) specify the
+endpoint to which replies to this message should be sent as an
+Endpoint Reference. Line (07) specifies the address URI of the
+ultimate receiver of this message. Line (08) specifies an action
+URI identifying expected semantics.</p>
+</div>
+<div class="div2">
+<h3><a name="notation" id="notation"></a>1.1 Notational
+Conventions</h3>
+<p>The keywords "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL"
+in this document are to be interpreted as described in RFC 2119
+[<cite><a href="#RFC2119">IETF RFC 2119</a></cite>].</p>
+<p>When describing abstract data models, this specification uses
+the notational convention used by XML Infoset [<cite><a href=
+"#XMLInfoSet">XML Information Set</a></cite>]. Specifically,
+abstract property names always appear in square brackets (e.g.,
+[some property]).</p>
+<p>When describing concrete XML schemas [<cite><a href=
+"#XMLSchemaP1">XML Schema Structures</a></cite>, <cite><a href=
+"#XMLSchemaP2">XML Schema Datatypes</a></cite>], this specification
+uses the notational convention of WS-Security [<cite><a href=
+"#WS-Security">WS-Security</a></cite>]. Specifically, each member
+of an element's [children] or [attributes] property is described
+using an XPath-like notation (e.g.,
+/x:MyHeader/x:SomeProperty/@value1). The use of {any} indicates the
+presence of an element wildcard (&lt;xs:any/&gt;). The use of
+@{any} indicates the presence of an attribute wildcard
+(&lt;xs:anyAttribute/&gt;).</p>
+</div>
+<div class="div2">
+<h3><a name="namespaces" id="namespaces"></a>1.2 Namespaces</h3>
+<p>This specification uses a number of namespace prefixes
+throughout; they are listed in <a href="#nsrefs">Table 1-1</a>.
+Note that the choice of any namespace prefix is arbitrary and not
+semantically significant (see [<cite><a href="#XMLNS">XML
+Namespaces</a></cite>]).</p>
+<a name="nsrefs" id="nsrefs"></a>
+<table border="1" summary=
+"Namespace prefixes usage in this specification">
+<caption>Table 1-1. Prefixes and Namespaces used in this
+specification</caption>
+<tbody>
+<tr>
+<th align="left" rowspan="1" colspan="1">Prefix</th>
+<th align="left" rowspan="1" colspan="1">Namespace</th>
+</tr>
+<tr>
+<td rowspan="1" colspan="1">S</td>
+<td rowspan="1" colspan="1">
+http://www.w3.org/2003/05/soap-envelope</td>
+</tr>
+<tr>
+<td rowspan="1" colspan="1">S11</td>
+<td rowspan="1" colspan="1">
+http://schemas.xmlsoap.org/soap/envelope</td>
+</tr>
+<tr>
+<td rowspan="1" colspan="1">wsa</td>
+<td rowspan="1" colspan="1">
+http://www.w3.org/2005/08/addressing</td>
+</tr>
+<tr>
+<td rowspan="1" colspan="1">wsaw</td>
+<td rowspan="1" colspan="1">
+http://www.w3.org/2006/02/addressing/wsdl</td>
+</tr>
+<tr>
+<td rowspan="1" colspan="1">xs</td>
+<td rowspan="1" colspan="1">http://www.w3.org/2001/XMLSchema</td>
+</tr>
+</tbody>
+</table>
+<br />
+<p>WS-Addressing is defined in terms of the XML Information Set
+[<cite><a href="#XMLInfoSet">XML Information Set</a></cite>].
+WS-Addressing is conformant to the SOAP 1.2 [<cite><a href=
+"#SOAP12-PART1">SOAP 1.2 Messaging Framework</a></cite>] processing
+model and is also compatible with SOAP 1.1[<cite><a href=
+"#SOAP11">SOAP 1.1</a></cite>] for backwards compatibility.
+WS-Addressing may be used with WSDL [<cite><a href="#WSDL20">WSDL
+2.0 Core Language</a></cite>] described services as described in
+Web Services Addressing 1.0 - WSDL Binding[<cite><a href=
+"#WSADDR-WSDL">WS-Addressing WSDL Binding</a></cite>]. The examples
+in this specification use an XML 1.0 [<cite><a href="#XML10">XML
+1.0</a></cite>] representation but this is not a requirement.</p>
+<p>All information items defined by this specification are
+identified by the XML namespace URI [<cite><a href="#XMLNS">XML
+Namespaces</a></cite>] <a href="https://www.w3.org/2005/08/addressing">http://www.w3.org/2005/08/addressing</a>.
+A normative XML Schema [<cite><a href="#XMLSchemaP1">XML Schema
+Structures</a></cite>, <cite><a href="#XMLSchemaP2">XML Schema
+Datatypes</a></cite>] document can be obtained by dereferencing the
+XML namespace URI.</p>
+</div>
+</div>
+<div class="div1">
+<h2><a name="s12feature" id="s12feature"></a>2. SOAP 1.2 Addressing
+1.0 Feature</h2>
+<p>This section defines the SOAP 1.2 Addressing 1.0 Feature.</p>
+<div class="div2">
+<h3><a name="s12featurename" id="s12featurename"></a>2.1 Feature
+Name</h3>
+<p>The SOAP 1.2 Addressing 1.0 Feature is named using the following
+URI:</p>
+<ul>
+<li>
+<p>http://www.w3.org/2005/08/addressing/feature</p>
+</li>
+</ul>
+</div>
+<div class="div2">
+<h3><a name="s12featuredesc" id="s12featuredesc"></a>2.2
+Description</h3>
+<p>The SOAP 1.2 Addressing 1.0 Feature provides a SOAP-specific
+expression of the abstract message addressing properties defined by
+Web Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>].</p>
+<p>This feature may be used with any SOAP MEP. A binding that
+supports this feature MUST provide a means to transmit the
+properties listed below with a message and to reconstitute their
+values on receipt of a message.</p>
+</div>
+<div class="div2">
+<h3><a name="s12featureprops" id="s12featureprops"></a>2.3
+Properties</h3>
+<p>The SOAP 1.2 Addressing 1.0 Feature defines the following
+properties:</p>
+<dl>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/Destination</dt>
+<dd>
+<p>Corresponds to the abstract [destination] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/SourceEndpoint</dt>
+<dd>
+<p>Corresponds to the abstract [source endpoint] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/ReplyEndpoint</dt>
+<dd>
+<p>Corresponds to the abstract [reply endpoint] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/FaultEndpoint</dt>
+<dd>
+<p>Corresponds to the abstract [fault endpoint] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/Action</dt>
+<dd>
+<p>Corresponds to the abstract [action] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/MessageID</dt>
+<dd>
+<p>Corresponds to the abstract [message id] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/Relationship</dt>
+<dd>
+<p>Corresponds to the abstract [relationship] property.</p>
+</dd>
+<dt class="label">
+http://www.w3.org/2005/08/addressing/feature/ReferenceParameters</dt>
+<dd>
+<p>Corresponds to the abstract [reference parameters] property.</p>
+</dd>
+</dl>
+</div>
+<div class="div2">
+<h3><a name="s12featureinteractions" id=
+"s12featureinteractions"></a>2.4 Interactions with Other SOAP
+Features</h3>
+<p>If the http://www.w3.org/2003/05/soap/features/action/Action
+property of the SOAP Action feature[<cite><a href=
+"#SOAP12-PART2">SOAP 1.2 Adjuncts</a></cite>] has a value, then the
+value of the http://www.w3.org/2005/08/addressing/feature/Action
+property of the SOAP 1.2 Addressing 1.0 feature MUST be identical
+to it. Failure to have an identical value results in an Invalid
+Addressing Header fault (see <a href="#invalidmapfault"><b>6.4.1
+Invalid Addressing Header</b></a>).</p>
+</div>
+</div>
+<div class="div1">
+<h2><a name="s12module" id="s12module"></a>3. SOAP 1.2 Addressing
+1.0 Module</h2>
+<p>The SOAP 1.2 Addressing 1.0 Module defines a set of SOAP header
+blocks to support the SOAP 1.2 Addressing 1.0 Feature described in
+<a href="#s12feature"><b>2. SOAP 1.2 Addressing 1.0
+Feature</b></a>.</p>
+<div class="div2">
+<h3><a name="s12modulename" id="s12modulename"></a>3.1 Module
+Name</h3>
+<p>The SOAP 1.2 Addressing 1.0 Module is identified using the
+following URI:</p>
+<ul>
+<li>
+<p>http://www.w3.org/2005/08/addressing/module</p>
+</li>
+</ul>
+</div>
+<div class="div2">
+<h3><a name="s12moduledesc" id="s12moduledesc"></a>3.2
+Description</h3>
+<p>The SOAP 1.2 Addressing 1.0 Feature (see <a href=
+"#s12feature"><b>2. SOAP 1.2 Addressing 1.0 Feature</b></a>)
+defines a set of SOAP properties and their correspondence to the
+abstract message addressing properties defined by Web Services
+Addressing 1.0 - Core[<cite><a href="#WSADDR-CORE">WS-Addressing
+Core</a></cite>]. The SOAP 1.2 Addressing 1.0 Module defines SOAP
+headers corresponding to the XML Infoset representation of the
+abstract message addressing properties defined in Web Services
+Addressing 1.0 - Core.</p>
+<div class="div3">
+<h4><a name="id2269329" id="id2269329"></a>3.2.1 Sending
+Messages</h4>
+<p>When sending a message each property is represented using the
+appropriate element information item as a SOAP header block. By
+default, the resulting header blocks are targeted at the ultimate
+recipient in the SOAP message path (note that extensions to
+WS-Addressing could be written to specify different targetting).
+<a href="#bindrefp"><b>3.4 Binding Message Addressing
+Properties</b></a> describes additional processing required when
+binding message addressing properties to SOAP header blocks.</p>
+</div>
+<div class="div3">
+<h4><a name="id2269357" id="id2269357"></a>3.2.2 Receiving
+Messages</h4>
+<p>When receiving a message, the abstract properties are populated
+from their corresponding element information items in the message.
+A message MUST NOT contain more than one wsa:To, wsa:ReplyTo,
+wsa:FaultTo, wsa:Action, or wsa:MessageID header targeted at a
+recipient; headers with an incorrect cardinality MUST NOT be used
+to populate the corresponding abstract properties. A recipient MUST
+generate a wsa:InvalidAddressingHeader (see <a href=
+"#invalidmapfault"><b>6.4.1 Invalid Addressing Header</b></a>)
+fault if such a message is received.</p>
+<div class="note">
+<p class="prefix"><b>Note:</b></p>
+<p>The SOAP processing model dictates that message addressing
+properties targeted at an intermediary do not normally get relayed
+as message addressing properties when the message is forwarded
+along the message path. The specification for a SOAP header used as
+a reference parameter or use of the soap:relay attribute can
+override this default behavior.</p>
+</div>
+</div>
+</div>
+<div class="div2">
+<h3><a name="additionalinfoset" id="additionalinfoset"></a>3.3
+Additional Infoset Items</h3>
+<p>The SOAP 1.2 Addressing 1.0 Module defines the following
+additional XML Infoset items:</p>
+<dl>
+<dt class="label">/[reference
+parameters]/@wsa:IsReferenceParameter</dt>
+<dd>
+<p>This REQUIRED attribute (of type xs:boolean) signifies whether
+the message addressing header is a reference parameter, see section
+<a href="#bindrefp"><b>3.4 Binding Message Addressing
+Properties</b></a> for more details on its use.</p>
+</dd>
+</dl>
+</div>
+<div class="div2">
+<h3><a name="bindrefp" id="bindrefp"></a>3.4 Binding Message
+Addressing Properties</h3>
+<p>When a message is to be addressed to an endpoint, the XML
+Infoset representation of each message addressing property that has
+been assigned a value is inserted into the message as a SOAP header
+block subject to the following additional constraints:</p>
+<ul>
+<li>
+<p>The value, if any, of the [reference parameters] property is
+added to the SOAP message header: the element information item of
+each of the [reference parameters] (including all of its
+[children], [attributes] and [in-scope namespaces]) is added as a
+SOAP header block in the new message.</p>
+<div class="note">
+<p class="prefix"><b>Note:</b></p>
+<p>The insertion of SOAP headers into a message implies particular
+semantics. Since the reference parameter mechanism does not
+restrict the content of the generated headers, EPR suppliers should
+exercise appropriate caution to ensure their reference parameters
+do not cause unintended or erroneous semantics in the resultant
+SOAP message. For example, using a reference parameter to send a
+WS-Security[<cite><a href="#WS-Security">WS-Security</a></cite>]
+header would be ill-advised (since other parts of the SOAP
+infrastructure will often control this header, and there must be at
+most one of them per message).</p>
+</div>
+</li>
+<li>
+<p>Each header block added as a result of the above rule is
+annotated with a wsa:IsReferenceParameter attribute (see <a href=
+"#additionalinfoset"><b>3.3 Additional Infoset Items</b></a>) whose
+value is a valid xs:boolean representation of "true". Any existing
+wsa:IsReferenceParameter attribute on the header block is
+replaced.</p>
+<div class="note">
+<p class="prefix"><b>Note:</b></p>
+<p>Integrity validation of [reference parameters] needs to take
+into account the addition of wsa:IsReferenceParameter attributes
+and the corresponding introduction of the WS-Addressing namespace
+to the [in-scope namespaces]</p>
+</div>
+</li>
+<li>
+<p>The value of each message addressing property that is of type
+IRI MUST be serialized as an absolute IRI in the corresponding SOAP
+header block. No additional %-escaping is performed.</p>
+</li>
+<li>
+<p>Each optional element or attribute that has a value equal to the
+defined default value for that element or attribute MAY be
+omitted.</p>
+</li>
+</ul>
+<p>The following example shows how the SOAP 1.2 Addressing 1.0
+Module is used to construct a message addressed to the
+endpoint:</p>
+<div class="exampleOuter">
+<p style="text-align: left" class="exampleHead"><i><span>Example
+3-1.</span> Example endpoint reference.</i></p>
+<div class="exampleInner">
+<pre>
+&lt;wsa:EndpointReference
+     xmlns:wsa="http://www.w3.org/2005/08/addressing"
+     xmlns:wsaw="http://www.w3.org/2006/02/addressing/wsdl"
+     xmlns:fabrikam="http://example.com/fabrikam"
+     xmlns:wsdli="http://www.w3.org/2006/01/wsdl-instance"
+     wsdli:wsdlLocation="http://example.com/fabrikam
+       http://example.com/fabrikam/fabrikam.wsdl"&gt;
+   &lt;wsa:Address&gt;http://example.com/fabrikam/acct&lt;/wsa:Address&gt;
+   &lt;wsa:Metadata&gt;
+       &lt;wsaw:InterfaceName&gt;fabrikam:Inventory&lt;/wsaw:InterfaceName&gt;
+   &lt;/wsa:Metadata&gt;
+   &lt;wsa:ReferenceParameters&gt;
+       &lt;fabrikam:CustomerKey&gt;123456789&lt;/fabrikam:CustomerKey&gt;
+       &lt;fabrikam:ShoppingCart&gt;ABCDEFG&lt;/fabrikam:ShoppingCart&gt;
+   &lt;/wsa:ReferenceParameters&gt;
+&lt;/wsa:EndpointReference&gt;
+</pre></div>
+</div>
+<p>The address value is copied in the "To" header block and the
+"CustomerKey" and "ShoppingCart" elements are copied literally as a
+header blocks in a SOAP message addressed to this endpoint. The
+resulting SOAP message would look as follows:</p>
+<div class="exampleOuter">
+<p style="text-align: left" class="exampleHead"><i><span>Example
+3-2.</span> Example endpoint reference mapped to SOAP message
+header blocks.</i></p>
+<div class="exampleInner">
+<pre>
+&lt;S:Envelope xmlns:S="http://www.w3.org/2003/05/soap-envelope"
+         xmlns:wsa="http://www.w3.org/2005/08/addressing"
+         xmlns:fabrikam="http://example.com/fabrikam"&gt;
+   &lt;S:Header&gt;
+     ...
+    &lt;wsa:To&gt;http://example.com/fabrikam/acct&lt;/wsa:To&gt;
+    &lt;wsa:Action&gt;...&lt;/wsa:Action&gt;
+    &lt;fabrikam:CustomerKey wsa:IsReferenceParameter='true'&gt;123456789&lt;/fabrikam:CustomerKey&gt;
+    &lt;fabrikam:ShoppingCart wsa:IsReferenceParameter='true'&gt;ABCDEFG&lt;/fabrikam:ShoppingCart&gt;
+     ...
+   &lt;/S:Header&gt;
+   &lt;S:Body&gt;
+     ...
+   &lt;/S:Body&gt;
+&lt;/S:Envelope&gt;
+</pre></div>
+</div>
+</div>
+<div class="div2">
+<h3><a name="soaphdrvtransport" id="soaphdrvtransport"></a>3.5
+Relationship between SOAP Headers and transport-level
+properties</h3>
+<p>Some underlying protocols may support native properties similar
+to the Message Addressing Properties. For example, the reply-to:
+email header is similar to the [reply endpoint] Message Addressing
+Property. Authors and implementors of bindings should not assume
+any particular correspondence between native properties and Message
+Addressing Properties. For example, if an email message represents
+only one hop in a multi-hop path, then the reply-to: header is
+likely to differ from the [reply endpoint] address.</p>
+</div>
+</div>
+<div class="div1">
+<h2><a name="s11ext" id="s11ext"></a>4. SOAP 1.1 Addressing 1.0
+Extension</h2>
+<p>The SOAP 1.1 Addressing 1.0 Extension defines a set of SOAP
+header blocks to support the SOAP 1.2 Addressing 1.0 Feature
+described in <a href="#s12feature"><b>2. SOAP 1.2 Addressing 1.0
+Feature</b></a>. This SOAP 1.1 extension is provided for backwards
+compatibility only.</p>
+<div class="div2">
+<h3><a name="s11extname" id="s11extname"></a>4.1 Extension
+Name</h3>
+<p>The SOAP 1.1 Addressing 1.0 Extension is identified using the
+following URI:</p>
+<ul>
+<li>
+<p>http://www.w3.org/2005/08/addressing/module</p>
+</li>
+</ul>
+</div>
+<div class="div2">
+<h3><a name="s11extdesc" id="s11extdesc"></a>4.2 Description</h3>
+<p>The SOAP 1.2 Addressing 1.0 Feature (see <a href=
+"#s12feature"><b>2. SOAP 1.2 Addressing 1.0 Feature</b></a>)
+defines a set of SOAP properties and their correspondence to the
+abstract message addressing properties defined by Web Services
+Addressing 1.0 - Core[<cite><a href="#WSADDR-CORE">WS-Addressing
+Core</a></cite>]. The SOAP 1.1 Addressing 1.0 Extension uses the
+XML Infoset representation of the abstract message addressing
+properties defined in Web Services Addressing 1.0 - Core and binds
+each element information item to a SOAP header block. The SOAP 1.1
+Addressing 1.0 Extension operates as described in <a href=
+"#s12module"><b>3. SOAP 1.2 Addressing 1.0 Module</b></a> with the
+following exceptions:</p>
+<dl>
+<dt class="label">SOAP Action</dt>
+<dd>
+<p>Use of the SOAPAction HTTP request header field is required when
+using the SOAP 1.1 HTTP binding. The field-value of the SOAPAction
+HTTP request header MUST either be the value of the [action]
+property enclosed in quotation marks, or the empty value "". The
+latter case supports the ability to obscure the [action] property
+through SOAP-level security mechanisms, without requiring otherwise
+unnecessary transport-level security. Any other value for
+SOAPAction results in an Invalid Message Addressing Property fault
+(see <a href="#invalidmapfault"><b>6.4.1 Invalid Addressing
+Header</b></a>).</p>
+</dd>
+</dl>
+</div>
+</div>
+<div class="div1">
+<h2><a name="addressesinsoap" id="addressesinsoap"></a>5. Addresses
+in SOAP</h2>
+<p>In the following text, the term 'response endpoint' refers to
+the [reply endpoint] and [fault endpoint] message addressing
+properties collectively.</p>
+<div class="div2">
+<h3><a name="anonaddress" id="anonaddress"></a>5.1 Use of Anonymous
+Address in SOAP Response Endpoints</h3>
+<p>A value of "http://www.w3.org/2005/08/addressing/anonymous" for
+the [destination] property implies no additional semantics beyond
+those resulting from the rules defined below and as described in
+Web Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>]. In particular, note
+that Web Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>], section 3.4 requires
+such a value in messages sent to a response endpoint whose
+[address] is "http://www.w3.org/2005/08/addressing/anonymous".</p>
+<div class="div3">
+<h4><a name="id2269957" id="id2269957"></a>5.1.1 SOAP 1.1/HTTP</h4>
+<p>When "http://www.w3.org/2005/08/addressing/anonymous" is
+specified for the response endpoint then there is no change to the
+SOAP 1.1/ HTTP binding.</p>
+</div>
+<div class="div3">
+<h4><a name="id2269974" id="id2269974"></a>5.1.2 SOAP 1.2</h4>
+<p>When "http://www.w3.org/2005/08/addressing/anonymous" is
+specified for the response endpoint and the message is the
+http://www.w3.org/2003/05/soap/mep/InboundMessage property of a
+SOAP request-response MEP [<cite><a href="#SOAP12-PART2">SOAP 1.2
+Adjuncts</a></cite>], then any response MUST be the
+http://www.w3.org/2003/05/soap/mep/OutboundMessage property of the
+same instance of the SOAP request-response MEP [<cite><a href=
+"#SOAP12-PART2">SOAP 1.2 Adjuncts</a></cite>].</p>
+</div>
+</div>
+<div class="div2">
+<h3><a name="nonanonaddress" id="nonanonaddress"></a>5.2 Use of
+Non-Anonymous Addresses in SOAP Response Endpoints</h3>
+<div class="div3">
+<h4><a name="id2270013" id="id2270013"></a>5.2.1 SOAP 1.1/HTTP</h4>
+<p>When "http://www.w3.org/2005/08/addressing/anonymous" is not
+specified for the response endpoint, then the message SHOULD be
+part of a binding that supports not returning a SOAP envelope in
+the HTTP response (e.g. see [<cite><a href="#SOAP11-ROR">SOAP 1.1
+Request Optional Response HTTP Binding</a></cite>]). Any response
+message SHOULD be sent using a separate connection and using the
+address value specified by response endpoint. Note that other
+specifications MAY define special URIs that have other behaviors
+(similar to the anonymous URI).</p>
+</div>
+<div class="div3">
+<h4><a name="id2270037" id="id2270037"></a>5.2.2 SOAP 1.2</h4>
+<p>When "http://www.w3.org/2005/08/addressing/anonymous" is not
+specified for the response endpoint, then any response SHOULD NOT
+be the http://www.w3.org/2003/05/soap/mep/OutboundMessage property
+of the same instance of the SOAP request-response MEP
+[<cite><a href="#SOAP12-PART2">SOAP 1.2 Adjuncts</a></cite>]. For
+instance, a SOAP 1.2 HTTP binding that supports a one-way MEP could
+put the reply message in a separate one-way MEP and a separate HTTP
+request. As in SOAP 1.1/HTTP, note that other specifications MAY
+define special URIs that have other behaviors (similar to the
+anonymous URI).</p>
+</div>
+</div>
+</div>
+<div class="div1">
+<h2><a name="faults" id="faults"></a>6. Faults</h2>
+<p>The faults defined in this section are generated if the
+condition stated in the preamble in each subsection is met.</p>
+<p>Endpoints compliant with this specification MUST include the
+required message addressing properties serialized as SOAP headers
+in generated fault messages. Fault messages are correlated as
+replies using the [relationship] property as defined in Web
+Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>]. Note that omission
+of the [message id] property in an input message may impact the
+ability of a fault message receiver to correlate the fault message
+to the message that caused the fault message to be generated.
+Omission of the [fault endpoint] or [reply endpoint] properties in
+input messages may impact the delivery of a generated fault
+message</p>
+<p>The [action] property below designates WS-Addressing fault
+messages:</p>
+<div class="exampleInner">
+<pre>
+http://www.w3.org/2005/08/addressing/fault
+      
+</pre></div>
+<p>This action SHOULD NOT be used as an action value in messages
+other than those carrying WS-Addressing faults.</p>
+<p>SOAP modules, extensions and applications SHOULD define custom
+[action] values for the faults they describe but MAY designate use
+of the following [action] value instead:</p>
+<div class="exampleInner">
+<pre>
+http://www.w3.org/2005/08/addressing/soap/fault
+</pre></div>
+<p>The above [action] value SHOULD be used for SOAP defined faults
+including version mismatch, must understand, and data encoding
+unknown.</p>
+<p>Each of the predefined faults listed below is defined by
+specifying values for the following abstract properties:</p>
+<p>[Code] The fault code, use of the specified fault code is
+REQUIRED.</p>
+<p>[Subcode] The fault subcode, use of the specified fault subcode
+is REQUIRED.</p>
+<p>[Subsubcode] A more specific fault subcode that may be used to
+further qualify the value of the [Subcode] property, use of a
+specified fault subcode is OPTIONAL.</p>
+<p>[Reason] The English language reason element, use of the
+specified fault code is RECOMMENDED but alternate text MAY be
+used.</p>
+<p>[Details] The detail elements, use of the specified detail
+elements is REQUIRED. If absent, no detail elements are defined for
+the fault.</p>
+<div class="div2">
+<h3><a name="id2270167" id="id2270167"></a>6.1 SOAP 1.2 Fault
+Binding</h3>
+<p>The fault properties bind to a SOAP 1.2 fault as follows:</p>
+<dl>
+<dt class="label">[Code]</dt>
+<dd>
+<p>The value of the [Code] property is bound as the value of the
+SOAP faults S:Fault/S:Code/S:Value element information item.</p>
+</dd>
+<dt class="label">[Subcode]</dt>
+<dd>
+<p>The value of the [Subcode] property is bound as the value of the
+SOAP faults S:Fault/S:Code/S:Subcode/S:Value element information
+item.</p>
+</dd>
+<dt class="label">[Subsubcode]</dt>
+<dd>
+<p>The value of the [Subsubcode] property is bound as the value of
+the SOAP faults S:Fault/S:Code/S:Subcode/S:/Subcode/S:Value element
+information item.</p>
+</dd>
+<dt class="label">[Reason]</dt>
+<dd>
+<p>The value of the [Reason] property is bound as the value of the
+SOAP faults S:Fault/S:Reason/S:Text element information item.</p>
+</dd>
+<dt class="label">[Details]</dt>
+<dd>
+<p>The value of the [Details] property is bound as child elements
+of the SOAP faults S:Fault/S:Detail element information item.</p>
+</dd>
+</dl>
+<div class="exampleOuter">
+<p style="text-align: left" class="exampleHead"><i><span>Example
+6-1.</span> Binding of fault properties to SOAP 1.2
+messages.</i></p>
+<div class="exampleInner">
+<pre>
+&lt;S:Envelope&gt;
+  &lt;S:Header&gt;
+    &lt;wsa:Action&gt;http://www.w3.org/2005/08/addressing/fault&lt;/wsa:Action&gt;
+    &lt;!-- Headers elided for brevity.  --&gt;
+  &lt;/S:Header&gt;
+  &lt;S:Body&gt;
+    &lt;S:Fault&gt;
+      &lt;S:Code&gt;
+        &lt;S:Value&gt;[Code]&lt;/S:Value&gt;
+        &lt;S:Subcode&gt;
+          &lt;S:Value&gt;[Subcode]&lt;/S:Value&gt;
+          &lt;S:Subcode&gt;
+            &lt;S:Value&gt;[Subsubcode]&lt;/S:Value&gt;
+          &lt;/S:Subcode&gt;
+        &lt;/S:Subcode&gt;
+      &lt;/S:Code&gt;
+      &lt;S:Reason&gt;
+        &lt;S:Text xml:lang="en"&gt;[Reason]&lt;/S:Text&gt;
+      &lt;/S:Reason&gt;
+      &lt;S:Detail&gt;
+        [Detail]
+      &lt;/S:Detail&gt;   
+    &lt;/S:Fault&gt;
+  &lt;/S:Body&gt;
+&lt;/S:Envelope&gt;
+      
+</pre></div>
+</div>
+</div>
+<div class="div2">
+<h3><a name="id2270287" id="id2270287"></a>6.2 SOAP 1.1 Fault
+Binding</h3>
+<p>The SOAP 1.1 fault is slightly less expressive than the SOAP 1.2
+fault and maps only [Subcode], [Reason] and [Detail]. These the
+properties bind to a SOAP 1.1 fault as follows:</p>
+<dl>
+<dt class="label">[Subcode] or [Subsubcode]</dt>
+<dd>
+<p>The value of the [Subsubcode] or, if that is not specified, the
+value of the [Subcode] property is bound as the value of the SOAP
+faults S11:Fault/faultcode element.</p>
+</dd>
+<dt class="label">[Reason]</dt>
+<dd>
+<p>The value of the [Reason] property is bound as the value of the
+SOAP faults S11:Fault/faultstring element.</p>
+</dd>
+<dt class="label">[Details]</dt>
+<dd>
+<p>The SOAP 1.1 fault detail is only for use with faults related to
+the body of a message and is therefore not used for SOAP 1.1 faults
+related to processing of addressing headers. Instead the value of
+the [Details] property is bound as the value of a new
+wsa:FaultDetail SOAP header block. The following describes the
+wsa:FaultDetail element:</p>
+<dl>
+<dt class="label">/wsa:FaultDetail</dt>
+<dd>
+<p>Zero or more of the elements defined in <a href=
+"#faultdetailelements"><b>6.3 Fault Detail Elements</b></a>.</p>
+</dd>
+<dt class="label">/wsa:FaultDetail/@{any}</dt>
+<dd>
+<p>Optional extensibility attributes including SOAP role and
+mustUnderstand.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="exampleOuter">
+<p style="text-align: left" class="exampleHead"><i><span>Example
+6-2.</span> Binding of fault properties to SOAP 1.1
+messages.</i></p>
+<div class="exampleInner">
+<pre>
+&lt;S11:Envelope&gt;
+  &lt;S11:Header&gt;
+    &lt;wsa:Action&gt;http://www.w3.org/2005/08/addressing/fault&lt;/wsa:Action&gt;
+    &lt;wsa:FaultDetail&gt;[Details]&lt;/wsa:FaultDetail&gt;
+    &lt;!-- Other headers elided for brevity.  --&gt;
+  &lt;/S11:Header&gt;
+  &lt;S11:Body&gt;
+    &lt;S11:Fault&gt;
+      &lt;faultcode&gt;[Subcode] or [Subsubcode]&lt;/faultcode&gt;
+      &lt;faultstring xml:lang="en"&gt;[Reason]&lt;/faultstring&gt;
+    &lt;/S11:Fault&gt;
+  &lt;/S11:Body&gt;
+&lt;/S11:Envelope&gt;
+      
+</pre></div>
+</div>
+</div>
+<div class="div2">
+<h3><a name="faultdetailelements" id="faultdetailelements"></a>6.3
+Fault Detail Elements</h3>
+<p>The following subsections define a set of elements used to
+convey additional information in the faults described in <a href=
+"#soapfaults"><b>6.4 Predefined Faults</b></a>.</p>
+<div class="div3">
+<h4><a name="id2270439" id="id2270439"></a>6.3.1 Problem Header
+QName</h4>
+<p>The following describes the &lt;wsa:ProblemHeaderQName&gt;
+element:</p>
+<dl>
+<dt class="label">/wsa:ProblemHeaderQName</dt>
+<dd>
+<p>A QName representing the name of the root element of the problem
+header block.</p>
+</dd>
+<dt class="label">/wsa:ProblemHeaderQName/@{any}</dt>
+<dd>
+<p>Optional extensibility attributes that do not affect
+processing.</p>
+</dd>
+</dl>
+</div>
+<div class="div3">
+<h4><a name="id2270483" id="id2270483"></a>6.3.2 Problem IRI</h4>
+<p>The following describes the &lt;wsa:ProblemIRI&gt; element:</p>
+<dl>
+<dt class="label">/wsa:ProblemIRI</dt>
+<dd>
+<p>The IRI that caused the problem.</p>
+</dd>
+<dt class="label">/wsa:ProblemIRI/@{any}</dt>
+<dd>
+<p>Optional extensibility attributes that do not affect
+processing.</p>
+</dd>
+</dl>
+</div>
+<div class="div3">
+<h4><a name="id2270525" id="id2270525"></a>6.3.3 Problem
+Action</h4>
+<p>The following describes the &lt;wsa:ProblemAction&gt;
+element:</p>
+<dl>
+<dt class="label">/wsa:ProblemAction/wsa:Action</dt>
+<dd>
+<p>An optional element that provides the [action] that caused the
+problem.</p>
+</dd>
+<dt class="label">/wsa:ProblemAction/wsa:SoapAction</dt>
+<dd>
+<p>An optional element that provides the SOAPAction IRI that caused
+the problem.</p>
+</dd>
+<dt class="label">/wsa:ProblemAction/{any}</dt>
+<dd>
+<p>Optional extensibility elements that do not affect
+processing.</p>
+</dd>
+<dt class="label">/wsa:ProblemAction/@{any}</dt>
+<dd>
+<p>Optional extensibility attributes that do not affect
+processing.</p>
+</dd>
+</dl>
+</div>
+<div class="div3">
+<h4><a name="id2270599" id="id2270599"></a>6.3.4 Retry After</h4>
+<p>The following describes the &lt;wsa:RetryAfter&gt; element:</p>
+<dl>
+<dt class="label">/wsa:RetryAfter</dt>
+<dd>
+<p>This element (whose content is of type xs:unsignedLong) is a
+suggested minimum duration in milliseconds to wait before
+retransmitting the message. Omission of this element indicates that
+a retry is never likely to succeed.</p>
+</dd>
+<dt class="label">/wsa:RetryAfter/@{any}</dt>
+<dd>
+<p>Optional extensibility attributes that do not affect
+processing.</p>
+</dd>
+</dl>
+</div>
+</div>
+<div class="div2">
+<h3><a name="soapfaults" id="soapfaults"></a>6.4 Predefined
+Faults</h3>
+<div class="div3">
+<h4><a name="invalidmapfault" id="invalidmapfault"></a>6.4.1
+Invalid Addressing Header</h4>
+<p>A header representing a WS-Addressing 1.0 Message Addressing
+Property is invalid and cannot be processed. The validity failure
+can be either structural or semantic, e.g. a [destination] that is
+not an IRI or a [relationship] to a [message id] that was never
+issued.</p>
+<p>[Code] a QName representing the value S:Sender</p>
+<p>[Subcode] a QName representing the value
+wsa:InvalidAddressingHeader</p>
+<p>[Reason] the string: "A header representing a Message Addressing
+Property is not valid and the message cannot be processed"</p>
+<p>[Details] either a &lt;wsa:ProblemHeader&gt; element that
+conveys a copy of the offending header or a
+&lt;wsa:ProblemHeaderQName&gt; element that conveys the QName of
+the root element of the offending header.</p>
+<p>The invalid addressing header fault can be further narrowed in
+scope by use of the additional [Subsubcode]s specified in the
+following subsections. Use of these [Subsubcode] values is
+OPTIONAL.</p>
+<div class="div4">
+<h5><a name="id2270702" id="id2270702"></a>6.4.1.1
+wsa:InvalidAddress</h5>
+<p>Specifies that an [address] was invalid.</p>
+</div>
+<div class="div4">
+<h5><a name="id2270712" id="id2270712"></a>6.4.1.2
+wsa:InvalidEPR</h5>
+<p>Specifies that the invalid header was expected to be an EPR but
+was not valid.</p>
+</div>
+<div class="div4">
+<h5><a name="id2270723" id="id2270723"></a>6.4.1.3
+wsa:InvalidCardinality</h5>
+<p>Specifies that there was a greater than expected number of the
+specified header.</p>
+</div>
+<div class="div4">
+<h5><a name="id2270735" id="id2270735"></a>6.4.1.4
+wsa:MissingAddressInEPR</h5>
+<p>Specifies that the invalid header was expected to be an EPR but
+did not contain an [address].</p>
+</div>
+<div class="div4">
+<h5><a name="id2270747" id="id2270747"></a>6.4.1.5
+wsa:DuplicateMessageID</h5>
+<p>Specifies that the invalid header conveyed a [message id] that
+was a duplicate of one already received.</p>
+</div>
+<div class="div4">
+<h5><a name="id2270759" id="id2270759"></a>6.4.1.6
+wsa:ActionMismatch</h5>
+<p>Specifies that the [action] and SOAPAction for the message did
+not match, [Details] MAY contain a &lt;wsa:ProblemAction&gt;
+element in addition to the &lt;wsa:ProblemHeader&gt; element or
+&lt;wsa:ProblemHeaderQName&gt; element.</p>
+</div>
+<div class="div4">
+<h5><a name="id2270777" id="id2270777"></a>6.4.1.7
+wsa:OnlyAnonymousAddressSupported</h5>
+<p>Specifies that the only address supported is the anonymous
+address.</p>
+</div>
+<div class="div4">
+<h5><a name="id2270788" id="id2270788"></a>6.4.1.8
+wsa:OnlyNonAnonymousAddressSupported</h5>
+<p>Specifies that the anonymous address is not supported, and that
+only a non-anonymous address will be accepted.</p>
+</div>
+</div>
+<div class="div3">
+<h4><a name="missingmapfault" id="missingmapfault"></a>6.4.2
+Message Addressing Header Required</h4>
+<p>A required header representing a Message Addressing Property is
+absent.</p>
+<p>[Code] a QName representing the value S:Sender</p>
+<p>[Subcode] a QName representing the value
+wsa:MessageAddressingHeaderRequired</p>
+<p>[Reason] the string: "A required header representing a Message
+Addressing Property is not present"</p>
+<p>[Details] a &lt;wsa:ProblemHeaderQName&gt; element that conveys
+the QName of the message addressing header that was missing.</p>
+</div>
+<div class="div3">
+<h4><a name="destinationfault" id="destinationfault"></a>6.4.3
+Destination Unreachable</h4>
+<p>The endpoint identified by the value of [destination] property
+cannot be reached.</p>
+<p>[Code] a QName representing the value S:Sender</p>
+<p>[Subcode] a QName representing the value
+wsa:DestinationUnreachable</p>
+<p>[Reason] the string: "No route can be determined to reach
+[destination]"</p>
+<p>[Details] an optional &lt;wsa:ProblemIRI&gt; element that
+conveys the [address] of the [destination].</p>
+<p>Implementation of this fault is optional.</p>
+</div>
+<div class="div3">
+<h4><a name="actionfault" id="actionfault"></a>6.4.4 Action Not
+Supported</h4>
+<p>The [action] property in the message is not supported at this
+endpoint.</p>
+<p>[Code] a QName representing the value S:Sender</p>
+<p>[Subcode] a QName representing the value
+wsa:ActionNotSupported</p>
+<p>[Reason] the string: "The [action] cannot be processed at the
+receiver"</p>
+<p>[Details] a &lt;wsa:ProblemAction&gt; element with a REQUIRED
+&lt;wsa:Action&gt; child element</p>
+<p>Implementation of this fault is optional.</p>
+</div>
+<div class="div3">
+<h4><a name="unavailablefault" id="unavailablefault"></a>6.4.5
+Endpoint Unavailable</h4>
+<p>The endpoint is unable to process the message at this time
+either due to some transient issue or a permanent failure.</p>
+<p>The endpoint may optionally include a RetryAfter parameter in
+the detail. The source SHOULD NOT retransmit the message until this
+duration has passed.</p>
+<p>[Code] a QName representing the value S:Receiver</p>
+<p>[Subcode] a QName representing the value
+wsa:EndpointUnavailable</p>
+<p>[Reason] the string "The endpoint is unable to process the
+message at this time"</p>
+<p>[Details] an optional &lt;wsa:RetryAfter&gt; element and an
+optional &lt;wsa:ProblemIRI&gt; element that conveys the [address]
+of the [destination].</p>
+<p>Implementation of this fault is optional.</p>
+</div>
+</div>
+</div>
+<div class="div1">
+<h2><a name="securityconsiderations" id=
+"securityconsiderations"></a>7. Security Considerations</h2>
+<div class="note">
+<p class="prefix"><b>Note:</b></p>
+<p>No assumptions are made herein of the application level security
+requirement, the organization of the application, implementation of
+senders or receivers, or of the ways that other protocols may make
+use of WS-Addressing, and what security mechanisms they may employ.
+A holistic approach to security which considers all components of
+the application, other protocols utilized, the way that these
+protocols compose with WS-Security, and the use of other methods or
+additional techniques is highly recommended.</p>
+</div>
+<p>As discussed in Web Services Addressing 1.0 -
+Core[<cite><a href="#WSADDR-CORE">WS-Addressing Core</a></cite>],
+WS-Addressing supports capabilities that allow a message sender to
+instruct a message receiver to send additional unsolicited messages
+to other receivers of their choice and to control the contents of
+those messages to an extent using reference parameters. The SOAP
+binding of WS-Addressing transforms EPR reference parameters into
+SOAP headers and this allows a message sender to request a message
+receiver to send additional unsolicited SOAP messages to other
+receivers of their choice and to specify a set of SOAP headers that
+must be included in such messages.</p>
+<p>SOAP headers are a powerful extension mechanism and therefore
+great care should be taken before honoring a [reply endpoint] or
+[fault endpoint] to avoid inadvertent participation in the
+activities of malicious SOAP message senders.</p>
+<p>WS-Addressing message addressing properties serialized as SOAP
+headers (wsa:To, wsa:Action et al.) including those headers present
+as a result of the [reference parameters] property should be
+integrity protected as explained in Web Services Addressing 1.0 -
+Core[<cite><a href="#WSADDR-CORE">WS-Addressing
+Core</a></cite>].</p>
+<p>Messages that use wsa:ReplyTo or wsa:FaultTo headers whose
+[address] is not the predefined anonymous URI should include claims
+that allow a receiver to confirm that the EPR was issued by a
+principle with authority to represent the [address] of the EPR.</p>
+<p>When receiving a SOAP message, certain SOAP headers may have
+resulted from the serialization of an EPR's [reference parameters]
+property. A SOAP message receiver should perform additional
+security and sanity checks to prevent unintended actions.</p>
+<div class="div2">
+<h3><a name="id2271048" id="id2271048"></a>7.1 Establishing EPR
+Trust</h3>
+<p>There are many mechanisms that could be used to supply proof
+that a message sender has authority to represent the [address] of
+EPRs supplied within the message. Typically such mechanisms require
+the inclusion of a WS-Security[<cite><a href=
+"#WS-Security">WS-Security</a></cite>] header that contains XML
+digital signatures binding the wsa:ReplyTo and wsa:FaultTo elements
+to the SOAP message using a security token issued by an authority
+trusted by the receiver of the message for the domain of the
+[address] of the EPR. Possession of a security token issued by a
+trusted authority for the domain of the [address] of the EPR
+provides a level of confidence that the message sender has
+authority to represent the [address].</p>
+<p>For example, a message could include a
+WS-Security[<cite><a href="#WS-Security">WS-Security</a></cite>]
+header that contains XML digital signatures binding the wsa:ReplyTo
+and wsa:FaultTo elements to the SOAP message using an X.509
+certificate for the domain addressed by the [address] of the EPR.
+If the certificate is issued by a certificate authority trusted by
+the receiver of the message then the receiver can have some level
+of confidence that the message sender has authority to represent
+the [address] of the EPR.</p>
+</div>
+<div class="div2">
+<h3><a name="id2271093" id="id2271093"></a>7.2 Additional Security
+Considerations</h3>
+<p>The wsa:isReferenceParameter attribute is only meaningful on
+SOAP headers. Message processors should consider its appearance
+elsewhere in a SOAP message as a possible attack.</p>
+<p>Message processors should consider elements from the soap11,
+soap12 and wsa namespaces appearing as reference parameters in an
+EPR as a possible attack.</p>
+<p>There are known XML ID and re-structuring attacks which should
+be considered by message processors, see [<cite><a href=
+"#WS-Security">WS-Security</a></cite>] - Security Considerations:
+Removal and modification of XML elements.</p>
+</div>
+<div class="div2">
+<h3><a name="id2271124" id="id2271124"></a>7.3 Additional
+Considerations for SOAP Intermediaries</h3>
+<p>To avoid breaking signatures, intermediaries MUST NOT change the
+XML representation of WS-Addressing headers when relaying those
+headers. Specifically, intermediaries MUST NOT remove XML content
+that explicitly indicates otherwise-implied content, and
+intermediaries MUST NOT insert XML content to make implied values
+explicit. For instance, if a RelationshipType attribute is present
+with a value of "http://www.w3.org/2005/08/addressing/reply", an
+intermediary MUST NOT remove it; similarly, if there is no
+RelationshipType attribute, an intermediary MUST NOT add one.</p>
+</div>
+</div>
+<div class="div1">
+<h2><a name="conformance" id="conformance"></a>8. Conformance</h2>
+<p>A SOAP 1.2 message conforms to the SOAP 1.2 Addressing 1.0
+Module when it contains headers from the wsa namespace, and follows
+all the constraints on message addressing properties defined by Web
+Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>] and by the SOAP 1.2
+Addressing 1.0 Module.</p>
+<p>A SOAP 1.1 message conforms to the SOAP 1.1 Addressing 1.0
+Extension when it contains headers from the wsa namespace, and
+follows all the constraints on message addressing properties
+defined by Web Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>] and by the SOAP 1.1
+Addressing 1.0 Extension.</p>
+<p>An endpoint which conforms to this specification understands and
+accepts SOAP messages containing headers in the wsa namespace
+targeted to it, generates reply or fault messages it may send in
+response according to the rules outlined in this specification and
+in Web Services Addressing 1.0 - Core[<cite><a href=
+"#WSADDR-CORE">WS-Addressing Core</a></cite>].</p>
+<div class="note">
+<p class="prefix"><b>Note:</b></p>
+<p>Web Services Addressing 1.0 - WSDL Binding[<cite><a href=
+"#WSADDR-WSDL">WS-Addressing WSDL Binding</a></cite>] defines
+additional conformance requirements for the description of an
+endpoint.</p>
+</div>
+<div class="note">
+<p class="prefix"><b>Note:</b></p>
+<p>Endpoints MAY accept and respond to messages which contain no
+WSA headers.</p>
+</div>
+<p>If a receiver processes a message containing a wsa:Action
+header, this SOAP binding is engaged, and the rules of this
+specification are in force.</p>
+</div>
+<div class="div1">
+<h2><a name="references" id="references"></a>9. References</h2>
+<div class="div2">
+<h3><a name="Normative-References" id=
+"Normative-References"></a>9.1 Normative References</h3>
+<dl>
+<dt class="label"><a name="RFC2119" id="RFC2119"></a>[IETF RFC
+2119]</dt>
+<dd><cite><a href="http://www.ietf.org/rfc/rfc2119.txt">Key words
+for use in RFCs to Indicate Requirement Levels</a></cite>, S.
+Bradner, Author. Internet Engineering Task Force, June 1999.
+Available at http://www.ietf.org/rfc/rfc2119.txt.</dd>
+<dt class="label"><a name="RFC3987" id="RFC3987"></a>[IETF RFC
+3987]</dt>
+<dd><cite><a href=
+"http://www.ietf.org/rfc/rfc3987.txt">Internationalized Resource
+Identifiers (IRIs)</a></cite> M. Duerst, and M. Suignard, Authors.
+Internet Engineering Task Force, January 2005. Available at
+http://www.ietf.org/rfc/rfc3987.txt.</dd>
+<dt class="label"><a name="SOAP11" id="SOAP11"></a>[SOAP 1.1]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2000/NOTE-SOAP-20000508/">Simple Object
+Access Protocol (SOAP) 1.1</a></cite>, D. Box, et al, Editors.
+World Wide Web Consortium, 8 May 2000. Available at
+http://www.w3.org/TR/2000/NOTE-SOAP-20000508/.</dd>
+<dt class="label"><a name="SOAP12-PART1" id=
+"SOAP12-PART1"></a>[SOAP 1.2 Messaging Framework]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2003/REC-soap12-part1-20030624/">SOAP Version
+1.2 Part 1: Messaging Framework</a></cite>, M. Gudgin, M. Hadley,
+N. Mendelsohn, J-J. Moreau, H. Frystyk Nielsen, Editors. World Wide
+Web Consortium, 24 June 2003. This version of the SOAP Version 1.2
+Part 1: Messaging Framework Recommendation is
+http://www.w3.org/TR/2003/REC-soap12-part1-20030624/. The <a href="https://www.w3.org/TR/soap12-part1/">latest version of SOAP Version
+1.2 Part 1: Messaging Framework</a> is available at
+http://www.w3.org/TR/soap12-part1/.</dd>
+<dt class="label"><a name="SOAP12-PART2" id=
+"SOAP12-PART2"></a>[SOAP 1.2 Adjuncts]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2003/REC-soap12-part2-20030624/">SOAP Version
+1.2 Part 2: Adjuncts</a></cite>, M. Gudgin, M. Hadley, N.
+Mendelsohn, J-J. Moreau, H. Frystyk Nielsen, Editors. World Wide
+Web Consortium, 24 June 2003. This version of the SOAP Version 1.2
+Part 2: Adjuncts Recommendation is
+http://www.w3.org/TR/2003/REC-soap12-part2-20030624/. The <a href="https://www.w3.org/TR/soap12-part1/">latest version of SOAP Version
+1.2 Part 2: Adjuncts</a> is available at
+http://www.w3.org/TR/soap12-part2/.</dd>
+<dt class="label"><a name="WSADDR-CORE" id=
+"WSADDR-CORE"></a>[WS-Addressing Core]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2006/REC-ws-addr-core-20060509">Web Services
+Addressing 1.0 - Core</a></cite>, M. Gudgin, M. Hadley, and T.
+Rogers, Editors. World Wide Web Consortium, 9 May 2006. This
+version of the WS-Addressing Core Recommendation is
+http://www.w3.org/TR/2006/REC-ws-addr-core-20060509. The <a href="https://www.w3.org/TR/ws-addr-core">latest version of WS-Addressing
+Core</a> is available at http://www.w3.org/TR/ws-addr-core.</dd>
+<dt class="label"><a name="XML10" id="XML10"></a>[XML 1.0]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2004/REC-xml-20040204">Extensible Markup
+Language (XML) 1.0 (Third Edition)</a></cite>, T. Bray, J. Paoli,
+C. M. Sperberg-McQueen, and E. Maler, Editors. World Wide Web
+Consortium, 4 February 2004. This version of the XML 1.0
+Recommendation is http://www.w3.org/TR/2004/REC-xml-20040204. The
+<a href="https://www.w3.org/TR/REC-xml">latest version of XML
+1.0</a> is available at http://www.w3.org/TR/REC-xml.</dd>
+<dt class="label"><a name="XMLNS" id="XMLNS"></a>[XML
+Namespaces]</dt>
+<dd><cite><a href="https://www.w3.org/TR/1999/REC-xml-names-19990114">Namespaces in
+XML</a></cite>, T. Bray, D. Hollander, and A. Layman, Editors.
+World Wide Web Consortium, 14 January 1999. This version of the XML
+Information Set Recommendation is
+http://www.w3.org/TR/1999/REC-xml-names-19990114. The <a href="https://www.w3.org/TR/REC-xml-names">latest version of Namespaces
+in XML</a> is available at http://www.w3.org/TR/REC-xml-names.</dd>
+<dt class="label"><a name="XMLInfoSet" id="XMLInfoSet"></a>[XML
+Information Set]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2004/REC-xml-infoset-20040204">XML
+Information Set (Second Edition)</a></cite>, J. Cowan and R. Tobin,
+Editors. World Wide Web Consortium, 4 February 2004. This version
+of the XML Information Set Recommendation is
+http://www.w3.org/TR/2004/REC-xml-infoset-20040204. The <a href="https://www.w3.org/TR/xml-infoset">latest version of XML
+Information Set</a> is available at
+http://www.w3.org/TR/xml-infoset.</dd>
+<dt class="label"><a name="XMLSchemaP1" id="XMLSchemaP1"></a>[XML
+Schema Structures]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2004/REC-xmlschema-1-20041028/">XML Schema
+Part 1: Structures Second Edition</a></cite>, H. Thompson, D.
+Beech, M. Maloney, and N. Mendelsohn, Editors. World Wide Web
+Consortium, 28 October 2004. This version of the XML Schema Part 1
+Recommendation is
+http://www.w3.org/TR/2004/REC-xmlschema-1-20041028. The <a href="https://www.w3.org/TR/xmlschema-1/">latest version of XML Schema
+Part 1</a> is available at http://www.w3.org/TR/xmlschema-1.</dd>
+<dt class="label"><a name="XMLSchemaP2" id="XMLSchemaP2"></a>[XML
+Schema Datatypes]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/">XML Schema
+Part 2: Datatypes Second Edition</a></cite>, P. Byron and A.
+Malhotra, Editors. World Wide Web Consortium, 28 October 2004. This
+version of the XML Schema Part 2 Recommendation is
+http://www.w3.org/TR/2004/REC-xmlschema-2-20041028. The <a href="https://www.w3.org/TR/xmlschema-2/">latest version of XML Schema
+Part 2</a> is available at http://www.w3.org/TR/xmlschema-2.</dd>
+</dl>
+</div>
+<div class="div2">
+<h3><a name="Informative-References" id=
+"Informative-References"></a>9.2 Other References</h3>
+<dl>
+<dt class="label"><a name="SOAP11-ROR" id="SOAP11-ROR"></a>[SOAP
+1.1 Request Optional Response HTTP Binding]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2006/NOTE-soap11-ror-httpbinding-20060321/">SOAP
+1.1 Request Optional Response HTTP Binding</a></cite>, D. Orchard,
+Editor. World Wide Web Consortium, 21 March 2006. This version of
+the SOAP 1.1 Request Optional Response HTTP Binding specification
+is http://www.w3.org/TR/2006/NOTE-soap11-ror-httpbinding-20060321/.
+The <a href="https://www.w3.org/TR/soap11-ror-httpbinding">latest
+version of SOAP 1.1 Request Optional Response HTTP Binding</a> is
+available http://www.w3.org/TR/soap11-ror-httpbinding.</dd>
+<dt class="label"><a name="WSADDR-WSDL" id=
+"WSADDR-WSDL"></a>[WS-Addressing WSDL Binding]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2006/WD-ws-addr-wsdl-20060216">Web Services
+Addressing 1.0 - WSDL Binding</a></cite>, M. Gudgin, M. Hadley, T.
+Rogers, Ü. Yalçinalp, Editors. World Wide Web Consortium, 16
+February 2006. This version of the WS-Addressing WSDL Binding
+specification is
+http://www.w3.org/TR/2006/WD-ws-addr-wsdl-20060216. The <a href="https://www.w3.org/TR/ws-addr-wsdl">latest version of WS-Addressing
+WSDL Binding</a> is available at
+http://www.w3.org/TR/ws-addr-wsdl.</dd>
+<dt class="label"><a name="WSDL20" id="WSDL20"></a>[WSDL 2.0 Core
+Language]</dt>
+<dd><cite><a href="https://www.w3.org/TR/2006/CR-wsdl20-20060327">Web Services
+Description Language (WSDL) Version 2.0 Part 1: Core
+Language</a></cite>, R. Chinnici, J. J. Moreau, A. Ryman, and S.
+Weerawarana, Editors. World Wide Web Consortium, 27 March 2006.
+This version of the WSDL 2.0 specification is
+http://www.w3.org/TR/2006/CR-wsdl20-20060327. The <a href="https://www.w3.org/TR/wsdl20">latest version of WSDL 2.0</a> is
+available at http://www.w3.org/TR/wsdl20.</dd>
+<dt class="label"><a name="WS-Security" id=
+"WS-Security"></a>[WS-Security]</dt>
+<dd><cite><a href=
+"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0.pdf">
+Web Services Security: SOAP Message Security 1.0 (WS-Security
+2004)</a></cite>, A. Nadalin, C. Kaler, P. Hallam-Baker, R.
+Monzillo, Editors. Organization for the Advancement of Structured
+Information Standards, March 2004.</dd>
+</dl>
+</div>
+</div>
+</div>
+<div class="back">
+<div class="div1">
+<h2><a name="acknowledgments" id="acknowledgments"></a>A.
+Acknowledgements (Non-Normative)</h2>
+<p>This document is the work of the <a href="https://www.w3.org/2002/ws/addr/">W3C Web Service Addressing
+Working Group</a>.</p>
+<p>Members of the Working Group are (at the time of writing, and by
+alphabetical order): Abbie Barbir (Nortel Networks), Andreas
+Bjärlestam (ERICSSON), Dave Chappell (Sonic Software), Eran
+Chinthaka (WSO2), Francisco Curbera (IBM Corporation), Glen Daniels
+(Sonic Software), Vikas Deolaliker (Sonoa Systems, Inc.), Paul
+Downey (BT), Jacques Durand (Fujitsu Limited), Robert Freund
+(Hitachi, Ltd.), Marc Goodner (Microsoft Corporation), Arun Gupta
+(Sun Microsystems, Inc.), Hugo Haas (W3C/ERCIM), Marc Hadley (Sun
+Microsystems, Inc.), David Hull (TIBCO Software, Inc.), Yin-Leng
+Husband (HP), David Illsley (IBM Corporation), Anish Karmarkar
+(Oracle Corporation), Paul Knight (Nortel Networks), Philippe Le
+Hégaret (W3C/MIT), Amelia Lewis (TIBCO Software, Inc.), Bozhong Lin
+(IONA Technologies, Inc.), Mark Little (JBoss Inc.), Jonathan Marsh
+(Microsoft Corporation), Jeff Mischkinsky (Oracle Corporation),
+Nilo Mitra (ERICSSON), Eisaku Nishiyama (Hitachi, Ltd.), Ales Novy
+(Systinet Inc.), David Orchard (BEA Systems, Inc.), Gilbert Pilz
+(BEA Systems, Inc.), Alain Regnier (Ricoh Company, Ltd.), Tony
+Rogers (Computer Associates), Tom Rutt (Fujitsu Limited), Davanum
+Srinivas (WSO2), Jiri Tejkl (Systinet Inc.), Mike Vernal (Microsoft
+Corporation), Steve Vinoski (IONA Technologies, Inc.), Katy Warr
+(IBM Corporation), Pete Wenzel (Sun Microsystems, Inc.), Steve
+Winkler (SAP AG), Ümit Yalçinalp (SAP AG), Prasad Yendluri
+(webMethods, Inc.).</p>
+<p>Previous members of the Working Group were: Lisa Bahler (SAIC -
+Telcordia Technologies), Rebecca Bergersen (IONA Technologies,
+Inc.), Ugo Corda (Sun Microsystems, Inc.), Michael Eder (Nokia),
+Yaron Goland (BEA Systems, Inc.), Marc Goodner (SAP AG), Martin
+Gudgin (Microsoft Corporation), Mark Nottingham (BEA Systems,
+Inc.), Mark Peel (Novell, Inc.), Harris Reynolds (webMethods,
+Inc.), Rich Salz (IBM Corporation), Davanum Srinivas (Computer
+Associates), Greg Truty (IBM Corporation).</p>
+<p>The people who have contributed to <a href=
+"http://lists.w3.org/Archives/Public/public-ws-addressing/">discussions
+on public-ws-addressing@w3.org</a> are also gratefully
+acknowledged.</p>
+</div>
+</div>
+<script src="https://www.w3.org/scripts/TR/fixup.js"></script></body>
+</html>

@@ -145,7 +145,7 @@ pub fn envelope(
             writer
                 .create_element("soap:Header")
                 .write_inner_content(|writer| {
-                    addressing(writer, RESPONSE_ACTION, message, &query.message_id)
+                    addressing(writer, RESPONSE_ACTION, message, query)
                 })?;
             writer
                 .create_element("soap:Body")
@@ -175,7 +175,7 @@ pub fn deferred_refused(query: &ReceivedQuery, responder: &Responder) -> std::io
             writer
                 .create_element("soap:Header")
                 .write_inner_content(|writer| {
-                    addressing(writer, ACKNOWLEDGEMENT_ACTION, message, &query.message_id)
+                    addressing(writer, ACKNOWLEDGEMENT_ACTION, message, query)
                 })?;
             writer
                 .create_element("soap:Body")
@@ -274,12 +274,13 @@ pub fn fault(blame: Blame, reason: &str) -> std::io::Result<Vec<u8>> {
 }
 
 /// The WS-Addressing headers of an answer: its action, its own
-/// `MessageID` and the `RelatesTo` of the request (Appendix V).
+/// `MessageID`, the `RelatesTo` of the request and, for an asynchronous
+/// exchange, the `To` of its reply endpoint (Appendix V).
 fn addressing(
     writer: &mut Out,
     action: &str,
     message: Uuid,
-    relates_to: &str,
+    query: &ReceivedQuery,
 ) -> std::io::Result<()> {
     // NOTE: ITI TF-2 V.3.2.2 IHE-WSA101: every wsa:Action carries mustUnderstand.
     writer
@@ -291,7 +292,14 @@ fn addressing(
         .write_text_content(BytesText::new(&format!("urn:uuid:{message}")))?;
     writer
         .create_element("wsa:RelatesTo")
-        .write_text_content(BytesText::new(relates_to))?;
+        .write_text_content(BytesText::new(&query.message_id))?;
+    // NOTE: ITI TF-2 V.9.2.4: an asynchronous response names the request's ReplyTo as wsa:To.
+    if let Some(reply_to) = &query.reply_to {
+        writer
+            .create_element("wsa:To")
+            .with_attribute(("soap:mustUnderstand", "1"))
+            .write_text_content(BytesText::new(reply_to))?;
+    }
     Ok(())
 }
 

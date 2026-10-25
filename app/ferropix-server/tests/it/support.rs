@@ -168,6 +168,8 @@ home_community_id = "urn:oid:2.999.60.1"
 device = "2.999.60.2"
 domains = ["urn:oid:2.999.1.1"]
 initiating_communities = ["urn:oid:2.999.70.1"]
+reply_endpoints = ["https://ig.example.org/xcpd/"]
+delivery_attempts = 3
 
 [audit]
 url = "https://arr.example.org/fhir"

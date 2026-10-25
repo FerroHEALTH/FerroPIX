@@ -416,9 +416,28 @@ fn the_answer_copies_the_query_and_names_the_request() {
         r#"<queryId root="2.999.40.10" extension="Q-1"/>"#,
         r#"code="NotHealthDataLocator""#,
         r#"<id root="2.999.60.2" extension="RG-1"/>"#,
+        r#"<wsa:To soap:mustUnderstand="1">https://ig.example.org/replies</wsa:To>"#,
     ] {
         assert!(answered.contains(expected), "{expected} in {answered}");
     }
+}
+
+#[test]
+fn a_synchronous_answer_names_no_reply_endpoint() {
+    let body = demographics_request("I", ACTION).replace(
+        "<wsa:ReplyTo><wsa:Address>https://ig.example.org/replies</wsa:Address></wsa:ReplyTo>",
+        "",
+    );
+    let read = query::read(Some(MEDIA_TYPE), body.as_bytes()).expect("the request reads");
+    assert_eq!(None, read.reply_to);
+    let responder = Responder {
+        device: oid(RECEIVER),
+        community: HomeCommunityId::new(oid(COMMUNITY)),
+    };
+    let answered =
+        String::from_utf8(answer::envelope(&read, &responder, &Outcome::NoMatch).expect("written"))
+            .expect("UTF-8");
+    assert!(!answered.contains("<wsa:To"), "{answered}");
 }
 
 #[cfg(feature = "atna")]

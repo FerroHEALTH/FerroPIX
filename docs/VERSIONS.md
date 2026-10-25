@@ -230,7 +230,7 @@ redistribution is fetched into the git-ignored `.vendor-cache/` and only its
 | IHE PDQm FHIR package, Swiss pin | package `ihe.iti.pdqm` 3.1.0, pin-set digest `ae4fb56c9eba92fcdf5637c86135618e37b60642c99013a8ca06ba747c9c4e73` | `scripts/vendor/ch.sh`, `docs/specs/ihe-pdqm-ch/PROVENANCE.md` |
 | IHE IUA supplement, Swiss pin | `IHE/ITI.IUA` Revision 2.3, pin-set digest `2a5f13a87ccf307fecda8c48e77a61fd09c440089b2172be0edea912dea85439` | `scripts/vendor/ch.sh`, `docs/specs/ihe-iua-ch/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 1 pages | ITI TF Revision 20.2 chapters 13, 18 and 27, pin-set digest `838b2f672e0bc34841d7fe297fd561c6f49c42fdd12b5a15119eb10a7234aeb7` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf/PROVENANCE.md` |
-| IHE ITI Technical Framework Volume 2 pages | the ITI-38 page (Revision 20.2), committed, and the ITI-55 page (Revision 20.1), cache only, pin-set digest `84c3ff8cfad148b5c066ae364d1f8a3044c6210ed806e9b87f363d8dda2d5546` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-vol2/PROVENANCE.md` |
+| IHE ITI Technical Framework Volume 2 pages | the ITI-38 page (Revision 20.2) and Appendix V (Revision 20.0), committed, and the ITI-55 page (Revision 20.1), cache only, pin-set digest `a0db03ab543e50569896e04fb4097bf6fd3a332d0b8106416b1d1de3d86572bf` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-vol2/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 2 HL7 v2 pages | the ITI-8, ITI-9 and ITI-10 pages (Revision 20.0), the ITI-21 page (Revision 20.2) and the ITI-22 page (Revision 20.1), all cache only, pin-set digest `ff7b90dfcd52d54ab9bec50dcec64fdd0ac811a6b02f45d3314c01385dd9358d` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-hl7v2/PROVENANCE.md` |
 
 ## The usage report contract

@@ -10,7 +10,8 @@ community knows a patient, by a shared identifier or by demographics, and
 the answer names the patient's identifiers in your domains. The messages are
 HL7 V3 `PRPA_IN201305UV02` and `PRPA_IN201306UV02` in SOAP 1.2 with
 WS-Addressing, as the IHE ITI Technical Framework Volume 2, §3.55, prescribes
-them. The gateway answers synchronously.
+them. The gateway answers on the same exchange, or asynchronously when the
+request names a reply endpoint.
 
 Turn it on with `[xcpd] enabled = true`
 ([Configuration](../operate/configuration.md#xcpd)):
@@ -22,6 +23,7 @@ home_community_id = "urn:oid:2.999.60.1"
 device = "2.999.60.2"
 domains = ["urn:oid:2.999.1.1", "urn:oid:2.999.1.2"]
 initiating_communities = ["urn:oid:2.999.70.1"]
+reply_endpoints = ["https://ig.example.org/xcpd/"]
 ```
 
 The gateway listens at `POST {base}/xcpd` on the HTTP server. The SOAP
@@ -52,11 +54,34 @@ FerroPIX, as it is for the MLLP listener.
   `RegistrationEvent` names `home_community_id` as its custodian.
 - **Refusals:** a query from an initiating community not listed in
   `initiating_communities` is Case 5 with `AnswerNotAvailable`. A query
-  targeted at another community is Case 5. A Deferred request
-  (`responsePriorityCode` `D`) is answered with the `NS250` "Unsupported
-  processing mode" acknowledgement. A store that cannot be read is Case 5
+  targeted at another community is Case 5. FerroPIX does not offer the
+  Deferred Response Option: a Deferred request (`responsePriorityCode` `D`)
+  is answered with the `NS250` "Unsupported processing mode"
+  acknowledgement. A store that cannot be read is Case 5
   with `InternalError`. A request that is no ITI-55 query is answered with a
   SOAP 1.2 fault, `400` for a `Sender` fault.
+
+## The asynchronous exchange
+
+ITI-55 requires a Responding Gateway to support the asynchronous web
+services exchange of ITI TF-2 Appendix V.5. A request whose WS-Addressing
+`ReplyTo` names an endpoint other than the anonymous one is answered with
+`202 Accepted` and no envelope. The answer follows on a new connection: a
+`POST` of the `PRPA_IN201306UV02` to that endpoint, with `RelatesTo` naming
+the request's `MessageID` and `To` naming the endpoint.
+
+- **Which endpoints:** the `ReplyTo` must start with one of
+  `reply_endpoints`, each `https` or `http` on a loopback host. Any other
+  `ReplyTo` is refused with a `Sender` fault and nothing is posted, so a
+  request cannot make FerroPIX post to an address you did not name.
+- **Delivery:** a `2xx` answer from the endpoint ends the delivery. Any other
+  status, a timeout (`delivery_timeout_ms`) or a refused connection is tried
+  again after `delivery_initial_backoff_ms`, doubling up to
+  `delivery_max_backoff_ms`, at most `delivery_attempts` times in all. The
+  answer is held in memory, so a restart drops an answer not yet delivered.
+- **Client certificate:** FerroPIX posts the answer without a client
+  certificate. Where the initiating gateway asks for mutual TLS, route the
+  delivery through an egress proxy that presents one.
 
 ## Audit
 

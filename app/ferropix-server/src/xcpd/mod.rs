@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The XCPD Responding Gateway: ITI-55 answered synchronously over the
-//! cross-reference, behind `[xcpd]`.
+//! The XCPD Responding Gateway: ITI-55 answered over the cross-reference,
+//! behind `[xcpd]`.
 //!
 //! `POST {base}/xcpd` reads one `PRPA_IN201305UV02` in its SOAP 1.2
 //! envelope through `ihe-iti` (ITI TF-2 §3.55.4.1, §3.55.6) and answers the
-//! `PRPA_IN201306UV02` of the case it settles (§3.55.4.2.3):
+//! `PRPA_IN201306UV02` of the case it settles (§3.55.4.2.3), on the same
+//! exchange, or, when the request's `ReplyTo` names an endpoint, posted to
+//! it later as Appendix V.5 describes; the gateway "shall support
+//! Asynchronous Web Services Exchange" (§3.55.6):
 //!
 //! - An identifier of the query in a domain the store holds is looked up in
 //!   the cross-reference: the persons found are Case 1 or Case 2, and an
@@ -21,7 +24,8 @@
 //!   own design: IHE leaves matching to the gateway (§3.55.4.1.3.1).
 //! - A person is answered with its identifiers in `[xcpd] domains`, and one
 //!   with none is left out.
-//! - A Deferred request is refused `NS250` (§3.55.4.1.3), a query from an
+//! - A Deferred request is refused `NS250` (§3.55.4.1.3), a `ReplyTo` no
+//!   `[xcpd] reply_endpoints` entry starts is a `Sender` fault, a query from an
 //!   initiating community `[xcpd]` does not list is Case 5 with
 //!   `AnswerNotAvailable`, a query targeted at another community is Case 5
 //!   (§3.55.4.1.3.2), and a store that cannot be read is Case 5 with
@@ -58,6 +62,7 @@ use uuid::Uuid;
 
 use crate::audit::Audit;
 use crate::audit::records::{self, Call, Identifier};
+use crate::audit::reserve::Place;
 use crate::config::section::matching::{BlockingKey, Matching};
 use crate::config::section::xcpd::XcpdSettings;
 use crate::feed::demographics::DemographicsError;
@@ -87,25 +92,34 @@ pub struct Gateway {
     audit: Audit,
     /// The gateway's endpoint, as its records name it.
     endpoint: NetworkAddress,
+    /// The client that posts an asynchronous answer.
+    client: reqwest::Client,
 }
 
 impl Gateway {
     /// Returns the gateway over `store`, scoring with `matching`, answering
     /// as `settings` names it at `public_base_url`, recording to `audit`.
-    #[must_use]
+    ///
+    /// # Errors
+    /// Returns the client's error when the HTTP client that posts an
+    /// asynchronous answer cannot be built.
     pub fn new(
         store: &Store,
         matching: &Matching,
         settings: XcpdSettings,
         public_base_url: &url::Url,
         audit: &Audit,
-    ) -> Self {
+    ) -> Result<Self, reqwest::Error> {
         let master = public_base_url.as_str().trim_end_matches('/').to_owned();
         let endpoint = url::Url::parse(&format!("{master}{PATH}")).map_or_else(
             |_| NetworkAddress::uri(public_base_url),
             |url| NetworkAddress::uri(&url),
         );
-        Self {
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(settings.delivery.timeout)
+            .build()?;
+        Ok(Self {
             store: store.clone(),
             scorer: Scorer::new(matching),
             blocking: matching.blocking_keys.clone(),
@@ -113,7 +127,8 @@ impl Gateway {
             settings,
             audit: audit.clone(),
             endpoint,
-        }
+            client,
+        })
     }
 
     /// Returns the responder every answer names.
@@ -126,7 +141,18 @@ impl Gateway {
 
     /// Answers one request of media type `media` and body `body`, from
     /// `peer`.
-    async fn answer(&self, media: Option<&str>, body: &[u8], peer: Option<SocketAddr>) -> Response {
+    ///
+    /// A request whose `ReplyTo` names an endpoint is the asynchronous
+    /// exchange of ITI TF-2 V.5: it is accepted with `202` and no envelope
+    /// (WS-Addressing 1.0 SOAP Binding §5.2.2: the response "SHOULD NOT" be
+    /// the outbound message of the same exchange), and the answer is posted
+    /// to the endpoint once settled.
+    async fn answer(
+        self: &Arc<Self>,
+        media: Option<&str>,
+        body: &[u8],
+        peer: Option<SocketAddr>,
+    ) -> Response {
         let received = match query::read(media, body) {
             Ok(received) => received,
             Err(refusal) => {
@@ -135,15 +161,32 @@ impl Gateway {
             }
         };
         let call = self.call(&received, peer);
+        let reply = received
+            .reply_to
+            .as_deref()
+            .map(|reply_to| self.reply_endpoint(reply_to));
+        if matches!(reply, Some(None)) {
+            tracing::warn!(
+                "an ITI-55 request is refused: its ReplyTo is no configured reply endpoint"
+            );
+            return fault(
+                Blame::Sender,
+                "the ReplyTo endpoint is not one this gateway answers",
+            );
+        }
+        let reply = reply.flatten();
         let Ok(place) = self.audit.reserve() else {
             tracing::error!("an ITI-55 query is refused: its audit record has no room");
+            if reply.is_some() {
+                return fault(Blame::Receiver, "the audit record has no room");
+            }
             return self.envelope(
                 &received,
                 &Outcome::Unable(vec![DetectedIssue::ResponderBusy]),
             );
         };
         if received.priority == Priority::Deferred {
-            // TODO(#232): answer a Deferred request with the Deferred Response Option.
+            // NOTE: ITI TF-2 §3.55.4.1.3: FerroPIX does not offer the Deferred Response Option.
             let exchange = record(&call, &received, &[], AuditOutcome::MinorFailure);
             if place.record(&exchange).await.is_err() {
                 tracing::error!(
@@ -156,7 +199,32 @@ impl Gateway {
                 Err(_) => fault(Blame::Receiver, "the answer could not be written"),
             };
         }
-        let settled = self.settle(&received).await;
+        let Some(endpoint) = reply else {
+            return match self.concluded(&received, &call, place).await {
+                Ok(bytes) => soap(StatusCode::OK, bytes),
+                Err(_) => fault(Blame::Receiver, "the answer could not be written"),
+            };
+        };
+        let gateway = Arc::clone(self);
+        tokio::spawn(async move {
+            if let Ok(bytes) = gateway.concluded(&received, &call, place).await {
+                gateway.deliver(&endpoint, bytes).await;
+            } else {
+                tracing::error!("an asynchronous ITI-55 answer could not be written");
+            }
+        });
+        StatusCode::ACCEPTED.into_response()
+    }
+
+    /// Settles `received`, stores its audit record in `place`, and returns
+    /// the answer: Case 5 when the record could not be stored.
+    async fn concluded(
+        &self,
+        received: &ReceivedQuery,
+        call: &Call,
+        place: Place,
+    ) -> std::io::Result<Vec<u8>> {
+        let settled = self.settle(received).await;
         let patients: Vec<Identifier> = match &settled {
             Outcome::Matched(candidates) => candidates
                 .iter()
@@ -171,15 +239,65 @@ impl Gateway {
             Outcome::Unable(_) => AuditOutcome::MinorFailure,
             _ => AuditOutcome::Success,
         };
-        let exchange = record(&call, &received, &patients, outcome);
+        let exchange = record(call, received, &patients, outcome);
         if place.record(&exchange).await.is_err() {
             tracing::error!("an ITI-55 answer is withheld: its audit record could not be stored");
-            return self.envelope(
-                &received,
+            return answer::envelope(
+                received,
+                &self.responder(),
                 &Outcome::Unable(vec![DetectedIssue::InternalError]),
             );
         }
-        self.envelope(&received, &settled)
+        answer::envelope(received, &self.responder(), &settled)
+    }
+
+    /// Returns `reply_to` as a URL when it starts with a configured reply
+    /// endpoint.
+    fn reply_endpoint(&self, reply_to: &str) -> Option<url::Url> {
+        // NOTE: a ReplyTo that is no URL names no endpoint this gateway can post to.
+        let endpoint = url::Url::parse(reply_to).ok()?;
+        self.settings
+            .delivery
+            .endpoints
+            .iter()
+            .any(|prefix| endpoint.as_str().starts_with(prefix.as_str()))
+            .then_some(endpoint)
+    }
+
+    /// Posts the asynchronous answer `bytes` to `endpoint`, retried with a
+    /// doubling wait until it is taken with a `2xx` or the attempts run out.
+    async fn deliver(&self, endpoint: &url::Url, bytes: Vec<u8>) {
+        let delivery = &self.settings.delivery;
+        let mut wait = delivery.initial_backoff;
+        for attempt in 1..=delivery.attempts {
+            let sent = self
+                .client
+                .post(endpoint.clone())
+                .header(header::CONTENT_TYPE, MEDIA_TYPE)
+                .body(bytes.clone())
+                .send()
+                .await;
+            match sent {
+                Ok(response) if response.status().is_success() => {
+                    tracing::info!(attempt, "an asynchronous ITI-55 answer is delivered");
+                    return;
+                }
+                Ok(response) => {
+                    tracing::warn!(attempt, status = %response.status(), "an asynchronous ITI-55 answer is refused by its reply endpoint");
+                }
+                Err(error) => {
+                    tracing::warn!(attempt, error = %crate::chain(&error.without_url()), "an asynchronous ITI-55 answer did not reach its reply endpoint");
+                }
+            }
+            if attempt < delivery.attempts {
+                tokio::time::sleep(wait).await;
+                wait = wait.saturating_mul(2).min(delivery.max_backoff);
+            }
+        }
+        tracing::error!(
+            attempts = delivery.attempts,
+            "an asynchronous ITI-55 answer is given up after its last attempt"
+        );
     }
 
     /// Settles the case of `received`.

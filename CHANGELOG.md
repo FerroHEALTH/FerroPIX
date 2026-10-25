@@ -14,6 +14,14 @@ and this project adheres to
 
 ### Added
 
+- The XCPD Responding Gateway answers the asynchronous exchange of ITI TF-2
+  Appendix V.5 (#232): a request whose `ReplyTo` starts with one of
+  `[xcpd] reply_endpoints` is accepted `202` and its answer posted to that
+  endpoint with `RelatesTo` and `To`, retried with a doubling wait up to
+  `[xcpd] delivery_attempts`; any other `ReplyTo` is a `Sender` fault. The
+  Deferred Response Option is not offered. `ihe-iti` 0.0.55 writes the
+  answer's `wsa:To` for an asynchronous request, and ITI TF-2 Appendix V is
+  vendored beside ITI-38.
 - The server answers ITI-55 as an XCPD Responding Gateway (#231) at
   `POST {base}/xcpd`, behind `[xcpd]`: a shared identifier is looked up in
   the cross-reference and demographics are scored by the matcher, settling

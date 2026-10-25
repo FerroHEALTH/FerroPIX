@@ -352,6 +352,9 @@ pub enum ServeError {
     /// The audit spool or the FHIR Feed could not start.
     #[error("the audit trail could not start")]
     Audit(#[source] audit::OpenError),
+    /// The XCPD Responding Gateway's HTTP client could not be built.
+    #[error("the XCPD Responding Gateway could not start")]
+    Xcpd(#[source] reqwest::Error),
     /// The listener could not be bound, or serving failed.
     #[error("the listener could not serve")]
     Io(#[source] std::io::Error),
@@ -371,7 +374,8 @@ pub enum ServeError {
 /// Returns [`ServeError::Store`] when the store refuses to start,
 /// [`ServeError::Auth`] when an authorization server cannot be read,
 /// [`ServeError::Audit`] when the audit spool or its repository cannot
-/// start, and [`ServeError::Io`] for the I/O error from binding, accepting or
+/// start, [`ServeError::Xcpd`] when the XCPD gateway's client cannot be
+/// built, and [`ServeError::Io`] for the I/O error from binding, accepting or
 /// serving.
 pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let started = Instant::now();
@@ -418,7 +422,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &audit,
         &backend(&store, &matching, pdqm.deprecated, origins, hl7v2.as_ref()),
     );
-    let guarded = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit);
+    let guarded = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit)?;
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = bind(&server).await?;
     let reporting = usage_report::reporter::start(
@@ -482,16 +486,13 @@ fn with_xcpd(
     matching: &config::section::matching::Matching,
     server: &config::section::server::ServerSettings,
     audit: &audit::Audit,
-) -> axum::Router {
+) -> Result<axum::Router, ServeError> {
     match settings {
-        Some(settings) => guarded.merge(xcpd::routes(xcpd::Gateway::new(
-            store,
-            matching,
-            settings,
-            &server.public_base_url,
-            audit,
+        Some(settings) => Ok(guarded.merge(xcpd::routes(
+            xcpd::Gateway::new(store, matching, settings, &server.public_base_url, audit)
+                .map_err(ServeError::Xcpd)?,
         ))),
-        None => guarded,
+        None => Ok(guarded),
     }
 }
 

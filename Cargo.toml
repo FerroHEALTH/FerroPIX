@@ -103,6 +103,11 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 url = "2.5.8"
 uuid = { version = "1.26.1", default-features = false, features = ["v4", "std"] }
 wiremock = "0.6.5"
+# A test certificate authority, server and client certificates, generated at
+# run time for the XCPD delivery's mutual TLS test (app/ferropix-server).
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "aws_lc_rs"] }
+# The TLS server of that test, requiring a client certificate.
+tokio-rustls = "0.26.6"
 # The testkit's container harness behind FERROPIX_E2E (tools/ferropix-testkit)
 # and the PostgreSQL client its end-to-end case connects with, at the
 # versions FerroFED and FerroBRIDGE pin. Verified against crates.io on

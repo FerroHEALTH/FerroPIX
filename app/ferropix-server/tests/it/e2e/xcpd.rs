@@ -57,7 +57,7 @@ const STRANGER: &str = "2.999.80.1";
 const ACTION: &str = "urn:hl7-org:v3:PRPA_IN201305UV02:CrossGatewayPatientDiscovery";
 
 /// The SOAP 1.2 media type.
-const SOAP: &str = "application/soap+xml; charset=UTF-8";
+pub(super) const SOAP: &str = "application/soap+xml; charset=UTF-8";
 
 /// The family names the store holds, which no log line may show.
 const FAMILIES: [&str; 2] = ["Wolderink", "Brouwershaven"];
@@ -70,6 +70,14 @@ fn oid(text: &str) -> Oid {
 /// The `[xcpd]` section of the gateway: the hospital's domain first,
 /// delivering to `reply_endpoints` with a short wait between attempts.
 fn settings(reply_endpoints: &[String]) -> XcpdSettings {
+    section(reply_endpoints)
+        .resolve()
+        .expect("the section resolves")
+        .expect("the gateway is on")
+}
+
+/// The `[xcpd]` section [`settings`] resolves, as written.
+pub(super) fn section(reply_endpoints: &[String]) -> Xcpd {
     Xcpd {
         enabled: true,
         home_community_id: format!("urn:oid:{COMMUNITY}"),
@@ -81,9 +89,6 @@ fn settings(reply_endpoints: &[String]) -> XcpdSettings {
         delivery_initial_backoff_ms: 10,
         ..Xcpd::default()
     }
-    .resolve()
-    .expect("the section resolves")
-    .expect("the gateway is on")
 }
 
 /// Returns the gateway's router over the harness's store, scoring with
@@ -93,7 +98,7 @@ fn gateway(harness: &Harness, matching: &Matching) -> Router {
 }
 
 /// Returns the gateway's router over the harness's store as `xcpd` sets it.
-fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSettings) -> Router {
+pub(super) fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSettings) -> Router {
     let mut audit_settings = harness.audit_settings.clone();
     audit_settings.spool_dir = harness.spool.path().join("spool");
     let audit = Audit::open(&audit_settings, &harness.public_base_url).expect("the spool opens");
@@ -111,7 +116,7 @@ fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSettings) -> R
 
 /// Feeds the store: Sanne Wolderink in the hospital, and two records of
 /// Ada Brouwershaven, alike enough to stay two persons under review.
-async fn seeded(harness: &Harness) {
+pub(super) async fn seeded(harness: &Harness) {
     fed(
         harness,
         HOSPITAL_DOMAIN,
@@ -175,7 +180,7 @@ fn request(community: &str, target: Option<&str>, priority: &str, parameters: &s
 
 /// The query of `request` sent asynchronously, its answer wanted at
 /// `reply_to` (ITI TF-2 V.9.2.3).
-fn asynchronous(reply_to: &str, parameters: &str) -> String {
+pub(super) fn asynchronous(reply_to: &str, parameters: &str) -> String {
     request(INITIATING, None, "I", parameters).replacen(
         "</wsa:MessageID>",
         &format!(
@@ -186,7 +191,7 @@ fn asynchronous(reply_to: &str, parameters: &str) -> String {
 }
 
 /// The parameters naming `given` `family`, born on `born`, with `extra`.
-fn named(given: &str, family: &str, born: &str, extra: &str) -> String {
+pub(super) fn named(given: &str, family: &str, born: &str, extra: &str) -> String {
     format!(
         r#"<livingSubjectBirthTime><value value="{born}"/><semanticsText>LivingSubject.birthTime</semanticsText></livingSubjectBirthTime>
 <livingSubjectName><value><given>{given}</given><family>{family}</family></value><semanticsText>LivingSubject.name</semanticsText></livingSubjectName>{extra}"#
@@ -194,10 +199,10 @@ fn named(given: &str, family: &str, born: &str, extra: &str) -> String {
 }
 
 /// The female gender parameter.
-const FEMALE: &str = r#"<livingSubjectAdministrativeGender><value code="F"/><semanticsText>LivingSubject.administrativeGender</semanticsText></livingSubjectAdministrativeGender>"#;
+pub(super) const FEMALE: &str = r#"<livingSubjectAdministrativeGender><value code="F"/><semanticsText>LivingSubject.administrativeGender</semanticsText></livingSubjectAdministrativeGender>"#;
 
 /// Posts `body` as `media` and returns the status and the answer.
-async fn post(app: &Router, media: &str, body: String) -> (StatusCode, String) {
+pub(super) async fn post(app: &Router, media: &str, body: String) -> (StatusCode, String) {
     let response = app
         .clone()
         .oneshot(
@@ -216,7 +221,7 @@ async fn post(app: &Router, media: &str, body: String) -> (StatusCode, String) {
 }
 
 /// Returns how many `registrationEvent`s `answer` carries.
-fn events(answer: &str) -> usize {
+pub(super) fn events(answer: &str) -> usize {
     answer.matches("<registrationEvent").count()
 }
 
@@ -492,7 +497,7 @@ async fn no_identifier_or_name_reaches_a_log_line() {
 }
 
 /// Waits until `stub` has received `count` requests and returns them.
-async fn received(stub: &MockServer, count: usize) -> Vec<wiremock::Request> {
+pub(super) async fn received(stub: &MockServer, count: usize) -> Vec<wiremock::Request> {
     for _ in 0..200 {
         let requests = stub.received_requests().await.expect("recording is on");
         if requests.len() >= count {

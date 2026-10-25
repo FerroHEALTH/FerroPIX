@@ -311,11 +311,16 @@ for two domains are refused at load. The drain on `SIGTERM` is
 | `xcpd.delivery_initial_backoff_ms` | `1000` | The wait before the first retry. |
 | `xcpd.delivery_max_backoff_ms` | `60000` | The longest wait between two attempts. |
 | `xcpd.delivery_timeout_ms` | `10000` | How long one attempt may take. |
+| `xcpd.client_certificate_file` | none | The PEM certificate chain the delivery presents for mutual TLS; set with `client_key_file`. |
+| `xcpd.client_key_file` | none | The PEM private key of that certificate. |
+| `xcpd.reply_trust_file` | none | PEM certificates trusted for a reply endpoint's server certificate, beside the system roots. |
 
 A value that is no OID, a domain that is no `urn:oid:` system, a domain or
 community listed twice, a reply endpoint that is neither `https` nor `http`
-on a loopback host or that carries userinfo, and a zero delivery bound are
-refused at load. See
+on a loopback host or that carries userinfo, a zero delivery bound, one of
+the two client identity files without the other, and an identity or trust
+file that cannot be read or is empty are refused at load; an identity or
+trust file that holds no PEM the delivery reads refuses the start. See
 [The XCPD Responding Gateway](../integrate/xcpd-gateway.md).
 
 ### `[audit]`

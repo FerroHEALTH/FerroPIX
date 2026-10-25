@@ -112,6 +112,8 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time
 tower = { workspace = true, features = ["util"] }
 # The authorization server the authorization tests stand up.
 wiremock.workspace = true
+rcgen.workspace = true
+tokio-rustls.workspace = true
 
 [lints]
 workspace = true

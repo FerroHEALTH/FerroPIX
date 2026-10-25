@@ -102,7 +102,9 @@ impl Gateway {
     ///
     /// # Errors
     /// Returns the client's error when the HTTP client that posts an
-    /// asynchronous answer cannot be built.
+    /// asynchronous answer cannot be built, the configured client identity is
+    /// no PEM certificate chain and private key it reads, or the trusted
+    /// certificates are no PEM bundle it reads.
     pub fn new(
         store: &Store,
         matching: &Matching,
@@ -115,10 +117,18 @@ impl Gateway {
             |_| NetworkAddress::uri(public_base_url),
             |url| NetworkAddress::uri(&url),
         );
-        let client = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(settings.delivery.timeout)
-            .build()?;
+            .timeout(settings.delivery.timeout);
+        if let Some(pem) = &settings.delivery.trust {
+            for certificate in reqwest::Certificate::from_pem_bundle(pem.as_bytes())? {
+                builder = builder.add_root_certificate(certificate);
+            }
+        }
+        if let Some(pem) = &settings.delivery.identity {
+            builder = builder.identity(reqwest::Identity::from_pem(pem.expose().as_bytes())?);
+        }
+        let client = builder.build()?;
         Ok(Self {
             store: store.clone(),
             scorer: Scorer::new(matching),

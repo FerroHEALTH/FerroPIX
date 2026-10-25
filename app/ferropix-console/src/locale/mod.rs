@@ -796,6 +796,76 @@ messages! {
     /// The note drawn in place of the domain forms without the
     /// administrator scope.
     DomainAdminOnly = "domain-admin-only",
+    /// The link threshold.
+    SettingLinkAt = "setting-link-at",
+    /// The review threshold.
+    SettingReviewAt = "setting-review-at",
+    /// The possible threshold.
+    SettingPossibleAt = "setting-possible-at",
+    /// The automatic link switch.
+    SettingAutoLink = "setting-auto-link",
+    /// The blocking keys.
+    SettingBlockingKeys = "setting-blocking-keys",
+    /// A field's agreement weight.
+    SettingAgreement = "setting-agreement",
+    /// A field's chance agreement weight.
+    SettingChance = "setting-chance",
+    /// The family name field.
+    FieldFamilyName = "field-family-name",
+    /// The given names field.
+    FieldGivenNames = "field-given-names",
+    /// The birth date field.
+    FieldBirthDate = "field-birth-date",
+    /// The gender field.
+    FieldGender = "field-gender",
+    /// The postal code field.
+    FieldPostalCode = "field-postal-code",
+    /// The address field.
+    FieldAddress = "field-address",
+    /// The telephone field.
+    FieldTelephone = "field-telephone",
+    /// The email field.
+    FieldEmail = "field-email",
+    /// The mother's maiden name field.
+    FieldMothersMaidenName = "field-mothers-maiden-name",
+    /// The local identifier field.
+    FieldLocalIdentifier = "field-local-identifier",
+    /// The authoritative identifier rule.
+    RuleAuthoritative = "rule-authoritative",
+    /// What the authoritative identifier rule holds.
+    RuleAuthoritativeText = "rule-authoritative-text",
+    /// The hard conflict rule.
+    RuleHardConflict = "rule-hard-conflict",
+    /// What the hard conflict rule holds.
+    RuleHardConflictText = "rule-hard-conflict-text",
+    /// The local domains rule.
+    RuleLocalDomains = "rule-local-domains",
+    /// What the local domains rule holds.
+    RuleLocalDomainsText = "rule-local-domains-text",
+    /// A steward viewed a person.
+    ActionView = "action-view",
+    /// A steward exported the trail.
+    ActionExport = "action-export",
+    /// A steward revealed a value.
+    ActionReveal = "action-reveal",
+    /// An administrator added a domain.
+    ActionDomainCreate = "action-domain-create",
+    /// An administrator changed a domain.
+    ActionDomainUpdate = "action-domain-update",
+    /// A source fed a record.
+    ActionFeed = "action-feed",
+    /// A source removed a record.
+    ActionRemove = "action-remove",
+    /// A source resolved a duplicate.
+    ActionResolveDuplicate = "action-resolve-duplicate",
+    /// A steward merged two persons.
+    ActionMerge = "action-merge",
+    /// A steward undid a merge.
+    ActionUnmerge = "action-unmerge",
+    /// A steward decided a pair.
+    ActionDecide = "action-decide",
+    /// An HL7 v2 message was received.
+    ActionMessage = "action-message",
     /// The sensitive switch.
     DomainSensitive = "domain-sensitive",
     /// The sensitive switch's help.

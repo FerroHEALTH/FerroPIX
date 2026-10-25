@@ -14,7 +14,8 @@ use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::support::{
-    OPERATOR_NAME, OPERATOR_TOKEN, console, get_with, offline, post_form, send, steward_session,
+    Captured, OPERATOR_NAME, OPERATOR_TOKEN, console, get_with, offline, post_form, send,
+    steward_session,
 };
 
 /// An address nothing listens on, so a call is refused at once.
@@ -268,6 +269,8 @@ async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_th
         .await;
     let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
     let cookie = steward_session(&state);
+    let captured = Captured::default();
+    let logging = captured.logging();
     // A synthetic identifier that fails the eleven-proof of every scheme it could resemble.
     let typed = "999999991";
     let (response, page) = send(
@@ -330,6 +333,11 @@ async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_th
         "the identifier is masked as it is typed"
     );
     assert!(page.contains("method=\"post\""), "the search posts");
+    drop(logging);
+    let logged = captured.text();
+    for secret in [typed, "Voorbeeld", "1970-01-01"] {
+        assert!(!logged.contains(secret), "a log line carries {secret}");
+    }
     Ok(())
 }
 

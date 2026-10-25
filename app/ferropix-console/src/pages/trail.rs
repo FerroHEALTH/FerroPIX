@@ -117,7 +117,7 @@ fn table(filter: &ActionFilter, actions: &Actions) -> AnyView {
                 <tr>
                     {title_cell(None, timestamp(&action.at), None)}
                     {cell(actor, action.actor.clone())}
-                    {cell(kind, badge(tone(&action.kind), action.kind.clone()))}
+                    {cell(kind, badge(tone(&action.kind), crate::pages::action_words(&action.kind)))}
                     {cell(person, person_link(action))}
                     {cell(reason, action.reason.clone().unwrap_or_default())}
                     {cell(detail, details(action))}

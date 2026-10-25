@@ -221,7 +221,7 @@ fn messages(messages: &[Message]) -> AnyView {
                 <tr>
                     {title_cell(None, timestamp(&message.at), None)}
                     {cell(channel_column, channel(message.channel))}
-                    {cell(action_column, message.action.clone())}
+                    {cell(action_column, crate::pages::action_words(&message.action))}
                     {cell(outcome_column, outcome(&message.outcome))}
                 </tr>
             }
@@ -586,10 +586,7 @@ fn section_panel(section: &Section) -> AnyView {
                 Origin::Default => Some(ValueSource::Default),
                 Origin::File | Origin::BuiltIn => None,
             };
-            let label = setting
-                .key
-                .rsplit_once('.')
-                .map_or_else(|| setting.key.clone(), |(_, name)| name.replace('_', " "));
+            let label = setting_label(&setting.key);
             setting_row(
                 Setting {
                     label,
@@ -599,7 +596,9 @@ fn section_panel(section: &Section) -> AnyView {
                         String::new()
                     },
                     value: if built_in {
-                        setting.value.clone().into_any()
+                        rule_text(&setting.key)
+                            .unwrap_or_else(|| setting.value.clone())
+                            .into_any()
                     } else {
                         view! { <code>{setting.value.clone()}</code> }.into_any()
                     },
@@ -616,4 +615,59 @@ fn section_panel(section: &Section) -> AnyView {
         })
         .collect();
     settings_panel(intro.into_any(), None, rows)
+}
+
+/// The words of the setting `key` of the configuration document, or the key
+/// itself for one the console does not know.
+fn setting_label(key: &str) -> String {
+    let words = match key {
+        "matching.link_at" => Msg::SettingLinkAt,
+        "matching.review_at" => Msg::SettingReviewAt,
+        "matching.possible_at" => Msg::SettingPossibleAt,
+        "matching.auto_link" => Msg::SettingAutoLink,
+        "matching.blocking_keys" => Msg::SettingBlockingKeys,
+        "deterministic.authoritative_identifier" => Msg::RuleAuthoritative,
+        "deterministic.hard_conflict" => Msg::RuleHardConflict,
+        "deterministic.local_domains" => Msg::RuleLocalDomains,
+        _ => return weight_label(key).unwrap_or_else(|| key.to_owned()),
+    };
+    tr(words)
+}
+
+/// The words of a field weight `matching.fields.<field>.<m|u>`, when `key`
+/// is one.
+fn weight_label(key: &str) -> Option<String> {
+    let rest = key.strip_prefix("matching.fields.")?;
+    let (field, weight) = rest.rsplit_once('.')?;
+    let field = tr(match field {
+        "family_name" => Msg::FieldFamilyName,
+        "given_names" => Msg::FieldGivenNames,
+        "birth_date" => Msg::FieldBirthDate,
+        "gender" => Msg::FieldGender,
+        "postal_code" => Msg::FieldPostalCode,
+        "address" => Msg::FieldAddress,
+        "telephone" => Msg::FieldTelephone,
+        "email" => Msg::FieldEmail,
+        "mothers_maiden_name" => Msg::FieldMothersMaidenName,
+        "local_identifier" => Msg::FieldLocalIdentifier,
+        _ => return None,
+    });
+    let words = match weight {
+        "m" => Msg::SettingAgreement,
+        "u" => Msg::SettingChance,
+        _ => return None,
+    };
+    Some(tr_with(words, &[("field", field.into())]))
+}
+
+/// What the built-in rule `key` holds, in the page's language, when the
+/// console knows the rule.
+fn rule_text(key: &str) -> Option<String> {
+    let words = match key {
+        "deterministic.authoritative_identifier" => Msg::RuleAuthoritativeText,
+        "deterministic.hard_conflict" => Msg::RuleHardConflictText,
+        "deterministic.local_domains" => Msg::RuleLocalDomainsText,
+        _ => return None,
+    };
+    Some(tr(words))
 }

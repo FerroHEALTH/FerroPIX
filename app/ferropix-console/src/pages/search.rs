@@ -327,10 +327,10 @@ pub fn results_table(segment: Segment, results: &Results) -> AnyView {
                 .birth_date
                 .clone()
                 .map_or_else(|| or_none(String::new()), IntoAny::into_any);
-            let gender = leading
-                .gender
-                .clone()
-                .map_or_else(|| or_none(String::new()), IntoAny::into_any);
+            let gender = leading.gender.as_deref().map_or_else(
+                || or_none(String::new()),
+                |code| crate::pages::gender_words(code).into_any(),
+            );
             let chips: Vec<Masked> = hit
                 .identifiers
                 .iter()

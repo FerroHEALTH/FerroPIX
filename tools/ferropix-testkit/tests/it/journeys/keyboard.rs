@@ -225,7 +225,7 @@ async fn a_reveal_shows_the_value_with_its_countdown_and_the_trail_shows_the_dis
             .evaluate("return document.body.innerText;")
             .await
             .expect("the trail's text");
-        assert!(trail.contains("reveal"), "the trail lists the disclosure");
+        assert!(trail.contains("Reveal"), "the trail lists the disclosure");
         assert!(!trail.contains(REVEALED), "the trail never shows the value");
     })
     .await;

@@ -180,3 +180,39 @@ pub fn server_state(probe: Option<&Probe>, needs: Needs, route: &str) -> AnyView
     })
     .into_any()
 }
+
+/// The words of a steward action's or a source message's kind as the server
+/// names it, or the name itself for a kind the console does not know.
+#[must_use]
+pub fn action_words(kind: &str) -> String {
+    let words = match kind {
+        "view" => Msg::ActionView,
+        "export" => Msg::ActionExport,
+        "reveal" => Msg::ActionReveal,
+        "domain-create" => Msg::ActionDomainCreate,
+        "domain-update" => Msg::ActionDomainUpdate,
+        "feed" => Msg::ActionFeed,
+        "remove" => Msg::ActionRemove,
+        "resolve-duplicate" => Msg::ActionResolveDuplicate,
+        "merge" => Msg::ActionMerge,
+        "unmerge" => Msg::ActionUnmerge,
+        "decide" => Msg::ActionDecide,
+        "message" => Msg::ActionMessage,
+        other => return other.to_owned(),
+    };
+    tr(words)
+}
+
+/// The words of an administrative gender code (the FHIR R4 `ValueSet`
+/// `administrative-gender`), or the code itself for one outside it.
+#[must_use]
+pub fn gender_words(code: &str) -> String {
+    let words = match code {
+        "female" => Msg::GenderFemale,
+        "male" => Msg::GenderMale,
+        "other" => Msg::GenderOther,
+        "unknown" => Msg::GenderUnknown,
+        other => return other.to_owned(),
+    };
+    tr(words)
+}

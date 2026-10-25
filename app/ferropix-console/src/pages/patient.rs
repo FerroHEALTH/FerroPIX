@@ -126,10 +126,10 @@ fn summary(person: &Person) -> AnyView {
         ),
         (
             tr(Msg::Gender),
-            leading
-                .gender
-                .clone()
-                .map_or_else(|| or_none(String::new()), IntoAny::into_any),
+            leading.gender.as_deref().map_or_else(
+                || or_none(String::new()),
+                |code| crate::pages::gender_words(code).into_any(),
+            ),
         ),
         (tr(Msg::ColState), status),
         (
@@ -292,7 +292,10 @@ fn value_of(demographics: &Demographics, key: &str) -> Option<String> {
     match key {
         "name" => full_name(demographics),
         "birth" => demographics.birth_date.clone(),
-        "gender" => demographics.gender.clone(),
+        "gender" => demographics
+            .gender
+            .as_deref()
+            .map(crate::pages::gender_words),
         "address" => demographics.addresses.first().map(|address| {
             let mut parts = address.lines.clone();
             parts.extend(address.postal_code.clone());

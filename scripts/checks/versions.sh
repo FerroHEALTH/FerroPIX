@@ -232,7 +232,7 @@ fi
 # 5. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/*) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/*) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

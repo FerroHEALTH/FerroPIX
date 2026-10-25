@@ -1,7 +1,7 @@
 <!-- This file describes vendored third-party material; the bytes beside it
      keep their upstream licence, not the licence of this repository. -->
 
-# Provenance: IHE ITI Technical Framework Volume 2, transactions ITI-38 and ITI-55 and Appendix V
+# Provenance: IHE ITI Technical Framework Volume 2, transactions ITI-38 and ITI-55, and Appendix V
 
 Vendored by `scripts/vendor/ihe-iti-tf.sh`, each artefact pinned by its
 URL and the sha256 of its bytes. Never edit a file here: change the pins in

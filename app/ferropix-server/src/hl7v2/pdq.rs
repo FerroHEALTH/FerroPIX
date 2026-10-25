@@ -33,17 +33,18 @@ use ihe_iti::pdqm::server::search::PatientSearch;
 use secrecy::{ExposeSecret as _, SecretString};
 use uuid::Uuid;
 
-use crate::audit::records::{self, V2Query};
+use crate::audit::records::{self, Call, V2Query};
 use crate::config::section::hl7v2::Sender;
 use crate::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
 use crate::hl7v2::feed::{fhir_escape, query_part, url_encoded};
 use crate::hl7v2::pid::{self, Shown};
 use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Condition, Fault, Writer, location};
+use crate::hl7v2::write::{Fault, Writer, location};
 use crate::hl7v2::{Answer, Face, acknowledge, sender_key};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
+use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// One person of an answer: its id and its `Patient`'s JSON.
 type Found = (Uuid, Object);
@@ -83,7 +84,7 @@ impl Settled {
         Self {
             code: Code::Reject,
             status: "AR",
-            faults: vec![Fault::anywhere(Condition::Application, text)],
+            faults: vec![Fault::anywhere(ErrorCode::Application, text)],
             found: Vec::new(),
             pointer: None,
         }
@@ -95,6 +96,7 @@ pub(super) async fn query(
     face: &Face,
     message: &Message,
     sender: &Sender,
+    call: &Call,
     text: &str,
     stamped: &Stamped,
 ) -> Answer {
@@ -124,7 +126,7 @@ pub(super) async fn query(
         Outcome::MinorFailure
     };
     let exchange = records::v2_query(
-        &face.call(sender, message),
+        call,
         V2Query::Pdq,
         SecretString::from(text.to_owned()),
         &[],
@@ -179,7 +181,7 @@ async fn settle(face: &Face, message: &Message, sender: &Sender) -> Settled {
             None => {
                 return Settled::error(vec![Fault::at(
                     location("DSC", 1, 1, None, None),
-                    Condition::UnknownKey,
+                    ErrorCode::UnknownKeyIdentifier,
                     "the continuation pointer is unknown or past its bound",
                 )]);
             }
@@ -246,7 +248,7 @@ fn increment(message: &Message) -> Result<Option<u32>, Fault> {
     let refused = || {
         Fault::at(
             location("RCP", 1, 2, None, None),
-            Condition::DataType,
+            ErrorCode::DataType,
             "RCP-2 is no number of records above 0 in RD",
         )
     };
@@ -347,7 +349,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
         let Some(parameter) = parameter(name) else {
             return Err(Settled::error(vec![Fault::at(
                 at(),
-                Condition::Application,
+                ErrorCode::Application,
                 "QPD-3 names a field this Supplier does not search on",
             )]));
         };
@@ -366,7 +368,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
                 let Some(dates) = dates else {
                     return Err(Settled::error(vec![Fault::at(
                         at(),
-                        Condition::DataType,
+                        ErrorCode::DataType,
                         "a @PID.7 value is no date",
                     )]));
                 };
@@ -377,7 +379,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
                 let Some(gender) = gender(first) else {
                     return Err(Settled::error(vec![Fault::at(
                         at(),
-                        Condition::DataType,
+                        ErrorCode::DataType,
                         "the @PID.8 value is no administrative sex",
                     )]));
                 };
@@ -424,7 +426,7 @@ async fn criteria(face: &Face, message: &Message) -> Result<Option<Criteria>, Se
             // not allowed" (Appendix E); the field is refused as missing.
             return Err(Settled::error(vec![Fault::at(
                 location("QPD", 1, 3, None, None),
-                Condition::RequiredFieldMissing,
+                ErrorCode::RequiredFieldMissing,
                 "an identifier parameter names no assigning authority",
             )]));
         };
@@ -436,7 +438,7 @@ async fn criteria(face: &Face, message: &Message) -> Result<Option<Criteria>, Se
     if pairs.is_empty() && !unmatchable {
         return Err(Settled::error(vec![Fault::at(
             location("QPD", 1, 3, None, None),
-            Condition::RequiredFieldMissing,
+            ErrorCode::RequiredFieldMissing,
             "QPD-3 names no parameter",
         )]));
     }
@@ -489,7 +491,7 @@ async fn domains(face: &Face, qpd: Option<&Segment>) -> Result<Vec<String>, Sett
             Some(system) => systems.push(system),
             None => faults.push(Fault::at(
                 location("QPD", 1, 8, Some(index.saturating_add(1)), None),
-                Condition::UnknownKey,
+                ErrorCode::UnknownKeyIdentifier,
                 "a domain of QPD-8 is not recognized",
             )),
         }
@@ -525,7 +527,7 @@ async fn run(
             tracing::debug!(%error, "an ITI-21 query reads as no ITI-78 search");
             Settled::error(vec![Fault::at(
                 location("QPD", 1, 3, None, None),
-                Condition::DataType,
+                ErrorCode::DataType,
                 "a QPD-3 value cannot be searched on",
             )])
         })?;
@@ -540,7 +542,7 @@ async fn run(
         let Searched::Found { answer, persons } = searched else {
             return Err(Settled::error(vec![Fault::at(
                 location("QPD", 1, 8, None, None),
-                Condition::UnknownKey,
+                ErrorCode::UnknownKeyIdentifier,
                 "a domain of QPD-8 is not recognized",
             )]));
         };

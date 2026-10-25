@@ -36,6 +36,7 @@ pub mod stamped;
 pub mod write;
 
 use std::future::Future;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -44,7 +45,7 @@ use ferrobridge_hl7v2::ack::{self, Code, Header};
 use ferrobridge_hl7v2::decode::{self, Charset};
 use ferrobridge_hl7v2::inbound::{self, Inbound, Received};
 use ferrobridge_hl7v2::mllp::{self, Codec, Connection, Handler, Malformed, Timeouts};
-use ferrobridge_hl7v2::parse::structure::{StructureError, structure_for};
+use ferrobridge_hl7v2::parse::structure::structure_declared;
 use ferrobridge_hl7v2::parse::{Component, Message};
 use ferropix_operator_api::health::IndicatorState;
 use ihe_atna::balp::{NetworkAddress, Peer};
@@ -63,10 +64,11 @@ use crate::health::{Check, HealthIndicator};
 use crate::hl7v2::authority::Authorities;
 use crate::hl7v2::cursor::Cursors;
 use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Condition, Fault, Writer};
+use crate::hl7v2::write::{Fault, Writer};
 use crate::pdqm::Supplier;
 use crate::store::Store;
 use crate::usage_report::window::Window;
+use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// The answer to one message: its acknowledgment code and its text, before
 /// it is encoded in the message's character set.
@@ -160,7 +162,7 @@ impl Face {
         let started = Instant::now();
         let answered = async {
             let stamped = Stamped::now();
-            match inbound::receive(message, self.charset, select, stamped.stamp()) {
+            match inbound::receive(message, self.charset, structure_declared, stamped.stamp()) {
                 Received::Unanswerable => {
                     tracing::warn!("the message names no readable header and is not answered");
                     None
@@ -199,29 +201,32 @@ impl Face {
                 message,
                 Code::Reject,
                 &[Fault::anywhere(
-                    Condition::Application,
+                    ErrorCode::Application,
                     "the sending application and facility are not accepted",
                 )],
                 stamped,
             );
         };
+        let call = self.call(sender, message, connection.peer());
         match (message.message_type(1), message.message_type(2)) {
             (Some("ADT"), Some("A01" | "A04" | "A05" | "A08")) => {
-                feed::receive(self, message, sender, false, stamped).await
+                feed::receive(self, message, sender, &call, false, stamped).await
             }
-            (Some("ADT"), Some("A40")) => feed::receive(self, message, sender, true, stamped).await,
+            (Some("ADT"), Some("A40")) => {
+                feed::receive(self, message, sender, &call, true, stamped).await
+            }
             (Some("QBP"), Some("Q23")) => {
-                pix::query(self, message, sender, &self.text(raw), stamped).await
+                pix::query(self, message, &call, &self.text(raw), stamped).await
             }
             (Some("QBP"), Some("Q22")) => {
-                pdq::query(self, message, sender, &self.text(raw), stamped).await
+                pdq::query(self, message, sender, &call, &self.text(raw), stamped).await
             }
             (Some("QCN"), Some("J01")) => pdq::cancel(self, message, sender, stamped),
             _ => acknowledge(
                 message,
                 Code::Reject,
                 &[Fault::anywhere(
-                    Condition::UnsupportedMessageType,
+                    ErrorCode::UnsupportedMessageType,
                     "the message type and trigger event are not ones this Manager answers",
                 )],
                 stamped,
@@ -240,13 +245,13 @@ impl Face {
 
     /// Returns the call the records of `sender`'s message name: the sender
     /// as the facility and application joined by `|` (ITI TF-2 §3.8.5.1.2,
-    /// Source `UserID`), at the listener's address, since the listener does
-    /// not hand the peer's, and MSH-10 as the request id.
-    fn call(&self, sender: &Sender, message: &Message) -> Call {
+    /// Source `UserID`), at the connection's `peer` address (the listener's
+    /// own when the socket reported none), and MSH-10 as the request id.
+    fn call(&self, sender: &Sender, message: &Message, peer: Option<SocketAddr>) -> Call {
         Call {
             client: Peer {
                 who: sender_key(sender),
-                network: self.endpoint.clone(),
+                network: client_network(peer, &self.endpoint),
             },
             on_behalf: OnBehalfOf::System,
             endpoint: self.endpoint.clone(),
@@ -272,37 +277,11 @@ impl Handler for Face {
     }
 }
 
-/// Selects the message structure of `message`, ITI-8's `ADT_A01` included.
-///
-/// The definitions give A04, A05 and A08 structures of their own, and ITI-8
-/// names `ADT_A01` for every add or revise (ITI TF-2 §3.8.4.1.2.1: the third
-/// component "shall have the value of `ADT_A01` for all message types"), so
-/// that name selects the A01 structure for them.
-///
-/// # Errors
-/// Returns the [`StructureError`] of a structure the definitions do not
-/// carry.
-pub fn select(message: &Message) -> Result<&'static hl7v2_types::model::Structure, StructureError> {
-    structure_for(message).or_else(|error| {
-        let feed = matches!(
-            (
-                message.message_type(1),
-                message.message_type(2),
-                message.message_type(3)
-            ),
-            (
-                Some("ADT"),
-                Some("A01" | "A04" | "A05" | "A08"),
-                Some("ADT_A01")
-            )
-        );
-        if !feed {
-            return Err(error);
-        }
-        hl7v2_types::message::find("ADT", "A01")
-            .and_then(|definition| definition.structure)
-            .ok_or(error)
-    })
+/// The network address a record names for the client at `peer`: its IP
+/// address, or `endpoint`, the listener's, when the socket reported none,
+/// as an HTTP call with no remote address names its endpoint's host.
+fn client_network(peer: Option<SocketAddr>, endpoint: &NetworkAddress) -> NetworkAddress {
+    peer.map_or_else(|| endpoint.clone(), |peer| NetworkAddress::Ip(peer.ip()))
 }
 
 /// Encodes `answer` in the character set of `message`; an answer that holds
@@ -317,7 +296,7 @@ fn encoded(message: &Message, answer: &Answer, stamped: &Stamped) -> (Code, Vec<
         message,
         Code::Error,
         &[Fault::anywhere(
-            Condition::Application,
+            ErrorCode::Application,
             "the answer holds a character the message's character set cannot carry",
         )],
         stamped,
@@ -495,10 +474,23 @@ mod tests {
     use ferrobridge_hl7v2::decode::Charset;
     use ferrobridge_hl7v2::parse::lex::lex;
 
+    #[test]
+    fn a_record_names_the_peer_and_the_listener_only_when_no_peer_was_reported() {
+        use ihe_atna::balp::NetworkAddress;
+        let listener = NetworkAddress::Ip(std::net::IpAddr::from([10, 0, 0, 1]));
+        let peer = std::net::SocketAddr::from(([192, 0, 2, 7], 40_001));
+        assert_eq!(
+            NetworkAddress::Ip(peer.ip()),
+            super::client_network(Some(peer), &listener)
+        );
+        assert_eq!(listener, super::client_network(None, &listener));
+    }
+
     use super::{acknowledge, names, sender_key};
     use crate::config::section::hl7v2::Sender;
     use crate::hl7v2::stamped::Stamped;
-    use crate::hl7v2::write::{Condition, Fault};
+    use crate::hl7v2::write::Fault;
+    use ferrobridge_hl7v2::parse::ErrorCode;
 
     fn sender(application: &str, facility: &str) -> Sender {
         Sender {
@@ -538,7 +530,7 @@ mod tests {
         let answer = acknowledge(
             &message,
             Code::Reject,
-            &[Fault::anywhere(Condition::Application, "refused")],
+            &[Fault::anywhere(ErrorCode::Application, "refused")],
             &stamped,
         );
         assert_eq!(answer.code, Code::Reject);

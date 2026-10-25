@@ -21,16 +21,16 @@ use ferrobridge_hl7v2::parse::{Field, Message};
 use ihe_atna::balp::Outcome;
 use secrecy::SecretString;
 
-use crate::audit::records::{self, Identifier, V2Query};
-use crate::config::section::hl7v2::Sender;
+use crate::audit::records::{self, Call, Identifier, V2Query};
 use crate::hl7v2::authority::Hd;
 use crate::hl7v2::pid::{self, Shown};
 use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Condition, Fault, Writer, location};
+use crate::hl7v2::write::{Fault, Writer, location};
 use crate::hl7v2::{Answer, Face};
 use crate::store::identifier::Rule;
 use crate::store::record;
 use crate::store::xref::{self, Lookup};
+use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// What a query settled.
 struct Settled {
@@ -63,7 +63,7 @@ impl Settled {
         Self {
             code: Code::Reject,
             status: "AR",
-            faults: vec![Fault::anywhere(Condition::Application, text)],
+            faults: vec![Fault::anywhere(ErrorCode::Application, text)],
             identifiers: None,
             persons: Vec::new(),
         }
@@ -74,7 +74,7 @@ impl Settled {
 pub(super) async fn query(
     face: &Face,
     message: &Message,
-    sender: &Sender,
+    call: &Call,
     text: &str,
     stamped: &Stamped,
 ) -> Answer {
@@ -121,7 +121,7 @@ pub(super) async fn query(
                 Outcome::MinorFailure
             };
             let exchange = records::v2_query(
-                &face.call(sender, message),
+                call,
                 V2Query::Pix,
                 SecretString::from(text.to_owned()),
                 &identifiers,
@@ -151,7 +151,7 @@ async fn settle(
     let unknown_domain = || {
         Settled::error(vec![Fault::at(
             location("QPD", 1, 3, Some(1), Some(4)),
-            Condition::UnknownKey,
+            ErrorCode::UnknownKeyIdentifier,
             "the assigning authority of QPD-3 is not recognized",
         )])
     };
@@ -161,7 +161,7 @@ async fn settle(
     let Some(value) = value else {
         return Settled::error(vec![Fault::at(
             location("QPD", 1, 3, Some(1), Some(1)),
-            Condition::RequiredFieldMissing,
+            ErrorCode::RequiredFieldMissing,
             "QPD-3 carries no identifier",
         )]);
     };
@@ -191,14 +191,14 @@ async fn settle(
         Lookup::Ambiguous => {
             return Settled::error(vec![Fault::at(
                 location("QPD", 1, 3, Some(1), Some(1)),
-                Condition::Application,
+                ErrorCode::Application,
                 "the identifier is carried in the records of more than one person",
             )]);
         }
         Lookup::UnknownDomain | Lookup::NotFound => {
             return Settled::error(vec![Fault::at(
                 location("QPD", 1, 3, Some(1), Some(1)),
-                Condition::UnknownKey,
+                ErrorCode::UnknownKeyIdentifier,
                 "the identifier of QPD-3 is not recognized",
             )]);
         }
@@ -257,7 +257,7 @@ async fn targets(
             Some(target) => targets.push(target),
             None => faults.push(Fault::at(
                 location("QPD", 1, 4, Some(index.saturating_add(1)), None),
-                Condition::UnknownKey,
+                ErrorCode::UnknownKeyIdentifier,
                 "a domain of QPD-4 is not recognized",
             )),
         }

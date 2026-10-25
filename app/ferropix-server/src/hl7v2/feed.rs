@@ -24,14 +24,15 @@ use ihe_iti::pixm::server::feed::Feed;
 use ihe_iti::server::format::Format;
 use secrecy::SecretString;
 
-use crate::audit::records::{self, Identifier};
+use crate::audit::records::{self, Call, Identifier};
 use crate::config::section::hl7v2::Sender;
 use crate::feed::{Action, Applied, Context, FeedError};
 use crate::hl7v2::pid::{self, Cx};
 use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Condition, Fault, location};
+use crate::hl7v2::write::{Fault, location};
 use crate::hl7v2::{Answer, Face, acknowledge, receipt, sender_key};
 use crate::store::record::Channel;
+use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// What applying a message settled: the code, the faults, and whether the
 /// outcome is final, so its receipt is written.
@@ -59,7 +60,7 @@ impl Settled {
     fn rejected(text: &'static str) -> Self {
         Self {
             code: Code::Reject,
-            faults: vec![Fault::anywhere(Condition::Application, text)],
+            faults: vec![Fault::anywhere(ErrorCode::Application, text)],
             final_outcome: false,
         }
     }
@@ -70,6 +71,7 @@ pub(super) async fn receive(
     face: &Face,
     message: &Message,
     sender: &Sender,
+    call: &Call,
     merge: bool,
     stamped: &Stamped,
 ) -> Answer {
@@ -80,7 +82,7 @@ pub(super) async fn receive(
             Code::Error,
             &[Fault::at(
                 location("MSH", 1, 10, None, None),
-                Condition::RequiredFieldMissing,
+                ErrorCode::RequiredFieldMissing,
                 "MSH-10 is required to acknowledge the message",
             )],
             stamped,
@@ -101,7 +103,7 @@ pub(super) async fn receive(
                         Code::Error
                     },
                     vec![Fault::anywhere(
-                        Condition::Application,
+                        ErrorCode::Application,
                         "the message was answered before and is not applied again",
                     )],
                 ),
@@ -115,7 +117,7 @@ pub(super) async fn receive(
             return acknowledge(message, settled.code, &settled.faults, stamped);
         }
     }
-    let settled = apply(face, message, sender, merge).await;
+    let settled = apply(face, message, sender, call, merge).await;
     if settled.final_outcome
         && let Err(error) =
             receipt::record(face.store.pool(), &key, control_id, settled.code.as_str()).await
@@ -126,10 +128,16 @@ pub(super) async fn receive(
 }
 
 /// Reads, applies and audits one ITI-8 message.
-async fn apply(face: &Face, message: &Message, sender: &Sender, merge: bool) -> Settled {
+async fn apply(
+    face: &Face,
+    message: &Message,
+    sender: &Sender,
+    call: &Call,
+    merge: bool,
+) -> Settled {
     let Some(domain) = sender.feeds() else {
         return Settled::refused(Fault::anywhere(
-            Condition::Application,
+            ErrorCode::Application,
             "the sender feeds no identifier domain",
         ));
     };
@@ -156,8 +164,7 @@ async fn apply(face: &Face, message: &Message, sender: &Sender, merge: bool) -> 
         Feed::ResolveDuplicate(resolved) => face.feeder.resolve_duplicate(resolved, &context).await,
         _ => Err(FeedError::Evidence),
     };
-    let call = face.call(sender, message);
-    let exchanges = records(&call, &read, applied.as_ref());
+    let exchanges = records(call, &read, applied.as_ref());
     let mut exchanges = exchanges.into_iter();
     let recorded = match exchanges.next() {
         Some(first) => match place.record(&first).await {
@@ -170,7 +177,7 @@ async fn apply(face: &Face, message: &Message, sender: &Sender, merge: bool) -> 
         tracing::error!(error = %crate::chain(&error), "the audit record of an ITI-8 message could not be stored");
         return if applied.is_ok() {
             Settled::refused(Fault::anywhere(
-                Condition::Application,
+                ErrorCode::Application,
                 "the message was applied, and its audit record could not be stored",
             ))
         } else {
@@ -209,7 +216,7 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
     let pid = segment(message, "PID").ok_or_else(|| {
         Fault::at(
             location("PID", 1, 3, None, None),
-            Condition::RequiredFieldMissing,
+            ErrorCode::RequiredFieldMissing,
             "the message carries no PID segment",
         )
     })?;
@@ -217,7 +224,7 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
     if carried.is_empty() {
         return Err(Fault::at(
             location("PID", 1, 3, None, None),
-            Condition::RequiredFieldMissing,
+            ErrorCode::RequiredFieldMissing,
             "PID-3 carries no identifier",
         ));
     }
@@ -228,7 +235,7 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
         .ok_or_else(|| {
             Fault::at(
                 location("PID", 1, 3, Some(1), Some(4)),
-                Condition::UnknownKey,
+                ErrorCode::UnknownKeyIdentifier,
                 "PID-3 carries no identifier in the domain the sender feeds",
             )
         })?;
@@ -240,7 +247,7 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
         let mrg = segment(message, "MRG").ok_or_else(|| {
             Fault::at(
                 location("MRG", 1, 1, None, None),
-                Condition::RequiredFieldMissing,
+                ErrorCode::RequiredFieldMissing,
                 "an A40 carries the subsumed identifier in MRG-1",
             )
         })?;
@@ -250,14 +257,14 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
             .ok_or_else(|| {
                 Fault::at(
                     location("MRG", 1, 1, None, None),
-                    Condition::RequiredFieldMissing,
+                    ErrorCode::RequiredFieldMissing,
                     "MRG-1 carries no identifier",
                 )
             })?;
         if subsumed.system.as_deref() != Some(domain) {
             return Err(Fault::at(
                 location("MRG", 1, 1, Some(1), Some(4)),
-                Condition::UnknownKey,
+                ErrorCode::UnknownKeyIdentifier,
                 "MRG-1 is not in the domain the sender feeds",
             ));
         }
@@ -271,20 +278,20 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
     let patient = pid::patient(pid, &identifiers, links).map_err(|_date| {
         Fault::at(
             location("PID", 1, 7, None, None),
-            Condition::DataType,
+            ErrorCode::DataType,
             "PID-7 is no date",
         )
     })?;
     let condition = subsumed.as_ref().unwrap_or(&own);
     let body = serde_json::to_vec(&Value::Object(patient)).map_err(|_json| {
-        Fault::anywhere(Condition::Application, "the patient could not be written")
+        Fault::anywhere(ErrorCode::Application, "the patient could not be written")
     })?;
     let query = format!("identifier={}", query_part(domain, &condition.value));
     let feed = Feed::from_update(&query, Format::Json, &body).map_err(|error| {
         tracing::debug!(%error, "an ITI-8 message is no feed the Manager applies");
         Fault::at(
             location("PID", 1, 3, None, None),
-            Condition::Application,
+            ErrorCode::Application,
             error.to_string(),
         )
     })?;
@@ -299,11 +306,7 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
 /// (ITI TF-2 §3.8.5.1.2: `C` for a new identifier, `U` for a known one;
 /// §3.8.5.2.2: a merge's `U` for the survivor and `D` for the subsumed
 /// identifier).
-fn records(
-    call: &records::Call,
-    read: &Read,
-    applied: Result<&Applied, &FeedError>,
-) -> Vec<Exchange> {
+fn records(call: &Call, read: &Read, applied: Result<&Applied, &FeedError>) -> Vec<Exchange> {
     match (applied, &read.subsumed) {
         (Ok(applied), None) => {
             let action = match applied.action {
@@ -331,26 +334,26 @@ fn refusal(error: &FeedError) -> Settled {
     match error {
         FeedError::UnknownDomain => Settled::refused(Fault::at(
             location("PID", 1, 3, Some(1), Some(4)),
-            Condition::UnknownKey,
+            ErrorCode::UnknownKeyIdentifier,
             "the domain the sender feeds is not known to the store",
         )),
         FeedError::Identifier { .. } => Settled::refused(Fault::at(
             identifier(),
-            Condition::DataType,
+            ErrorCode::DataType,
             "an identifier is refused by its domain's rule",
         )),
         FeedError::Subsumed => Settled::refused(Fault::at(
             identifier(),
-            Condition::Application,
+            ErrorCode::Application,
             "the identifier was merged into another and takes no new version",
         )),
         FeedError::SurvivorNotFound | FeedError::NotFound => Settled::refused(Fault::at(
             identifier(),
-            Condition::UnknownKey,
+            ErrorCode::UnknownKeyIdentifier,
             "the surviving identifier names no active record of the domain",
         )),
         FeedError::Demographics(_) | FeedError::Evidence => Settled::refused(Fault::anywhere(
-            Condition::Application,
+            ErrorCode::Application,
             "the demographics could not be stored",
         )),
         FeedError::Contention => {

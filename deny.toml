@@ -55,18 +55,8 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ihe-atna" },
   { allow = ["BUSL-1.1"], crate = "nl-generic-functions" },
   { allow = ["BUSL-1.1"], crate = "ferrohealth-smart" },
-  # FerroBRIDGE's HL7 v2 face and what it brings: its v2-to-FHIR mapper
-  # depends on the FHIRconnect engine, the terminology client and the
-  # openEHR model crates, which the server links but never calls.
+  # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },
-  { allow = ["BUSL-1.1"], crate = "ferrobridge-term" },
-  { allow = ["BUSL-1.1"], crate = "fhirconnect" },
-  { allow = ["BUSL-1.1"], crate = "openehr-mapping-core" },
-  { allow = ["BUSL-1.1"], crate = "openehr-sdt" },
-  # openehr-term's Rust code is Apache-2.0; the CC-BY-SA-3.0 half covers the
-  # official openEHR terminology XML it redistributes verbatim, unchanged
-  # and with attribution, and no first-party file derives from it.
-  { allow = ["Apache-2.0", "CC-BY-SA-3.0"], crate = "openehr-term" },
   # The FerroUI components the operator console draws with, and the console
   # itself, which is never published.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-ui" },

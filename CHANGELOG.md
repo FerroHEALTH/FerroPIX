@@ -18,6 +18,13 @@ and this project adheres to
   search still submits to the search page, which lists every match in the
   page; whether it answers under the field as you type waits on what a
   search typed that way records in the audit trail (#214).
+- The HL7 v2 face takes `ferrobridge-hl7v2` 0.1.143 without its v2-to-FHIR
+  mapper, so the server no longer links `fhirconnect`, `ferrobridge-term` or
+  the openEHR crates. Its ITI-8, ITI-9 and ITI-21 audit records name the
+  sending system's own network address, where they named the listener's;
+  ITI-8's `ADT_A01` for A04, A05 and A08 is selected by the crate
+  (`structure_declared`), and table 0357's `204` is the crate's
+  `ErrorCode` (#213).
 - `ihe-iti` 0.0.52 takes `ihe-atna = "=0.2.7"` and `fhir-types` 0.1.128 or
   later, and `nl-generic-functions` 0.0.28 takes `ferrohealth-smart =
   "=0.6.0"`, the family's newest pins, so a product on those lines (FerroEHR)

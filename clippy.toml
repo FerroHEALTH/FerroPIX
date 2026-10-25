@@ -31,4 +31,4 @@ disallowed-types = [
 
 # Product, specification and organisation names are words, not code, in
 # documentation.
-doc-valid-idents = ["FerroPIX", "FerroHEALTH", "FerroEHR", "FerroFED", "FerroBRIDGE", "FerroTERM", "FerroSMART", "FerroAUDIT", "FerroUI", "openEHR", "PIXm", "PDQm", "PMIR", "mCSD", "XCPD", "IUA", "BALP", "ATNA", "HL7", "FHIR", "MLLP", "BSN", "BSNk", "LRZa", "OAuth", "OpenID", ".."]
+doc-valid-idents = ["FerroPIX", "FerroHEALTH", "FerroEHR", "FerroFED", "FerroBRIDGE", "FerroTERM", "FerroAUTH", "FerroAUDIT", "FerroUI", "openEHR", "PIXm", "PDQm", "PMIR", "mCSD", "XCPD", "IUA", "BALP", "ATNA", "HL7", "FHIR", "MLLP", "BSN", "BSNk", "LRZa", "OAuth", "OpenID", ".."]

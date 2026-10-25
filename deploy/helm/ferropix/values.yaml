@@ -1,0 +1,125 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+#
+# The values of the FerroPIX chart. No credential is a value here: every one
+# is a Secret you create, named below and mounted as a file the server or the
+# console reads through its `_file` key.
+
+image:
+  # The server image the release lane publishes.
+  repository: ghcr.io/ferrohealth/ferropix
+  # Defaults to the chart's appVersion.
+  tag: ""
+  # The digest of the image index, which wins over the tag when set.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# The server's configuration file, rendered as TOML from this map into a
+# ConfigMap (https://ferropix.eu/docs/operate/configuration.html). The keys
+# of [db] that name the secrets are set by the chart from `database` and
+# `dataKey` below; do not set a secret inline here.
+config:
+  profile: production
+  server:
+    listen: "0.0.0.0:8080"
+    public_base_url: "https://pix.example.org"
+  auth:
+    audience:
+      - "https://pix.example.org/fhir"
+    issuer: []
+  domain: []
+  hl7v2:
+    enabled: false
+    listen: "0.0.0.0:2575"
+
+# PostgreSQL 18 is an external dependency: the Secret `existingSecret` holds
+# its connection URL (`postgresql://ferropix:…@host:5432/ferropix`) under
+# `key`.
+database:
+  existingSecret: ""
+  key: url
+
+# The sealing key of the identifier values (the base64 of 32 random bytes,
+# `openssl rand -base64 32`), held in the Secret `existingSecret` under `key`.
+dataKey:
+  existingSecret: ""
+  key: data-key
+
+# The installation report to FerroPULSE: on by default, stating `helm`; set
+# `usageReport.enabled=false` to stop it
+# (https://ferropix.eu/docs/operate/configuration.html#usage_report).
+usageReport:
+  enabled: true
+
+# The audit spool and the usage report's instance id. An emptyDir by default;
+# name a PersistentVolumeClaim to keep the spool across restarts.
+state:
+  existingClaim: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 8080
+  # The MLLP listener's Service, rendered when config.hl7v2.enabled is true.
+  mllpPort: 2575
+
+# Containers beside the server in its pod, such as a TLS proxy.
+extraContainers: []
+
+serviceAccount:
+  create: true
+  name: ""
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+networkPolicy:
+  enabled: true
+  # The sources admitted to the server's ports; empty admits every source.
+  ingressFrom: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# The operator console, its own Deployment and Service.
+console:
+  enabled: false
+  image:
+    repository: ghcr.io/ferrohealth/ferropix-console
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  # The console's configuration file, rendered as TOML. `pix.base_url`
+  # defaults to the server's Service.
+  config:
+    oidc:
+      issuer: "https://issuer.example.org"
+      authorization_endpoint: "https://issuer.example.org/authorize"
+      token_endpoint: "https://issuer.example.org/token"
+      jwks_uri: "https://issuer.example.org/jwks"
+      client_id: ferropix-console
+      redirect_uri: "https://console.example.org/auth/callback"
+  # The OIDC client secret, held in the Secret `existingSecret` under `key`.
+  clientSecret:
+    existingSecret: ""
+    key: client-secret
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

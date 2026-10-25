@@ -1,0 +1,123 @@
+{{- /*
+SPDX-FileCopyrightText: Cadasto B.V.
+SPDX-License-Identifier: BUSL-1.1
+*/ -}}
+{{- if .Values.console.enabled }}
+{{- if not .Values.console.clientSecret.existingSecret }}
+{{- fail "console.clientSecret.existingSecret must name the Secret that holds the OIDC client secret" }}
+{{- end }}
+{{- $config := deepCopy .Values.console.config }}
+{{- $pix := default dict (get $config "pix") }}
+{{- if not (hasKey $pix "base_url") }}
+{{- $_ := set $pix "base_url" (printf "http://%s:%v/" (include "ferropix.fullname" .) .Values.service.port) }}
+{{- end }}
+{{- $_ := set $config "pix" $pix }}
+{{- $oidc := default dict (get $config "oidc") }}
+{{- $_ := set $oidc "client_secret_file" "/run/secrets/ferropix-console/client-secret" }}
+{{- $_ := set $config "oidc" $oidc }}
+{{- $server := default dict (get $config "server") }}
+{{- $_ := set $server "listen" "0.0.0.0:3000" }}
+{{- $_ := set $server "site_root" "/site" }}
+{{- $_ := set $config "server" $server }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ferropix.console" . }}
+  labels:
+    {{- include "ferropix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+data:
+  console.toml: |
+    {{- toToml $config | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ferropix.console" . }}
+  labels:
+    {{- include "ferropix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+spec:
+  replicas: {{ .Values.console.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ferropix.consoleSelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ferropix.labels" . | nindent 8 }}
+        app.kubernetes.io/component: console
+      annotations:
+        checksum/config: {{ toToml $config | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "ferropix.serviceAccount" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: console
+          image: {{ include "ferropix.image" (list .Values.console.image .Chart) | quote }}
+          imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+          args: ["serve"]
+          env:
+            - name: FERROPIX_CONSOLE_CONFIG
+              value: /etc/ferropix-console/console.toml
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+          securityContext:
+            {{- include "ferropix.containerSecurity" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.console.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ferropix-console
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets/ferropix-console
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "ferropix.console" . }}
+        - name: secrets
+          secret:
+            secretName: {{ .Values.console.clientSecret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.console.clientSecret.key }}
+                path: client-secret
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ferropix.console" . }}
+  labels:
+    {{- include "ferropix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: console
+spec:
+  type: {{ .Values.console.service.type }}
+  selector:
+    {{- include "ferropix.consoleSelector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.console.service.port }}
+      targetPort: http
+{{- end }}

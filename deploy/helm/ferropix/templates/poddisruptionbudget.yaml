@@ -1,0 +1,18 @@
+{{- /*
+SPDX-FileCopyrightText: Cadasto B.V.
+SPDX-License-Identifier: BUSL-1.1
+*/ -}}
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ferropix.fullname" . }}
+  labels:
+    {{- include "ferropix.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "ferropix.selector" . | nindent 6 }}
+{{- end }}

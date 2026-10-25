@@ -1,0 +1,22 @@
+{{- /*
+SPDX-FileCopyrightText: Cadasto B.V.
+SPDX-License-Identifier: BUSL-1.1
+*/ -}}
+FerroPIX {{ .Chart.AppVersion }} is installed as {{ include "ferropix.fullname" . }}.
+
+Its readiness:
+  kubectl port-forward svc/{{ include "ferropix.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl http://localhost:{{ .Values.service.port }}/health/readiness
+{{- if .Values.config.hl7v2.enabled }}
+
+The MLLP listener: svc/{{ include "ferropix.fullname" . }}-mllp, port {{ .Values.service.mllpPort }}.
+{{- end }}
+{{- if .Values.console.enabled }}
+
+The operator console: svc/{{ include "ferropix.console" . }}, port {{ .Values.console.service.port }}.
+{{- end }}
+{{- if .Values.usageReport.enabled }}
+
+The server sends its installation report to FerroPULSE, stating `helm`;
+set usageReport.enabled=false to stop it.
+{{- end }}

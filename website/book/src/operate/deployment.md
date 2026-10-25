@@ -12,8 +12,8 @@ publishes the first image, so until then you build the image from source
 (see [Building the image locally](#building-the-image-locally)). The
 operator console has an image of its own, `ghcr.io/ferrohealth/ferropix-console`,
 published by the same release ([The operator console](console.md#the-image)).
-A Helm chart is planned
-([#100](https://github.com/FerroHEALTH/FerroPIX/issues/100)).
+The Helm chart under `deploy/helm/ferropix` runs both on Kubernetes
+([The Helm chart](#the-helm-chart)).
 
 The two crates deploy inside your own application: they build with the
 Rust toolchain your application uses, at or above the minimum supported
@@ -126,6 +126,51 @@ token="$(curl -s -d grant_type=client_credentials \
 curl -H "Authorization: Bearer $token" \
   'http://localhost:8080/fhir/Patient/$ihe-pix?sourceIdentifier=urn:oid:2.999.1.1|1'
 ```
+
+## The Helm chart
+
+`deploy/helm/ferropix` installs the server and, with `console.enabled`, the
+operator console, against a PostgreSQL 18 you run yourself. Install it from
+a checkout:
+
+```sh
+kubectl create secret generic ferropix-db \
+  --from-literal=url='postgresql://ferropix:…@postgres:5432/ferropix'
+kubectl create secret generic ferropix-data-key \
+  --from-literal=data-key="$(openssl rand -base64 32)"
+helm install ferropix deploy/helm/ferropix \
+  --set database.existingSecret=ferropix-db \
+  --set dataKey.existingSecret=ferropix-data-key \
+  -f my-values.yaml
+```
+
+No credential is a value of the chart. The PostgreSQL URL, the sealing key
+and the console's OIDC client secret are Secrets you create; the chart
+mounts each as a file and the configuration names it by its `_file` key, so
+a chart without them refuses to render.
+
+| Value | Default | What it sets |
+|---|---|---|
+| `config` | a production profile on `https://pix.example.org` | The server's configuration file as a map, rendered as TOML; every key of [Configuration](configuration.md) but the secret files, which the chart sets. |
+| `database.existingSecret`, `database.key` | none, `url` | The Secret and key that hold the PostgreSQL URL. |
+| `dataKey.existingSecret`, `dataKey.key` | none, `data-key` | The Secret and key that hold the sealing key. |
+| `usageReport.enabled` | `true` | The installation report, stating `helm`; `false` stops it. |
+| `image.tag`, `image.digest` | the chart's app version, none | The server image; a digest wins over the tag. |
+| `state.existingClaim` | none | A PersistentVolumeClaim for the audit spool, which is an `emptyDir` without one. |
+| `service.port`, `service.mllpPort` | `8080`, `2575` | The HTTP Service and, with `config.hl7v2.enabled`, the MLLP Service. |
+| `networkPolicy.enabled`, `networkPolicy.ingressFrom` | `true`, every source | The NetworkPolicy of the serving ports and the sources it admits. |
+| `podDisruptionBudget.enabled` | `true` | A PodDisruptionBudget of one pod unavailable at a time. |
+| `extraContainers` | none | Containers beside the server, such as a TLS proxy. |
+| `console.enabled`, `console.config`, `console.clientSecret.existingSecret` | `false`, an OIDC example, none | The console, its configuration as a map (the server's Service is its default `pix.base_url`), and the Secret of its client secret. |
+
+Every container runs as user 65532 with a read-only root filesystem, no
+privilege escalation, every capability dropped and the `RuntimeDefault`
+seccomp profile, the Restricted Pod Security Standard. The server's startup
+and readiness probes ask `/health/readiness` and its liveness probe
+`/health`. `deploy/helm/validate.sh` lints and renders the chart and holds
+the manifests to the Kubernetes schemas with `kubeconform`, and
+`deploy/helm/kind-check.sh` installs it on a throwaway kind cluster with
+the published images and waits until its health routes answer.
 
 ## Building the image locally
 

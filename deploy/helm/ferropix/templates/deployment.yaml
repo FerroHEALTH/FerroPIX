@@ -1,0 +1,121 @@
+{{- /*
+SPDX-FileCopyrightText: Cadasto B.V.
+SPDX-License-Identifier: BUSL-1.1
+*/ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ferropix.fullname" . }}
+  labels:
+    {{- include "ferropix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ferropix.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ferropix.labels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+      annotations:
+        checksum/config: {{ include "ferropix.config" . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "ferropix.serviceAccount" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # Longer than the server's drain window, [server] drain_timeout_ms.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: ferropix
+          image: {{ include "ferropix.image" (list .Values.image .Chart) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          env:
+            - name: FERROPIX_CONFIG
+              value: /etc/ferropix/ferropix.toml
+          ports:
+            - name: http
+              containerPort: 8080
+            {{- if .Values.config.hl7v2.enabled }}
+            - name: mllp
+              containerPort: 2575
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+          securityContext:
+            {{- include "ferropix.containerSecurity" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ferropix
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets/ferropix
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/ferropix
+            - name: tmp
+              mountPath: /tmp
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "ferropix.fullname" . }}
+        - name: secrets
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: {{ .Values.database.existingSecret }}
+                  items:
+                    - key: {{ .Values.database.key }}
+                      path: db-url
+              - secret:
+                  name: {{ .Values.dataKey.existingSecret }}
+                  items:
+                    - key: {{ .Values.dataKey.key }}
+                      path: data-key
+        - name: state
+          {{- if .Values.state.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.state.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

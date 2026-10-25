@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+# The chart with its required Secrets named and nothing else set.
+database:
+  existingSecret: ferropix-db
+dataKey:
+  existingSecret: ferropix-data-key
+usageReport:
+  enabled: false

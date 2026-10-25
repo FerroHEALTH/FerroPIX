@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+# Every switch on: the MLLP listener, the console, a state claim and an
+# ingress allowlist.
+database:
+  existingSecret: ferropix-db
+dataKey:
+  existingSecret: ferropix-data-key
+usageReport:
+  enabled: false
+state:
+  existingClaim: ferropix-state
+config:
+  hl7v2:
+    enabled: true
+    listen: "0.0.0.0:2575"
+    senders:
+      - application: ADT
+        facility: EAST
+        domain: "urn:oid:2.999.1.1"
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress
+console:
+  enabled: true
+  clientSecret:
+    existingSecret: ferropix-console-oidc

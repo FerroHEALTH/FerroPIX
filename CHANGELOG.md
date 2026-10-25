@@ -32,6 +32,16 @@ and this project adheres to
   `[hl7v2.namespaces]` names a domain's HL7 namespace id, and a sender with
   no `domain` may query and not feed. The usage report counts the face's
   messages in the `hl7v2` group with `hl7v2_ae` and `hl7v2_ar`.
+- The Helm chart, `deploy/helm/ferropix` (#100): the server's Deployment
+  with its startup, readiness and liveness probes on the health family, the
+  HTTP Service and, with the HL7 v2 face on, the MLLP Service, the operator
+  console's Deployment and Service, the PostgreSQL URL, the sealing key and
+  the console's client secret as Secrets mounted as files, a NetworkPolicy,
+  a PodDisruptionBudget and the usage report stating `helm`. Every
+  container holds the Restricted Pod Security Standard with a read-only
+  root. `deploy/helm/validate.sh` (CI's `helm-chart` job) lints, renders and
+  holds it to the Kubernetes schemas with `kubeconform`, and
+  `deploy/helm/kind-check.sh` installs it on a kind cluster.
 
 ### Changed
 

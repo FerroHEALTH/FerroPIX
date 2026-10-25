@@ -1,0 +1,19 @@
+{{- /*
+SPDX-FileCopyrightText: Cadasto B.V.
+SPDX-License-Identifier: BUSL-1.1
+*/ -}}
+{{- if not .Values.database.existingSecret }}
+{{- fail "database.existingSecret must name the Secret that holds the PostgreSQL URL" }}
+{{- end }}
+{{- if not .Values.dataKey.existingSecret }}
+{{- fail "dataKey.existingSecret must name the Secret that holds the sealing key" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ferropix.fullname" . }}
+  labels:
+    {{- include "ferropix.labels" . | nindent 4 }}
+data:
+  ferropix.toml: |
+    {{- include "ferropix.config" . | nindent 4 }}

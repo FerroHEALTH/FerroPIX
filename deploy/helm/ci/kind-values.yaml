@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+# The cluster check: the server against the PostgreSQL of ci/kind/, with
+# the compose quickstart's development issuer as a sidecar, so the server
+# reads its metadata on loopback (RFC 8414 §2 admits plain http there), and
+# the console beside it. A development issuer signs any request: never for
+# anything real.
+database:
+  existingSecret: ferropix-db
+dataKey:
+  existingSecret: ferropix-data-key
+usageReport:
+  enabled: false
+config:
+  profile: production
+  server:
+    listen: "0.0.0.0:8080"
+    public_base_url: "http://localhost:8080"
+  auth:
+    audience:
+      - "http://localhost:8080/fhir"
+    issuer:
+      - issuer: "http://localhost:8180/ferropix"
+        clients: ["quickstart-source"]
+        token_profile: jwt
+  domain:
+    - system: "urn:oid:2.999.1.1"
+      name: "Chart check hospital"
+      kind: local
+      source_client_id: quickstart-source
+  hl7v2:
+    enabled: true
+    listen: "0.0.0.0:2575"
+    senders:
+      - application: ADT
+        facility: EAST
+        domain: "urn:oid:2.999.1.1"
+extraContainers:
+  - name: issuer
+    image: ghcr.io/navikt/mock-oauth2-server:6.1.3@sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8
+    env:
+      - name: SERVER_PORT
+        value: "8180"
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 65532
+      capabilities:
+        drop: ["ALL"]
+console:
+  enabled: true
+  config:
+    oidc:
+      issuer: "http://localhost:8180/ferropix"
+      authorization_endpoint: "http://localhost:8180/ferropix/authorize"
+      token_endpoint: "http://localhost:8180/ferropix/token"
+      jwks_uri: "http://localhost:8180/ferropix/jwks"
+      client_id: ferropix-console
+      redirect_uri: "http://localhost:3000/auth/callback"
+    session:
+      secure_cookie: false
+  clientSecret:
+    existingSecret: ferropix-console-oidc

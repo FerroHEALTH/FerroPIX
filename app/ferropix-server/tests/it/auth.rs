@@ -208,7 +208,7 @@ pub(crate) async fn application_with(
     backend: &fhir::Backend,
 ) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let smart = Arc::new(
-        Smart::discover(settings.auth, &settings.domains)
+        Box::pin(Smart::discover(settings.auth, &settings.domains))
             .await
             .expect("the authorization server is read"),
     );

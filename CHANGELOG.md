@@ -14,6 +14,13 @@ and this project adheres to
 
 ### Changed
 
+- `ihe-iti` 0.0.52 takes `ihe-atna = "=0.2.7"` and `fhir-types` 0.1.128 or
+  later, and `nl-generic-functions` 0.0.28 takes `ferrohealth-smart =
+  "=0.6.0"`, the family's newest pins, so a product on those lines (FerroEHR)
+  resolves both crates beside its own pins. A product that takes `ihe-iti`
+  moves to `ihe-atna = "=0.2.7"` with it, and one that takes
+  `nl-generic-functions` with `nuts-auth` to `ferrohealth-smart = "=0.6.0"`
+  (#211).
 - The changelog structure guard refuses a blank line between two bullets of
   an `[Unreleased]` list, which would split the list in the release notes,
   and has a self-test that CI runs; released sections keep their form

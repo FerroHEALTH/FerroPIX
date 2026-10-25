@@ -180,9 +180,9 @@ dependencies = [
 
 [[package]]
 name = "fhir-types"
-version = "0.1.127"
+version = "0.1.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1d316f2ef88198139bb57a6dcb17b25311274b42ccc2584e27a849d35697a42"
+checksum = "eab6cf450919fa8033d479209d0384dfd9dc9a7373aef7a9be66dab6f1db72b3"
 dependencies = [
  "quick-xml",
  "regex",
@@ -474,16 +474,16 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59a774a45545a2b1cced10d75810602969c66bd6dc843634d76931965084320b"
+checksum = "334e34b35c8ae4cd917d85424ca98055300067585313e6adb5de16618f0999a3"
 dependencies = [
  "url",
 ]
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.51"
+version = "0.0.52"
 dependencies = [
  "fhir-types",
  "http",

@@ -3,15 +3,17 @@
 
 //! `db reseal`: every identifier column rewritten under a new key, the old
 //! key opening and finding nothing afterwards, and a store under another key
-//! or mid-reseal refused at start.
+//! or mid-reseal refused at start, and the outbox's payloads rewritten too.
 
 use ferropix_server::store::key;
+use ferropix_server::store::outbox::{self, Channel, Message};
 use ferropix_server::store::record::{self, RecordId};
 use ferropix_server::store::reseal;
 use ferropix_server::store::seal::{IdentifierValue, Sealer};
 use ferropix_server::store::{Job, Store, StoreError};
 use ferropix_testkit::containers::{e2e_enabled, postgres};
 use ferropix_testkit::synthetic::HOSPITAL_DOMAIN;
+use secrecy::{ExposeSecret as _, SecretString};
 use uuid::Uuid;
 
 use super::{BSN_SYSTEM, app_role, bsn, create, domain, fresh_key, seeds, settings};
@@ -198,4 +200,49 @@ async fn a_store_whose_reseal_has_not_finished_refuses_to_start() {
         .expect_err("the configured key is not an old key");
     assert!(matches!(same, StoreError::SameKey), "{same:?}");
     resumed.close().await;
+}
+
+#[tokio::test]
+async fn db_reseal_rewrites_the_payloads_waiting_in_the_outbox() {
+    if !e2e_enabled() {
+        return;
+    }
+    let postgres = postgres().await.unwrap();
+    let url = app_role(&postgres).await;
+    let (old_key, new_key) = (fresh_key(), fresh_key());
+    let old = Store::start(&settings(&url, &old_key, true), &seeds(), Job::Migrate)
+        .await
+        .unwrap();
+    let message = Message {
+        channel: Channel::Xcpd,
+        destination: String::from("https://ig.example.org/replies"),
+        media_type: "application/soap+xml; charset=UTF-8",
+        payload: SecretString::from(String::from("<answer>a synthetic patient</answer>")),
+        max_attempts: 3,
+    };
+    outbox::enqueue(old.pool(), old.sealer(), &message)
+        .await
+        .unwrap();
+    old.close().await;
+
+    let new = Store::connect(&settings(&url, &new_key, true))
+        .await
+        .unwrap();
+    reseal::run(&new, &Sealer::new(&old_key).unwrap(), reseal::BATCH)
+        .await
+        .unwrap();
+    let key_id: Vec<u8> = sqlx::query_scalar("SELECT key_id FROM pix.outbox")
+        .fetch_one(new.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        new.sealer().key_id().as_bytes().as_slice(),
+        key_id.as_slice()
+    );
+    let claimed = outbox::claim(&new, 10, outbox::LEASE).await.unwrap();
+    assert_eq!(1, claimed.len(), "the payload opens under the new key");
+    assert_eq!(
+        "<answer>a synthetic patient</answer>",
+        claimed[0].payload.expose_secret()
+    );
 }

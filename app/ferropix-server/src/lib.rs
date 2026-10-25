@@ -22,6 +22,7 @@ pub mod hl7v2;
 pub mod http;
 pub mod matching;
 pub mod operator;
+pub mod outbox;
 pub mod pdqm;
 pub mod store;
 pub mod telemetry;
@@ -422,7 +423,8 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &audit,
         &backend(&store, &matching, pdqm.deprecated, origins, hl7v2.as_ref()),
     );
-    let guarded = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit)?;
+    let wake = outbox::Wake::default();
+    let (guarded, channels) = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = bind(&server).await?;
     let reporting = usage_report::reporter::start(
@@ -437,6 +439,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     )
     .await;
     let (signal, stopped) = stop_signal();
+    let sender = outbox::start(store.clone(), channels, wake, stopped.clone());
     let mllp = match &hl7v2 {
         Some(settings) => Some(
             start_mllp(
@@ -467,18 +470,30 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     .await
     .map_err(ServeError::Io);
     signal.abort();
-    if let Some(mllp) = mllp {
-        drained(mllp).await;
-    }
-    for task in [draining, reporting].into_iter().flatten() {
-        task.abort();
-    }
+    wound_down(mllp, sender, server.drain_timeout, [draining, reporting]).await;
     store.close().await;
     served
 }
 
+/// Waits for the MLLP listener's drain and the outbox sender's message in
+/// flight, then stops the background tasks `tasks`.
+async fn wound_down(
+    mllp: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
+    sender: tokio::task::JoinHandle<()>,
+    drain: std::time::Duration,
+    tasks: [Option<tokio::task::JoinHandle<()>>; 2],
+) {
+    if let Some(mllp) = mllp {
+        drained(mllp).await;
+    }
+    sent(sender, drain).await;
+    for task in tasks.into_iter().flatten() {
+        task.abort();
+    }
+}
+
 /// Returns `guarded` with the XCPD Responding Gateway's route when `[xcpd]`
-/// is on.
+/// is on, and the outbox channels that deliver its answers.
 fn with_xcpd(
     guarded: axum::Router,
     settings: Option<config::section::xcpd::XcpdSettings>,
@@ -486,13 +501,36 @@ fn with_xcpd(
     matching: &config::section::matching::Matching,
     server: &config::section::server::ServerSettings,
     audit: &audit::Audit,
-) -> Result<axum::Router, ServeError> {
-    match settings {
-        Some(settings) => Ok(guarded.merge(xcpd::routes(
-            xcpd::Gateway::new(store, matching, settings, &server.public_base_url, audit)
-                .map_err(ServeError::Xcpd)?,
-        ))),
-        None => Ok(guarded),
+    wake: &outbox::Wake,
+) -> Result<(axum::Router, outbox::Channels), ServeError> {
+    let Some(settings) = settings else {
+        return Ok((guarded, outbox::Channels::default()));
+    };
+    let gateway = xcpd::Gateway::new(
+        store,
+        matching,
+        settings,
+        &server.public_base_url,
+        audit,
+        wake.clone(),
+    )
+    .map_err(ServeError::Xcpd)?;
+    let channels = outbox::Channels {
+        xcpd: Some(gateway.channel()),
+    };
+    Ok((guarded.merge(xcpd::routes(gateway)), channels))
+}
+
+/// Waits for the outbox sender to finish the message in flight, at most
+/// `drain`; a message it never reached stays in the outbox for the next start.
+async fn sent(sender: tokio::task::JoinHandle<()>, drain: std::time::Duration) {
+    match tokio::time::timeout(drain, sender).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::error!(%error, "the outbox sender's task failed"),
+        Err(_) => tracing::warn!(
+            drain_ms = drain.as_millis(),
+            "the outbox sender did not finish within the drain; its message falls due again after its lease"
+        ),
     }
 }
 

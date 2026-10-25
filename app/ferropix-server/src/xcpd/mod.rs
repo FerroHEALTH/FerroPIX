@@ -67,8 +67,10 @@ use crate::config::section::matching::{BlockingKey, Matching};
 use crate::config::section::xcpd::XcpdSettings;
 use crate::feed::demographics::DemographicsError;
 use crate::matching::scorer::{Grade, Scorer};
+use crate::outbox::{Backoff, HttpChannel, Wake};
 use crate::pdqm::PdqError;
 use crate::pdqm::patient::{self, Person};
+use crate::store::outbox::{self, Channel, Message};
 use crate::store::xref::{self, Lookup};
 use crate::store::{Store, StoreError};
 
@@ -94,6 +96,8 @@ pub struct Gateway {
     endpoint: NetworkAddress,
     /// The client that posts an asynchronous answer.
     client: reqwest::Client,
+    /// What wakes the outbox sender once an answer is written.
+    wake: Wake,
 }
 
 impl Gateway {
@@ -111,6 +115,7 @@ impl Gateway {
         settings: XcpdSettings,
         public_base_url: &url::Url,
         audit: &Audit,
+        wake: Wake,
     ) -> Result<Self, reqwest::Error> {
         let master = public_base_url.as_str().trim_end_matches('/').to_owned();
         let endpoint = url::Url::parse(&format!("{master}{PATH}")).map_or_else(
@@ -138,7 +143,21 @@ impl Gateway {
             audit: audit.clone(),
             endpoint,
             client,
+            wake,
         })
+    }
+
+    /// Returns the outbox channel that delivers this gateway's asynchronous
+    /// answers: its client and the retry waits of `[xcpd]`.
+    #[must_use]
+    pub fn channel(&self) -> HttpChannel {
+        HttpChannel {
+            client: self.client.clone(),
+            backoff: Backoff {
+                initial: self.settings.delivery.initial_backoff,
+                max: self.settings.delivery.max_backoff,
+            },
+        }
     }
 
     /// Returns the responder every answer names.
@@ -153,10 +172,11 @@ impl Gateway {
     /// `peer`.
     ///
     /// A request whose `ReplyTo` names an endpoint is the asynchronous
-    /// exchange of ITI TF-2 V.5: it is accepted with `202` and no envelope
-    /// (WS-Addressing 1.0 SOAP Binding §5.2.2: the response "SHOULD NOT" be
-    /// the outbound message of the same exchange), and the answer is posted
-    /// to the endpoint once settled.
+    /// exchange of ITI TF-2 V.5: the answer is settled and written to the
+    /// outbox, whose sender posts it to the endpoint, and only then is the
+    /// request accepted with `202` and no envelope (WS-Addressing 1.0 SOAP
+    /// Binding §5.2.2: the response "SHOULD NOT" be the outbound message of
+    /// the same exchange), so an accepted answer survives a restart.
     async fn answer(
         self: &Arc<Self>,
         media: Option<&str>,
@@ -215,14 +235,22 @@ impl Gateway {
                 Err(_) => fault(Blame::Receiver, "the answer could not be written"),
             };
         };
-        let gateway = Arc::clone(self);
-        tokio::spawn(async move {
-            if let Ok(bytes) = gateway.concluded(&received, &call, place).await {
-                gateway.deliver(&endpoint, bytes).await;
-            } else {
-                tracing::error!("an asynchronous ITI-55 answer could not be written");
-            }
-        });
+        let Ok(bytes) = self.concluded(&received, &call, place).await else {
+            return fault(Blame::Receiver, "the answer could not be written");
+        };
+        let message = Message {
+            channel: Channel::Xcpd,
+            destination: endpoint.to_string(),
+            media_type: MEDIA_TYPE,
+            payload: SecretString::from(String::from_utf8_lossy(&bytes).into_owned()),
+            max_attempts: self.settings.delivery.attempts,
+        };
+        if let Err(error) = outbox::enqueue(self.store.pool(), self.store.sealer(), &message).await
+        {
+            tracing::error!(error = %crate::chain(&error), "an asynchronous ITI-55 answer could not be written to the outbox");
+            return fault(Blame::Receiver, "the answer could not be queued");
+        }
+        self.wake.now();
         StatusCode::ACCEPTED.into_response()
     }
 
@@ -272,42 +300,6 @@ impl Gateway {
             .iter()
             .any(|prefix| endpoint.as_str().starts_with(prefix.as_str()))
             .then_some(endpoint)
-    }
-
-    /// Posts the asynchronous answer `bytes` to `endpoint`, retried with a
-    /// doubling wait until it is taken with a `2xx` or the attempts run out.
-    async fn deliver(&self, endpoint: &url::Url, bytes: Vec<u8>) {
-        let delivery = &self.settings.delivery;
-        let mut wait = delivery.initial_backoff;
-        for attempt in 1..=delivery.attempts {
-            let sent = self
-                .client
-                .post(endpoint.clone())
-                .header(header::CONTENT_TYPE, MEDIA_TYPE)
-                .body(bytes.clone())
-                .send()
-                .await;
-            match sent {
-                Ok(response) if response.status().is_success() => {
-                    tracing::info!(attempt, "an asynchronous ITI-55 answer is delivered");
-                    return;
-                }
-                Ok(response) => {
-                    tracing::warn!(attempt, status = %response.status(), "an asynchronous ITI-55 answer is refused by its reply endpoint");
-                }
-                Err(error) => {
-                    tracing::warn!(attempt, error = %crate::chain(&error.without_url()), "an asynchronous ITI-55 answer did not reach its reply endpoint");
-                }
-            }
-            if attempt < delivery.attempts {
-                tokio::time::sleep(wait).await;
-                wait = wait.saturating_mul(2).min(delivery.max_backoff);
-            }
-        }
-        tracing::error!(
-            attempts = delivery.attempts,
-            "an asynchronous ITI-55 answer is given up after its last attempt"
-        );
     }
 
     /// Settles the case of `received`.

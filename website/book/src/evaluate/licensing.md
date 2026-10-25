@@ -30,6 +30,10 @@ named in
 `ihe-iti` and `nl-generic-functions` each ship the licence in their package.
 A product that depends on them takes them under the same terms.
 
+## The brand assets
+
+The logos and icons under `assets/brand/` are part of the Licensed Work.
+
 ## Vendored material
 
 The specification texts under `docs/specs/` keep their upstream terms, each

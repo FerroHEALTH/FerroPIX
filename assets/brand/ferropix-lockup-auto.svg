@@ -1,0 +1,30 @@
+<!-- SPDX-FileCopyrightText: Cadasto B.V. -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- One lockup for both themes: the media query inside the SVG switches the
+     mark and wordmark tones on prefers-color-scheme, so a README or a page
+     serves one file to a light and a dark reader. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="64" viewBox="0 0 220 64" role="img" aria-label="FerroPIX">
+  <title>FerroPIX</title>
+  <style>
+    .c0-fill { fill: #6B21A8 }
+    .c0-stroke { stroke: #6B21A8 }
+    .c1-fill { fill: #C084FC }
+    .c1-stroke { stroke: #C084FC }
+    .wm { fill: #0F172A; }
+    @media (prefers-color-scheme: dark) {
+      .c0-fill { fill: #C084FC }
+      .c0-stroke { stroke: #C084FC }
+      .c1-fill { fill: #F3E8FF }
+      .c1-stroke { stroke: #F3E8FF }
+      .wm { fill: #F1F5F9; }
+    }
+  </style>
+  <g>
+  <rect x="8" y="14" width="48" height="42" rx="6" fill="none" class="c0-stroke" stroke-width="4.6"/>
+  <path d="M8 20 V14 a6 6 0 0 1 6 -6 h14 v12 Z" class="c0-fill"/>
+  <circle cx="22" cy="34" r="5" class="c1-fill"/>
+  <path d="M14 48 a8 8 0 0 1 16 0" fill="none" class="c1-stroke" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M37 32 H48 M37 41 H48" fill="none" class="c1-stroke" stroke-width="4.2" stroke-linecap="round"/>
+  </g>
+  <text class="wm" x="76" y="44" font-family="'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.3">FerroPIX</text>
+</svg>

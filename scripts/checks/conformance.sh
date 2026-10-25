@@ -39,21 +39,23 @@ readonly CORPORA=(pixm pdqm pmir audit)
 readonly BADGES=conformance/badges
 # The shields.io endpoint prefix every conformance badge file is read through.
 readonly ENDPOINT='https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2F'
-# The build badges, the first rows of the README block, in the family's order.
-readonly BUILD_BADGES=(
-  '[![CI](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml/badge.svg)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml)'
-  '[![CodeQL](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml/badge.svg)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)'
-  '[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/FerroHEALTH/FerroPIX/badge)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)'
-  '[![SLSA Build L3](https://slsa.dev/images/gh-badge-level3.svg)](docs/release.md#the-build-legs)'
-  '[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=FerroHEALTH_FerroPIX&metric=alert_status)](https://sonarcloud.io/summary/overall?id=FerroHEALTH_FerroPIX)'
-  '[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=FerroHEALTH_FerroPIX&metric=coverage)](https://sonarcloud.io/summary/new_code?id=FerroHEALTH_FerroPIX)'
-  '[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)'
-  '[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/FerroHEALTH/FerroPIX?sort=semver)](https://github.com/FerroHEALTH/FerroPIX/releases/latest)'
+# The project and quality badges, the first two rows of the README block.
+readonly PROJECT_BADGES=(
+  '[![Release](https://img.shields.io/github/v/release/FerroHEALTH/FerroPIX?sort=semver&logo=github&label=release)](https://github.com/FerroHEALTH/FerroPIX/releases/latest)'
+  '[![CI](https://img.shields.io/github/actions/workflow/status/FerroHEALTH/FerroPIX/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml)'
+  '[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue)](LICENSE)'
+  '[![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8?logo=mdbook)](https://ferropix.eu/docs/)'
+  '[![GHCR](https://img.shields.io/badge/ghcr.io-ferropix-2496ED?logo=docker&logoColor=white)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
   '[![Image pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FFerroHEALTH%2FFerroPIX%2Fferropix&query=downloadCount&label=image%20pulls&logo=github)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
-  '[![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8.svg)](https://ferropix.eu/docs/)'
 )
-# The published crates, each with its crates.io and docs.rs badge.
-readonly CRATES=(ihe-iti nl-generic-functions)
+readonly QUALITY_BADGES=(
+  '[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/FerroHEALTH/FerroPIX/badge)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)'
+  '[![Quality gate](https://img.shields.io/sonar/quality_gate/FerroHEALTH_FerroPIX?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&label=quality%20gate)](https://sonarcloud.io/summary/overall?id=FerroHEALTH_FerroPIX)'
+  '[![Coverage](https://img.shields.io/sonar/coverage/FerroHEALTH_FerroPIX?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&label=coverage)](https://sonarcloud.io/summary/new_code?id=FerroHEALTH_FerroPIX)'
+  '[![CodeQL](https://img.shields.io/github/actions/workflow/status/FerroHEALTH/FerroPIX/codeql.yml?branch=main&logo=github&label=CodeQL)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)'
+  '[![Signed releases](https://img.shields.io/badge/releases-signed-brightgreen?logo=github)](https://ferropix.eu/docs/operate/deployment.html#verifying-an-image)'
+  '[![SLSA Build L3](https://slsa.dev/images/gh-badge-level3.svg)](docs/release.md#the-build-legs)'
+)
 
 # The badge label of a corpus.
 label_of() {
@@ -131,19 +133,18 @@ badge_link() {
   echo "[![$(label_of "$1")](${ENDPOINT}${1}.json)](conformance/$1/pass-list.txt)"
 }
 
-# The README block with its markers: the build badges, the crates, then the
+# The README block with its markers: the project and quality rows, then the
 # conformance row.
 render_block() {
-  local crate corpus
+  local corpus
   echo '<!-- badges:begin -->'
-  printf '%s\n' "${BUILD_BADGES[@]}"
-  for crate in "${CRATES[@]}"; do
-    echo "[![${crate} on crates.io](https://img.shields.io/crates/v/${crate}.svg?label=${crate})](https://crates.io/crates/${crate})"
-    echo "[![${crate} on docs.rs](https://img.shields.io/docsrs/${crate}?label=docs.rs%20${crate})](https://docs.rs/${crate})"
-  done
+  echo '**Project**<br>'
+  printf '%s\n' "${PROJECT_BADGES[@]}"
   echo
-  echo "**Conformance**, measured by the corpus tests of \`ihe-iti\` over every example the vendored IHE packages ship; each badge links to its pass list, where a failing example is listed with its reason."
+  echo '**Quality and security**<br>'
+  printf '%s\n' "${QUALITY_BADGES[@]}"
   echo
+  echo '**Conformance**<br>'
   for corpus in "${CORPORA[@]}"; do
     badge_link "$corpus"
   done

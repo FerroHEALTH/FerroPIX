@@ -425,18 +425,18 @@ pub fn framed(content: AnyView) -> AnyView {
         shortcuts: None,
         sign_out: Some(String::from(SIGN_OUT)),
     });
-    let search = search_box(
-        SearchBox {
-            id: String::from(SEARCH_ID),
-            label: tr(Msg::SearchLabel),
-            placeholder: tr(Msg::SearchPlaceholder),
-            action: String::from(SEARCH),
-            submit: tr(Msg::SearchFind).into(),
-            post: true,
-            ..SearchBox::default()
-        },
-        None,
-    );
+    let search = search_box(SearchBox {
+        id: String::from(SEARCH_ID),
+        label: tr(Msg::SearchLabel),
+        placeholder: tr(Msg::SearchPlaceholder),
+        action: String::from(SEARCH),
+        submit: tr(Msg::SearchFind).into(),
+        post: true,
+        // TODO(#214): answer under the field as you type once the steward search's
+        // audit records per keystroke are decided (design D26).
+        suggest: None,
+        ..SearchBox::default()
+    });
     let end = view! {
         {pill(page.probe.as_ref(), &base)}
         {menu}

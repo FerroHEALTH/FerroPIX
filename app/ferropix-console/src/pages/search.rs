@@ -32,6 +32,7 @@ use crate::document::{Document, Prefill, Segment};
 use crate::locale::{Msg, tr, tr_with};
 use crate::pages::patient::full_name;
 use crate::pages::{Needs, server_state, title};
+use ferrohealth_ui::island::WorkList;
 use ferrohealth_ui::table::view::{
     Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
 };
@@ -39,7 +40,6 @@ use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::status::badge;
 use ferrohealth_ui::view::surface::or_none;
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
-use ferrohealth_ui::island::WorkList;
 use ferrohealth_ui::widget::identifier::{Domain, Masked, identifier_list};
 use ferrohealth_ui::widget::worklist::{WorkRow, row};
 use ferropix_operator_api::domain::Domains;

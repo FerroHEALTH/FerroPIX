@@ -245,6 +245,31 @@ impl Journey {
         }
     }
 
+    /// Sends `key` to `element` and returns once the page it loads, if any,
+    /// has hydrated.
+    pub(crate) async fn keys(&self, element: &WebElement, key: Key, what: &str) {
+        if let Err(error) = self.acting(what, || element.send_keys(key)).await {
+            panic!("{}", self.failure(what, &error.to_string()).await);
+        }
+    }
+
+    /// The `WebDriver` session, for a call no wait wraps.
+    pub(crate) fn driver(&self) -> &WebDriver {
+        &self.driver
+    }
+
+    /// The element that holds the focus.
+    pub(crate) async fn active(&self) -> WebElement {
+        match self.driver.active_element().await {
+            Ok(element) => element,
+            Err(error) => panic!(
+                "{}",
+                self.failure("the focused element", &error.to_string())
+                    .await
+            ),
+        }
+    }
+
     /// Runs `act`, a press or keys, on a tagged page, and returns once the
     /// page it loads, if any, has hydrated.
     ///

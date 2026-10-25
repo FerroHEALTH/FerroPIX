@@ -36,6 +36,103 @@ until then those pages say the server serves no operator API for them yet. The c
 published by the release lane from the first tagged release
 ([The image](#the-image)).
 
+## What each page looks like
+
+Every page below is drawn from synthetic documents, at 1440 pixels wide in
+the light theme, with a link to the dark one.
+
+![The sign-in page a visitor reads](img/console/sign-in.png)
+
+The sign-in page a visitor reads. [Dark theme](img/console/sign-in-dark.png).
+
+![The sign-in page after you signed out](img/console/signed-out.png)
+
+The sign-in page after you signed out. [Dark theme](img/console/signed-out-dark.png).
+
+![The sign-in page after your session expired](img/console/expired.png)
+
+The sign-in page after your session expired. [Dark theme](img/console/expired-dark.png).
+
+![The dashboard](img/console/dashboard.png)
+
+The dashboard. [Dark theme](img/console/dashboard-dark.png).
+
+![The review queue, which follows with v0.0.5](img/console/queue.png)
+
+The review queue, which follows with v0.0.5. [Dark theme](img/console/queue-dark.png).
+
+![A pair in the review queue, which follows with v0.0.5](img/console/queue-pair.png)
+
+A pair in the review queue, which follows with v0.0.5. [Dark theme](img/console/queue-pair-dark.png).
+
+![Search by identifier](img/console/search.png)
+
+Search by identifier. [Dark theme](img/console/search-dark.png).
+
+![Search by demographics](img/console/search-demographics.png)
+
+Search by demographics. [Dark theme](img/console/search-demographics-dark.png).
+
+![A patient's record on its identifiers tab](img/console/patient.png)
+
+A patient's record on its identifiers tab. [Dark theme](img/console/patient-dark.png).
+
+![Merge, which follows with v0.0.5](img/console/patient-merge.png)
+
+Merge, which follows with v0.0.5. [Dark theme](img/console/patient-merge-dark.png).
+
+![Unmerge, which follows with v0.0.5](img/console/patient-unmerge.png)
+
+Unmerge, which follows with v0.0.5. [Dark theme](img/console/patient-unmerge-dark.png).
+
+![The sources](img/console/sources.png)
+
+The sources. [Dark theme](img/console/sources-dark.png).
+
+![One source with its last messages](img/console/source.png)
+
+One source with its last messages. [Dark theme](img/console/source-dark.png).
+
+![The identifier domains](img/console/domains.png)
+
+The identifier domains. [Dark theme](img/console/domains-dark.png).
+
+![One identifier domain with its last feeds](img/console/domain.png)
+
+One identifier domain with its last feeds. [Dark theme](img/console/domain-dark.png).
+
+![The pseudonymisation domains, which follow with v0.0.5](img/console/pseudonym-domains.png)
+
+The pseudonymisation domains, which follow with v0.0.5. [Dark theme](img/console/pseudonym-domains-dark.png).
+
+![The matching configuration](img/console/configuration.png)
+
+The matching configuration. [Dark theme](img/console/configuration-dark.png).
+
+![The audit trail](img/console/audit.png)
+
+The audit trail. [Dark theme](img/console/audit-dark.png).
+
+![About](img/console/about.png)
+
+About. [Dark theme](img/console/about-dark.png).
+
+![Your preferences](img/console/preferences.png)
+
+Your preferences. [Dark theme](img/console/preferences-dark.png).
+
+![The language preference](img/console/preferences-language.png)
+
+The language preference. [Dark theme](img/console/preferences-language-dark.png).
+
+![The keyboard preference](img/console/preferences-keyboard.png)
+
+The keyboard preference. [Dark theme](img/console/preferences-keyboard-dark.png).
+
+![The page an unknown address draws](img/console/not-found.png)
+
+The page an unknown address draws. [Dark theme](img/console/not-found-dark.png).
+
 ## Build and run it
 
 The console is a Leptos app the server renders whole; the browser loads a

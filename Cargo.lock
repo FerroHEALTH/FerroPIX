@@ -1538,6 +1538,7 @@ dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
  "ferropix-console",
+ "ferropix-operator-api",
  "fhir-types",
  "jiff",
  "jsonwebtoken",

@@ -62,6 +62,15 @@ and this project adheres to
   with posted filters and the CSV export (#96); the sources and the
   configuration in file mode (#120, #121). A refused call shows the
   server's issue in place.
+- The console's browser journeys over the filled screens (#98): the WCAG 2.2
+  AA battery runs over every screen drawn from synthetic operator API
+  documents as well as over its refused state, in both themes and at
+  320 px; `/` focuses the top bar's search, `j` and `k` walk the results
+  and Enter opens the person; a dialog closed with Escape gives the focus
+  back to its button. The book's console page shows every page in the light
+  theme with its dark capture, taken behind `FERROPIX_SCREENSHOTS` at 1440
+  and 390 px, and a guard fails when a route has no capture or the captures
+  name another release.
 
 ### Changed
 

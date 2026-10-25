@@ -49,6 +49,8 @@ tokio = { workspace = true, features = ["time", "rt", "net", "sync", "io-util"] 
 # The browser journeys run the console in process, against its release site
 # bundle, and drive headless Chrome through a chromedriver of their own.
 ferropix-console = { path = "../../app/ferropix-console" }
+# The filled stack's documents are read back into the operator API's types.
+ferropix-operator-api = { path = "../../app/ferropix-operator-api" }
 rustix.workspace = true
 tempfile.workspace = true
 thirtyfour.workspace = true

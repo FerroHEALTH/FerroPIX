@@ -417,6 +417,7 @@ pub fn framed(content: AnyView) -> AnyView {
         },
         choices: Vec::new(),
         links: Vec::new(),
+        // TODO(#204): pass the shortcut legend once FerroUI carries it.
         shortcuts: None,
         sign_out: Some(String::from(SIGN_OUT)),
     });

@@ -23,8 +23,10 @@
 mod accessibility;
 mod browser;
 mod chromedriver;
+mod keyboard;
 mod preferences;
 mod pseudo_locale;
+mod screenshots;
 mod sign_in;
 mod stack;
 
@@ -57,7 +59,7 @@ const SCREENS: [&str; 20] = [
     "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/merge",
     "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/unmerge",
     "/sources",
-    "/sources/synthetic-lab",
+    "/sources/EAST.ADT",
     "/domains",
     "/domains/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
     "/pseudonym-domains",

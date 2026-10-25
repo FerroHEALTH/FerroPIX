@@ -1,0 +1,87 @@
+{
+  "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+  "status": "active",
+  "created_at": "2026-10-20T08:00:00Z",
+  "leading": {
+    "names": [
+      {
+        "family": "Proefsma",
+        "given": [
+          "Ada"
+        ]
+      }
+    ],
+    "birth_date": "1980-02-29",
+    "gender": "female"
+  },
+  "identifiers": [
+    {
+      "handle": {
+        "record": "record-1"
+      },
+      "domain": {
+        "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+        "system": "urn:oid:2.999.1.1",
+        "name": "Synthetic hospital",
+        "kind": "local"
+      },
+      "masked": "•••••••711",
+      "state": "active",
+      "last_fed": "2026-10-24T09:00:00Z",
+      "link": {
+        "kind": "feed",
+        "made_by": "east-lab",
+        "made_at": "2026-10-20T08:00:00Z"
+      }
+    }
+  ],
+  "records": [
+    {
+      "id": "record-1",
+      "domain": {
+        "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+        "system": "urn:oid:2.999.1.1",
+        "name": "Synthetic hospital",
+        "kind": "local"
+      },
+      "version": 2,
+      "received_at": "2026-10-24T09:00:00Z",
+      "channel": "v2",
+      "state": "active",
+      "demographics": {
+        "names": [
+          {
+            "family": "Proefsma",
+            "given": [
+              "Ada"
+            ]
+          }
+        ],
+        "birth_date": "1980-03-01",
+        "gender": "female"
+      }
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-10-24T09:00:00Z",
+      "actor": "east-lab",
+      "event": {
+        "version": {
+          "record": "record-1",
+          "version": 2,
+          "channel": "v2"
+        }
+      }
+    }
+  ],
+  "history_truncated": false,
+  "pseudonyms": [
+    {
+      "domain": "pseudonym-domain-1",
+      "namespace": "urn:example:ehr",
+      "name": "Synthetic EHR",
+      "masked": "••••••••••c3d"
+    }
+  ]
+}

@@ -14,6 +14,10 @@ and this project adheres to
 
 ### Changed
 
+- The changelog guard passes a pull request that adds a bullet to the
+  newest `## [X.Y.Z]` section while no `vX.Y.Z` tag exists, so a fix that
+  lands between the release pull request and the tag records itself in the
+  notes the tag publishes, without the `no-changelog` label (#193).
 - `ihe-atna` moves to 0.2.6, the FerroAUDIT release whose forwarder closes
   a syslog connection with `close_notify` before it reconnects and adds
   `Forwarder::stop`, so a product that pins 0.2.6 resolves `ihe-iti` beside

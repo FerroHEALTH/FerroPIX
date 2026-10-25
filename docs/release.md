@@ -108,6 +108,12 @@ image, and its `crates` leg waits on the `crates-io` environment's
 reviewer. Its last job closes the milestone. A pushed tag is never moved or
 deleted; a bad cut ships forward as a new patch version.
 
+A fix that merges after the release pull request and before the tag records
+itself in the cut `## [X.Y.Z]` section, so the tag's notes carry it.
+`scripts/checks/changelog-guard.sh` passes a bullet added to the newest
+version section while `vX.Y.Z` is untagged, and refuses it once the tag
+exists.
+
 ## The build legs
 
 No specification governs the lane's shape: our own design, the family's

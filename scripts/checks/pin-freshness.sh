@@ -161,7 +161,8 @@ readonly WATCHED_W3C="\
 W3C Verifiable Credentials Data Model 1.1	vc-data-model	the version the pinned Netherlands Generic Functions IG cites
 W3C Decentralized Identifiers 1.0	did-core	-
 W3C DID Resolution 1.0	did-resolution	-
-W3C Bitstring Status List 1.0	vc-bitstring-status-list	-"
+W3C Bitstring Status List 1.0	vc-bitstring-status-list	-
+W3C Web Services Addressing 1.0 SOAP Binding	ws-addr-soap	-"
 
 # One "vendor script<TAB>reason" record per line: a script whose corpus rows
 # no reader above watches, with the reason none is needed. The self-test

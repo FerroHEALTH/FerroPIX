@@ -12,6 +12,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- The changelog structure guard refuses a blank line between two bullets of
+  an `[Unreleased]` list, which would split the list in the release notes,
+  and has a self-test that CI runs; released sections keep their form
+  (#208).
+
 ## [0.0.4] - 2026-10-25
 
 ### Added

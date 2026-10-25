@@ -116,7 +116,7 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off conformance vex-coverage; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security changelog-structure contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals console-bundle usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg

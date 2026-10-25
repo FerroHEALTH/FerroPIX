@@ -247,18 +247,21 @@ async fn no_refresh_token_reaches_an_answer_a_cookie_or_a_log_line() -> Result<(
     let (refused, refused_body) = send(&service, get_with(PAGE, &cookie)?).await?;
     let logged = captured.text();
     let cookies = [set_cookies(&response), set_cookies(&refused)].concat();
-    for secret in [
-        OPERATOR_REFRESH,
-        "synthetic-refresh-2",
-        OPERATOR_TOKEN,
-        "synthetic-access-2",
+    for (what, value) in [
+        ("the first refresh token", OPERATOR_REFRESH),
+        ("the rotated refresh token", "synthetic-refresh-2"),
+        ("the first access token", OPERATOR_TOKEN),
+        ("the renewed access token", "synthetic-access-2"),
     ] {
-        assert!(!logged.contains(secret), "a log line carries {secret}");
-        assert!(!body.contains(secret), "the page carries {secret}");
-        assert!(!refused_body.contains(secret), "the page carries {secret}");
+        assert!(!logged.contains(value), "a log line carries {what}");
+        assert!(!body.contains(value), "the page carries {what}");
         assert!(
-            !cookies.iter().any(|set| set.contains(secret)),
-            "a cookie carries {secret}"
+            !refused_body.contains(value),
+            "the refused page carries {what}"
+        );
+        assert!(
+            !cookies.iter().any(|set| set.contains(value)),
+            "a cookie carries {what}"
         );
     }
     Ok(())

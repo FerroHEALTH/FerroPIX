@@ -17,6 +17,7 @@ mod gate;
 mod hl7v2;
 mod indicator;
 mod leak;
+mod merges;
 mod operator;
 mod operator_writes;
 mod pdqm_match;

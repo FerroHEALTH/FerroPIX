@@ -364,7 +364,9 @@ boundaries: our own design.
   versions stated: a feed that changes only what the scorer does not
   compare leaves the pair out of the queue.
 - **A merge** (section 5.3): advisory locks on both persons in `uuid`
-  order; refuse `409` when either is no longer `active`; the merged person
+  order; refuse `409` when either is no longer `active` or its version
+  moved (a person's version is the time of its latest change: a link opened
+  or closed, or a version fed to one of its records); the merged person
   gets `status = merged` and `merged_into`; every open link of the merged
   person is closed and reopened on the survivor, each move a `merge_effect`
   row; the candidates between the two persons' records are closed as

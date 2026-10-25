@@ -38,6 +38,9 @@ Every answer carries `Cache-Control: no-store`. A refusal is a FHIR
 | `GET /operator/candidates` | steward | A page of 50 of the review queue: the open candidates and the deferred ones whose day has come, the grade first, then the score, then the age, each with the two records' domains, leading names and birth dates. `grade`, `domain` (a system), `older_than_days` and `deferred=true` (the deferred candidates whose day has not come) filter it, `offset` pages it. |
 | `GET /operator/candidates/{id}` | steward | One candidate: the score, the grade and the evidence of every field, the two records at the versions the score was computed on with their persons' identifiers masked, the thresholds, whether a link merges two persons, and the candidates before and after it in the queue. |
 | `POST /operator/candidates/{id}/decide` | steward | Your decision with the two versions you read and your reason: `link`, `not-a-match`, or `defer` with an `until` day after today. |
+| `GET /operator/merges/preview` | steward | The whole effect of merging `merged` into `survivor`, or of reverting the merge `revert`, written nowhere: both persons with their versions, the identifiers that move (masked), the pseudonyms that resolve to the other person, the PMIR subscriptions told and the candidates the merge closes; for a revert, the reason the merge was made and the later merge to revert first, when there is one. |
+| `POST /operator/merges` | steward | Merges `merged` into `survivor` with both versions you read and your reason. |
+| `POST /operator/merges/{id}/revert` | steward | Reverts the merge with the survivor's version you read and your reason. |
 | `GET /operator/actions` | steward | A page of the audit trail, the newest first. |
 | `POST /operator/actions/export` | steward | The same filter answered as CSV. |
 
@@ -56,6 +59,18 @@ as linked. A `not-a-match` keeps the pair out of the queue until either
 record's demographics change; a feed that changes only an identifier leaves
 it out. A `defer` takes the pair out of the queue until the day you name,
 when it comes back in its place. Nothing a decision does deletes a row.
+
+## Merging and unmerging
+
+Read the preview first: it names both persons with their versions, and a
+merge or a revert carries those versions back. When either person changed
+since, a link opened or closed or a record fed, the server answers `409` and
+changes nothing: read the preview again. A merge moves every record of the
+merged person onto the survivor and closes the candidates between the two
+as linked. Only the latest merge into a survivor can be reverted, so merges
+unwind in order: a revert of an earlier one is `409`, and its preview names
+the merge to revert first. A revert moves the records back and makes the
+merged person active again; the merge row stays, marked reverted.
 
 ## Identifiers stay off the URL and out of the answer
 
@@ -169,6 +184,9 @@ formula starts with `'`.
 | `GET /operator/candidates` | none | one Patient Query record per person the page shows, with the raw request |
 | `GET /operator/candidates/{id}` | none | a Patient Read of each of the two persons |
 | `POST /operator/candidates/{id}/decide` | `link`, `not-a-match` or `defer`, with your reason | a Patient Update of the person the records end in |
+| `GET /operator/merges/preview` | none | a Patient Read of each of the two persons |
+| `POST /operator/merges` | `merge`, with your reason | a Patient Update of the survivor |
+| `POST /operator/merges/{id}/revert` | `unmerge`, with your reason | a Patient Update of the person the revert reactivates |
 | `POST` and `PATCH /operator/domains` | `domain-create`, `domain-update` | a create or update of the domain, naming no patient |
 
 The server stores the BALP record before it sends the answer, and answers

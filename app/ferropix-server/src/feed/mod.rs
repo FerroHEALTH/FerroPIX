@@ -27,6 +27,7 @@
 
 pub mod demographics;
 mod link;
+pub mod merging;
 pub mod steward;
 mod write;
 

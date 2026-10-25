@@ -15,7 +15,8 @@ domain uses.
 
 The family architecture of 2026-10-25 ([[family-architecture]]) makes
 identity and the IHE profiles FerroPIX's lane: the others reach it over
-IHE PIXm, PDQm and PMIR and over HL7 v2 on MLLP, as clients, and no other
+IHE PIXm, PDQm and PMIR and over the HL7 v2 identity feed and queries
+(ITI-8, ITI-9, ITI-21) on MLLP, as clients, and no other
 product implements an IHE identity profile of its own. FerroPIX in turn
 reaches the other products only over their published protocols. FerroEHR resolves `ehr_id` through it (FerroHEALTH/FerroEHR#3380:
 PIXm `$ihe-pix` ITI-83 and PDQm ITI-78), and FerroFED's identity binding

@@ -4,8 +4,9 @@
 # CLAUDE.md
 
 **FerroPIX** is the FerroHEALTH family's Master Patient Index over IHE PIX,
-PIXm, PDQ, PDQm, PMIR and HL7 v2, in pure Rust, and the one product that
-owns identity and the IHE profiles; the other products reach it only over
+PIXm, PDQ, PDQm and PMIR, with the HL7 v2 identity feed and queries (ITI-8,
+ITI-9, ITI-21), in pure Rust, and the one product that owns identity and
+the IHE profiles; the other products reach it only over
 those protocols (`.claude/memory/family-architecture.md`). It holds the patient identity
 cross-reference and mints the pseudonymous identifiers the clinical domain
 uses, so identifying data stays outside the clinical record. FerroEHR

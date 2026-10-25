@@ -942,6 +942,38 @@ impl std::io::Write for Capture {
     }
 }
 
+// NOTE: ITI TF-2 §3.22.4.2.2.7 (a PV1 per patient) and Table 3.22-4 (a visit field searched):
+// FerroPIX keeps no visit data, so ITI-22 is refused and ITI-21 is the demographics query.
+#[tokio::test]
+async fn a_demographics_and_visit_query_is_refused_as_unsupported() {
+    if !e2e_enabled() {
+        return;
+    }
+    let v2 = V2::start(Cursors::default()).await;
+    let before = v2.records().len();
+    for (control, qpd3) in [
+        ("Z-1", "@PID.5.1.1^Proefsma"),
+        ("Z-2", "@PV1.3.2^389~@PV1.3.3^2"),
+    ] {
+        let query = pdq_query(control, &format!("T-{control}"), qpd3, "", "", None)
+            .replace("QBP^Q22^QBP_Q21", "QBP^ZV1^QBP_Q21");
+        let answer = v2.send(&query).await;
+        assert_eq!(code(&answer), "AR", "{answer}");
+        assert_eq!(errors(&answer), vec![(String::new(), String::from("200"))]);
+        assert!(
+            answer.contains("ITI-21"),
+            "the refusal names the query to use: {answer}"
+        );
+        assert!(
+            !segments(&answer)
+                .iter()
+                .any(|segment| segment.starts_with("PID|")),
+            "no patient is answered: {answer}"
+        );
+    }
+    assert_eq!(v2.records().len(), before, "a refused query is no query");
+}
+
 #[tokio::test]
 async fn no_identifier_or_name_of_a_message_reaches_a_log_line() {
     if !e2e_enabled() {

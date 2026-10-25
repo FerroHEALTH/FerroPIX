@@ -137,6 +137,13 @@ segment for the next increment. A pointer lives ten minutes, is used once,
 and is given up by QCN^J01; a pointer unknown or past its lifetime answers
 `AE` with an ERR at `DSC^1^1`.
 
+## ITI-22, the demographics and visit query
+
+FerroPIX keeps no visit data, so it does not answer ITI-22 (QBP^ZV1): the
+transaction returns a PV1 segment for every patient and searches visit
+fields. A QBP^ZV1 is acknowledged `AR` with ERR code `200`. Query with
+ITI-21, which searches the same demographics.
+
 ## Audit
 
 Every message writes its audit record before the answer leaves: the Patient

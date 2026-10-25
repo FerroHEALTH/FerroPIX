@@ -292,10 +292,22 @@ pub(super) async fn action(
     context: &Context,
     subjects: Subjects,
 ) -> Result<Uuid, StoreError> {
+    reasoned(connection, kind, context, subjects, None).await
+}
+
+/// Inserts the steward action row of kind `kind`, with the `reason` a
+/// steward gave, and returns its id.
+pub(super) async fn reasoned(
+    connection: &mut PgConnection,
+    kind: &str,
+    context: &Context,
+    subjects: Subjects,
+    reason: Option<&str>,
+) -> Result<Uuid, StoreError> {
     let id = sqlx::query_scalar(
         "INSERT INTO pix.steward_action
-             (kind, actor, person_id, record_id, candidate_id, merge_id, request_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+             (kind, actor, person_id, record_id, candidate_id, merge_id, request_id, reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id",
     )
     .bind(kind)
@@ -305,6 +317,7 @@ pub(super) async fn action(
     .bind(subjects.candidate)
     .bind(subjects.merge)
     .bind(context.request_id.as_deref())
+    .bind(reason)
     .fetch_one(&mut *connection)
     .await?;
     Ok(id)

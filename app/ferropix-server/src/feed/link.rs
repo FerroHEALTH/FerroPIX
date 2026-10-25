@@ -60,6 +60,8 @@ pub(super) enum MergeKind {
     Deterministic,
     /// An automatic probabilistic link.
     Probabilistic,
+    /// A steward's decision.
+    Steward,
 }
 
 impl MergeKind {
@@ -69,6 +71,7 @@ impl MergeKind {
             Self::Source => "source",
             Self::Deterministic => "deterministic",
             Self::Probabilistic => "probabilistic",
+            Self::Steward => "steward",
         }
     }
 }
@@ -252,7 +255,7 @@ async fn probabilistic(
 
 /// Takes the advisory lock of each of `persons` in key order and refuses
 /// with [`FeedError::Contention`] when one is no longer active.
-async fn lock_persons(
+pub(super) async fn lock_persons(
     connection: &mut PgConnection,
     persons: &[PersonId],
 ) -> Result<(), FeedError> {
@@ -294,7 +297,7 @@ fn other_key(feeder: &Feeder, me: &Me<'_>, other: &Other) -> Option<BlockingKey>
 }
 
 /// Returns the person `record`'s open link names.
-async fn open_person(
+pub(super) async fn open_person(
     connection: &mut PgConnection,
     record: RecordId,
 ) -> Result<Option<PersonId>, FeedError> {
@@ -388,10 +391,30 @@ pub(super) async fn close_link(
     Ok(person.map(PersonId::from_uuid))
 }
 
-/// Merges `merged` into `survivor`, both locked and active: the merged
-/// person points at the survivor, each of its open links is closed and
-/// reopened on the survivor with a `merge_effect` row, the candidates the
-/// merge decides are closed as linked, and the action is recorded.
+/// How a merge is recorded: the system action of a feed, or a steward's
+/// decision with its kind, its candidate and its reason.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Recording<'a> {
+    /// The actor, the channel and the request.
+    pub context: &'a Context,
+    /// The steward action's kind.
+    pub kind: &'static str,
+    /// The candidate the decision settles.
+    pub candidate: Option<Uuid>,
+    /// The reason the steward gave.
+    pub reason: Option<&'a str>,
+}
+
+/// What a merge wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Merged {
+    /// The merge row.
+    pub merge: Uuid,
+    /// The steward action that records it.
+    pub action: Uuid,
+}
+
+/// Merges `merged` into `survivor` as a system action of the feed.
 pub(super) async fn merge(
     connection: &mut PgConnection,
     merged: PersonId,
@@ -399,26 +422,53 @@ pub(super) async fn merge(
     kind: MergeKind,
     context: &Context,
 ) -> Result<(), FeedError> {
+    let recording = Recording {
+        context,
+        kind: "merge",
+        candidate: None,
+        reason: None,
+    };
+    merge_recorded(connection, merged, survivor, kind, recording)
+        .await
+        .map(|_merged| ())
+}
+
+/// Merges `merged` into `survivor`, both locked and active: the merged
+/// person points at the survivor, each of its open links is closed and
+/// reopened on the survivor with a `merge_effect` row, the candidates the
+/// merge decides are closed as linked, and the action is recorded as
+/// `recording` says.
+pub(super) async fn merge_recorded(
+    connection: &mut PgConnection,
+    merged: PersonId,
+    survivor: PersonId,
+    kind: MergeKind,
+    recording: Recording<'_>,
+) -> Result<Merged, FeedError> {
+    let context = recording.context;
     let merge: Uuid = sqlx::query_scalar(
-        "INSERT INTO pix.merge (survivor_id, merged_id, kind, made_by)
-         VALUES ($1, $2, $3, $4) RETURNING id",
+        "INSERT INTO pix.merge (survivor_id, merged_id, kind, made_by, reason)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
     )
     .bind(survivor.uuid())
     .bind(merged.uuid())
     .bind(kind.as_str())
     .bind(&context.actor)
+    .bind(recording.reason)
     .fetch_one(&mut *connection)
     .await
     .map_err(store)?;
-    let action = write::action(
+    let action = write::reasoned(
         connection,
-        "merge",
+        recording.kind,
         context,
         Subjects {
             person: Some(survivor),
+            candidate: recording.candidate,
             merge: Some(merge),
             ..Subjects::default()
         },
+        recording.reason,
     )
     .await?;
     let moved = sqlx::query(
@@ -485,12 +535,14 @@ pub(super) async fn merge(
     .await
     .map_err(store)?;
     // TODO(#104): queue the PMIR merge message for each matching subscription.
-    Ok(())
+    Ok(Merged { merge, action })
 }
 
 /// Records the pair of `me` and `other` as an open candidate, or refreshes
 /// the open candidate of the pair, and records the system action; a pair
-/// a steward deferred is left as it is.
+/// a steward deferred is left as it is, and a pair a steward held to be
+/// two patients is not queued again while both records state what they
+/// stated then.
 async fn candidate(
     connection: &mut PgConnection,
     me: &Me<'_>,
@@ -503,6 +555,9 @@ async fn candidate(
     } else {
         ((other.record, other.version), (me.record, me.version))
     };
+    if decided_apart(connection, (a, a_version), (b, b_version)).await? {
+        return Ok(None);
+    }
     let evidence = serde_json::to_string(&scored.evidence).map_err(|_json| FeedError::Evidence)?;
     let id: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO pix.candidate (record_a, record_b, a_version, b_version, score, grade, evidence)
@@ -538,6 +593,36 @@ async fn candidate(
     )
     .await?;
     Ok(Some(CandidateId(id)))
+}
+
+/// Whether a steward held the records `a` and `b` to be two patients on
+/// versions whose demographics their versions `a.1` and `b.1` still state.
+///
+/// A version that changes only what the scorer does not compare (an
+/// identifier, a `meta` element) leaves the decision standing; a change of
+/// the demographics queues the pair again (`docs/architecture.md` §5.3).
+async fn decided_apart(
+    connection: &mut PgConnection,
+    a: (RecordId, i32),
+    b: (RecordId, i32),
+) -> Result<bool, FeedError> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM pix.candidate c
+             JOIN pix.source_record_version da ON da.record_id = c.record_a AND da.version = c.a_version
+             JOIN pix.source_record_version db ON db.record_id = c.record_b AND db.version = c.b_version
+             JOIN pix.source_record_version na ON na.record_id = c.record_a AND na.version = $3
+             JOIN pix.source_record_version nb ON nb.record_id = c.record_b AND nb.version = $4
+             WHERE c.record_a = $1 AND c.record_b = $2 AND c.status = 'not-a-match'
+               AND da.demographics = na.demographics AND db.demographics = nb.demographics)",
+    )
+    .bind(a.0.uuid())
+    .bind(b.0.uuid())
+    .bind(a.1)
+    .bind(b.1)
+    .fetch_one(&mut *connection)
+    .await
+    .map_err(store)
 }
 
 /// The records in another person whose current version has the phonetic

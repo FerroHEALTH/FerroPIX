@@ -357,8 +357,12 @@ boundaries: our own design.
   candidate; refuse `409` when it is no longer `open` or when either
   record's head version moved past the version the candidate was computed
   on; a link of two records that sit in two persons is a merge of the
-  persons and takes the merge path below; a link of a record into a person
-  opens the link and closes the old one; record the action; commit.
+  persons, the older surviving, and takes the merge path below; a link of
+  two records already in one person settles the candidate; record the
+  action with the steward's reason; commit. A `not-a-match` holds while
+  both records' current versions state the demographics the decided
+  versions stated: a feed that changes only what the scorer does not
+  compare leaves the pair out of the queue.
 - **A merge** (section 5.3): advisory locks on both persons in `uuid`
   order; refuse `409` when either is no longer `active`; the merged person
   gets `status = merged` and `merged_into`; every open link of the merged

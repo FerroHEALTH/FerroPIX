@@ -18,6 +18,17 @@ and this project adheres to
   Query, by name: a QBP^ZV1 is acknowledged `AR` with ERR code `200` and a
   text that points to ITI-21, since FerroPIX keeps no visit data and the
   transaction returns a PV1 per patient (ITI TF-2 §3.22.4.2.2.7) (#199).
+- The review queue and the steward's decisions in the operator API (#107).
+  `GET /operator/candidates` lists the open candidates and the deferred
+  ones whose day has come, by grade, score and age, filtered by grade,
+  domain, age and deferral; `GET /operator/candidates/{id}` answers one with
+  its evidence, the two records at their versions and their persons'
+  identifiers masked; `POST /operator/candidates/{id}/decide` links (a merge
+  of the two persons, the older surviving), holds the pair apart, or defers
+  it to a day, refused with `409` when the candidate was decided or a record
+  moved since the versions it names. Each decision is one steward action
+  with its reason and one BALP record, and a not-a-match pair stays out of
+  the queue until a record's demographics change.
 
 ### Changed
 

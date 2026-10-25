@@ -50,3 +50,6 @@
 - [The book stays current](book-same-pr.md): ferropix.eu documents only what
   the code does, changes in the same PR, links the tracker for the planned,
   never types a moving version; owner 2026-10-21
+- [Helm and Kubernetes in Podman](helm-kubernetes-in-podman.md): owner 2026-10-25, test charts locally on kind over Podman; install helm when missing; never build images locally
+- [Reactive console UI](reactive-console-ui.md): owner 2026-10-25, no full page reload for an interaction; WebAssembly is the normal path, the no-WebAssembly page the fallback (FerroUI #410)
+- [Contribution licence attestation](contribution-licence-attestation.md): owner 2026-10-25, always tick the licence checkbox on PRs opened for the owner, never ask

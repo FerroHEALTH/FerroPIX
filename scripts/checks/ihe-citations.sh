@@ -84,7 +84,9 @@ headings() {
   local file="$1"
   case "$file" in
     *.html)
-      grep -o -E '<(h[1-6]|span class="heading[0-9]+")[^>]*>[^<]*' "$file" | sed -E 's/^<[^>]*>//' \
+      # profiles.ihe.net renders a seventh heading level as <h7>, which HTML
+      # does not define, so the heading levels are read without a bound.
+      grep -o -E '<(h[1-9]|span class="heading[0-9]+")[^>]*>[^<]*' "$file" | sed -E 's/^<[^>]*>//' \
         | awk '{
             if (match($0, /[0-9]+:[0-9]+(\.[0-9]+)*/)) { print substr($0, RSTART, RLENGTH) }
             else if (match($0, /^[ \t]*[0-9]+(\.[0-9]+)*/)) { s = substr($0, RSTART, RLENGTH); gsub(/[ \t]/, "", s); print s }
@@ -363,10 +365,11 @@ self_test() {
   mkdir -p "$work/.vendor-cache/ihe-iti-tf-hl7v2"
   printf '<h2 id="3.8">3.8 Patient Identity Feed [ITI-8]</h2>\n<h5 id="y">3.8.4.2.1 Trigger Events</h5>\n' \
     > "$work/.vendor-cache/ihe-iti-tf-hl7v2/ITI-8.html"
-  printf '<h2 id="3.21">3.21 Patient Demographics Query [ITI-21]</h2>\n<h6 id="z">3.21.4.1.3.3 Incremental Response Processing</h6>\n' \
+  printf '<h2 id="3.21">3.21 Patient Demographics Query [ITI-21]</h2>\n<h6 id="z">3.21.4.1.3.3 Incremental Response Processing</h6>\n<h7 id="w">3.21.4.1.2.5.2 Populating RCP-2-Quantity Limited Request</h7>\n' \
     > "$work/.vendor-cache/ihe-iti-tf-hl7v2/ITI-21.html"
   expect 0 '/// the A40 merge, ITI TF-2 §3.8.4.2.1, from the cache.'
   expect 0 '/// ITI-21 §3.21.4.1.3.3 and the continuation of §3.21.4.1.3.3.'
+  expect 0 '/// RCP-2 asks for increments (§3.21.4.1.2.5.2), a seventh-level heading.'
   expect 0 '/// ITI-9 §3.9.4.1, whose page the cache does not hold.'
   expect 1 '/// ITI TF-2 §3.8.4.9, which the cached page does not hold.'
   expect 1 '/// ITI-21 §3.8.4.2.1 names another transaction.'

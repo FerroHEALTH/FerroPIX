@@ -41,6 +41,10 @@ and this project adheres to
 
 ### Changed
 
+- `nl-generic-functions` 0.0.29 takes `ferrohealth-smart = "=0.7.0"`, the
+  family's newest pin, and the server runs on it; a product that takes
+  `nl-generic-functions` with `nuts-auth` moves to `ferrohealth-smart =
+  "=0.7.0"` with it (#225).
 - The operator console draws with FerroUI 0.4.0 (#215). The top bar's
   search still submits to the search page, which lists every match in the
   page; whether it answers under the field as you type waits on what a

@@ -20,12 +20,14 @@
 //! governs them.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid};
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
+use crate::config::secret::{Secret, read_file};
 use crate::config::section::is_loopback_url;
 
 /// The `[xcpd]` section as written.
@@ -55,6 +57,16 @@ pub struct Xcpd {
     pub delivery_max_backoff_ms: u64,
     /// How long one delivery attempt may take.
     pub delivery_timeout_ms: u64,
+    /// The PEM certificate chain the delivery presents for mutual TLS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_certificate_file: Option<PathBuf>,
+    /// The PEM private key of that certificate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_key_file: Option<PathBuf>,
+    /// PEM certificates the delivery trusts for a reply endpoint's server
+    /// certificate, beside the system roots: a private community PKI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_trust_file: Option<PathBuf>,
 }
 
 impl Default for Xcpd {
@@ -70,12 +82,15 @@ impl Default for Xcpd {
             delivery_initial_backoff_ms: 1000,
             delivery_max_backoff_ms: 60_000,
             delivery_timeout_ms: 10_000,
+            client_certificate_file: None,
+            client_key_file: None,
+            reply_trust_file: None,
         }
     }
 }
 
 /// How an asynchronous answer is delivered, resolved.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Delivery {
     /// The URL prefixes a `ReplyTo` may start with.
     pub endpoints: Vec<url::Url>,
@@ -87,6 +102,11 @@ pub struct Delivery {
     pub max_backoff: Duration,
     /// How long one attempt may take.
     pub timeout: Duration,
+    /// The certificate chain and private key the delivery presents, as one
+    /// PEM text, when mutual TLS is configured.
+    pub identity: Option<Secret>,
+    /// The PEM certificates trusted beside the system roots.
+    pub trust: Option<String>,
 }
 
 /// One answering domain, resolved.
@@ -99,7 +119,7 @@ pub struct AnswerDomain {
 }
 
 /// The `[xcpd]` section, resolved.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct XcpdSettings {
     /// The community.
     pub community: HomeCommunityId,
@@ -216,7 +236,37 @@ impl Xcpd {
             initial_backoff: Duration::from_millis(self.delivery_initial_backoff_ms),
             max_backoff: Duration::from_millis(self.delivery_max_backoff_ms),
             timeout: Duration::from_millis(self.delivery_timeout_ms),
+            identity: self.identity()?,
+            trust: self
+                .reply_trust_file
+                .as_deref()
+                .map(|path| read_file("xcpd.reply_trust_file", path))
+                .transpose()?
+                .map(|pem| pem.expose().to_owned()),
         })
+    }
+
+    /// Reads the client identity: both files or neither, each readable and
+    /// not empty.
+    fn identity(&self) -> Result<Option<Secret>, Error> {
+        match (&self.client_certificate_file, &self.client_key_file) {
+            (None, None) => Ok(None),
+            (Some(certificate), Some(key)) => {
+                let certificate = read_file("xcpd.client_certificate_file", certificate)?;
+                let key = read_file("xcpd.client_key_file", key)?;
+                Ok(Some(Secret::new(format!(
+                    "{}\n{}\n",
+                    certificate.expose(),
+                    key.expose()
+                ))))
+            }
+            (Some(_), None) => Err(Error::Missing {
+                key: String::from("xcpd.client_key_file"),
+            }),
+            (None, Some(_)) => Err(Error::Missing {
+                key: String::from("xcpd.client_certificate_file"),
+            }),
+        }
     }
 }
 
@@ -263,7 +313,7 @@ mod tests {
 
     #[test]
     fn the_gateway_is_off_by_default_and_resolves_when_on() {
-        assert_eq!(None, Xcpd::default().resolve().expect("off resolves"));
+        assert!(Xcpd::default().resolve().expect("off resolves").is_none());
         let resolved = on().resolve().expect("on resolves").expect("on");
         assert_eq!("urn:oid:2.999.7", resolved.community.to_string());
         assert_eq!("2.999.7.1", resolved.device.as_str());
@@ -341,5 +391,46 @@ mod tests {
             &edited(|s| s.delivery_attempts = 0),
             "xcpd.delivery_attempts",
         );
+    }
+
+    #[test]
+    fn a_client_identity_is_read_from_both_files_or_refused() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let certificate = dir.path().join("client.crt");
+        let key = dir.path().join("client.key");
+        std::fs::write(
+            &certificate,
+            "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n",
+        )
+        .expect("written");
+        std::fs::write(
+            &key,
+            "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----\n",
+        )
+        .expect("written");
+        let read = edited(|s| {
+            s.client_certificate_file = Some(certificate.clone());
+            s.client_key_file = Some(key.clone());
+        })
+        .expect("resolves")
+        .expect("on");
+        let pem = read.delivery.identity.as_ref().expect("an identity");
+        assert!(pem.expose().contains("BEGIN CERTIFICATE"));
+        assert!(pem.expose().contains("BEGIN PRIVATE KEY"));
+        assert!(
+            !format!("{:?}", read.delivery).contains("PRIVATE KEY"),
+            "Debug redacts the identity"
+        );
+        missing(
+            &edited(|s| s.client_certificate_file = Some(certificate.clone())),
+            "xcpd.client_key_file",
+        );
+        assert!(matches!(
+            edited(|s| {
+                s.client_certificate_file = Some(dir.path().join("absent.crt"));
+                s.client_key_file = Some(key.clone());
+            }),
+            Err(Error::SecretFile { key, .. }) if key == "xcpd.client_certificate_file"
+        ));
     }
 }

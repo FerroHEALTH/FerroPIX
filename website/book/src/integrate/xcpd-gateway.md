@@ -79,9 +79,11 @@ the request's `MessageID` and `To` naming the endpoint.
   again after `delivery_initial_backoff_ms`, doubling up to
   `delivery_max_backoff_ms`, at most `delivery_attempts` times in all. The
   answer is held in memory, so a restart drops an answer not yet delivered.
-- **Client certificate:** FerroPIX posts the answer without a client
-  certificate. Where the initiating gateway asks for mutual TLS, route the
-  delivery through an egress proxy that presents one.
+- **Mutual TLS:** with `client_certificate_file` and `client_key_file` set,
+  the delivery presents that certificate to the reply endpoint, as the
+  mutual TLS of an ATNA Secure Node asks. `reply_trust_file` adds the PEM
+  certificates of a community's own authority to the system roots the
+  delivery trusts for the endpoint's server certificate.
 
 ## Audit
 

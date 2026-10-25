@@ -18,6 +18,10 @@ and this project adheres to
   by `scripts/vendor/w3c-ws-addressing.sh` (#241), so the XCPD Responding
   Gateway's citation of its §5.2.2 is checked against the text in the
   repository.
+- The XCPD asynchronous delivery presents a client certificate for mutual
+  TLS (#240): `[xcpd] client_certificate_file` and `client_key_file` name the
+  PEM chain and key, and `reply_trust_file` the authorities trusted for a
+  reply endpoint beside the system roots.
 
 ### Fixed
 

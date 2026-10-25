@@ -29,6 +29,7 @@ mod schema;
 mod sealing;
 mod supplier;
 mod xcpd;
+mod xcpd_mtls;
 
 use base64::Engine as _;
 use ferropix_server::config::secret::SecretUrl;

@@ -35,12 +35,27 @@ Every answer carries `Cache-Control: no-store`. A refusal is a FHIR
 | `GET /operator/sources/{id}` | steward or administrator | One source with its last 20 messages: time, channel, what it asked and its outcome (`applied`, or the HL7 v2 acknowledgment code). An HL7 v2 sender's id is its facility and application joined by `.`. |
 | `GET /operator/matching` | steward or administrator | The thresholds, automatic linking, the blocking keys and every field's weights in effect, the configured ones marked. |
 | `GET /operator/configuration` | steward or administrator | The matching configuration in file mode: the thresholds, the weights, the blocking keys and the built-in deterministic rules, each setting with where its value came from (`file`, `environment`, `default`, `built_in`) and the file named once. |
+| `GET /operator/candidates` | steward | A page of 50 of the review queue: the open candidates and the deferred ones whose day has come, the grade first, then the score, then the age, each with the two records' domains, leading names and birth dates. `grade`, `domain` (a system), `older_than_days` and `deferred=true` (the deferred candidates whose day has not come) filter it, `offset` pages it. |
+| `GET /operator/candidates/{id}` | steward | One candidate: the score, the grade and the evidence of every field, the two records at the versions the score was computed on with their persons' identifiers masked, the thresholds, whether a link merges two persons, and the candidates before and after it in the queue. |
+| `POST /operator/candidates/{id}/decide` | steward | Your decision with the two versions you read and your reason: `link`, `not-a-match`, or `defer` with an `until` day after today. |
 | `GET /operator/actions` | steward | A page of the audit trail, the newest first. |
 | `POST /operator/actions/export` | steward | The same filter answered as CSV. |
 
 The review queue, the decisions, the merges and the pseudonymisation domains
 follow with the [v0.0.5 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/5).
 Until then those routes answer `501`.
+
+## Deciding a candidate
+
+A decision names the versions of both records you read. When the candidate
+was decided by someone else, or a feed changed either record since, the
+server answers `409` and decides nothing: read the candidate again and
+decide on what it says now. A `link` of two records in two persons merges
+the persons, the older surviving, and every candidate between them closes
+as linked. A `not-a-match` keeps the pair out of the queue until either
+record's demographics change; a feed that changes only an identifier leaves
+it out. A `defer` takes the pair out of the queue until the day you name,
+when it comes back in its place. Nothing a decision does deletes a row.
 
 ## Identifiers stay off the URL and out of the answer
 
@@ -151,6 +166,9 @@ formula starts with `'`.
 | either search | none | one Patient Query record per person found, or one Query record when none was, with the raw request |
 | `POST /operator/persons/{id}/reveal` | `reveal` | Privacy Disclosure at the source |
 | `POST /operator/actions/export` | `export` | an Export event |
+| `GET /operator/candidates` | none | one Patient Query record per person the page shows, with the raw request |
+| `GET /operator/candidates/{id}` | none | a Patient Read of each of the two persons |
+| `POST /operator/candidates/{id}/decide` | `link`, `not-a-match` or `defer`, with your reason | a Patient Update of the person the records end in |
 | `POST` and `PATCH /operator/domains` | `domain-create`, `domain-update` | a create or update of the domain, naming no patient |
 
 The server stores the BALP record before it sends the answer, and answers

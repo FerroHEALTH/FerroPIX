@@ -10,6 +10,7 @@
 
 mod blocking;
 mod cli;
+mod decisions;
 mod feed;
 mod feeds;
 mod gate;

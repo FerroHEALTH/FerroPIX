@@ -18,6 +18,7 @@
 //! FerroBRIDGE's operator API crate.
 
 pub mod actions;
+pub mod candidate;
 pub mod configuration;
 pub mod domain;
 pub mod health;

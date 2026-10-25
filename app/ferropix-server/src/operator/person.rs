@@ -36,7 +36,7 @@ use crate::pdqm::patient::{SERVED, SERVED_ORDER};
 use crate::store::seal::Sealer;
 
 /// The format every timestamp of the document is written in, RFC 3339 UTC.
-const UTC: &str = "YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"";
+pub(super) const UTC: &str = "YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"";
 
 /// The pseudonymisation domains a document lists at most.
 const PSEUDONYM_DOMAINS: i64 = 200;
@@ -167,7 +167,7 @@ struct RecordRow {
 
 /// Reads the records whose latest link names `person`, with their
 /// identifiers masked.
-async fn records(
+pub(super) async fn records(
     connection: &mut PgConnection,
     sealer: &Sealer,
     person: Uuid,
@@ -266,7 +266,7 @@ struct CarriedRow {
 
 /// Reads the authoritative identifiers the person's current records carry
 /// with no record of their own, masked.
-async fn carried(
+pub(super) async fn carried(
     connection: &mut PgConnection,
     sealer: &Sealer,
     person: Uuid,

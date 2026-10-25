@@ -16,6 +16,8 @@
 //! - [`matching`]: the matching configuration in effect, and
 //!   [`configuration`] its settings with where each came from.
 //! - [`actions`]: the audit trail and its export.
+//! - [`candidates`]: the review queue, one candidate and the steward's
+//!   decision.
 //!
 //! Every answer is a [`ferropix_operator_api`] document in JSON, never kept
 //! by a cache (`Cache-Control: no-store`); a refusal is an
@@ -27,6 +29,7 @@
 //! governs the API: our own design.
 
 pub mod actions;
+pub mod candidates;
 pub mod configuration;
 pub mod demographics;
 pub mod domains;
@@ -190,6 +193,20 @@ pub fn handler(
             let operator = Arc::clone(&operator);
             async move { domains::one(&operator, request).await }
         }),
+        (Method::GET, "/operator/candidates") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { candidates::list(&operator, request).await }
+        }),
+        (Method::GET, "/operator/candidates/{id}") => on(filter, move |request: Request| {
+            let operator = Arc::clone(&operator);
+            async move { candidates::one(&operator, request).await }
+        }),
+        (Method::POST, "/operator/candidates/{id}/decide") => {
+            on(filter, move |request: Request| {
+                let operator = Arc::clone(&operator);
+                async move { candidates::decide(&operator, request).await }
+            })
+        }
         (Method::GET, "/operator/matching") => on(filter, move || {
             let operator = Arc::clone(&operator);
             async move { matching::answer(&operator) }

@@ -27,6 +27,7 @@
 
 pub mod demographics;
 mod link;
+pub mod steward;
 mod write;
 
 use std::collections::BTreeSet;

@@ -56,7 +56,7 @@ fhir-types = { version = "0.1.113", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroSMART: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers; pinned exactly, as every family crate.
-ferrohealth-smart = { version = "=0.4.0", default-features = false }
+ferrohealth-smart = { version = "=0.5.0", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec and listener, the MSH-18 decoder, the positional parser and
 # the original-mode acknowledgment, over the generated v2 tables, pinned

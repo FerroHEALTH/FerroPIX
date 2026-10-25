@@ -102,6 +102,7 @@ pub mod presentation;
 use std::fmt;
 use std::time::{Duration, Instant};
 
+use ferrohealth_smart::metadata::repeats_no_name;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use http::{Method, StatusCode};
 use jsonwebtoken::Header;
@@ -114,7 +115,7 @@ use error::{InvalidInput, Malformation, NutsAuthError, Step, bounded};
 use holder::Holder;
 use presentation::PresentationDefinition;
 
-use crate::nuts_auth::issuer::{Issuer, repeats_no_name};
+use crate::nuts_auth::issuer::Issuer;
 
 /// The `grant_type` of the VP Token Grant Type (Nuts RFC021 §3).
 pub const GRANT_TYPE: &str = "vp_token-bearer";

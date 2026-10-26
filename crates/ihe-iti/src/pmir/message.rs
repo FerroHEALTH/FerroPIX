@@ -72,7 +72,7 @@ pub(super) struct Message {
     /// The `MessageHeader.source.endpoint`.
     #[cfg_attr(
         not(feature = "pmir-server"),
-        allow(dead_code, reason = "the Registry side reads it, behind pmir-server")
+        expect(dead_code, reason = "the Registry side reads it, behind pmir-server")
     )]
     pub(super) source: String,
     /// The changes, in history order.

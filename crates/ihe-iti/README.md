@@ -19,6 +19,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
 | `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |
 | `pdqm-server` | The Patient Demographics Supplier side of PDQm, typed, with no store and no HTTP server | ITI-78, ITI-119 |
+| `pmir-server` | The Patient Identity Registry side of PMIR, typed, with no store and no HTTP server | ITI-93, ITI-94 |
 
 The crate depends on no application, so a federation gateway, a master patient
 index or any other caller can use it as it is. Only the `xcpd` feature may carry
@@ -152,7 +153,7 @@ authentication of the Registry to your channel to the two parties, so your
 code authenticates each message before it reads it. Build the
 `reqwest::Client` you pass in with `redirect::Policy::none()`.
 
-## The server sides (`pixm-server`, `pdqm-server`)
+## The server sides (`pixm-server`, `pdqm-server`, `pmir-server`)
 
 Each server side is the profile's request readers and answer writers, with
 no store, no matching and no HTTP framework, so any server can put them on
@@ -190,6 +191,17 @@ client sides' redacting types, and no type has `Display`.
   each entry with its `search.score` and `match-grade`, honouring
   `onlyCertainMatches` and `count`. `pdqm::server::Refusal` writes the
   unrecognised domain of Case 4 and the missing Patient of a retrieve.
+- **`pmir-server`, the Patient Identity Registry:**
+  `pmir::server::feed::FeedMessage` reads an ITI-93 feed message in FHIR
+  JSON or XML, held to the PMIR Bundle, `MessageHeader`, history Bundle and
+  merged Patient profiles, into creates, updates, deletes and merges that
+  keep their Patients; `feed::response` writes the response message, `ok`
+  or `fatal-error` with a contained `OperationOutcome` correlating each
+  refused entry, such as the `405` of an unmerge.
+  `pmir::server::subscription::RequestedSubscription` reads an ITI-94
+  `Subscription` with one of the four criteria, and `Criteria::matches`
+  says whether a Patient falls under it. `pmir::server::notification::message`
+  builds the ITI-93 message for a subscriber, which `pmir::feed::Feed` reads.
 
 ## XCPD (`xcpd`)
 

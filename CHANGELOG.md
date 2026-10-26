@@ -14,6 +14,14 @@ and this project adheres to
 
 ### Added
 
+- `ihe-iti` 0.0.58 carries the PMIR Patient Identity Registry side behind
+  `pmir-server` (#102): `pmir::server::feed::FeedMessage` reads an ITI-93
+  feed message in FHIR JSON or XML with its Patients, `feed::response`
+  writes the response with a correlated refusal per entry,
+  `pmir::server::subscription::RequestedSubscription` reads an ITI-94
+  `Subscription` with one of the four criteria and `Criteria::matches` tests
+  a Patient against them, and `pmir::server::notification::message` builds
+  the ITI-93 message a subscriber receives.
 - A durable outbox for outbound messages (#239): an XCPD asynchronous answer
   is written to `pix.outbox`, its payload sealed under the store's key,
   before the request is accepted with `202`, so a restart delivers it; the

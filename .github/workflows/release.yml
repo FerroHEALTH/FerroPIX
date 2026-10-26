@@ -5,7 +5,7 @@
 # is a `needs` edge:
 #
 #   plan ── github-release (draft) ─┬─ build-binaries ── build-image ─┬─ vulnerability-record ─┬─ finalize-release ── crates ── milestone
-#                                   ├─ build-console ──────────────────┤                        └─ scan-and-tag ──────────────────┘
+#                                   ├─ build-console ──────────────────┤                        └─ scan-and-tag ── chart ─────────┘
 #                                   └─ crate (reusable) ───────────────┘
 #
 # plan runs every release fact of scripts/release/plan.sh at the tagged
@@ -21,8 +21,8 @@
 # half-assembled release is never visible, and a published release is
 # immutable, so the draft is the only window the uploads have.
 #
-# build-binaries, build-image, build-console and crate are `uses:` calls AND
-# NOTHING ELSE.
+# build-binaries, build-image, build-console, crate and chart are `uses:`
+# calls AND NOTHING ELSE.
 # SLSA v1.2 Build Level 3 requires the signing material to be out of reach of
 # the user-defined build steps, and every step of one job shares one runner
 # VM; a reusable workflow's job cannot carry `steps:` from its caller, which
@@ -34,7 +34,9 @@
 # while a finding lacks an OpenVEX judgement under security/vex/;
 # finalize-release and scan-and-tag both wait on it, so a refused release is
 # neither published nor tagged. scan-and-tag runs the HIGH/CRITICAL gate on
-# each digest and only then applies the tags.
+# each digest and only then applies the tags. chart then packages the Helm
+# chart with the release as its appVersion and both images pinned by digest,
+# pushes it to oci://ghcr.io/ferrohealth/charts/ferropix and attests it.
 #
 # The crates leg uploads the crates scripts/release/publish-crates.sh lists
 # through Trusted Publishing behind the `crates-io` environment's required
@@ -406,6 +408,24 @@ jobs:
       console-digest: ${{ needs.build-console.outputs.digest }}
       console-tags: ${{ needs.build-console.outputs.tags }}
 
+  # ---- chart: the Helm chart, after the images it pins are tagged ----------
+  # A call and nothing else, for the same Build L3 reason. It runs after
+  # scan-and-tag, so the images the chart deploys by digest are the scanned
+  # ones and are pullable.
+  chart:
+    name: chart (package, push, attest)
+    needs: [plan, build-image, build-console, scan-and-tag]
+    permissions:
+      contents: read # check out the chart
+      packages: write # push the chart to GHCR
+      id-token: write # Sigstore, for the provenance attestation
+      attestations: write # store it against this repository
+    uses: ./.github/workflows/build-chart.yml
+    with:
+      release-tag: ${{ needs.plan.outputs.tag }}
+      server-digest: ${{ needs.build-image.outputs.digest }}
+      console-digest: ${{ needs.build-console.outputs.digest }}
+
   # ---- finalize-release: verify the asset set, then PUBLISH -----------------
   finalize-release:
     name: github release (publish)
@@ -536,7 +556,7 @@ jobs:
   # already-closed milestone counts as done.
   milestone:
     name: close the milestone
-    needs: [plan, github-release, build-binaries, build-image, build-console, crate, vulnerability-record, scan-and-tag, finalize-release, crates]
+    needs: [plan, github-release, build-binaries, build-image, build-console, crate, vulnerability-record, scan-and-tag, chart, finalize-release, crates]
     if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

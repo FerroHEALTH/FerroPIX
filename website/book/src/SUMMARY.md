@@ -18,6 +18,7 @@
 - [The PDQm Supplier](integrate/pdqm-supplier.md)
 - [The HL7 v2 face](integrate/hl7v2-face.md)
 - [The XCPD Responding Gateway](integrate/xcpd-gateway.md)
+- [The Dutch identifiers](integrate/dutch-identifiers.md)
 - [The PMIR Registry](integrate/pmir-registry.md)
 - [Pseudonyms](integrate/pseudonyms.md)
 - [The published crates](crates/index.md)

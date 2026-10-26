@@ -18,6 +18,7 @@ and this project adheres to
   - An ITI-83 query that names a pseudonymisation domain as `targetSystem` answers the person's pseudonym in it. The domain's consumer mints it on the first ask, as one value however many first asks arrive at once. Any other caller reads only a minted pseudonym, a query that names no `targetSystem` mints nothing, and each mint writes its own BALP Create record.
   - The domains are seeded from `[[pseudonym_domain]]` with their `consumer_client_id`. The operator API lists, adds, changes and retires them, a steward mints through `POST /operator/pseudonyms`, and the reverse resolution `POST /operator/pseudonyms/resolve` is a steward action and a BALP disclosure.
   - A pseudonym resolves to the survivor while its person is merged, and to its own person again after the revert.
+- The quickstart seeds the BSN and the pseudonymised BSN as `authoritative`, sealed identifier domains (#117). A pseudonymised BSN links two records deterministically, as a BSN does, and never reaches a log. A BSN that fails the eleven-proof is refused at the feed. The book's Dutch identifiers page states what is held, and that no BSNk service is called.
 - `ihe-iti` 0.0.61 has the feature `smart` (#268):
   `authorizer::smart::TokenAuthorizer` is the IUA authorizer over
   `ferrohealth-smart`'s client-credentials `TokenSource`. Each PIXm, PDQm,

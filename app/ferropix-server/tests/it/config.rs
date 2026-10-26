@@ -10,6 +10,7 @@ use ferropix_server::config::Config;
 use ferropix_server::config::error::Error;
 use ferropix_server::config::section::domain::DomainKind;
 use ferropix_server::config::section::profiles::Deprecated;
+use nl_generic_functions::identification::{BSN_SYSTEMS, PSEUDO_BSN_SYSTEM};
 
 use crate::support::{FULL, PASSWORD, PHC, Secrets};
 
@@ -286,5 +287,18 @@ fn the_quickstart_configuration_resolves_with_its_two_secret_files() {
     )
     .expect("the quickstart file is read");
     let settings = resolve(&quickstart, &secrets).expect("the quickstart resolves");
-    assert_eq!(1, settings.domains.len());
+    let systems: Vec<(&str, DomainKind, bool)> = settings
+        .domains
+        .iter()
+        .map(|domain| (domain.system.as_str(), domain.kind, domain.sensitive))
+        .collect();
+    assert_eq!(
+        vec![
+            ("urn:oid:2.999.1.1", DomainKind::Local, true),
+            (BSN_SYSTEMS[0], DomainKind::Authoritative, true),
+            (PSEUDO_BSN_SYSTEM, DomainKind::Authoritative, true),
+        ],
+        systems,
+        "the hospital, the BSN and the pseudonymised BSN, both sealed and authoritative"
+    );
 }

@@ -71,5 +71,5 @@ answers `400`, "sourceIdentifier Assigning Authority not found".
 ## The Dutch identifiers
 
 The pseudonymised BSN of the Dutch Generic Functions is an identifier
-domain of its own, not a pseudonymisation domain. Its treatment is planned
-in [#117](https://github.com/FerroHEALTH/FerroPIX/issues/117).
+domain of its own, not a pseudonymisation domain
+([The Dutch identifiers](dutch-identifiers.md)).

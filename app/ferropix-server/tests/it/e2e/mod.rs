@@ -25,6 +25,7 @@ mod outbox;
 mod pdqm_match;
 mod pdqm_search;
 mod pixm;
+mod pseudo_bsn;
 mod pseudonyms;
 mod registry;
 mod reseal;

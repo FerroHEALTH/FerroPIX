@@ -70,6 +70,9 @@ pub enum UpstreamKind {
     AuditRepository,
     /// A PMIR subscriber the ITI-93 feed goes to.
     Subscriber,
+    /// An HL7 v2 Patient Identifier Cross-reference Consumer the ITI-10
+    /// notifications go to.
+    Consumer,
 }
 
 /// The last exchange with one upstream.

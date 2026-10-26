@@ -40,7 +40,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | IUA, access tokens on each request | ITI-72 | The authorizer seam of the `ihe-iti` clients. |
 | The persisted cross-reference | identifier domains, one source per domain, linking and merge | Planned. |
 | Pseudonym minting | a UUID per patient and pseudonymisation domain | The server mints on the consumer's first ITI-83 ask, resolves through merges, and audits the steward's reverse resolution ([Pseudonyms](../integrate/pseudonyms.md)). |
-| HL7 v2 PIX and PDQ | ITI-8 (A01, A04, A05, A08, A40), ITI-9 and ITI-21 with the continuation protocol | The server's MLLP listener, on FerroBRIDGE's HL7 v2 parser and MLLP codec ([The HL7 v2 face](../integrate/hl7v2-face.md)). ITI-10 and ITI-22 are planned. |
+| HL7 v2 PIX and PDQ | ITI-8 (A01, A04, A05, A08, A40), ITI-9, ITI-10 and ITI-21 with the continuation protocol | The server's MLLP listener, on FerroBRIDGE's HL7 v2 parser and MLLP codec ([The HL7 v2 face](../integrate/hl7v2-face.md)). ITI-10 goes to the consumers `[[hl7v2.consumers]]` names after every cross-reference change; ITI-22 is refused, as FerroPIX keeps no visit. |
 | Audit of the Manager side | BALP `AuditEvent` through `ihe-atna` | The PIXm Manager records every ITI-83 and ITI-104, and the PDQm Supplier every ITI-78 and ITI-119. The clients' audit records are built (`balp`, `atna`). |
 | Dutch Generic Functions: localization (NVI) | the NVI Localization Service search | Client, in `nl-generic-functions` (`nvi`). |
 | Dutch Generic Functions: consent (Mitz) | the closed authorization question | Client, in `nl-generic-functions` (`mitz`). |
@@ -64,8 +64,6 @@ this list is planned:
 - **The cross-reference:** identifier domains, one Patient Identity Source
   per domain, linking and merge with their full history, persisted in
   PostgreSQL.
-- **HL7 v2:** ITI-10, the PIX update notification, beside the ITI-8, ITI-9
-  and ITI-21 the server answers today.
 - **Audit:** the Manager side's BALP records through `ihe-atna`, the audit
   crate of FerroAUDIT.
 - **The server's and the console's container images**, published by the

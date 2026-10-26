@@ -304,11 +304,26 @@ namespace named twice, or one an identifier domain holds, is refused.
 | `hl7v2.senders[].facility` | none | The sending facility, MSH-4. |
 | `hl7v2.senders[].domain` | none | The system of the identifier domain the sender feeds; leave it out for a sender that only queries. |
 | `hl7v2.namespaces` | none | A table from a domain's system to its HL7 namespace id, the first subcomponent of an assigning authority. |
+| `hl7v2.application` | `"FERROPIX"` | The Manager's sending application, MSH-3 of an ITI-10 notification. |
+| `hl7v2.facility` | `"FERROPIX"` | The Manager's sending facility, MSH-4 of an ITI-10 notification. |
+| `hl7v2.consumers[].name` | none | The name the outbox, the log and the dependency report know the consumer by. |
+| `hl7v2.consumers[].address` | none | The `host:port` of the consumer's MLLP listener. |
+| `hl7v2.consumers[].application` | none | The receiving application, MSH-5. |
+| `hl7v2.consumers[].facility` | none | The receiving facility, MSH-6. |
+| `hl7v2.consumers[].domains` | `[]` | The systems of the identifier domains of interest to the consumer; empty for every domain. |
+| `hl7v2.consumers[].connect_timeout_ms` | `5000` | How long opening the connection may take. |
+| `hl7v2.consumers[].reply_timeout_ms` | `30000` | How long the acknowledgment may take once connected. |
+| `hl7v2.notification.max_attempts` | `10` | The most attempts one ITI-10 notification is given. |
+| `hl7v2.notification.initial_backoff_ms` | `1000` | The wait before the first retry. |
+| `hl7v2.notification.max_backoff_ms` | `300000` | The longest wait between two attempts. |
 
 A message from a sender not listed is answered `AR`. A sending application
 and facility listed twice, two senders of one domain, and one namespace id
-for two domains are refused at load. The drain on `SIGTERM` is
-`server.drain_timeout_ms`, the HTTP server's.
+for two domains are refused at load. A consumer without its name, address,
+application or facility, two consumers of one name, and an address without
+a port are refused too. The consumers are notified while `hl7v2.enabled`
+is `true`. The drain on `SIGTERM` is `server.drain_timeout_ms`, the HTTP
+server's.
 
 ### `[xcpd]`
 

@@ -59,10 +59,11 @@ fhir-types = { version = "0.1.128", default-features = false }
 # the published crates take their own caret requirement on it.
 ferrohealth-smart = { version = "=0.7.4", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
-# Release 1 codec and listener, the MSH-18 decoder, the positional parser and
-# the original-mode acknowledgment, over the generated v2 tables, pinned
-# exactly as every family crate. Verified against crates.io on 2026-10-25.
-ferrobridge-hl7v2 = { version = "=0.1.143", default-features = false }
+# Release 1 codec, listener and sender, the MSH-18 decoder, the positional
+# parser and the original-mode acknowledgment, over the generated v2 tables,
+# pinned exactly as a product pins every family crate. Verified against
+# crates.io on 2026-10-26 (0.1.158, the first with `mllp::send`).
+ferrobridge-hl7v2 = { version = "=0.1.158", default-features = false }
 hl7v2-types = "=0.1.127"
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`

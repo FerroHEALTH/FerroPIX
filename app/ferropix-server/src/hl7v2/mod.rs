@@ -21,13 +21,16 @@
 //! - QBP^Q22 and QCN^J01 ([`pdq`]): ITI-21, answered with RSP^K22 from the
 //!   search ITI-78 runs, with the continuation protocol (§3.21.4).
 //!
-//! Every other type is acknowledged `AR` with `ERR` code `200`. No byte of a
+//! Every other type is acknowledged `AR` with `ERR` code `200`. The other
+//! way, [`notification`] writes ITI-10's ADT^A31 to each configured consumer
+//! after a cross-reference change, which the outbox sender delivers. No byte of a
 //! message reaches a log line: the span names MSH-10 and the type, and the
 //! events the acknowledgment code.
 
 pub mod authority;
 pub mod cursor;
 pub mod feed;
+pub mod notification;
 pub mod pdq;
 pub mod pid;
 pub mod pix;

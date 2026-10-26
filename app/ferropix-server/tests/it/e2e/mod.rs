@@ -20,6 +20,7 @@ mod hl7v2;
 mod indicator;
 mod leak;
 mod merges;
+mod notify;
 mod operator;
 mod operator_writes;
 mod outbox;

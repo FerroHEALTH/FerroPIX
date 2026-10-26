@@ -86,6 +86,12 @@ mcsd = [
   "dep:thiserror",
   "dep:url",
 ]
+# The PMIR Patient Identity Registry side (ITI-93, ITI-94) with no store and
+# no HTTP server: the feed message read with its Patients in JSON or XML, its
+# response written, the Subscription read with its criteria, and the outbound
+# ITI-93 message built. The subscriber side of `pmir` comes with it, for the
+# message reader the two sides share.
+pmir-server = ["pmir"]
 # PMIR, the patient master identity registry (ITI-93, ITI-94): the HTTP
 # client of the ITI-94 subscription, the FHIR R4 `resources` root set for the
 # Subscription, the message Bundle, its MessageHeader and the Patient resources

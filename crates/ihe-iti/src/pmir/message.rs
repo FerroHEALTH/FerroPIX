@@ -40,6 +40,45 @@ const RESPONSE_DEFINITION: &str =
 /// The link type of a merged Patient (the PMIR merged Patient profile).
 const REPLACED_BY: &str = "replaced-by";
 
+/// One change of a message's history, with the Patient it carries.
+pub(super) enum Change {
+    /// A `POST`: the created Patient.
+    Created(Box<Patient>),
+    /// A `PUT` with no `replaced-by` link: the updated Patient.
+    Updated(Box<Patient>),
+    /// A `DELETE`: the id its `request.url` names, and the Patient when the
+    /// entry carries it.
+    Deleted {
+        /// The deleted Patient's id.
+        id: String,
+        /// The Patient, when the entry carries it.
+        patient: Option<Box<Patient>>,
+    },
+    /// A `PUT` of a merged Patient: the deprecated Patient and the reference
+    /// to the surviving one its `replaced-by` link names.
+    Merged {
+        /// The deprecated Patient, `active` false.
+        deprecated: Box<Patient>,
+        /// The reference to the surviving Patient.
+        surviving: String,
+    },
+}
+
+/// One message, read: its `MessageHeader.id`, its source endpoint and its
+/// changes, in history order.
+pub(super) struct Message {
+    /// The `MessageHeader.id`.
+    pub(super) id: String,
+    /// The `MessageHeader.source.endpoint`.
+    #[cfg_attr(
+        not(feature = "pmir-server"),
+        allow(dead_code, reason = "the Registry side reads it, behind pmir-server")
+    )]
+    pub(super) source: String,
+    /// The changes, in history order.
+    pub(super) changes: Vec<Change>,
+}
+
 /// Reads the message: its `MessageHeader.id` and its changes, in history
 /// order.
 pub(super) fn read(media: Option<&str>, body: &[u8]) -> Result<(String, Vec<Event>), FeedError> {
@@ -51,6 +90,41 @@ pub(super) fn read(media: Option<&str>, body: &[u8]) -> Result<(String, Vec<Even
         column: error.column(),
     })?;
     let object: &Object = value.as_object().ok_or(FeedError::NotAResource)?;
+    let message = read_bundle(object)?;
+    let events = message.changes.iter().map(Change::event).collect();
+    Ok((message.id, events))
+}
+
+impl Change {
+    /// The change as the Consumer keeps it: ids and identifiers only.
+    fn event(&self) -> Event {
+        match self {
+            Self::Created(patient) => Event::Created(identity(patient)),
+            Self::Updated(patient) => Event::Updated(identity(patient)),
+            Self::Deleted { id, patient } => {
+                let identifiers = patient
+                    .as_deref()
+                    .map(|patient| identity(patient).identifiers().to_vec())
+                    .unwrap_or_default();
+                Event::Deleted(PatientIdentity::new(
+                    Some(SecretString::from(id.clone())),
+                    identifiers,
+                ))
+            }
+            Self::Merged {
+                deprecated,
+                surviving,
+            } => Event::Merged {
+                subsumed: identity(deprecated),
+                surviving: SecretString::from(surviving.clone()),
+            },
+        }
+    }
+}
+
+/// Reads the message from its decoded `object`, held to the PMIR profiles
+/// (§2:3.93.4.1.2).
+pub(super) fn read_bundle(object: &Object) -> Result<Message, FeedError> {
     match object.get("resourceType").and_then(Value::as_str) {
         Some("Bundle") => {}
         Some(_) => return Err(FeedError::UnexpectedResource),
@@ -72,6 +146,7 @@ pub(super) fn read(media: Option<&str>, body: &[u8]) -> Result<(String, Vec<Even
         return Err(FeedError::NoHeader);
     };
     let message_id = held_header(&header, &header_url, &history_url)?;
+    let source = header.source.endpoint.value.clone().unwrap_or_default();
     let Some(Resource::Bundle(history)) = history_entry.resource else {
         return Err(FeedError::NoHistory);
     };
@@ -83,18 +158,22 @@ pub(super) fn read(media: Option<&str>, body: &[u8]) -> Result<(String, Vec<Even
     if history.entry.is_empty() {
         return Err(FeedError::EmptyHistory);
     }
-    let mut changed: BTreeSet<String> = BTreeSet::new();
-    let mut events = Vec::with_capacity(history.entry.len());
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut changes = Vec::with_capacity(history.entry.len());
     for (index, entry) in history.entry.into_iter().enumerate() {
-        let (event, patient) = event(index, entry)?;
+        let (change, patient) = change(index, entry)?;
         if let Some(patient) = patient
-            && !changed.insert(patient)
+            && !seen.insert(patient)
         {
             return Err(FeedError::Duplicate { index });
         }
-        events.push(event);
+        changes.push(change);
     }
-    Ok((message_id, events))
+    Ok(Message {
+        id: message_id,
+        source,
+        changes,
+    })
 }
 
 /// The `MessageHeader.id`, once the header holds to the PMIR `MessageHeader`
@@ -180,7 +259,7 @@ fn full_url(entry: &BundleEntry) -> Option<String> {
 
 /// The change history entry `index` reports, and the Patient it changes when
 /// the entry names one, which no other entry may change.
-fn event(index: usize, entry: BundleEntry) -> Result<(Event, Option<String>), FeedError> {
+fn change(index: usize, entry: BundleEntry) -> Result<(Change, Option<String>), FeedError> {
     let request = entry.request.ok_or(FeedError::NoRequest { index })?;
     let response = entry.response.ok_or(FeedError::NoResponse { index })?;
     // NOTE: PMIR §2:3.93.4.1.2.3: the history holds only the changes that
@@ -204,39 +283,40 @@ fn event(index: usize, entry: BundleEntry) -> Result<(Event, Option<String>), Fe
                 return Err(FeedError::Merge { index });
             }
             let key = patient.id.clone();
-            Ok((Event::Created(identity(&patient)), key))
+            Ok((Change::Created(patient), key))
         }
         Some("PUT") => {
             let patient = patient(index, entry.resource)?;
             let key = same_patient(index, named, patient.id.clone())?;
             if merges(&patient) {
                 let surviving = merged(&patient).ok_or(FeedError::Merge { index })?;
-                let subsumed = identity(&patient);
                 return Ok((
-                    Event::Merged {
-                        subsumed,
+                    Change::Merged {
+                        deprecated: patient,
                         surviving,
                     },
                     key,
                 ));
             }
-            Ok((Event::Updated(identity(&patient)), key))
+            Ok((Change::Updated(patient), key))
         }
         Some("DELETE") => {
             let named = named.ok_or(FeedError::RequestUrl { index })?;
-            let identity = match entry.resource {
-                None => PatientIdentity::default(),
+            let patient = match entry.resource {
+                None => None,
                 Some(Resource::Patient(patient)) => {
                     same_patient(index, Some(named.clone()), patient.id.clone())?;
-                    identity(&patient)
+                    Some(patient)
                 }
                 Some(_) => return Err(FeedError::NotAPatient { index }),
             };
-            let identity = PatientIdentity::new(
-                Some(SecretString::from(named.clone())),
-                identity.identifiers().to_vec(),
-            );
-            Ok((Event::Deleted(identity), Some(named)))
+            Ok((
+                Change::Deleted {
+                    id: named.clone(),
+                    patient,
+                },
+                Some(named),
+            ))
         }
         _ => Err(FeedError::Method { index }),
     }
@@ -290,7 +370,7 @@ fn merges(patient: &Patient) -> bool {
 /// The surviving Patient a merged `patient` names, when it holds to the
 /// merged Patient profile: `active` false and exactly that one link, whose
 /// `other` carries a reference.
-fn merged(patient: &Patient) -> Option<SecretString> {
+fn merged(patient: &Patient) -> Option<String> {
     let deprecated = patient
         .active
         .as_ref()
@@ -307,7 +387,6 @@ fn merged(patient: &Patient) -> Option<SecretString> {
         .as_ref()
         .and_then(|reference| reference.value.clone())
         .filter(|reference| !reference.is_empty())
-        .map(SecretString::from)
 }
 
 /// The resource id and business identifiers of `patient`, and nothing else

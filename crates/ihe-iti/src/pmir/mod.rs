@@ -60,6 +60,8 @@ pub mod audit;
 pub mod error;
 pub mod feed;
 mod message;
+#[cfg(feature = "pmir-server")]
+pub mod server;
 pub mod subscription;
 
 use std::fmt;

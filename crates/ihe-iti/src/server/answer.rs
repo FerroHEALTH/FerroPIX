@@ -49,6 +49,8 @@ resource!(Bundle, "Bundle");
 resource!(OperationOutcome, "OperationOutcome");
 #[cfg(feature = "pdqm-server")]
 resource!(fhir_types::r4::patient::Patient, "Patient");
+#[cfg(feature = "pmir-server")]
+resource!(fhir_types::r4::subscription::Subscription, "Subscription");
 
 /// One answer: its HTTP status and its resource.
 ///

@@ -32,9 +32,13 @@ const POSTGRES_PORT: u16 = 5432;
 /// image's default `SERVER_PORT`.
 const PROVIDER_PORT: u16 = 8080;
 
-/// The login role, its password and its database in the PostgreSQL
-/// container.
-const POSTGRES_ROLE: &str = "ferropix";
+/// The superuser and its password in the PostgreSQL container. It is not
+/// `ferropix`, the role the store's grants name, so a suite can create that
+/// role as the server's and connect as it.
+const POSTGRES_ROLE: &str = "pix_super";
+
+/// The database in the PostgreSQL container.
+const POSTGRES_DB: &str = "ferropix";
 
 /// The issuer id the stub provider is configured under: the first path
 /// segment of every URL it serves.
@@ -204,9 +208,9 @@ impl Postgres {
 
 /// Starts PostgreSQL 18 and returns it with the URL of its login role.
 ///
-/// The role, its password and its database are all `ferropix`, and the role
-/// is the database's superuser, so a suite can create the restricted roles
-/// the store's boot gate expects. The server offers no TLS, so the URL says
+/// The role and its password are `pix_super`, the database `ferropix`, and
+/// the role is the database's superuser, so a suite can create the restricted
+/// roles the store's boot gate expects and the server's role the grants name. The server offers no TLS, so the URL says
 /// `sslmode=disable`.
 ///
 /// # Errors
@@ -227,7 +231,7 @@ pub async fn postgres() -> Result<Postgres, HarnessError> {
         .await
         .map_err(|source| container_error(POSTGRES, source))?;
     let url = format!(
-        "postgres://{POSTGRES_ROLE}:{POSTGRES_ROLE}@{host}:{port}/{POSTGRES_ROLE}?sslmode=disable"
+        "postgres://{POSTGRES_ROLE}:{POSTGRES_ROLE}@{host}:{port}/{POSTGRES_DB}?sslmode=disable"
     );
     Ok(Postgres { container, url })
 }
@@ -241,7 +245,7 @@ fn postgres_request() -> ContainerRequest<GenericImage> {
         .with_health_check(postgres_health_check())
         .with_env_var("POSTGRES_USER", POSTGRES_ROLE)
         .with_env_var("POSTGRES_PASSWORD", POSTGRES_ROLE)
-        .with_env_var("POSTGRES_DB", POSTGRES_ROLE)
+        .with_env_var("POSTGRES_DB", POSTGRES_DB)
 }
 
 /// Returns the health check that answers when PostgreSQL accepts TCP
@@ -259,7 +263,7 @@ fn postgres_health_check() -> Healthcheck {
         "-U",
         POSTGRES_ROLE,
         "-d",
-        POSTGRES_ROLE,
+        POSTGRES_DB,
     ])
     .with_interval(HEALTH_INTERVAL)
     .with_timeout(HEALTH_INTERVAL)

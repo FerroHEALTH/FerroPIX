@@ -79,9 +79,31 @@ pub(crate) async fn app_role(postgres: &Postgres) -> String {
         .await
         .expect("the role may create a schema");
     admin.close().await;
-    postgres
-        .url()
-        .replacen("ferropix:ferropix@", &format!("{APP_ROLE}:{APP_ROLE}@"), 1)
+    postgres.url().replacen(
+        "pix_super:pix_super@",
+        &format!("{APP_ROLE}:{APP_ROLE}@"),
+        1,
+    )
+}
+
+/// The role the store's grants name: the server's own, which neither owns
+/// nor creates anything.
+pub(crate) const SERVER_ROLE: &str = "ferropix";
+
+/// Creates [`SERVER_ROLE`] as a login role and returns its URL. Call it
+/// before the migrations run, so the grants find it.
+pub(crate) async fn server_role(postgres: &Postgres) -> String {
+    let admin = admin(postgres).await;
+    sqlx::query("CREATE ROLE ferropix LOGIN PASSWORD 'ferropix'")
+        .execute(&admin)
+        .await
+        .expect("the server's role is created");
+    admin.close().await;
+    postgres.url().replacen(
+        "pix_super:pix_super@",
+        &format!("{SERVER_ROLE}:{SERVER_ROLE}@"),
+        1,
+    )
 }
 
 /// Returns the `[db]` settings for `url` under `key`.

@@ -122,7 +122,7 @@ pub enum Answer {
         /// Who the steward is.
         steward: Steward,
         /// The document the post brought back.
-        document: Document,
+        document: Box<Document>,
     },
     /// The page to send the browser back to: a post with no live session,
     /// or one that names no target.
@@ -174,8 +174,43 @@ pub async fn answer(
         path: back,
         token,
         steward,
-        document,
+        document: Box::new(document),
     }
+}
+
+/// Answers the top bar's search panel with what the posted words name.
+///
+/// It offers pages, identifier domains and settings, never a person
+/// (FerroPIX #214, design D26), and answers `401` without a live session, which the panel answers by
+/// loading the sign-in page. The words ride in the body, never an address.
+pub async fn suggest(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
+    let (parts, pairs) = match form(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    let Some((token, _)) = signed_in(&state, &parts.headers) else {
+        return (StatusCode::UNAUTHORIZED, [(CACHE_CONTROL, "no-store")]).into_response();
+    };
+    let words = field(&pairs, "q").unwrap_or_default();
+    // NOTE: no specification governs this: our own design; a refused read of the domains
+    // leaves them out and the panel says so (`SearchAnswer::unfinished`).
+    let domains = state
+        .pix()
+        .read::<ferropix_operator_api::domain::Domains>("operator/domains?limit=200", &token)
+        .await
+        .ok();
+    let prefix = state.sessions().preference_prefix();
+    let cookies = crate::preferences::kept_cookies(&parts.headers, &prefix);
+    let locale = crate::locale::chosen(
+        &ferrohealth_ui::theme::Preferences::read(&cookies, &prefix),
+        &parts.headers,
+        state.settings().locale.clone(),
+    );
+    let answer = leptos::prelude::Owner::new().with(|| {
+        ferrohealth_ui::i18n::provide_locale(locale);
+        crate::pages::search::suggestions(&words, domains.as_ref())
+    });
+    ([(CACHE_CONTROL, "no-store")], axum::Json(answer)).into_response()
 }
 
 /// Serves a form post (a search, a trail filter, a reveal, a domain's
@@ -194,7 +229,7 @@ pub async fn post(Extension(state): Extension<ConsoleState>, request: Request) -
             document,
         } => {
             let page =
-                posted_context(&state, &parts.headers, &path, &token, steward, document).await;
+                posted_context(&state, &parts.headers, &path, &token, steward, *document).await;
             if let Ok(uri) = path.parse() {
                 parts.uri = uri;
             }

@@ -27,7 +27,7 @@ pub fn NotFound() -> impl IntoView {
     let page = error_page(ErrorPage {
         status: Status::NotFound,
         title: tr(Msg::NotFoundTitle),
-        body: view! { <p>{tr(Msg::NotFoundBody)}</p> }.into_any(),
+        body: tr(Msg::NotFoundBody).into_any(),
         hint: None,
         ways: vec![
             Way {

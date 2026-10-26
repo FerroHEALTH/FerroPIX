@@ -46,10 +46,11 @@ use ferropix_operator_api::domain::Domains;
 use ferropix_operator_api::patient::Grade;
 use ferropix_operator_api::search::Results;
 
-/// The route the top bar's search panel asks as the steward types: it
-/// answers the pages, identifier domains and settings the words name, and
-/// never a person, since every person search is an audited query (FerroPIX
-/// #214, design D26).
+/// The route the top bar's search panel asks as the steward types.
+///
+/// It answers the pages, identifier domains and settings the words name,
+/// and never a person, since every person search is an audited query
+/// (FerroPIX #214, design D26).
 pub const SUGGEST: &str = "/search/answer";
 
 /// The submit of a search form.
@@ -394,4 +395,97 @@ pub fn results_table(segment: Segment, results: &Results) -> AnyView {
         },
         pager: None,
     })
+}
+
+/// What the top bar's search panel offers for `words`.
+///
+/// That is the console's pages, the identifier domains in `domains` (`None` when the server did not
+/// answer, which the panel says) and the settings whose names hold them,
+/// never a person (FerroPIX #214, design D26). A patient search runs
+/// only on Enter or the panel's last row, as an audited post.
+#[must_use]
+pub fn suggestions(
+    words: &str,
+    domains: Option<&Domains>,
+) -> ferrohealth_ui::view::search::SearchAnswer {
+    use ferrohealth_ui::view::search::{Hit, HitGroup, Mark, SearchAnswer};
+    let wanted = words.trim().to_lowercase();
+    let holds = |name: &str| !wanted.is_empty() && name.to_lowercase().contains(&wanted);
+    let hit = |href: String, name: String, line: String, glyph: Glyph| Hit {
+        href,
+        name,
+        line,
+        mark: Some(Mark::Glyph(glyph)),
+        tag: None,
+    };
+    let pages = [
+        (
+            crate::app::DASHBOARD,
+            Msg::Dashboard,
+            Glyph::LAYOUT_DASHBOARD,
+        ),
+        (crate::app::QUEUE, Msg::Queue, Glyph::LIST_CHECKS),
+        (SEARCH, Msg::Search, Glyph::USER_ROUND_SEARCH),
+        (crate::app::SOURCES, Msg::Sources, Glyph::RADIO_TOWER),
+        (crate::app::DOMAINS, Msg::Domains, Glyph::TAGS),
+        (crate::app::AUDIT, Msg::Audit, Glyph::FILE_CLOCK),
+        (
+            crate::app::CONFIGURATION,
+            Msg::Configuration,
+            Glyph::FILE_TEXT,
+        ),
+        (crate::app::ABOUT, Msg::About, Glyph::INFO),
+    ]
+    .into_iter()
+    .map(|(href, words, glyph)| (href, tr(words), glyph))
+    .filter(|(_, name, _)| holds(name))
+    .map(|(href, name, glyph)| hit(String::from(href), name, tr(Msg::SuggestPage), glyph))
+    .collect::<Vec<_>>();
+    let unfinished = domains.is_none().then(|| tr(Msg::SuggestDomainsUnread));
+    let domains = domains
+        .map(|domains| {
+            domains
+                .domains
+                .iter()
+                .filter(|domain| holds(&domain.name) || holds(&domain.system))
+                .map(|domain| {
+                    hit(
+                        format!("{}/{}", crate::app::DOMAINS, domain.id),
+                        domain.name.clone(),
+                        domain.system.clone(),
+                        Glyph::TAGS,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let preferences = crate::app::PREFERENCES;
+    let settings = [
+        (String::from(preferences), tr(Msg::SettingAppearance)),
+        (format!("{preferences}/language"), tr(Msg::SettingLanguage)),
+        (format!("{preferences}/keyboard"), tr(Msg::SettingKeyboard)),
+    ]
+    .into_iter()
+    .filter(|(_, name)| holds(name))
+    .map(|(href, name)| hit(href, name, tr(Msg::SuggestSetting), Glyph::SETTINGS))
+    .collect::<Vec<_>>();
+    let groups = [
+        (Msg::SuggestPages, pages),
+        (Msg::SuggestDomains, domains),
+        (Msg::SuggestSettings, settings),
+    ]
+    .into_iter()
+    .filter(|(_, hits)| !hits.is_empty())
+    .map(|(kind, hits)| HitGroup {
+        kind: tr(kind),
+        hits,
+    })
+    .collect();
+    SearchAnswer {
+        query: String::from(words.trim()),
+        groups,
+        none: Some((tr(Msg::SuggestNone), tr(Msg::SuggestNoneLine))),
+        unfinished,
+        ..SearchAnswer::default()
+    }
 }

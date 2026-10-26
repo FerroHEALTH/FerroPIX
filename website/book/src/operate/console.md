@@ -17,6 +17,27 @@ when the server refused the connection, did not answer in time or refused
 the console, the page says so in place, with the server's issue, and one
 refused part never blanks a page.
 
+The browser draws every page after the first itself, so a link, a search, a
+filter or a reveal keeps the page you are on and loads no new document; with
+no WebAssembly each is a plain link or form post that draws the page again.
+
+## Searching from the top bar
+
+As you type in the top bar's field, its panel offers the console's pages,
+the identifier domains and your preferences whose names hold the words. It
+never offers a person: a patient search runs only when you press Enter or
+choose the panel's last row, Search patients for "…", and every patient
+search is a posted, audited query. The words travel in the request's body,
+never in an address.
+
+## Keyboard shortcuts
+
+`?` opens the list of shortcuts on every screen, and so does Keyboard
+shortcuts in your menu. `/` puts the focus in the search, `j` and `k` (or
+the arrow keys) walk a list and Enter opens the row, and `1` to `4` open the
+patient record's Identifiers, Records, History and Pseudonyms tabs. Shortcuts
+never act while you type in a field, and a phone shows none.
+
 ## The pages
 
 | Page | What it shows |

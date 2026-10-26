@@ -41,6 +41,9 @@ toml = { version = "1.1.6", default-features = false, features = ["std", "parse"
 # 2026-10-23.
 leptos = { version = "0.8.22", default-features = false }
 leptos_axum = "0.8.10"
+# The task executor the server render and the server functions run on,
+# started where leptos_axum's route registration would start it.
+any_spawner = { version = "0.3.0", features = ["tokio"] }
 leptos_meta = { version = "0.8.7", default-features = false }
 leptos_router = { version = "0.8.17", default-features = false }
 ferrohealth-ui = "=0.5.1"
@@ -254,3 +257,4 @@ codegen-units = 256
 panic = "unwind"
 overflow-checks = true
 debug = "line-tables-only"
+

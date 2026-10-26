@@ -31,7 +31,6 @@ use http::header::{
 use http::{HeaderValue, Method, StatusCode};
 use leptos::config::LeptosOptions;
 use leptos::nonce::Nonce;
-use leptos_axum::LeptosRoutes as _;
 use serde::Serialize;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{And, Predicate as _, SizeAbove};
@@ -133,9 +132,13 @@ pub fn leptos_options(settings: &Settings) -> LeptosOptions {
 
 /// Builds the console's whole HTTP service over `state`.
 pub fn router(state: ConsoleState) -> axum::Router {
+    // NOTE: leptos_axum 0.8.10 `init_executor`: a server render spawns its resources on the
+    // global executor, which the console starts since it registers its pages itself.
+    if any_spawner::Executor::init_tokio().is_err() {
+        tracing::debug!("the task executor was already started");
+    }
     let options = leptos_options(state.settings());
     let form_action = form_action(state.settings());
-    let routes = leptos_axum::generate_route_list(crate::app::App);
     let context = {
         let state = state.clone();
         move || {
@@ -169,6 +172,7 @@ pub fn router(state: ConsoleState) -> axum::Router {
             post(crate::preferences::sidebar),
         )
         .route(SEARCH, post(crate::posts::post))
+        .route(crate::pages::search::SUGGEST, post(crate::posts::suggest))
         .route(crate::app::AUDIT, post(crate::posts::post))
         .route(crate::pages::trail::EXPORT, post(crate::posts::export))
         .route("/patients/{person}/reveal", post(crate::posts::post))
@@ -179,10 +183,18 @@ pub fn router(state: ConsoleState) -> axum::Router {
             get(capability_download),
         )
         .route(crate::app::SEARCH_DEMOGRAPHICS, post(crate::posts::post))
-        .leptos_routes_with_context(&options, routes, context.clone(), {
-            let options = options.clone();
-            move || crate::app::document(options.clone())
-        })
+        .route(
+            "/api/{*function}",
+            post({
+                let context = context.clone();
+                move |request: Request| {
+                    leptos_axum::handle_server_fns_with_context(context.clone(), request)
+                }
+            }),
+        );
+    let pages = PAGES
+        .iter()
+        .fold(pages, |pages, path| pages.route(path, get(page)))
         .fallback(leptos_axum::file_and_error_handler_with_context(
             context,
             crate::app::document,
@@ -194,6 +206,38 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .layer(axum::middleware::from_fn(same_origin_only))
         .layer(Extension(state));
     with_security_headers(pages.layer(bundle_compression()), form_action).with_state(options)
+}
+
+/// The address patterns of the console's pages, which the browser draws
+/// after the first by the console's own route table
+/// (`crate::app`'s `route`); an address none names is the not-found page.
+pub const PAGES: [&str; 20] = [
+    "/",
+    "/sign-in",
+    "/sign-in/{state}",
+    "/queue",
+    "/queue/{candidate}",
+    "/search",
+    "/search/demographics",
+    "/patients/{person}",
+    "/patients/{person}/merge",
+    "/patients/{person}/unmerge",
+    "/sources",
+    "/sources/{source}",
+    "/domains",
+    "/domains/{domain}",
+    "/pseudonym-domains",
+    "/configuration",
+    "/audit",
+    "/about",
+    "/preferences",
+    "/preferences/{section}",
+];
+
+/// Draws the page at the request's address.
+async fn page(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
+    let (parts, _) = request.into_parts();
+    render(state, parts).await
 }
 
 /// Whether a request for `path` reaches a file or a route that needs no
@@ -216,8 +260,9 @@ pub fn is_public(path: &str) -> bool {
         .contains(&path)
 }
 
-/// What a request to the page at `path` (with its query) is drawn from:
-/// the steward's name, the call to the server's liveness route, on About
+/// What a request to the page at `path` (with its query) is drawn from.
+///
+/// That is the steward's name, the call to the server's liveness route, on About
 /// the server's `CapabilityStatement`, and the page's document, with the
 /// request's preferences and locale. A request with no live session gets
 /// the sign-in as its redirect, one whose session has ended the sign-in
@@ -371,6 +416,11 @@ async fn gate(
         }
     };
     if let Some(to) = &page.redirect {
+        // NOTE: no specification governs this: our own design; the search panel asks with
+        // `fetch`, which a redirect does not move, so it reads a `401` and loads the sign-in.
+        if path == crate::pages::search::SUGGEST {
+            return (StatusCode::UNAUTHORIZED, [(CACHE_CONTROL, "no-store")]).into_response();
+        }
         return Redirect::to(to).into_response();
     }
     if drawn {

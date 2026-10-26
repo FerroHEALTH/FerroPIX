@@ -29,17 +29,21 @@
 
 use ferrohealth_ui::i18n::{Arg, Locale, provide_locale};
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::island::{FormNavigator, PageAnnouncer};
+use ferrohealth_ui::island::{FormNavigator, PageAnnouncer, ShortcutLegend};
 use ferrohealth_ui::theme::Preferences;
+use ferrohealth_ui::view::kbd::{Shortcut, ShortcutGroup};
 use ferrohealth_ui::view::search::{SearchBox, search_box};
 use ferrohealth_ui::view::shell::{Footer, Shell, TopBar, brand_mark, lockup, shell, topbar};
 use ferrohealth_ui::view::status::{Reach as PillReach, StatusPill, status_pill};
 use ferrohealth_ui::widget::menu::{ThemeChoice, UserMenu, user_menu};
 use ferrohealth_ui::widget::nav::{Count, Entry, Group, Rail, Sidebar, sidebar};
+use ferrohealth_ui::widget::shortcuts::LegendWords;
 use leptos::prelude::*;
 use leptos_meta::{Title, provide_meta_context};
-use leptos_router::components::Router;
+use leptos_router::components::{Route, Router, Routes};
+use leptos_router::{Lazy, LazyRoute, lazy_route};
 use leptos_router::hooks::use_location;
+use leptos_router::path;
 
 use crate::locale::{Msg, tr, tr_with};
 use crate::model::{PageContext, Probe, Reach};
@@ -273,7 +277,7 @@ pub async fn post_now(
             &path,
             &token,
             steward,
-            document,
+            *document,
         )
         .await),
         crate::posts::Answer::Back(path) => Ok(PageContext {
@@ -290,80 +294,144 @@ pub async fn post_now(
 #[derive(Debug, Clone, Copy)]
 pub struct Posted(pub RwSignal<Option<PageContext>>);
 
-/// Posts the form under `event` through [`post_now`] and draws its answer
-/// in the page, in place of the plain post's new document.
-pub fn post_in_page(event: &leptos::ev::SubmitEvent) {
+/// The paths whose plain post draws a page the browser can draw in place:
+/// a search, a trail filter, a reveal and an identifier domain's form.
+#[must_use]
+pub fn posts_in_page(path: &str) -> bool {
+    let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
+    matches!(
+        parts.as_slice(),
+        ["search" | "audit" | "domains"] | ["search", "demographics"] | ["domains", _]
+    ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL)
+}
+
+/// Takes the submit of every form [`posts_in_page`] names through
+/// [`post_now`], drawing its answer in place of the plain post's new
+/// document; draw it once, inside the router.
+fn listen_posts() {
     #[cfg(target_arch = "wasm32")]
     {
-        use leptos::wasm_bindgen::{JsCast as _, JsValue};
-        let Some(form) = event
-            .target()
-            .and_then(|target| target.dyn_into::<web_sys::HtmlFormElement>().ok())
-        else {
-            return;
-        };
-        let Some(Posted(posted)) = use_context::<Posted>() else {
-            return;
-        };
-        let Ok(data) = web_sys::FormData::new_with_form(&form) else {
-            return;
-        };
-        event.prevent_default();
-        if let Some(by) = event
-            .submitter()
-            .and_then(|by| by.dyn_into::<web_sys::HtmlElement>().ok())
-            && let (Some(name), Some(value)) = (by.get_attribute("name"), by.get_attribute("value"))
-            && data.append_with_str(&name, &value).is_err()
-        {
-            leptos::logging::warn!("the browser refused the submit's value");
-        }
-        let mut fields = Vec::new();
-        if let Ok(Some(entries)) = JsValue::from(data.entries())
-            .dyn_into::<web_sys::js_sys::Iterator>()
-            .map(Some)
-        {
-            while let Ok(next) = entries.next() {
-                if next.done() {
-                    break;
-                }
-                let pair = web_sys::js_sys::Array::from(&next.value());
-                if let (Some(name), Some(value)) =
-                    (pair.get(0).as_string(), pair.get(1).as_string())
-                {
-                    fields.push((name, value));
-                }
-            }
-        }
-        let action = form.action();
-        let path = web_sys::Url::new(&action).map_or(action, |url| url.pathname());
-        leptos::task::spawn_local(async move {
-            match post_now(path.clone(), fields).await {
-                Ok(page) => {
-                    if let Some(to) = &page.redirect {
-                        if window().location().assign(to).is_err() {
-                            leptos::logging::warn!(
-                                "the browser refused the page it is sent back to"
-                            );
-                        }
-                        return;
-                    }
-                    let shown = page.path.clone();
-                    drop(posted.try_set(Some(page)));
-                    if window().location().pathname().ok().as_deref() != Some(shown.as_str()) {
-                        leptos_router::hooks::use_navigate()(&shown, Default::default());
-                    }
-                }
-                Err(error) => {
-                    leptos::logging::warn!("the post did not come back: {error}");
-                    if form.submit().is_err() {
-                        leptos::logging::warn!("the browser refused the plain post");
-                    }
-                }
-            }
+        let posted = use_context::<Posted>();
+        let navigate = leptos_router::hooks::use_navigate();
+        Effect::new(move |_| {
+            let navigate = navigate.clone();
+            let handle = window_event_listener(leptos::ev::submit, move |event| {
+                post_in_page(&event, posted, navigate.clone());
+            });
+            on_cleanup(move || handle.remove());
         });
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    let _: &leptos::ev::SubmitEvent = event;
+}
+
+/// Posts the form under `event` through [`post_now`] and draws its answer
+/// in the page, when its path is one [`posts_in_page`] names.
+#[cfg(target_arch = "wasm32")]
+fn post_in_page(
+    event: &leptos::ev::SubmitEvent,
+    posted: Option<Posted>,
+    navigate: impl Fn(&str, leptos_router::NavigateOptions) + 'static,
+) {
+    use leptos::wasm_bindgen::{JsCast as _, JsValue};
+    if event.default_prevented() {
+        return;
+    }
+    let (Some(Posted(posted)), Some(form)) = (
+        posted,
+        event
+            .target()
+            .and_then(|target| target.dyn_into::<web_sys::HtmlFormElement>().ok()),
+    ) else {
+        return;
+    };
+    let action = form.action();
+    let path = web_sys::Url::new(&action).map_or(action, |url| url.pathname());
+    if !form.method().eq_ignore_ascii_case("post")
+        || form.has_attribute(ferrohealth_ui::widget::submit::RELOADS)
+        || !posts_in_page(&path)
+    {
+        return;
+    }
+    let Ok(data) = web_sys::FormData::new_with_form(&form) else {
+        return;
+    };
+    event.prevent_default();
+    if let Some(by) = event
+        .submitter()
+        .and_then(|by| by.dyn_into::<web_sys::HtmlElement>().ok())
+        && let (Some(name), Some(value)) = (by.get_attribute("name"), by.get_attribute("value"))
+        && data.append_with_str(&name, &value).is_err()
+    {
+        leptos::logging::warn!("the browser refused the submit's value");
+    }
+    let mut fields = Vec::new();
+    if let Ok(entries) = JsValue::from(data.entries()).dyn_into::<web_sys::js_sys::Iterator>() {
+        while let Ok(next) = entries.next() {
+            if next.done() {
+                break;
+            }
+            let pair = web_sys::js_sys::Array::from(&next.value());
+            if let (Some(name), Some(value)) = (pair.get(0).as_string(), pair.get(1).as_string()) {
+                fields.push((name, value));
+            }
+        }
+    }
+    leptos::task::spawn_local(async move {
+        match post_now(path, fields).await {
+            Ok(page) => {
+                if let Some(to) = &page.redirect {
+                    navigate(to, leptos_router::NavigateOptions::default());
+                    return;
+                }
+                let shown = page.path.clone();
+                drop(posted.try_set(Some(page)));
+                if window().location().pathname().ok().as_deref() != Some(shown.as_str()) {
+                    navigate(&shown, leptos_router::NavigateOptions::default());
+                }
+                ferrohealth_ui::widget::submit::drawn();
+            }
+            Err(error) => {
+                leptos::logging::warn!("the post did not come back: {error}");
+                if form.submit().is_err() {
+                    leptos::logging::warn!("the browser refused the plain post");
+                }
+            }
+        }
+    });
+}
+
+/// The console's keyboard shortcuts, which the legend lists (FerroPIX
+/// design D21).
+fn shortcut_groups() -> Vec<ShortcutGroup> {
+    let shortcut = |keys: &str, does: Msg| Shortcut {
+        keys: String::from(keys),
+        does: tr(does),
+    };
+    let tabs = crate::pages::patient::TABS
+        .iter()
+        .zip(["1", "2", "3", "4"])
+        .map(|((_, words), key)| shortcut(key, *words))
+        .collect();
+    vec![
+        ShortcutGroup {
+            title: tr(Msg::ShortcutsEverywhere),
+            shortcuts: vec![
+                shortcut("/", Msg::ShortcutSearch),
+                shortcut("?", Msg::ShortcutLegend),
+            ],
+        },
+        ShortcutGroup {
+            title: tr(Msg::ShortcutsLists),
+            shortcuts: vec![
+                shortcut("j | down", Msg::ShortcutNext),
+                shortcut("k | up", Msg::ShortcutPrevious),
+                shortcut("enter", Msg::ShortcutOpen),
+            ],
+        },
+        ShortcutGroup {
+            title: tr(Msg::ShortcutsPatient),
+            shortcuts: tabs,
+        },
+    ]
 }
 
 /// The root component: the router, the page tree, and the title.
@@ -398,6 +466,7 @@ pub fn App() -> impl IntoView {
 #[component]
 fn Root() -> impl IntoView {
     ferrohealth_ui::widget::nav::follow_path();
+    listen_posts();
     let location = use_location();
     let latest = use_context::<Latest>();
     let posted = use_context::<Posted>();
@@ -416,13 +485,15 @@ fn Root() -> impl IntoView {
         };
         page_now(path)
     });
-    // NOTE: no specification governs this: our own design; a post's answer is shown until
-    // the steward goes to another address.
+    // NOTE: no specification governs this: our own design; a post's answer is shown at its
+    // own address until the steward goes to another one.
     Effect::watch(
-        move || (location.pathname.get(), location.search.get()),
-        move |now, before, _| {
-            if before.is_some_and(|before| before != now)
-                && let Some(Posted(posted)) = posted
+        move || location.pathname.get(),
+        move |now, _, _| {
+            if let Some(Posted(posted)) = posted
+                && posted
+                    .get_untracked()
+                    .is_some_and(|page| page.path.split('?').next() != Some(now.as_str()))
             {
                 drop(posted.try_set(None));
             }
@@ -431,7 +502,10 @@ fn Root() -> impl IntoView {
     );
     let shown = Memo::new(move |_| {
         let read = read.get().and_then(Result::ok);
-        let posted = posted.and_then(|Posted(posted)| posted.get());
+        let here = location.pathname.get();
+        let posted = posted
+            .and_then(|Posted(posted)| posted.get())
+            .filter(|page| page.path.split('?').next() == Some(here.as_str()));
         posted.or(read)
     });
     Effect::new(move |_| {
@@ -442,20 +516,45 @@ fn Root() -> impl IntoView {
             }
         }
     });
+    provide_context(Reads { read, shown });
     let signed_in = Memo::new(move |_| !crate::paths::is_sign_in(&location.pathname.get()));
     move || {
+        // NOTE: leptos_router 0.8 `Routes`: the router writes a navigation's address once a
+        // route has drawn it; each group of pages loads its code from its own chunks.
         let content = view! {
-            <Transition fallback=|| ()>
-                {move || Suspend::new(async move {
-                    let read = read.await;
-                    let page = shown.get().or_else(|| read.ok());
-                    page.map(drawn)
-                })}
-            </Transition>
+            <Routes fallback=|| content(missing)>
+                <Route path=path!("/sign-in") view={Lazy::<Aside>::new()} />
+                <Route path=path!("/sign-in/:state") view={Lazy::<Aside>::new()} />
+                <Route path=path!("/") view={Lazy::<Work>::new()} />
+                <Route path=path!("/queue") view={Lazy::<Work>::new()} />
+                <Route path=path!("/queue/:candidate") view={Lazy::<Work>::new()} />
+                <Route path=path!("/patients/:person/merge") view={Lazy::<Work>::new()} />
+                <Route path=path!("/patients/:person/unmerge") view={Lazy::<Work>::new()} />
+                <Route path=path!("/search") view={Lazy::<Patients>::new()} />
+                <Route path=path!("/search/demographics") view={Lazy::<Patients>::new()} />
+                <Route path=path!("/patients/:person") view={Lazy::<Patients>::new()} />
+                <Route path=path!("/sources") view={Lazy::<Registry>::new()} />
+                <Route path=path!("/sources/:source") view={Lazy::<Registry>::new()} />
+                <Route path=path!("/domains") view={Lazy::<Registry>::new()} />
+                <Route path=path!("/domains/:domain") view={Lazy::<Registry>::new()} />
+                <Route path=path!("/pseudonym-domains") view={Lazy::<Registry>::new()} />
+                <Route path=path!("/configuration") view={Lazy::<Aside>::new()} />
+                <Route path=path!("/audit") view={Lazy::<Registry>::new()} />
+                <Route path=path!("/about") view={Lazy::<Aside>::new()} />
+                <Route path=path!("/preferences") view={Lazy::<Aside>::new()} />
+                <Route path=path!("/preferences/:section") view={Lazy::<Aside>::new()} />
+            </Routes>
         }
         .into_any();
         if signed_in.get() {
-            framed(content)
+            let legend = view! {
+                <ShortcutLegend groups=shortcut_groups() words=LegendWords::of_page() />
+            };
+            view! {
+                {framed(content)}
+                {legend}
+            }
+            .into_any()
         } else {
             content
         }
@@ -653,35 +752,120 @@ fn route(path: &str) -> Option<(Page, Vec<(String, String)>)> {
     })
 }
 
-/// Draws the page `page` is the context of, by the address it was read for.
-fn drawn(page: PageContext) -> AnyView {
-    use crate::pages::{about, not_found, preferences, screens, search, sign_in};
+/// The read of the page in view and the page context shown, which every
+/// group of pages draws from.
+#[derive(Debug, Clone, Copy)]
+struct Reads {
+    /// The read of the page at the address.
+    read: Resource<Result<PageContext, ServerFnError>>,
+    /// The context shown: a post's answer at its own address, else the read.
+    shown: Memo<Option<PageContext>>,
+}
+
+/// The page in view, drawn by `draw` once its read has arrived; the page
+/// before stays until then.
+fn content(draw: fn(Page) -> AnyView) -> AnyView {
+    let Some(Reads { read, shown }) = use_context::<Reads>() else {
+        return ().into_any();
+    };
+    view! {
+        <Transition fallback=|| ()>
+            {move || Suspend::new(async move {
+                let read = read.await;
+                let page = shown.get().or_else(|| read.ok());
+                page.map(|page| drawn(page, draw))
+            })}
+        </Transition>
+    }
+    .into_any()
+}
+
+/// Draws the page `page` is the context of, by the address it was read
+/// for, with `draw`; an address no page answers is the not-found page.
+fn drawn(page: PageContext, draw: fn(Page) -> AnyView) -> AnyView {
     let found = route(&page.path);
     provide_context(Shown(page));
     let Some((page, params)) = found else {
-        return view! { <not_found::NotFound /> }.into_any();
+        return missing(Page::Dashboard);
     };
     provide_context(Params(params));
-    match page {
-        Page::SignIn => view! { <sign_in::SignInPage /> }.into_any(),
-        Page::Dashboard => view! { <screens::Dashboard /> }.into_any(),
-        Page::Queue => view! { <screens::Queue /> }.into_any(),
-        Page::Pair => view! { <screens::Pair /> }.into_any(),
-        Page::Search => view! { <search::SearchPage /> }.into_any(),
-        Page::Patient => view! { <screens::Patient /> }.into_any(),
-        Page::Merge => view! { <screens::Merge /> }.into_any(),
-        Page::Unmerge => view! { <screens::Unmerge /> }.into_any(),
-        Page::Sources => view! { <screens::Sources /> }.into_any(),
-        Page::Source => view! { <screens::Source /> }.into_any(),
-        Page::Domains => view! { <screens::Domains /> }.into_any(),
-        Page::Domain => view! { <screens::Domain /> }.into_any(),
-        Page::PseudonymDomains => view! { <screens::PseudonymDomains /> }.into_any(),
-        Page::Configuration => view! { <screens::Configuration /> }.into_any(),
-        Page::Audit => view! { <screens::Audit /> }.into_any(),
-        Page::About => view! { <about::AboutPage /> }.into_any(),
-        Page::Preferences => view! { <preferences::PreferencesPage /> }.into_any(),
-    }
+    draw(page)
 }
+
+/// The not-found page, whatever the page.
+fn missing(_: Page) -> AnyView {
+    view! { <crate::pages::not_found::NotFound /> }.into_any()
+}
+
+/// Declares the lazy route `$name` of a group of pages, drawing each page
+/// `$page` by its component `$component`, so its chunks hold their code
+/// and no other group's.
+macro_rules! group {
+    ($(#[$doc:meta])* $name:ident { $($page:ident => $component:path),+ $(,)? }) => {
+        $(#[$doc])*
+        #[derive(Debug, Clone, Copy)]
+        struct $name;
+
+        #[lazy_route]
+        impl LazyRoute for $name {
+            fn data() -> Self {
+                Self
+            }
+
+            fn view(this: Self) -> AnyView {
+                let _: $name = this;
+                content(|page| match page {
+                    $(Page::$page => view! { <$component /> }.into_any(),)+
+                    _ => missing(page),
+                })
+            }
+        }
+    };
+}
+
+group!(
+    /// The review work: the dashboard, the queue, a pair, a merge and an
+    /// unmerge.
+    Work {
+        Dashboard => crate::pages::screens::Dashboard,
+        Queue => crate::pages::screens::Queue,
+        Pair => crate::pages::screens::Pair,
+        Merge => crate::pages::screens::Merge,
+        Unmerge => crate::pages::screens::Unmerge,
+    }
+);
+
+group!(
+    /// The search and the patient record.
+    Patients {
+        Search => crate::pages::search::SearchPage,
+        Patient => crate::pages::screens::Patient,
+    }
+);
+
+group!(
+    /// The registry and the trail: the sources, the identifier and
+    /// pseudonymisation domains, and the audit trail.
+    Registry {
+        Sources => crate::pages::screens::Sources,
+        Source => crate::pages::screens::Source,
+        Domains => crate::pages::screens::Domains,
+        Domain => crate::pages::screens::Domain,
+        PseudonymDomains => crate::pages::screens::PseudonymDomains,
+        Audit => crate::pages::screens::Audit,
+    }
+);
+
+group!(
+    /// The pages beside the work: sign-in, the configuration, About and
+    /// Your preferences.
+    Aside {
+        SignIn => crate::pages::sign_in::SignInPage,
+        Configuration => crate::pages::screens::Configuration,
+        About => crate::pages::about::AboutPage,
+        Preferences => crate::pages::preferences::PreferencesPage,
+    }
+);
 
 /// Follows the page `page` the browser now draws: sends the browser to the
 /// sign-in it names as its redirect, and sets the root element's theme,
@@ -710,6 +894,14 @@ fn follow(page: &PageContext) {
             }
             return;
         }
+        let draws = root
+            .get_attribute(DRAWS)
+            .and_then(|draws| draws.parse::<u32>().ok())
+            .unwrap_or_default()
+            .wrapping_add(1);
+        if root.set_attribute(DRAWS, &draws.to_string()).is_err() {
+            leptos::logging::warn!("the browser refused the root's {DRAWS}");
+        }
         let chosen = Preferences::read(&page.preferences, &page.prefix);
         for (name, value) in [
             ("data-theme", chosen.theme.key()),
@@ -727,6 +919,10 @@ fn follow(page: &PageContext) {
     #[cfg(not(target_arch = "wasm32"))]
     let _: &PageContext = page;
 }
+
+/// The attribute of the root element that counts the pages the browser has
+/// drawn in place, which a journey waits on after a press.
+pub const DRAWS: &str = "data-pix-draws";
 
 /// The latest page context, which the shell's parts follow.
 fn latest() -> PageContext {

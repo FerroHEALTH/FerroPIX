@@ -9,7 +9,7 @@
 //!
 //! The waits are FerroTERM's (FerroHEALTH/FerroTERM#834, #840): every wait
 //! starts by waiting for the page in front of the browser to hydrate, which
-//! the console marks with `data-hydrated` on `<html>`, and a press tags the
+//! the console marks with `data-ferroui-hydrated` on `<html>`, and a press tags the
 //! page first, so the wait after it is never satisfied by the page the press
 //! is leaving. Nothing sleeps for a fixed time and hopes. A wait that runs
 //! out fails the journey with the address, what the browser logged, a
@@ -64,7 +64,7 @@ const SLUG_WORDS: usize = 8;
 /// no bundle and is not waited on.
 const HYDRATED: &str = r#"
 return document.readyState === "complete"
-    && (document.documentElement.hasAttribute("data-hydrated")
+    && (document.documentElement.hasAttribute("data-ferroui-hydrated")
         || document.querySelector("script[src*='/pkg/'], link[href*='/pkg/']") === null);
 "#;
 
@@ -73,25 +73,45 @@ return document.readyState === "complete"
 /// Navigation API reports, or a form submission nothing cancelled, which
 /// navigates only in a later task
 /// (<https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm>).
+///
+/// A navigation in the same document, the router drawing the next page, and
+/// a post the page took itself are drawn in place: the press has then left
+/// once the console counted another drawn page on the root
+/// (`data-pix-draws`).
 const TAG: &str = r#"
 if (window.__journeyPress === undefined) {
   navigation.addEventListener("navigate", (event) => {
-    if (!event.hashChange) { window.__journeyPress.navigating = true; }
+    if (event.hashChange) { return; }
+    if (event.destination.sameDocument) { window.__journeyPress.inPage = true; }
+    else { window.__journeyPress.navigating = true; }
   });
   addEventListener("submit", (event) => { window.__journeyPress.submits.push(event); }, true);
 }
-window.__journeyPress = { navigating: false, submits: [] };
+window.__journeyPress = {
+  navigating: false,
+  inPage: false,
+  submits: [],
+  draws: document.documentElement.getAttribute("data-pix-draws"),
+};
 "#;
 
 /// Where the press [`TAG`] watched has left the browser: `loaded` once the
 /// tagged page is gone, `leaving` while it is still in front of the browser
-/// and another page is on its way, `staying` when the press loads nothing.
+/// and another page is on its way, `drawing` while the page drawn in place
+/// is on its way and `drawn` once it is, `staying` when the press loads
+/// nothing.
 const LEFT: &str = r#"
 const press = window.__journeyPress;
 if (press === undefined) { return "loaded"; }
-const posted = press.submits.some((event) => !event.defaultPrevented
-  && (event.submitter?.getAttribute("formmethod") ?? event.target.method).toLowerCase() !== "dialog");
-return press.navigating || posted ? "leaving" : "staying";
+const method = (event) =>
+  (event.submitter?.getAttribute("formmethod") ?? event.target.method).toLowerCase();
+const posted = press.submits.some((event) => !event.defaultPrevented && method(event) !== "dialog");
+if (press.navigating || posted) { return "leaving"; }
+const taken = press.submits.some((event) => event.defaultPrevented && method(event) === "post");
+if (press.inPage || taken) {
+  return document.documentElement.getAttribute("data-pix-draws") !== press.draws ? "drawn" : "drawing";
+}
+return "staying";
 "#;
 
 /// The workspace root.
@@ -202,7 +222,7 @@ impl Journey {
         }
         panic!(
             "{}",
-            self.failure("the page to hydrate", "no data-hydrated mark")
+            self.failure("the page to hydrate", "no data-ferroui-hydrated mark")
                 .await
         );
     }
@@ -295,7 +315,7 @@ impl Journey {
                 .ok()
                 .and_then(|answer| answer.convert::<String>().ok());
             match left.as_deref() {
-                Some("staying") => return Ok(()),
+                Some("staying" | "drawn") => return Ok(()),
                 Some("loaded") => {
                     self.hydrated().await;
                     return Ok(());
@@ -459,9 +479,14 @@ impl Journey {
             .into_iter()
             .filter(|entry| !expected.iter().any(|wanted| entry.contains(wanted)))
             .collect();
+        let address = self
+            .driver
+            .current_url()
+            .await
+            .map_or_else(|error| error.to_string(), |url| url.to_string());
         assert!(
             console.is_empty(),
-            "the browser logged {} severe entries, and a page that logs one is a defect:\n  {}",
+            "the browser logged {} severe entries at {address}, and a page that logs one is a defect:\n  {}",
             console.len(),
             console.join("\n  ")
         );

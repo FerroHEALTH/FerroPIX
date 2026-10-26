@@ -217,7 +217,13 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("FerroPIX 0.0.3"), "the server's version");
     assert!(page.contains("4.0.1"), "the FHIR version");
-    assert!(page.contains("ferrohealth-ui 0.4.0"), "the library");
+    assert!(
+        page.contains(&format!(
+            "ferrohealth-ui {}",
+            ferropix_console::pages::about::FERROUI
+        )),
+        "the library"
+    );
     assert!(page.contains("Cadasto B.V."), "the maker");
     assert!(page.contains("The CapabilityStatement"), "the card");
     assert!(
@@ -400,5 +406,37 @@ async fn the_search_entry_of_the_navigation_draws_user_round_search() -> Result<
         !entry.contains(Glyph::SEARCH.markup()),
         "the stand-in search glyph is gone: {entry}"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_search_panel_offers_pages_and_domains_and_refuses_a_reader_with_no_session()
+-> Result<(), Box<dyn Error>> {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/operator/domains"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{"domains":[{"id":"0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c","system":"urn:oid:2.999.1.1","name":"Synthetic hospital","kind":"local","sensitive":false,"source_client_id":"synthetic-source","created_at":"2026-10-20T08:00:00Z","records":1}]}"#,
+        ))
+        .mount(&server)
+        .await;
+    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
+    let (response, _) = send(&service, post_form("/search/answer", "", "q=audit")?).await?;
+    assert_eq!(
+        StatusCode::UNAUTHORIZED,
+        response.status(),
+        "the panel loads the sign-in on a 401"
+    );
+    let cookie = steward_session(&state);
+    let (response, answer) = send(
+        &service,
+        post_form("/search/answer", &cookie, "q=synthetic")?,
+    )
+    .await?;
+    assert_eq!(StatusCode::OK, response.status());
+    assert!(answer.contains("Synthetic hospital"), "a domain: {answer}");
+    assert!(answer.contains("Identifier domains"), "its group: {answer}");
+    let (_, answer) = send(&service, post_form("/search/answer", &cookie, "q=audit")?).await?;
+    assert!(answer.contains("\"/audit\""), "a page: {answer}");
     Ok(())
 }

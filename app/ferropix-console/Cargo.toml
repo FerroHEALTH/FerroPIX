@@ -53,6 +53,8 @@ web-sys = { workspace = true, features = ["Document", "Element", "Window", "Loca
 # The per-request script nonce of the Content-Security-Policy rides `nonce`.
 leptos = { workspace = true, features = ["ssr", "nonce"] }
 leptos_axum.workspace = true
+# The executor the server render runs its resources on.
+any_spawner.workspace = true
 leptos_meta = { workspace = true, features = ["ssr"] }
 leptos_router = { workspace = true, features = ["ssr"] }
 # The random session ids, PKCE verifiers and states, and the SHA-256 of the

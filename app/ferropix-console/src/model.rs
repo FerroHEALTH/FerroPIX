@@ -29,6 +29,10 @@ mod status {
     use serde::{Deserialize as _, Deserializer, Serializer, de::Error as _};
 
     /// Writes `status` as its number.
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "serde's `with` calls the writer with a reference to the field"
+    )]
     pub(super) fn serialize<S: Serializer>(status: &StatusCode, out: S) -> Result<S::Ok, S::Error> {
         out.serialize_u16(status.as_u16())
     }

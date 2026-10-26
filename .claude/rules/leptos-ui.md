@@ -155,12 +155,15 @@ the workspace resolves, never memory.
 
   | Measure | Budget |
   |---|---|
-  | Entry WebAssembly, brotli-compressed | 393216 bytes |
+  | Entry WebAssembly, brotli-compressed | 598016 bytes |
 
-  Measured 2026-10-23 at 295172 bytes (cargo-leptos 0.3.11, wasm-bindgen
-  0.2.129, Rust 1.99.1), with FerroUI's lazy date pickers and tree in chunks
-  of their own; the budget is a third over it, as FerroUI's gallery keeps
-  its own. FerroUI 0.3.3 with its `split` feature (#127) measured 298123, FerroUI 0.3.4 (#131) 300608, FerroUI 0.3.5 (#137) 301105, and FerroUI 0.3.6 (#139) 301074, with 184554 more in its lazy chunks (142932 in three `split_*` files, 41622 in three `chunk_*` files). The `console-wasm` job of `ci.yml`
+  Measured 2026-10-26 at 477374 bytes on the move to FerroUI 0.5 (#214,
+  cargo-leptos 0.3.11, wasm-bindgen 0.2.129, Rust 1.99.1), with the pages
+  in four lazy route groups (work, patients, registry, aside) whose chunks
+  hold 511934 more; the budget is a quarter over it. Whole-page hydration
+  puts the renderer, the reactive graph, the router, the shell, the page
+  context's serde and every data segment in the entry, since `--split`
+  moves code alone. Under islands it measured 295172 (2026-10-23). The `console-wasm` job of `ci.yml`
   builds the bundle with `scripts/release/console-site.sh --release` and
   fails over the budget (`scripts/checks/console-bundle.sh`, which reads it
   from the table above and writes the sizes to the job summary).

@@ -474,16 +474,16 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b5aef869e5cd9d7df358482697bc153c7c2c562547a7274e67e8dc0de1dae3e"
+checksum = "36f8d363e379e283fe1452e235f9003cbf0207ef56b9fb2364d5aa33d44db6cf"
 dependencies = [
  "url",
 ]
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.59"
+version = "0.0.60"
 dependencies = [
  "fhir-types",
  "http",

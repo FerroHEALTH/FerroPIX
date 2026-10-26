@@ -82,6 +82,12 @@ and this project adheres to
   §3.21.4.1.2.5.2 among them, is checked instead of refused when the HL7 v2
   cache is fetched.
 
+### Security
+
+Shipped with functional changes because: the advisory fix is a dependency move, and the unreleased functional changes already on `main` ship in the same release.
+
+- The workspace takes `ferrohealth-smart` 0.7.1, which fixes GHSA-vphj-3f8c-5hpx, and `ihe-atna` 0.2.11. `ihe-iti` 0.0.60 and `nl-generic-functions` 0.0.30 are released against them.
+
 ## [0.0.5] - 2026-10-25
 
 ### Added

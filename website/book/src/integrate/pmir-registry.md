@@ -18,14 +18,9 @@ A subscriber holds the `system/Subscription.cruds` scope.
 - **Create:** `POST {base}/fhir/Subscription` with a `Subscription` in FHIR
   JSON or XML. It must hold to the PMIR Subscription profile: a `message`
   channel, a payload media type, every contact with its system and value,
-  and one of the four criteria:
-  - `Patient`: every patient;
-  - `Patient?_id=X`: one person;
-  - `Patient?organization=X`: the patients of one Organization;
-  - `Patient?identifier=X`: a FHIR token, by system, value or both.
-
-  FerroPIX activates the subscription at once. It answers `201` with the
-  `Location` and the stored `Subscription`, now `active`.
+  and one of the four criteria listed below. FerroPIX activates the
+  subscription at once. It answers `201` with the `Location` and the stored
+  `Subscription`, now `active`.
 - **Read:** `GET {base}/fhir/Subscription/{id}` answers the subscription as
   it stands, with `status` `error` and the error text once a delivery has
   failed for good.
@@ -35,6 +30,13 @@ A subscriber holds the `system/Subscription.cruds` scope.
 - **Delete:** `DELETE {base}/fhir/Subscription/{id}` answers `204`. The
   subscription is gone for every later request, and FerroPIX sends it
   nothing.
+
+The four criteria are:
+
+- `Patient`: every patient;
+- `Patient?_id=X`: one person;
+- `Patient?organization=X`: the patients of one Organization;
+- `Patient?identifier=X`: a FHIR token, by system, value or both.
 
 The channel endpoint must be `https`. Plain `http` on a loopback host is
 accepted only under the development profile's `[dev]` table. A criteria

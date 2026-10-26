@@ -160,7 +160,8 @@ pub async fn export(operator: &Operator, request: Request) -> Response {
     }
     let call = wire::call(operator, &parts);
     let person = read.person.map(|person| format!("Patient/{person}"));
-    let exchange = records::export(&call, actions.len(), person.as_deref(), Outcome::Success);
+    let exchange =
+        records::operator::export(&call, actions.len(), person.as_deref(), Outcome::Success);
     if let Err(error) = wire::record(operator, &parts, vec![exchange]).await {
         return wire::unaudited(&error);
     }

@@ -29,7 +29,7 @@ use secrecy::SecretString;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::audit::records::{self, StewardAction};
+use crate::audit::records::{self, operator::StewardAction};
 use crate::feed::Context;
 use crate::feed::steward::{self, DecideError};
 use crate::fhir::outcome::IssueType;
@@ -80,8 +80,12 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
         .map(|person| format!("Patient/{person}"))
         .collect();
     let call = wire::call(operator, &parts);
-    let exchanges =
-        records::steward_search(&call, &raw(operator, &parts), &references, Outcome::Success);
+    let exchanges = records::operator::steward_search(
+        &call,
+        &raw(operator, &parts),
+        &references,
+        Outcome::Success,
+    );
     if let Err(error) = wire::record(operator, &parts, exchanges).await {
         return wire::unaudited(&error);
     }
@@ -105,7 +109,7 @@ pub async fn one(operator: &Operator, request: Request) -> Response {
     let exchanges = persons
         .iter()
         .map(|person| {
-            records::steward(
+            records::operator::steward(
                 &call,
                 StewardAction::View,
                 &format!("Patient/{person}"),
@@ -155,7 +159,7 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
             "candidate record without a person",
         ));
     };
-    let exchanges = vec![records::steward(
+    let exchanges = vec![records::operator::steward(
         &call,
         StewardAction::Decide,
         &format!("Patient/{}", person.uuid()),

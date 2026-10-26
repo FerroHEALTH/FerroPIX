@@ -24,7 +24,7 @@ use http::StatusCode;
 use ihe_atna::balp::Outcome;
 use uuid::Uuid;
 
-use crate::audit::records::{self, Disclosed};
+use crate::audit::records::{self, operator::Disclosed};
 use crate::fhir::outcome::IssueType;
 use crate::operator::{Operator, OperatorError, Recorded, opened, record_action, wire};
 
@@ -116,7 +116,7 @@ async fn disclose(
         .await
         .map_err(failed)?;
     let call = wire::call(operator, parts);
-    let exchange = records::disclosure(
+    let exchange = records::operator::disclosure(
         &call,
         &format!("Patient/{person}"),
         Disclosed {

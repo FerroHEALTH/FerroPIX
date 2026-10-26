@@ -18,9 +18,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ferrohealth_smart::resource::{Access, Caller};
+use ferropix_server::audit::records::operator::{StewardAction, steward};
 use ferropix_server::audit::records::{
-    Call, Feed, Identifier, Search, StewardAction, feed, pdq_search, pix_query, raw_request,
-    steward,
+    Call, Feed, Identifier, Search, feed, pdq_search, pix_query, raw_request,
 };
 use ferropix_server::audit::reserve::UNAUDITED;
 use ferropix_server::audit::{Audit, Headroom, OpenError};

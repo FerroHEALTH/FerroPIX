@@ -26,7 +26,7 @@ use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::audit::records::{self, StewardAction};
+use crate::audit::records::{self, operator::StewardAction};
 use crate::feed::Context;
 use crate::feed::merging::{self, Change, MergeRequest, RevertError};
 use crate::feed::steward::DecideError;
@@ -82,7 +82,7 @@ pub async fn preview(operator: &Operator, request: Request) -> Response {
     let exchanges = [&preview.survivor.id, &preview.merged.id]
         .iter()
         .map(|person| {
-            records::steward(
+            records::operator::steward(
                 &call,
                 StewardAction::View,
                 &format!("Patient/{person}"),
@@ -170,7 +170,7 @@ async fn finish(
     person: PersonId,
 ) -> Response {
     let call = wire::call(operator, parts);
-    let exchange = records::steward(
+    let exchange = records::operator::steward(
         &call,
         StewardAction::Decide,
         &format!("Patient/{}", person.uuid()),

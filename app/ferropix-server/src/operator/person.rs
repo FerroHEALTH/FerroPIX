@@ -25,7 +25,7 @@ use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::audit::records::{self, StewardAction};
+use crate::audit::records::{self, operator::StewardAction};
 use crate::fhir::outcome::IssueType;
 use crate::matching::scorer::mask;
 use crate::operator::{
@@ -63,7 +63,7 @@ pub async fn answer(operator: &Operator, request: Request) -> Response {
         return wire::failed(&error);
     }
     let call = wire::call(operator, &parts);
-    let exchange = records::steward(
+    let exchange = records::operator::steward(
         &call,
         StewardAction::View,
         &format!("Patient/{id}"),

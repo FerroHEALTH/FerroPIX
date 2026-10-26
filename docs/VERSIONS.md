@@ -89,11 +89,11 @@ it, and the `mac-arm64` pair verified again here on 2026-10-24.
 | Item | Pin | Repeated in |
 |---|---|---|
 | thirtyfour | `0.37.5` | `Cargo.toml` |
-| Chrome for Testing (Chrome and chromedriver) | `155.0.8059.79` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `bcd9a79130d7e44d70f93be87042e9bcee7fe0f0b3898e06b8c9bed5fb619dcd` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `e141a7cbf948780bb7d381860bd5a7944c6736f79b9918b9826fccb199d28ea4` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `876f0ea4095237bb3e93321d95758d38c9195989935d7bdc9f51d8e26bc6a3a1` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `ca9a98c74b8d3904be6536ff6d26493abb7d7a476e2b384a75cd55d101bce29d` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing (Chrome and chromedriver) | `156.0.8078.47` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `ad7f2b49a4dc679af286b1b1b386670d93ca7868079f69012d21ba0ac8293df3` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `2a5024610c53f340a1aaa5d9a3e2a4fa448be7d71cca5238bd8c3c7f16181df4` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `f42d25b984e2185ee48a628f0e76d49fcdf2fa83f20f7c286880dddeb4a28cc9` | `scripts/release/journey-tools.sh` |
 
 `scripts/checks/versions.sh` reads each pin back from the files its row
 names.
@@ -220,7 +220,7 @@ redistribution is fetched into the git-ignored `.vendor-cache/` and only its
 | IETF RFC 9449 | `https://www.rfc-editor.org/rfc/rfc9449.txt` sha256 `3842c58e1f6043389416023b9bb8d765048266024982fbbd90640e05943f4e13`, OAuth 2.0 Demonstrating Proof of Possession (DPoP) | `scripts/vendor/ietf-oauth.sh`, `docs/specs/ietf-oauth/PROVENANCE.md` |
 | W3C Verifiable Credentials Data Model 1.1 | `https://www.w3.org/TR/2022/REC-vc-data-model-20220303/` sha256 `d7c796e1f7e9a233d9037eec03e9d9fe7d69220a71639b07f5038684949a3091`, W3C Recommendation 2022-03-03 | `scripts/vendor/w3c-did-vc.sh`, `docs/specs/w3c-did-vc/PROVENANCE.md` |
 | W3C Decentralized Identifiers 1.0 | `https://www.w3.org/TR/2022/REC-did-core-20220719/` sha256 `5e44345740d9bfaa852d3b66c57e98c9beb6c5bf6083b0126dd5daac377b9993`, W3C Recommendation 2022-07-19 | `scripts/vendor/w3c-did-vc.sh`, `docs/specs/w3c-did-vc/PROVENANCE.md` |
-| W3C DID Resolution 1.0 | `https://www.w3.org/TR/2026/CRD-did-resolution-1.0-20261001/` sha256 `2b194843d37f5b7f01a4f5464f64d672dc4be43dafe5f2f49114c6070819586e`, W3C Candidate Recommendation Draft 2026-10-01 | `scripts/vendor/w3c-did-vc.sh`, `docs/specs/w3c-did-vc/PROVENANCE.md` |
+| W3C DID Resolution 1.0 | `https://www.w3.org/TR/2026/CRD-did-resolution-1.0-20261025/` sha256 `6ccb57ec70c645fa643d6d111dcac8b47f24b68d1eedf9fe178cd78088e91b3e`, W3C Candidate Recommendation Draft 2026-10-25 | `scripts/vendor/w3c-did-vc.sh`, `docs/specs/w3c-did-vc/PROVENANCE.md` |
 | W3C Bitstring Status List 1.0 | `https://www.w3.org/TR/2025/REC-vc-bitstring-status-list-20250515/` sha256 `3cdf3358a09f3b02f2a97e5dac13cf2b63115c2db1260bf7b7c236d8702924ec`, W3C Recommendation 2025-05-15 | `scripts/vendor/w3c-did-vc.sh`, `docs/specs/w3c-did-vc/PROVENANCE.md` |
 | W3C Web Services Addressing 1.0 SOAP Binding | `https://www.w3.org/TR/2006/REC-ws-addr-soap-20060509/` sha256 `6b1a44d6465c77deb9dbf6ad3fbfe435ece5b7b95b08a1782a81183f4bdc0931`, W3C Recommendation 2006-05-09 | `scripts/vendor/w3c-ws-addressing.sh`, `docs/specs/w3c-ws-addressing/PROVENANCE.md` |
 | did:web Method Specification | `w3c-ccg/did-method-web` commit `ea423c114e6f2537498ee6f94e8d794c64f60c18`, the Credentials Community Group report and its licence | `scripts/vendor/w3c-did-vc.sh`, `docs/specs/w3c-did-vc/PROVENANCE.md` |

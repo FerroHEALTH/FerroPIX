@@ -45,6 +45,10 @@ and this project adheres to
 
 ### Changed
 
+- The pins the freshness check reported behind upstream move (#252): W3C DID
+  Resolution 1.0 to the Candidate Recommendation Draft of 2026-10-25,
+  re-vendored, the console journeys' Chrome for Testing to 156.0.8078.47,
+  and CI's yq to 4.54.1, each by version and digest.
 - `ihe-iti` 0.0.57 names the receiver of a Responding Gateway answer by its
   device alone, as IHE's example answers do (#228); the answer no longer
   repeats the initiating community as the receiver's organization.

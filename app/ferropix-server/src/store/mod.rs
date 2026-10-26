@@ -25,6 +25,7 @@ pub mod identifier;
 pub mod indicator;
 pub mod key;
 pub mod outbox;
+pub mod pseudonym;
 pub mod record;
 pub mod reseal;
 pub mod schema;

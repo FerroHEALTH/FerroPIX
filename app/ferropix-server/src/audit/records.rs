@@ -24,6 +24,8 @@
 //! - ITI-93 as the PMIR Registry: the PMIR Feed audit profile (PMIR 1.6.0
 //!   §2:3.93.5.1), one record per message, with each Patient the message
 //!   names and its `MessageHeader`.
+//! - A pseudonym minted on an ITI-83 ask, on BALP Create, naming the
+//!   person and the pseudonymisation domain, never the value.
 //! - A steward action, in [`operator`]: a `RESTful` activity on the person (BALP 1.1.4
 //!   §3:5.7.3), a read for a view and an update for a decision; a steward's
 //!   search, a BALP Patient Query record per person found or a Query record
@@ -563,6 +565,38 @@ pub fn pmir_feed(
         },
         outcome,
         entities,
+    )
+}
+
+/// Returns the record of a pseudonym minted for the person `person`
+/// (`Patient/{id}`) in the pseudonymisation domain `namespace`.
+///
+/// The record is BALP Create (BALP 1.1.4 §3:5.7.3): the person as the
+/// patient, the domain as the data, and no pseudonym value.
+#[must_use]
+pub fn pseudonym_minted(call: &Call, person: &str, namespace: &str, outcome: Outcome) -> Exchange {
+    call.exchange(
+        EventKind {
+            profile: "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Create",
+            event_type: REST,
+            subtypes: vec![CREATE],
+            action: "C",
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        vec![
+            Entity::PatientReference(SecretString::from(person.to_owned())),
+            Entity::Described(Described {
+                what: None,
+                kind: SYSTEM_OBJECT,
+                role: Some(DOMAIN_RESOURCE),
+                name: Some(String::from("pseudonym")),
+                description: None,
+                details: vec![Detail::new("namespace", namespace)],
+                security_labels: Vec::new(),
+            }),
+        ],
     )
 }
 

@@ -38,7 +38,10 @@ identifier the person holds in the domains asked for (every domain when no
 `targetId` naming `Patient/{id}`, the person (§2:3.83.4.2.2.1). The
 identifiers are the records each Source fed and every identifier in an
 `authoritative` domain that those records carry and no Source feeds, such
-as the BSN on a hospital's `Patient`; you can ask by that BSN too.
+as the BSN on a hospital's `Patient`; you can ask by that BSN too. A
+pseudonymisation domain is a `targetSystem` too: the answer carries the
+person's pseudonym in it, minted on the first ask of the domain's consumer
+([Pseudonyms](pseudonyms.md)).
 
 | Case | Answer |
 |---|---|

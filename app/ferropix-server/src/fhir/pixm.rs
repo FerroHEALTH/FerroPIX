@@ -48,8 +48,16 @@ use crate::fhir::status::Case;
 use crate::fhir::wire;
 use crate::http::request_id;
 use crate::store::Store;
+use crate::store::pseudonym;
 use crate::store::record::{self, Channel};
 use crate::store::xref::{self, Lookup};
+
+/// An ITI-83 answer with the pseudonyms it minted, as the person's
+/// `Patient/{id}` and the domain's namespace.
+type Looked = (
+    Answer<fhir_types::r4::parameters::Parameters>,
+    Vec<(String, String)>,
+);
 
 /// The PIXm Manager: the store it reads, the feed transaction it writes
 /// through, and the audit trail it records to.
@@ -141,11 +149,31 @@ impl Manager {
                 Err(_unacceptable) => return wire::send(&Case::NotAcceptable.answer(), format),
             };
         }
-        let answered = self.lookup(&pix).await;
+        let client = parts
+            .extensions
+            .get::<Access>()
+            .and_then(|access| access.caller())
+            .and_then(|caller| caller.client_id().map(str::to_owned));
+        let answered = self.lookup(&pix, client.as_deref()).await;
         let outcome = match &answered {
             Ok(_) => Outcome::Success,
             Err(case) => failure(*case),
         };
+        if let Ok((_, minted)) = &answered
+            && !minted.is_empty()
+        {
+            let call = self.call(&parts);
+            let exchanges = minted
+                .iter()
+                .map(|(person, namespace)| {
+                    records::pseudonym_minted(&call, person, namespace, Outcome::Success)
+                })
+                .collect();
+            if let Err(error) = self.audit.record(exchanges).await {
+                tracing::error!(error = %crate::chain(&error), "an ITI-83 answer is withheld: the record of a minted pseudonym could not be stored");
+                return wire::send(&Case::CommittedUnaudited.answer(), format);
+            }
+        }
         let url = self.request_url(&parts);
         let raw = records::raw_request(
             &url,
@@ -160,16 +188,21 @@ impl Manager {
             return wire::send(&Case::Unaudited.answer(), format);
         }
         match answered {
-            Ok(found) => wire::send(&found, format),
+            Ok((found, _minted)) => wire::send(&found, format),
             Err(case) => wire::send(&case.answer(), format),
         }
     }
 
-    /// Reads the cross-reference `pix` asks for.
-    async fn lookup(
-        &self,
-        pix: &PixQuery,
-    ) -> Result<Answer<fhir_types::r4::parameters::Parameters>, Case> {
+    /// Reads the cross-reference `pix` asks for, for the caller of client id
+    /// `client`, and returns it with each pseudonym it minted, as the
+    /// person's `Patient/{id}` and the domain's namespace.
+    ///
+    /// A pseudonymisation domain named as `targetSystem` answers the
+    /// person's pseudonym in it, minted on this ask when the person has none
+    /// and the caller is the domain's consumer; with no `targetSystem`, the
+    /// answer carries the pseudonyms already minted and mints none (PIXm
+    /// 3.1.0 §2:3.83.4.1.3).
+    async fn lookup(&self, pix: &PixQuery, client: Option<&str>) -> Result<Looked, Case> {
         let source = pix.source();
         let mut connection = self.store.pool().acquire().await.map_err(unavailable)?;
         let found = xref::lookup(
@@ -183,11 +216,27 @@ impl Manager {
         if found == Lookup::UnknownDomain {
             return Err(Case::SourceDomainNotRecognized);
         }
+        let pseudonymised = pseudonym::domains(&mut connection)
+            .await
+            .map_err(|error| store_failure(&error))?;
+        let asked: Vec<&pseudonym::PseudonymDomain> = pseudonymised
+            .iter()
+            .filter(|domain| {
+                !domain.retired
+                    && pix
+                        .targets()
+                        .iter()
+                        .any(|target| target.as_str() == domain.namespace)
+            })
+            .collect();
         if !pix.targets().is_empty() {
             let domains = record::domains(&mut *connection)
                 .await
                 .map_err(|error| store_failure(&error))?;
-            let known = |system: &str| domains.iter().any(|d| d.system == system && !d.retired);
+            let known = |system: &str| {
+                domains.iter().any(|d| d.system == system && !d.retired)
+                    || asked.iter().any(|domain| domain.namespace == system)
+            };
             if !pix.targets().iter().all(|target| known(target.as_str())) {
                 return Err(Case::TargetDomainNotRecognized);
             }
@@ -199,13 +248,45 @@ impl Manager {
                 return Err(Case::SourceIdentifierNotFound);
             }
         };
-        let mut identifiers = Vec::with_capacity(cross_reference.identifiers.len());
-        for (system, value) in &cross_reference.identifiers {
-            let identifier = TargetIdentifier::new(
-                system.clone(),
-                SecretString::from(value.expose().to_owned()),
-            )
-            .map_err(|_invalid| internal("a stored identifier is no target identifier"))?;
+        let person = cross_reference.person;
+        let mut held: Vec<(String, String)> = cross_reference
+            .identifiers
+            .iter()
+            .map(|(system, value)| (system.clone(), value.expose().to_owned()))
+            .collect();
+        let mut minted = Vec::new();
+        if pix.targets().is_empty() {
+            let pseudonyms = pseudonym::held(&mut connection, person)
+                .await
+                .map_err(|error| store_failure(&error))?;
+            held.extend(
+                pseudonyms
+                    .into_iter()
+                    .map(|(namespace, value)| (namespace, value.to_string())),
+            );
+        }
+        for domain in &asked {
+            let resolved =
+                pseudonym::resolve(&mut connection, person, domain.id, domain.mints_for(client))
+                    .await
+                    .map_err(|error| store_failure(&error))?;
+            if let Some(resolved) = resolved {
+                if resolved.minted {
+                    minted.push((
+                        format!("Patient/{}", person.uuid()),
+                        domain.namespace.clone(),
+                    ));
+                }
+                held.push((domain.namespace.clone(), resolved.value.to_string()));
+            }
+        }
+        if !minted.is_empty() {
+            tracing::info!(minted = minted.len(), "ITI-83 minted pseudonyms");
+        }
+        let mut identifiers = Vec::with_capacity(held.len());
+        for (system, value) in held {
+            let identifier = TargetIdentifier::new(system, SecretString::from(value))
+                .map_err(|_invalid| internal("a stored identifier is no target identifier"))?;
             identifiers.push(identifier);
         }
         let patient = PatientReference::new(SecretString::from(format!(
@@ -213,7 +294,10 @@ impl Manager {
             cross_reference.person.uuid()
         )))
         .map_err(|_invalid| internal("a person id is no Patient reference"))?;
-        Ok(answer::cross_references(pix, &identifiers, &[patient]))
+        Ok((
+            answer::cross_references(pix, &identifiers, &[patient]),
+            minted,
+        ))
     }
 
     /// ITI-104's conditional update: Add or Revise Patient, or Resolve

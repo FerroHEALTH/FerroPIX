@@ -22,7 +22,7 @@ use crate::auth::{Issuer, application, bearer, send, settings};
 use crate::support::Secrets;
 
 /// The operator routes this build serves, by interaction.
-pub(crate) const SERVED: [&str; 21] = [
+pub(crate) const SERVED: [&str; 26] = [
     "operator-reveal",
     "operator-domain-create",
     "operator-domain-update",
@@ -44,6 +44,11 @@ pub(crate) const SERVED: [&str; 21] = [
     "operator-merge-preview",
     "operator-merge",
     "operator-unmerge",
+    "operator-pseudonym-domains",
+    "operator-pseudonym-domain-create",
+    "operator-pseudonym-domain-update",
+    "operator-pseudonym-mint",
+    "operator-pseudonym-resolve",
 ];
 
 /// Sends `method` on `uri` with `authorization`, a body and its media type,
@@ -122,7 +127,7 @@ async fn every_served_operator_route_refuses_a_token_without_its_product_scope()
         }
         checked += 1;
     }
-    assert_eq!(22, checked, "every served route was driven");
+    assert_eq!(27, checked, "every served route was driven");
 }
 
 #[tokio::test]

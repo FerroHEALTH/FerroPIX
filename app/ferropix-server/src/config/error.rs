@@ -162,6 +162,17 @@ pub enum Error {
         /// The system.
         system: String,
     },
+    /// Two `[[pseudonym_domain]]` entries name one namespace, or one names
+    /// the system of an identifier domain.
+    #[error(
+        "pseudonym_domain[{index}].namespace names {namespace:?}, which an earlier entry or an identifier domain holds already"
+    )]
+    DuplicateNamespace {
+        /// The position of the entry, from 0.
+        index: usize,
+        /// The namespace.
+        namespace: String,
+    },
     /// Two `[[hl7v2.senders]]` entries name one sending application and
     /// facility.
     #[error(

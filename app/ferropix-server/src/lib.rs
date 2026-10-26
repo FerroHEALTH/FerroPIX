@@ -289,14 +289,20 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
     }
     runtime_then(|| async move {
         let outcome = match old_key {
-            None => store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
+            None => match store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
                 .await
-                .map(|store| {
-                    (
-                        store,
-                        String::from("the migrations and the domain seed are applied"),
-                    )
-                }),
+            {
+                Ok(store) => store::pseudonym::seed(&store, &settings.pseudonym_domains)
+                    .await
+                    .map(|_inserted| store),
+                Err(error) => Err(error),
+            }
+            .map(|store| {
+                (
+                    store,
+                    String::from("the migrations and the domain seed are applied"),
+                )
+            }),
             Some(old) => reseal(&settings, &old).await,
         };
         match outcome {
@@ -381,6 +387,9 @@ pub enum ServeError {
 pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let started = Instant::now();
     let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
+        .await
+        .map_err(ServeError::Store)?;
+    store::pseudonym::seed(&store, &settings.pseudonym_domains)
         .await
         .map_err(ServeError::Store)?;
     let domains = store::seed::stored(&store)

@@ -32,7 +32,7 @@ keeps working when the service lands.
 | `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, and exits 0 when the server would start on it. Otherwise it prints the first error on one line and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down exits 1. Use it as the container health check. |
-| `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` seed, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
+| `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 
 Every command takes `--config <PATH>`. A refused configuration exits 78
@@ -149,6 +149,7 @@ these steps in order:
 3. **The seed.** Each `[[domain]]` the store lacks is inserted. A domain the
    store holds already is left as it is, since the store is the record; when
    it differs from the seed, the server logs a warning naming its system.
+   Each `[[pseudonym_domain]]` the store lacks is inserted the same way.
 
 Before these steps, `serve` refuses to start when the role it connects as
 can read anything outside `pix`: a superuser, a member of
@@ -247,6 +248,18 @@ stays the record. A system named twice is refused.
 | `domain[].kind` | none, required | `"local"` (a system's own numbers), `"authoritative"` (a national number the deterministic match links on) or `"master"` (FerroPIX's own). |
 | `domain[].source_client_id` | none, required | The client id of the domain's one Patient Identity Source. |
 | `domain[].sensitive` | `true` | Whether the domain's identifier values are sealed at rest. |
+
+### `[[pseudonym_domain]]`
+
+Each entry is a pseudonymisation domain written to the store at start when
+it is absent, never updated ([Pseudonyms](../integrate/pseudonyms.md)). A
+namespace named twice, or one an identifier domain holds, is refused.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `pseudonym_domain[].namespace` | none, required | The system of the pseudonyms: a `urn:oid:` OID in the FHIR `oid` form, or another absolute URI. |
+| `pseudonym_domain[].name` | none, required | The name a steward reads. |
+| `pseudonym_domain[].consumer_client_id` | none | The client id whose ITI-83 query mints a pseudonym in the domain; without one, only a steward mints. |
 
 ### `[matching]`
 

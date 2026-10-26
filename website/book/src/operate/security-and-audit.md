@@ -113,6 +113,8 @@ the PIXm Manager or the PDQm Supplier, and for every steward action:
 | A steward's view or decision | BALP Patient Read or Patient Update |
 | A steward's search | BALP Patient Query per person found, or Query when none was |
 | A steward's reveal of an identifier or a pseudonym | BALP Privacy Disclosure at the source, with the reason |
+| A pseudonym minted, on an ITI-83 ask or by a steward | BALP Create, naming the patient and the domain, never the value |
+| A steward's reverse resolution of a pseudonym | BALP Privacy Disclosure at the source, with the reason |
 | An export of the steward trail | an Export event (DICOM `110106`) |
 
 Each record names the patient as its subject and, for a search, carries the

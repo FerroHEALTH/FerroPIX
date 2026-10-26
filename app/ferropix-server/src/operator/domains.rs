@@ -411,7 +411,8 @@ async fn finish(
         .await
         .map_err(failed)?;
     let call = wire::call(operator, parts);
-    let exchange = records::domain_write(&call, write.created, write.system, Outcome::Success);
+    let exchange =
+        records::operator::domain_write(&call, write.created, write.system, Outcome::Success);
     wire::record(operator, parts, vec![exchange])
         .await
         .map_err(|error| Box::new(wire::unaudited(&error)))?;

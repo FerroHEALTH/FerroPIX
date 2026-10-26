@@ -348,3 +348,57 @@ async fn pending_operator() -> Response {
         None,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use ferropix_operator_api::health::{IndicatorState, UpstreamKind};
+
+    use super::subscriber;
+    use crate::store::subscription::LastDelivery;
+
+    fn delivery(endpoint: &str) -> LastDelivery {
+        LastDelivery {
+            endpoint: endpoint.to_owned(),
+            error: None,
+            last: None,
+            at: None,
+        }
+    }
+
+    #[test]
+    fn a_subscriber_entry_shows_no_credential_of_its_endpoint() {
+        let entry = subscriber(delivery(
+            "https://user:secret@subscriber.example.org/pmir?token=abc#part",
+        ));
+        assert_eq!(UpstreamKind::Subscriber, entry.kind);
+        assert_eq!("https://subscriber.example.org/pmir", entry.endpoint);
+        assert_eq!(None, entry.last, "before the first message");
+        assert_eq!(
+            "(an endpoint that is no URL)",
+            subscriber(delivery("not a url")).endpoint
+        );
+    }
+
+    #[test]
+    fn a_subscriber_entry_states_its_error_before_its_last_outcome() {
+        let mut delivered = delivery("https://subscriber.example.org/pmir");
+        delivered.last = Some(Ok(()));
+        delivered.at = Some(String::from("2026-10-26T12:00:00Z"));
+        assert_eq!(
+            Some(IndicatorState::up()),
+            subscriber(delivered.clone()).last
+        );
+        delivered.last = Some(Err(String::from("the endpoint answered 503")));
+        assert_eq!(
+            Some(IndicatorState::down("the endpoint answered 503")),
+            subscriber(delivered.clone()).last
+        );
+        delivered.error = Some(String::from("an ITI-93 message could not be delivered"));
+        assert_eq!(
+            Some(IndicatorState::down(
+                "an ITI-93 message could not be delivered"
+            )),
+            subscriber(delivered).last
+        );
+    }
+}

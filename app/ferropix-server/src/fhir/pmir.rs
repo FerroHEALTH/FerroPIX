@@ -107,7 +107,7 @@ pub fn handler(route: &Route, filter: MethodFilter, face: &Arc<Face>) -> Option<
 /// `POST {base}/fhir/Subscription` (§2:3.94.4.1, §2:3.94.4.2).
 async fn create(face: Arc<Face>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
-    let call = call(&face, &parts);
+    let call = call(&face.fhir_base, &parts);
     let format = answer_format(&parts);
     let requested = match requested(&face, &parts, body).await {
         Ok(requested) => requested,
@@ -157,7 +157,7 @@ async fn create(face: Arc<Face>, request: Request) -> Response {
 /// `GET {base}/fhir/Subscription/{id}` (§2:3.94.4.3).
 async fn read(face: Arc<Face>, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
-    let call = call(&face, &parts);
+    let call = call(&face.fhir_base, &parts);
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let found = match id {
@@ -208,7 +208,7 @@ async fn read(face: Arc<Face>, request: Request) -> Response {
 /// `PUT {base}/fhir/Subscription/{id}`: enable or disable (§2:3.94.4.4).
 async fn update(face: Arc<Face>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
-    let call = call(&face, &parts);
+    let call = call(&face.fhir_base, &parts);
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let label = id.map(|id| id.to_string());
@@ -291,7 +291,7 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
 /// `DELETE {base}/fhir/Subscription/{id}` (§2:3.94.4.5).
 async fn delete(face: Arc<Face>, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
-    let call = call(&face, &parts);
+    let call = call(&face.fhir_base, &parts);
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let label = id.map(|id| id.to_string());
@@ -307,7 +307,7 @@ async fn delete(face: Arc<Face>, request: Request) -> Response {
                 label.as_deref(),
                 Outcome::Success,
             );
-            match record(&face, &parts, &exchange).await {
+            match record(&face.audit, &parts, &exchange).await {
                 Ok(()) => StatusCode::NO_CONTENT.into_response(),
                 Err(()) => written(&unaudited(), format, None),
             }
@@ -383,8 +383,8 @@ fn id_of(parts: &Parts) -> Option<Uuid> {
         .and_then(|id| Uuid::try_parse(id).ok())
 }
 
-/// Who called and where.
-fn call(face: &Face, parts: &Parts) -> Call {
+/// Who called and where, at the FHIR base `fhir_base`.
+pub(super) fn call(fhir_base: &Url, parts: &Parts) -> Call {
     let access = parts
         .extensions
         .get::<Access>()
@@ -397,14 +397,14 @@ fn call(face: &Face, parts: &Parts) -> Call {
     Call::of(
         &access,
         remote,
-        &face.fhir_base,
+        fhir_base,
         crate::http::request_id::of(&parts.headers),
     )
 }
 
 /// The format the answer is written in: the one `_format` or `Accept` asks,
 /// JSON when neither names one the face writes.
-fn answer_format(parts: &Parts) -> Format {
+pub(super) fn answer_format(parts: &Parts) -> Format {
     let format = url::form_urlencoded::parse(parts.uri.query().unwrap_or_default().as_bytes())
         .find(|(name, _)| name == "_format")
         .map(|(_, value)| value.into_owned());
@@ -445,7 +445,7 @@ fn unavailable() -> Answer<OperationOutcome> {
 }
 
 /// The `503` of an answer withheld because its record was not stored.
-fn unaudited() -> Answer<OperationOutcome> {
+pub(super) fn unaudited() -> Answer<OperationOutcome> {
     Answer::outcome(
         StatusCode::SERVICE_UNAVAILABLE,
         Severity::Error,
@@ -454,14 +454,19 @@ fn unaudited() -> Answer<OperationOutcome> {
     )
 }
 
-/// Stores the request's record.
-async fn record(face: &Face, parts: &Parts, exchange: &ihe_atna::balp::Exchange) -> Result<(), ()> {
+/// Stores the request's record on `audit`, in the request's place in the
+/// spool.
+pub(super) async fn record(
+    audit: &Audit,
+    parts: &Parts,
+    exchange: &ihe_atna::balp::Exchange,
+) -> Result<(), ()> {
     let stored = match parts.extensions.get::<Pending>() {
-        Some(pending) => pending.record(&face.audit, exchange).await,
-        None => face.audit.record(vec![exchange.clone()]).await,
+        Some(pending) => pending.record(audit, exchange).await,
+        None => audit.record(vec![exchange.clone()]).await,
     };
     stored.map_err(|error| {
-        tracing::error!(error = %crate::chain(&error), "an ITI-94 answer was withheld: its audit record could not be stored");
+        tracing::error!(error = %crate::chain(&error), "a PMIR answer was withheld: its audit record could not be stored");
     })
 }
 
@@ -475,16 +480,20 @@ async fn send<T: Resource>(
     format: Format,
     location: Option<&str>,
 ) -> Response {
-    match record(face, parts, &exchange).await {
+    match record(&face.audit, parts, &exchange).await {
         Ok(()) => written(answer, format, location),
         Err(()) => written(&unaudited(), format, None),
     }
 }
 
 /// `answer` encoded in `format`.
-fn written<T: Resource>(answer: &Answer<T>, format: Format, location: Option<&str>) -> Response {
+pub(super) fn written<T: Resource>(
+    answer: &Answer<T>,
+    format: Format,
+    location: Option<&str>,
+) -> Response {
     let Ok(bytes) = answer.encode(format) else {
-        tracing::error!("an ITI-94 answer could not be encoded");
+        tracing::error!("a PMIR answer could not be encoded");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
     let mut response = (answer.status(), Body::from(bytes)).into_response();

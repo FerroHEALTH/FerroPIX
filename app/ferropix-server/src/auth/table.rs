@@ -54,9 +54,8 @@ pub enum Need {
         resource_type: &'static str,
         /// The IUA scope of the transaction, when its profile defines one.
         transaction: Option<&'static str>,
-        /// Whether the caller must be the Source of the domain the request
-        /// writes to (PIXm 3.1.0 §2:3.104.5).
-        source: bool,
+        /// Which domain's Source the caller must be.
+        source: SourceRule,
     },
     /// `[auth] steward_scope`.
     Steward,
@@ -65,6 +64,19 @@ pub enum Need {
     /// Either product scope: a read an administrator needs beside a
     /// steward.
     StewardOrAdmin,
+}
+
+/// Whose Source a writing route's caller must be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceRule {
+    /// Any caller the scope admits.
+    Any,
+    /// The Source of every domain the `identifier` parameters name (PIXm
+    /// 3.1.0 §2:3.104.5).
+    Named,
+    /// The Source of the master domain, which an ITI-93 feed changes (PMIR
+    /// 1.6.0 §2:3.93.4.1.3).
+    Master,
 }
 
 /// One row of the table.
@@ -95,7 +107,7 @@ const fn consumer(permissions: &'static [Permission], transaction: &'static str)
         permissions,
         resource_type: "Patient",
         transaction: Some(transaction),
-        source: false,
+        source: SourceRule::Any,
     }
 }
 
@@ -105,7 +117,7 @@ const fn source(permissions: &'static [Permission], transaction: &'static str) -
         permissions,
         resource_type: "Patient",
         transaction: Some(transaction),
-        source: true,
+        source: SourceRule::Named,
     }
 }
 
@@ -115,7 +127,7 @@ const fn subscriber(permissions: &'static [Permission]) -> Need {
         permissions,
         resource_type: "Subscription",
         transaction: None,
-        source: false,
+        source: SourceRule::Any,
     }
 }
 
@@ -211,7 +223,6 @@ pub static ROUTES: [Route; 40] = [
         Mount::Pdqm,
         consumer(SEARCH, "ITI-119"),
     ),
-    // TODO(#103): hold an ITI-93 feed to the domains its sender is the Source of.
     row(
         Method::POST,
         "/fhir",
@@ -221,7 +232,7 @@ pub static ROUTES: [Route; 40] = [
             permissions: &[Permission::Create, Permission::Update],
             resource_type: "Patient",
             transaction: None,
-            source: false,
+            source: SourceRule::Master,
         },
     ),
     row(

@@ -14,6 +14,16 @@ and this project adheres to
 
 ### Added
 
+- The server receives ITI-93 as the PMIR Patient Identity Registry (#103):
+  `POST {base}/fhir` from the master domain's Source, by its client id,
+  applies each change of the feed message in JSON or XML. A create takes the
+  Patient's UUID id as the patient's id, and a create of a held patient
+  updates it; an update revises it; a merge (`replaced-by`) merges the
+  patient into the survivor as the Source's own merge; a delete removes its
+  master identifier. A non-UUID id is refused per entry with `invalid`, a
+  patient the server does not hold with `404`, and an unmerge with `405`.
+  Every message writes one BALP record. A served `Patient` no longer lists
+  its master identifier twice.
 - Matching never merges two master identities (#103): a master-domain
   record keeps its own patient, two master patients an identifier names are
   held apart as a candidate with the `master_identities` conflict, and a

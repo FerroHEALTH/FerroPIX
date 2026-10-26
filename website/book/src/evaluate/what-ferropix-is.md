@@ -34,7 +34,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | PIXm, the identifier cross-reference query | ITI-83 by `GET`, or by `POST` of a `Parameters` body | Client, in `ihe-iti` (`pixm`), and the server's PIXm Manager ([The PIXm Manager](../integrate/pixm-manager.md)). |
 | PIXm, the FHIR identity feed | ITI-104 | The server's PIXm Manager, over the store's feed transaction. |
 | PDQm, the demographics query and match | ITI-78 search and read, ITI-119 `$match` | Client, in `ihe-iti` (`pdqm`), and the server's PDQm Supplier with the Match Operation Option ([The PDQm Supplier](../integrate/pdqm-supplier.md)). |
-| PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`); the Registry side in `ihe-iti` (`pmir-server`); the server's PMIR Registry answers ITI-94 ([The PMIR Registry](../integrate/pmir-registry.md)). ITI-93 is planned. |
+| PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`); the Registry side in `ihe-iti` (`pmir-server`); the server's PMIR Registry receives ITI-93 and answers ITI-94 ([The PMIR Registry](../integrate/pmir-registry.md)). Sending ITI-93 to subscribers is planned ([#104](https://github.com/FerroHEALTH/FerroPIX/issues/104)). |
 | mCSD, the care services directory | ITI-90, ITI-91 | Client and replica, in `ihe-iti` (`mcsd`). |
 | XCPD, cross-community patient discovery | ITI-55 | Initiating Gateway and the Responding Gateway's messages, in `ihe-iti` (`xcpd`), and the server's Responding Gateway behind `[xcpd]`, synchronous and asynchronous ([The XCPD Responding Gateway](../integrate/xcpd-gateway.md)). The Deferred Response Option is not offered. |
 | IUA, access tokens on each request | ITI-72 | The authorizer seam of the `ihe-iti` clients. |
@@ -61,7 +61,7 @@ names what the server will do. The PIXm Manager
 ([The PDQm Supplier](../integrate/pdqm-supplier.md)) run today; the rest of
 this list is planned:
 
-- **The PMIR Registry:** ITI-93, received and sent; ITI-94 is answered today.
+- **The PMIR Registry:** ITI-93 sent to each subscriber; ITI-93 is received and ITI-94 answered today.
 - **The cross-reference:** identifier domains, one Patient Identity Source
   per domain, linking and merge with their full history, persisted in
   PostgreSQL.

@@ -10,7 +10,9 @@
 //! A request without a valid credential answers `401` and one whose
 //! credential grants no permission for the route `403` (RFC 6750 §3.1),
 //! each with a `security` issue. A Source writing to a domain it is not the
-//! Source of answers `403` with a `forbidden` issue (PIXm 3.1.0 §2:3.104.5).
+//! Source of answers `403` with a `forbidden` issue (PIXm 3.1.0 §2:3.104.5),
+//! as does an ITI-93 feed from a caller that is not the master domain's
+//! Source (PMIR 1.6.0 §2:3.93.4.1.3).
 //! No refusal names a claim, a scope, the token or a value of the request.
 
 use std::sync::Arc;
@@ -26,7 +28,7 @@ use http::{Extensions, Method, StatusCode, Uri};
 
 use crate::auth::Smart;
 use crate::auth::source::{Verdict, domains_of};
-use crate::auth::table::{self, Need, Route};
+use crate::auth::table::{self, Need, Route, SourceRule};
 use crate::fhir::outcome::{IssueType, respond};
 use crate::http::request_log::{Caller, Written};
 
@@ -161,8 +163,10 @@ impl Confine {
 }
 
 /// The check behind the gate: a FHIR route needs a grant that reaches every
-/// resource of its type, and a Source route needs the caller to be the
-/// Source of every domain the request names.
+/// resource of its type, and a Source route needs a Source.
+///
+/// The caller is the Source of every domain the request names, or of the
+/// master domain for ITI-93.
 ///
 /// A `patient/` scope reaches one patient's compartment, which a Master
 /// Patient Index has no use for, so it is refused as a missing permission
@@ -230,15 +234,22 @@ fn check(confine: &Confine, access: &Access, request: &Request) -> Checked {
             .respond(&Refusal::Forbidden),
         );
     }
-    if !source {
-        return Checked::Pass;
-    }
     let sources = confine.smart.sources();
-    let systems = domains_of(request.uri().query());
-    if systems
-        .iter()
-        .any(|system| sources.verdict(access, system) == Verdict::Forbidden)
-    {
+    let (systems, forbidden) = match source {
+        SourceRule::Any => return Checked::Pass,
+        SourceRule::Named => {
+            let systems = domains_of(request.uri().query());
+            let forbidden = systems
+                .iter()
+                .any(|system| sources.verdict(access, system) == Verdict::Forbidden);
+            (systems, forbidden)
+        }
+        SourceRule::Master => (
+            sources.master().into_iter().collect(),
+            sources.verdict_master(access) == Verdict::Forbidden,
+        ),
+    };
+    if forbidden {
         return Checked::Refused(respond(
             StatusCode::FORBIDDEN,
             IssueType::Forbidden,

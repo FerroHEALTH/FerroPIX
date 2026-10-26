@@ -133,9 +133,12 @@ pub async fn patients(
     let mut identifiers: BTreeMap<Uuid, Vec<Identifier>> = BTreeMap::new();
     for person in persons {
         let held = xref::identifiers(&mut *connection, keys, person.id).await?;
+        let id = person.id.to_string();
+        // NOTE: PMIR 1.6.0 §2:3.93.4.1.3: the master domain is the Registry's base URL, so its record repeats the master identifier.
         identifiers.insert(
             person.id,
             held.iter()
+                .filter(|(system, value)| !(system == master && value.expose() == id))
                 .map(|(system, value)| identifier(system, value.expose()))
                 .collect(),
         );

@@ -21,7 +21,7 @@ use std::sync::{Arc, PoisonError, RwLock};
 
 use ferrohealth_smart::resource::{Access, Via};
 
-use crate::config::section::domain::DomainSeed;
+use crate::config::section::domain::{DomainKind, DomainSeed};
 
 /// The Sources of the domains and the clients each issuer may vouch for.
 #[derive(Debug, Clone, Default)]
@@ -29,6 +29,8 @@ pub struct Sources {
     /// The `source_client_id` of each unretired domain, by system, shared by
     /// every clone so a replacement reaches the guard.
     domains: Arc<RwLock<BTreeMap<String, String>>>,
+    /// The system of the master domain, shared the same way.
+    master: Arc<RwLock<Option<String>>>,
     /// The Source clients each issuer may vouch for, by issuer.
     clients: BTreeMap<String, BTreeSet<String>>,
     /// The user-ids of the Basic users.
@@ -58,6 +60,7 @@ impl Sources {
     ) -> Self {
         Self {
             domains: Arc::new(RwLock::new(map(domains))),
+            master: Arc::new(RwLock::new(master(domains))),
             clients,
             basic_users,
         }
@@ -69,7 +72,30 @@ impl Sources {
         // NOTE: no specification governs this: our own design; the map is
         // replaced whole, so a writer that panicked left no half-written map.
         let mut held = self.domains.write().unwrap_or_else(PoisonError::into_inner);
+        let mut kept = self.master.write().unwrap_or_else(PoisonError::into_inner);
         *held = map(domains);
+        *kept = master(domains);
+    }
+
+    /// Returns the system of the master domain, the PMIR Master Patient
+    /// Identification Domain, when the store holds one.
+    #[must_use]
+    pub fn master(&self) -> Option<String> {
+        self.master
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Returns whether `access` may feed the master domain: only its Source
+    /// sends ITI-93 (PMIR 1.6.0 §2:3.93.4.1.3), and with no master domain
+    /// no caller may.
+    #[must_use]
+    pub fn verdict_master(&self, access: &Access) -> Verdict {
+        match self.master() {
+            Some(system) if self.verdict(access, &system) == Verdict::Admitted => Verdict::Admitted,
+            _ => Verdict::Forbidden,
+        }
     }
 
     /// Returns the Source clients each issuer may vouch for, by issuer.
@@ -135,6 +161,14 @@ impl Sources {
             }
         }
     }
+}
+
+/// Returns the system of the first master domain of `domains`.
+fn master(domains: &[DomainSeed]) -> Option<String> {
+    domains
+        .iter()
+        .find(|domain| domain.kind == DomainKind::Master)
+        .map(|domain| domain.system.clone())
 }
 
 /// Returns the `source_client_id` of each domain of `domains`, by system.
@@ -236,6 +270,32 @@ mod tests {
         let basic = Access::Caller(Arc::new(Caller::basic(String::from("dev-source"), "")));
         assert_eq!(Some("dev-source"), sources.client(&basic));
         assert_eq!(None, sources.client(&Access::Open));
+    }
+
+    #[test]
+    fn only_the_master_domains_source_feeds_the_master_domain() {
+        let sources = sources();
+        let east = bearer("east-lab", ISSUER);
+        assert_eq!(None, sources.master());
+        assert_eq!(
+            Verdict::Forbidden,
+            sources.verdict_master(&east),
+            "no master domain, no Source of it"
+        );
+        let guard = sources.clone();
+        sources.replace(&[DomainSeed {
+            system: String::from("https://pix.example.org"),
+            name: String::from("Master"),
+            kind: DomainKind::Master,
+            source_client_id: String::from("east-lab"),
+            sensitive: false,
+        }]);
+        assert_eq!(Some("https://pix.example.org"), guard.master().as_deref());
+        assert_eq!(Verdict::Admitted, guard.verdict_master(&east));
+        assert_eq!(
+            Verdict::Forbidden,
+            guard.verdict_master(&bearer("west-lab", ISSUER))
+        );
     }
 
     #[test]

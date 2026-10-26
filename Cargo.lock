@@ -1350,9 +1350,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-smart"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc7b492d6e7caadf0e4face53c38823ff848e719aa11098597b9cca3d51d17b3"
+checksum = "e544511f7750de41c5c33e90e7633f6a1fa25a6ad6bb56500b17fb8abe1d11b1"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -2294,9 +2294,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b5aef869e5cd9d7df358482697bc153c7c2c562547a7274e67e8dc0de1dae3e"
+checksum = "36f8d363e379e283fe1452e235f9003cbf0207ef56b9fb2364d5aa33d44db6cf"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2318,7 +2318,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.59"
+version = "0.0.60"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3043,7 +3043,7 @@ checksum = "60993920e071b0c9b66f14e2b32740a4e27ffc82854dcd72035887f336a09a28"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

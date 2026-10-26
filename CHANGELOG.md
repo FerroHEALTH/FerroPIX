@@ -19,6 +19,7 @@ and this project adheres to
 ### Fixed
 
 - The release lane installs kubeconform beside helm, so the chart job validates and publishes the chart (#278). The v0.0.6 release published its images and binaries but no chart, and the chart for v0.0.6 is published through the chart fix lane.
+- The chart job logs in to the registry before it attests the chart, so the provenance attestation is pushed beside the chart (#278). Chart 0.2.0 was pushed without its attestation; chart 0.2.1, the same templates and values for v0.0.6, is published with it.
 
 ## [0.0.6] - 2026-10-26
 

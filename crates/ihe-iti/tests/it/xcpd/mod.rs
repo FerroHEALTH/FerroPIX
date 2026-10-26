@@ -12,6 +12,7 @@
 mod answers;
 mod audit;
 mod contract;
+mod examples;
 mod hygiene;
 mod responding;
 

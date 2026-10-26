@@ -385,12 +385,8 @@ fn wrapper(
         .sender_device
         .as_ref()
         .map_or("", |device| device.as_str());
-    device(
-        writer,
-        ("receiver", "RCV"),
-        initiating,
-        query.sender_community.as_ref(),
-    )?;
+    // NOTE: IHE's example answers name the receiver by its device alone (ITI TF-2 Appendix W).
+    device(writer, ("receiver", "RCV"), initiating, None)?;
     device(
         writer,
         ("sender", "SND"),

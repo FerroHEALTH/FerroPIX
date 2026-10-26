@@ -366,8 +366,12 @@ async fn no_identifier_or_name_of_a_message_reaches_the_log() {
     until(&store, |rows| rows.iter().all(|row| row.3)).await;
     let logs = capture.text();
     assert!(logs.contains("ITI-93"), "the sender logged: {logs}");
-    for secret in [BSN, FAMILY, FIRST] {
-        assert!(!logs.contains(secret), "{secret} reached the log");
+    for (label, secret) in [
+        ("the BSN", BSN),
+        ("the family name", FAMILY),
+        ("the person id", FIRST),
+    ] {
+        assert!(!logs.contains(secret), "{label} reached the log");
     }
 }
 

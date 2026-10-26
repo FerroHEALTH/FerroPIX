@@ -27,6 +27,7 @@
 
 pub mod demographics;
 mod link;
+pub mod master;
 pub mod merging;
 pub mod steward;
 mod write;
@@ -169,10 +170,26 @@ impl Feeder {
         revision: &Revision,
         context: &Context,
     ) -> Result<Applied, FeedError> {
+        let revising = Revising {
+            system: revision.identifier().system(),
+            value: revision.identifier().value().expose_secret(),
+            master: None,
+        };
+        self.revising(&revising, revision.patient(), context).await
+    }
+
+    /// Applies the revision `revising` with `patient`, tried again after
+    /// contention.
+    async fn revising(
+        &self,
+        revising: &Revising<'_>,
+        patient: &Patient,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
         let mut attempt = 0;
         loop {
             attempt += 1;
-            match self.revise_once(revision, context).await {
+            match self.revise_once(revising, patient, context).await {
                 Err(error) if error.retryable() && attempt < ATTEMPTS => {
                     tracing::debug!(attempt, "a feed is tried again after contention");
                 }
@@ -192,10 +209,26 @@ impl Feeder {
         merge: &Merge,
         context: &Context,
     ) -> Result<Applied, FeedError> {
+        let resolving = Resolving {
+            system: merge.subsumed().system(),
+            subsumed: merge.subsumed().value().expose_secret(),
+            survivor: merge.survivor().value().expose_secret(),
+        };
+        self.resolving(&resolving, merge.patient(), context).await
+    }
+
+    /// Applies the resolved duplicate `resolving` with `patient`, tried
+    /// again after contention.
+    async fn resolving(
+        &self,
+        resolving: &Resolving<'_>,
+        patient: &Patient,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
         let mut attempt = 0;
         loop {
             attempt += 1;
-            match self.resolve_once(merge, context).await {
+            match self.resolve_once(resolving, patient, context).await {
                 Err(error) if error.retryable() && attempt < ATTEMPTS => {
                     tracing::debug!(attempt, "a feed is tried again after contention");
                 }
@@ -212,10 +245,26 @@ impl Feeder {
     /// the store does not hold or removed already, and
     /// [`FeedError::Store`] when a statement fails.
     pub async fn remove(&self, removal: &Removal, context: &Context) -> Result<Applied, FeedError> {
+        let identifier = removal.identifier();
+        self.removing(
+            identifier.system(),
+            identifier.value().expose_secret(),
+            context,
+        )
+        .await
+    }
+
+    /// Removes the identifier `value` of the domain `system`.
+    async fn removing(
+        &self,
+        system: &str,
+        value: &str,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
         let mut transaction = self.store.pool().begin().await.map_err(store)?;
         let domains = record::domains(&mut *transaction).await?;
-        let (domain, value) = condition(&domains, removal.identifier())?;
+        let (domain, value) = condition(&domains, system, value)?;
         let hmac = keys.hmac(domain.id.uuid(), &value);
         write::advisory(&mut transaction, vec![write::identity_key(&hmac)]).await?;
         let Some(locked) = write::lock(&mut transaction, domain.id, &hmac).await? else {
@@ -252,22 +301,33 @@ impl Feeder {
         })
     }
 
-    /// One attempt at [`Feeder::revise`].
+    /// One attempt at [`Feeder::revising`].
     async fn revise_once(
         &self,
-        revision: &Revision,
+        revising: &Revising<'_>,
+        patient: &Patient,
         context: &Context,
     ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
-        let patient = revision.patient();
         let mut transaction = self.store.pool().begin().await.map_err(store)?;
         let domains = record::domains(&mut *transaction).await?;
-        let (domain, value) = condition(&domains, revision.identifier())?;
+        let (domain, value) = condition(&domains, revising.system, revising.value)?;
         let carried = write::carried(patient, &domains, keys)?;
         let own = keys.hmac(domain.id.uuid(), &value);
         write::advisory(&mut transaction, identity_keys(&own, &carried)).await?;
-        let locked = write::lock_or_insert(&mut transaction, keys, domain, &value).await?;
+        let locked = match revising.master {
+            Some(master) if master.known => write::lock(&mut transaction, domain.id, &own)
+                .await?
+                .filter(|locked| !locked.removed)
+                .ok_or(FeedError::NotFound)?,
+            _ => write::lock_or_insert(&mut transaction, keys, domain, &value).await?,
+        };
         if !locked.active {
+            return Err(FeedError::Subsumed);
+        }
+        if let Some(master) = revising.master
+            && master::merged(&mut transaction, master.identity).await?
+        {
             return Err(FeedError::Subsumed);
         }
         let (version, subject) = self
@@ -283,13 +343,14 @@ impl Feeder {
             },
         )
         .await?;
-        let me = me(
+        let mut me = me(
             locked.id,
             version,
             &subject,
             &carried,
             domain.kind == DomainKind::Master,
         );
+        me.identity = revising.master.map(|master| master.identity);
         let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
         transaction.commit().await.map_err(store)?;
         let action = if locked.created {
@@ -315,14 +376,18 @@ impl Feeder {
         })
     }
 
-    /// One attempt at [`Feeder::resolve_duplicate`].
-    async fn resolve_once(&self, merge: &Merge, context: &Context) -> Result<Applied, FeedError> {
+    /// One attempt at [`Feeder::resolving`].
+    async fn resolve_once(
+        &self,
+        resolving: &Resolving<'_>,
+        patient: &Patient,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
-        let patient = merge.patient();
         let mut transaction = self.store.pool().begin().await.map_err(store)?;
         let domains = record::domains(&mut *transaction).await?;
-        let (domain, subsumed) = condition(&domains, merge.subsumed())?;
-        let (_, survivor) = condition(&domains, merge.survivor())?;
+        let (domain, subsumed) = condition(&domains, resolving.system, resolving.subsumed)?;
+        let (_, survivor) = condition(&domains, resolving.system, resolving.survivor)?;
         let carried = write::carried(patient, &domains, keys)?;
         let subsumed_hmac = keys.hmac(domain.id.uuid(), &subsumed);
         let survivor_hmac = keys.hmac(domain.id.uuid(), &survivor);
@@ -434,18 +499,40 @@ impl Feeder {
     }
 }
 
-/// Returns the domain and the normalised value of `identifier`.
+/// Which record a revision writes.
+#[derive(Debug, Clone, Copy)]
+struct Revising<'a> {
+    /// The domain's system.
+    system: &'a str,
+    /// The identifier's value, as sent.
+    value: &'a str,
+    /// The master identity an ITI-93 change writes, `None` for a feed.
+    master: Option<master::Identity>,
+}
+
+/// Which record a resolved duplicate subsumes, and into which.
+#[derive(Debug, Clone, Copy)]
+struct Resolving<'a> {
+    /// The domain of both records.
+    system: &'a str,
+    /// The subsumed identifier's value.
+    subsumed: &'a str,
+    /// The surviving identifier's value.
+    survivor: &'a str,
+}
+
+/// Returns the domain `system` names and the normalised `value`.
 fn condition<'d>(
     domains: &'d [Domain],
-    identifier: &SourceIdentifier,
+    system: &str,
+    value: &str,
 ) -> Result<(&'d Domain, crate::store::seal::IdentifierValue), FeedError> {
-    let system = identifier.system();
     let domain = domains
         .iter()
         .find(|d| d.system == system && !d.retired)
         .ok_or(FeedError::UnknownDomain)?;
     let value = Rule::of(system)
-        .normalise(identifier.value().expose_secret())
+        .normalise(value)
         .map_err(|source| FeedError::Identifier {
             system: system.to_owned(),
             source,
@@ -495,6 +582,7 @@ fn me<'s>(
         record,
         version,
         master,
+        identity: None,
         subject,
         authoritative: keys(DomainKind::Authoritative),
         local: keys(DomainKind::Local),

@@ -21,6 +21,9 @@
 //!   §3.55.5.1.2 written as an `AuditEvent` the same way, with the
 //!   `QueryByParameter` as the query entity, the initiating community as its
 //!   `ihe:homeCommunityID` detail and one patient per patient answered.
+//! - ITI-93 as the PMIR Registry: the PMIR Feed audit profile (PMIR 1.6.0
+//!   §2:3.93.5.1), one record per message, with each Patient the message
+//!   names and its `MessageHeader`.
 //! - A steward action, in [`operator`]: a `RESTful` activity on the person (BALP 1.1.4
 //!   §3:5.7.3), a read for a view and an update for a decision; a steward's
 //!   search, a BALP Patient Query record per person found or a Query record
@@ -509,6 +512,57 @@ pub fn subscription(
             name: None,
             query: None,
         }],
+    )
+}
+
+/// The `ITI-93` subtype.
+pub const ITI_93: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-93", "Mobile Patient Identity Feed");
+
+/// The `type` of the PMIR Feed audit profile's message entity.
+const MESSAGE_HEADER: Coded = Coded::fixed(
+    "http://hl7.org/fhir/resource-types",
+    "MessageHeader",
+    "MessageHeader",
+);
+
+/// The event a PMIR feed message's `MessageHeader` names.
+const FEED_EVENT: &str = "urn:ihe:iti:pmir:2019:patient-feed";
+
+/// Returns the record of one ITI-93 message the Registry received, ended in
+/// `outcome` (PMIR 1.6.0 §2:3.93.5.1).
+///
+/// The record follows the PMIR Feed audit profile: one patient entity per
+/// `Patient/{id}` of `patients`, and the message's `MessageHeader`, whose
+/// id is `message`. A message refused before it was read names neither.
+#[must_use]
+pub fn pmir_feed(
+    call: &Call,
+    patients: Vec<SecretString>,
+    message: Option<&str>,
+    outcome: Outcome,
+) -> Exchange {
+    let mut entities: Vec<Entity> = patients.into_iter().map(Entity::PatientReference).collect();
+    if let Some(id) = message {
+        entities.push(Entity::Resource {
+            reference: Some(format!("MessageHeader/{id}")),
+            resource_type: "MessageHeader",
+            kind: MESSAGE_HEADER,
+            role: None,
+            name: Some(FEED_EVENT),
+            query: None,
+        });
+    }
+    call.exchange(
+        EventKind {
+            profile: "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Feed.Audit",
+            event_type: PATIENT_RECORD,
+            subtypes: vec![ITI_93],
+            action: "E",
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        entities,
     )
 }
 

@@ -22,7 +22,7 @@ use axum::body::Body;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::auth::guard::{NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
-use ferropix_server::auth::table::{Need, ROUTES, Route};
+use ferropix_server::auth::table::{Need, ROUTES, Route, SourceRule};
 use ferropix_server::config::Config;
 use ferropix_server::config::settings::Settings;
 use ferropix_server::fhir::{self, Mounts};
@@ -51,7 +51,7 @@ const IDENTIFIER: &str = "SYNTHETIC-ID-4711";
 /// The FHIR transactions served today; every other one answers `501` until its
 /// issue lands, as does an operator route [`crate::operator::SERVED`] does
 /// not name.
-const SERVED: [&str; 5] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119", "ITI-94"];
+const SERVED: [&str; 6] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119", "ITI-93", "ITI-94"];
 
 /// Returns whether `status` is an answer of the route's handler: neither a
 /// refusal of the guard nor the pending handler's `501`.
@@ -163,6 +163,13 @@ system = "{DOMAIN}"
 name = "East hospital"
 kind = "local"
 source_client_id = "east-lab"
+
+[[domain]]
+system = "http://localhost:8080"
+name = "Master Patient Identification Domain"
+kind = "master"
+source_client_id = "east-lab"
+sensitive = false
 
 [pixm]
 remove_patient = true
@@ -301,7 +308,10 @@ pub(crate) async fn send(
 fn uri_of(route: &Route) -> String {
     let path = route.path.replace("{id}", "p-1");
     match route.need {
-        Need::Fhir { source: true, .. } => {
+        Need::Fhir {
+            source: SourceRule::Named,
+            ..
+        } => {
             format!(
                 "{path}?identifier={}%7C{IDENTIFIER}",
                 DOMAIN.replace(':', "%3A")
@@ -396,9 +406,15 @@ async fn a_source_feeding_another_domain_is_answered_403_with_a_forbidden_issue(
     let unlisted = bearer(&issuer.token("north-lab", "system/Patient.cud"));
     let sources: Vec<&Route> = ROUTES
         .iter()
-        .filter(|route| matches!(route.need, Need::Fhir { source: true, .. }))
+        .filter(
+            |route| matches!(route.need, Need::Fhir { source, .. } if source != SourceRule::Any),
+        )
         .collect();
-    assert_eq!(2, sources.len(), "the ITI-104 update and remove");
+    assert_eq!(
+        3,
+        sources.len(),
+        "the ITI-104 update and remove, and the ITI-93 feed"
+    );
     for route in sources {
         for token in [&other, &unlisted] {
             let answer = send(&app, route.method.clone(), &uri_of(route), Some(token)).await;

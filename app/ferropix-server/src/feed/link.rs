@@ -88,6 +88,9 @@ pub(super) struct Me<'a> {
     pub version: i32,
     /// Whether it is a record of the master domain, a master identity.
     pub master: bool,
+    /// The person a master record names by its value, which an ITI-93
+    /// create links it to, made with this id when the store lacks it.
+    pub identity: Option<PersonId>,
     /// Its demographics as the scorer compares them.
     pub subject: &'a Subject,
     /// The identifiers it carries in `authoritative` domains.
@@ -174,7 +177,16 @@ async fn join(
         .map(|other| other.person)
         .filter(|person| !conflicted.contains(person))
         .collect();
-    let mut persons: Vec<PersonId> = joinable.iter().copied().chain(current).collect();
+    let identity = match (current, me.identity) {
+        (None, Some(identity)) => Some(super::master::person_with_id(connection, identity).await?),
+        _ => None,
+    };
+    let mut persons: Vec<PersonId> = joinable
+        .iter()
+        .copied()
+        .chain(current)
+        .chain(identity)
+        .collect();
     persons.sort_unstable();
     persons.dedup();
     lock_persons(connection, &persons).await?;
@@ -185,8 +197,8 @@ async fn join(
             .any(|(person, master)| *person == current && *master)
     });
     let survivor = if me.master || current_master {
-        match current {
-            Some(current) => current,
+        match current.or(identity) {
+            Some(kept) => kept,
             None => new_person(connection).await?,
         }
     } else {

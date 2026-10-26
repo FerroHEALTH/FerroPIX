@@ -11,7 +11,8 @@
 //! on `Patient` adds to the one `Patient` entry (`patient`).
 
 use fhir_types::r4::capability_statement::{
-    CapabilityStatement, CapabilityStatementImplementation, CapabilityStatementRest,
+    CapabilityStatement, CapabilityStatementImplementation, CapabilityStatementMessaging,
+    CapabilityStatementMessagingSupportedMessage, CapabilityStatementRest,
     CapabilityStatementRestResource, CapabilityStatementRestResourceInteraction,
     CapabilityStatementRestResourceOperation, CapabilityStatementRestResourceSearchParam,
     CapabilityStatementRestSecurity, CapabilityStatementSoftware,
@@ -149,6 +150,7 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> C
             resource,
             ..CapabilityStatementRest::default()
         }],
+        messaging: mounts.pmir.then(feed_received).into_iter().collect(),
         ..CapabilityStatement::default()
     }
 }
@@ -168,6 +170,25 @@ fn patient(mounts: Mounts) -> Option<CapabilityStatementRestResource> {
     }
     let served = !patient.interaction.is_empty() || !patient.operation.is_empty();
     served.then_some(patient)
+}
+
+/// The PMIR feed message ITI-93 carries (PMIR 1.6.0, the PMIR Feed
+/// `MessageDefinition`).
+pub const PMIR_FEED_MESSAGE: &str =
+    "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition";
+
+/// The ITI-93 feed the Registry receives, as the PMIR Patient Identity
+/// Registry actor statement declares it (`CapabilityStatement-IHE.PMIR.PatientIdentityRegistry`).
+fn feed_received() -> CapabilityStatementMessaging {
+    CapabilityStatementMessaging {
+        documentation: Some("For Mobile Patient Identity Feed [ITI-93]".into()),
+        supported_message: vec![CapabilityStatementMessagingSupportedMessage {
+            mode: "receiver".into(),
+            definition: PMIR_FEED_MESSAGE.into(),
+            ..CapabilityStatementMessagingSupportedMessage::default()
+        }],
+        ..CapabilityStatementMessaging::default()
+    }
 }
 
 /// The PMIR subscription profile ITI-94 creates against (PMIR 1.6.0

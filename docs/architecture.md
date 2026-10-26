@@ -672,14 +672,32 @@ be stored withholds the answer with `503` (decision D24).
 
 **ITI-93, received.** `POST {base}/fhir` with a PMIR message Bundle: a
 `MessageHeader` as `entry[0]` and a history Bundle as `entry[1]` (PMIR 1.6.0
-§2:3.93.4.1.2.2, §2:3.93.4.1.2.3). The Registry creates, updates and deletes
-persons in the Master Patient Identification Domain, which is `[server]
-public_base_url` (§2:3.93.4.1.3), and merges when an entry carries
-`replaced-by` (§2:3.93.4.1.2.4): the deprecated person gets `active = false`
-and the `replaced-by` link, as section 4.3's merge path does. An attempt to
-unmerge through the feed is answered with `entry.response.code` `405`
-(§2:3.93.4.1.3). The response is a message Bundle with one `MessageHeader`
-carrying the outcome (§2:3.93.4.2.2).
+§2:3.93.4.1.2.2, §2:3.93.4.1.2.3). Only the Source of the master domain
+sends it: the guard admits the client the master domain's
+`source_client_id` names and answers any other `403` with a `forbidden`
+issue, every client when no master domain is seeded. The Registry creates,
+updates and deletes persons in the Master Patient Identification Domain,
+which is `[server] public_base_url` (§2:3.93.4.1.3), and merges when an
+entry carries `replaced-by` (§2:3.93.4.1.2.4): the deprecated person gets
+`active = false` and the `replaced-by` link, as section 4.3's merge path
+does. Each change applies in history order in its own transaction (D37):
+
+- a **create** carries a UUID `Patient.id` that becomes the person's id,
+  with a master record of that value; a create of a held identity applies
+  as an update (D36);
+- an **update** revises the master record the id names;
+- a **merge** is the Source's duplicate resolution of section 4.3 in the
+  master domain, the deprecated id subsumed by the one `replaced-by` names;
+- a **delete** removes the master record, as a removal does.
+
+A change is refused in the response (D35): an id that is no UUID with
+`invalid` and `400`, an update, merge or delete of an identity the store
+does not hold with `not-found` and `404`, and an update or create of a
+merged identity, which is an attempt to unmerge, with `not-supported` and
+`405` (§2:3.93.4.1.3). A store failure ends the message with `503`. The
+response is a message Bundle with one `MessageHeader` carrying the outcome
+(§2:3.93.4.2.2), and each message writes one record on the PMIR Feed audit
+profile (§2:3.93.5.1).
 
 **ITI-93, sent.** Every committed change to a person is an ITI-93 message to
 each active subscription whose criteria match (section 4.3 inserts it into
@@ -1801,3 +1819,4 @@ The milestones carry the order; every issue cites the section it builds.
 | D34 | The outbound messages | one `outbox` table every sender shares (XCPD now, ITI-10 next), written before its request is acknowledged, the payload sealed under the store's key for its row id, claimed with `FOR UPDATE SKIP LOCKED` under a lease, retried with a doubling wait and abandoned with its failure when its attempts are spent; the sender finishes its message in flight on `SIGTERM` within the drain; `db reseal` rewrites the payloads; delivered and abandoned rows past `[outbox] retention_days` are pruned hourly through the `SECURITY DEFINER` function `pix.prune_outbox`, the server's role holding `EXECUTE` on it and no `DELETE` on the table | no specification governs it: our own design; an acknowledged message lost on a restart would be a silent failure, and a payload that names a patient is sealed as an identifier is (D7) |
 | D35 | A refused ITI-93 entry in the response | the response `MessageHeader.response.code` `fatal-error`, its `details` a contained `OperationOutcome` with one issue per refused entry: the history entry as `expression`, the correlated status (an unmerge's `405`) in `diagnostics` | PMIR 1.6.0 §2:3.93.4.1.3 asks for a "correlated entry.response.code" while §2:3.93.4.2.2 allows the response one `MessageHeader` entry; FHIR R4 `MessageHeader.response.details` references the outcome of a message; the gap is reported upstream (#250) |
 | D36 | Master identities in the cross-reference | an ITI-93 create carries a UUID `Patient.id` that becomes the person's id, a create of a known person applies as an update, a non-UUID id is refused per entry as `invalid` (D35); a master identity survives any other person, between two of one kind the earlier `person.created_at` survives and the smaller id breaks only a tie; matching never merges two master identities and holds them apart as a candidate with the `master_identities` conflict; only the Source's own merge (`replaced-by`) joins them | PMIR 1.6.0 §2:3.93.4.1.1 has the Registry assign `Patient.id` while §2:3.93.4.2.2's one-`MessageHeader` response cannot return it, so the Source owns the master identity and the Registry keeps it (reported upstream, #262); the survival order and the conflict no specification governs: our own design |
+| D37 | The changes of one ITI-93 message | applied in history order, each in its own transaction; a refused change leaves the changes before and after it applied, and the response names it; a store failure ends the message with `503` and the changes before it stay applied, so a resent message applies again (a create of a held identity is an update, a merge already made changes nothing) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry, which presumes each entry is applied or refused on its own; how the entries share transactions no specification governs: our own design |

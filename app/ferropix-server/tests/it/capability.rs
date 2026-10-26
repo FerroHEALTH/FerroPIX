@@ -24,7 +24,7 @@ use axum::body::Body;
 use ferropix_server::auth::table::{self, Mount};
 use ferropix_server::fhir::Mounts;
 use ferropix_server::fhir::capability::{
-    self, IHE_PIX, PDQM_MATCH, PDQM_SUPPLIER, PDQM_SUPPLIER_MATCH, PIXM_MANAGER,
+    self, IHE_PIX, PDQM_MATCH, PDQM_SUPPLIER, PDQM_SUPPLIER_MATCH, PIXM_MANAGER, PMIR_FEED_MESSAGE,
 };
 use http::{Method, Request, StatusCode, header};
 use serde_json::Value;
@@ -261,6 +261,24 @@ async fn the_statement_meets_the_pixm_and_pdqm_actor_statements_and_names_only_m
 }
 
 #[tokio::test]
+async fn the_statement_declares_the_iti_93_feed_the_registry_receives() {
+    let issuer = Issuer::start().await;
+    let secrets = Secrets::new();
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
+    let (status, _, text) = get(&app, "/fhir/metadata", None).await;
+    assert_eq!(StatusCode::OK, status);
+    let statement: Value = serde_json::from_str(&text).expect("JSON");
+    assert_eq!(
+        serde_json::json!([{
+            "documentation": "For Mobile Patient Identity Feed [ITI-93]",
+            "supportedMessage": [{"mode": "receiver", "definition": PMIR_FEED_MESSAGE}]
+        }]),
+        statement["messaging"],
+        "the ITI-93 feed received, as the PMIR Registry statement declares it"
+    );
+}
+
+#[tokio::test]
 async fn the_statement_declares_every_pdqm_search_parameter_the_search_reads() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
@@ -355,6 +373,18 @@ async fn the_statement_follows_the_switches() {
         },
     );
     assert_eq!(1, without_pdqm.instantiates.len(), "the PIXm Manager alone");
+    let without_pmir = capability::statement(
+        &base,
+        &smart,
+        Mounts {
+            pmir: false,
+            ..Mounts::all()
+        },
+    );
+    assert!(
+        without_pmir.messaging.is_empty(),
+        "no ITI-93 feed without [pmir]"
+    );
     let patient = &without_pdqm.rest[0].resource[0];
     assert!(
         patient.search_param.is_empty(),

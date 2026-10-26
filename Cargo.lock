@@ -1413,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-console"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1453,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-operator-api"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "serde",
  "serde_json",
@@ -1461,7 +1461,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-server"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1510,7 +1510,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-testkit"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "async-trait",
  "aws-lc-rs",

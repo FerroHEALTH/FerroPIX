@@ -43,7 +43,7 @@ leptos = { version = "0.8.22", default-features = false }
 leptos_axum = "0.8.10"
 leptos_meta = { version = "0.8.7", default-features = false }
 leptos_router = { version = "0.8.17", default-features = false }
-ferrohealth-ui = "=0.4.0"
+ferrohealth-ui = "=0.5.1"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 wasm-bindgen = "0.2.129"
 console_error_panic_hook = "0.1.7"

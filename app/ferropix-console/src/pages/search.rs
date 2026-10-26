@@ -26,10 +26,10 @@ use ferrohealth_ui::island::DatePicker;
 use ferrohealth_ui::widget::date::{DateField, DateWords};
 
 use crate::app::{
-    SEARCH, SEARCH_DEMOGRAPHICS, current_path, current_query, framed, page_context, preferences,
+    SEARCH, SEARCH_DEMOGRAPHICS, current_path, current_query, page_context, preferences,
 };
-use crate::document::{Document, Prefill, Segment};
 use crate::locale::{Msg, tr, tr_with};
+use crate::model::{Document, Prefill, Segment};
 use crate::pages::patient::full_name;
 use crate::pages::{Needs, server_state, title};
 use ferrohealth_ui::island::WorkList;
@@ -45,6 +45,12 @@ use ferrohealth_ui::widget::worklist::{WorkRow, row};
 use ferropix_operator_api::domain::Domains;
 use ferropix_operator_api::patient::Grade;
 use ferropix_operator_api::search::Results;
+
+/// The route the top bar's search panel asks as the steward types: it
+/// answers the pages, identifier domains and settings the words name, and
+/// never a person, since every person search is an audited query (FerroPIX
+/// #214, design D26).
+pub const SUGGEST: &str = "/search/answer";
 
 /// The submit of a search form.
 fn submit() -> AnyView {
@@ -125,14 +131,9 @@ fn text_field(id: &'static str, words: Msg, hint: Option<Msg>, value: Option<&St
 /// The birth date, FerroUI's date field (R23) with its picker (R25), which
 /// allows no day after today, holding `value`.
 fn birth_date(value: Option<&String>) -> AnyView {
-    let date = jiff::Timestamp::now()
-        .to_zoned(jiff::tz::TimeZone::UTC)
-        .date();
-    let today = u16::try_from(date.year())
-        .ok()
-        .zip(u8::try_from(date.month()).ok())
-        .zip(u8::try_from(date.day()).ok())
-        .and_then(|((year, month), day)| Day::new(year, month, day));
+    let today = page_context()
+        .today
+        .and_then(|(year, month, day)| Day::new(year, month, day));
     // NOTE: no specification governs this: our own design; a clock outside the
     // calendar's years leaves the field a plain text field, its format stated.
     let Some(today) = today else {
@@ -268,18 +269,16 @@ pub fn SearchPage() -> impl IntoView {
             <p class="fui-muted">{tr(Msg::NothingSearched)}</p>
         }
     });
-    framed(
-        view! {
-            {title(tr(Msg::Search))}
-            {page_header(tr(Msg::Search), Some(tr(Msg::SearchSub)), ActionGroup::none())}
-            {stack(view! {
-                {card(tr(Msg::FindPatient), view! { {segments} {form} })}
-                {answered}
-                {outcome}
-            })}
-        }
-        .into_any(),
-    )
+    view! {
+        {title(tr(Msg::Search))}
+        {page_header(tr(Msg::Search), Some(tr(Msg::SearchSub)), ActionGroup::none())}
+        {stack(view! {
+            {card(tr(Msg::FindPatient), view! { {segments} {form} })}
+            {answered}
+            {outcome}
+        })}
+    }
+    .into_any()
 }
 
 /// The words of a grade.

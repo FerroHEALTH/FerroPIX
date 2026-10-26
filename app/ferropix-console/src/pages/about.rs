@@ -18,10 +18,10 @@ use ferrohealth_ui::view::template::about::{
 use leptos::prelude::*;
 use serde::Deserialize;
 
-use crate::app::{footer, framed, page_context};
+use crate::app::{footer, page_context};
 use crate::locale::{Msg, tr};
+use crate::model::Capability;
 use crate::pages::title;
-use crate::pix::Capability;
 
 /// The FerroUI release the console is built on, as `Cargo.toml` pins it
 /// exactly (a test holds the two together).
@@ -137,13 +137,11 @@ pub fn AboutPage() -> impl IntoView {
         self_description,
         replica: None,
     });
-    framed(
-        view! {
-            {title(tr(Msg::About))}
-            {page}
-        }
-        .into_any(),
-    )
+    view! {
+        {title(tr(Msg::About))}
+        {page}
+    }
+    .into_any()
 }
 
 #[cfg(test)]

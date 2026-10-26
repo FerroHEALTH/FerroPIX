@@ -207,6 +207,8 @@ messages! {
     SearchLabel = "search-label",
     /// The top bar's search field's placeholder.
     SearchPlaceholder = "search-placeholder",
+    /// The search panel's last row, which searches patients for the words.
+    SearchPatientsFor = "search-patients-for",
     /// The top bar's search submit.
     SearchFind = "search-find",
     /// The status pill when the server answers.

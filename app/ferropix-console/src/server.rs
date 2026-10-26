@@ -37,30 +37,17 @@ use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{And, Predicate as _, SizeAbove};
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::app::{ABOUT, PageContext, SEARCH, SIGN_IN};
+use crate::app::{ABOUT, SEARCH, SIGN_IN};
 use crate::config::settings::{OidcSettings, Settings};
 use crate::locale::{Msg, catalog, negotiated, tr_in};
+use crate::model::PageContext;
+use crate::paths::{FAVICON, MARK_DARK, MARK_LIGHT, STYLESHEET, THEME, is_sign_in};
 use crate::pix::{ClientError, Pix};
 use crate::session::Sessions;
 use crate::session::request::{Held, held};
 
 /// The path of the console's own liveness route.
 pub const HEALTH: &str = "/health";
-
-/// The path of the library's stylesheet.
-pub const STYLESHEET: &str = "/ferrohealth-ui.css";
-
-/// The path of the FerroPIX theme, which loads after the stylesheet.
-pub const THEME: &str = "/theme.css";
-
-/// The path of the favicon.
-pub const FAVICON: &str = "/favicon.svg";
-
-/// The path of the brand mark in the light theme.
-pub const MARK_LIGHT: &str = "/ferropix-icon.svg";
-
-/// The path of the brand mark in the dark theme.
-pub const MARK_DARK: &str = "/ferropix-icon-dark.svg";
 
 /// The name cargo-leptos gives the site bundle's files under `pkg/`.
 pub const OUTPUT_NAME: &str = "ferropix-console";
@@ -163,7 +150,7 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .route(FAVICON, get(favicon))
         .route(MARK_LIGHT, get(mark_light))
         .route(MARK_DARK, get(mark_dark))
-        .route(crate::oidc::LOGIN, get(crate::oidc::login))
+        .route(crate::paths::LOGIN, get(crate::oidc::login))
         .route(crate::oidc::CALLBACK, get(crate::oidc::callback))
         .route(
             crate::oidc::logout::LOGOUT,
@@ -181,17 +168,17 @@ pub fn router(state: ConsoleState) -> axum::Router {
             crate::preferences::SIDEBAR_ROUTE,
             post(crate::preferences::sidebar),
         )
-        .route(SEARCH, post(crate::posts::search))
-        .route(crate::app::AUDIT, post(crate::posts::trail))
+        .route(SEARCH, post(crate::posts::post))
+        .route(crate::app::AUDIT, post(crate::posts::post))
         .route(crate::pages::trail::EXPORT, post(crate::posts::export))
-        .route("/patients/{person}/reveal", post(crate::posts::reveal))
-        .route(crate::app::DOMAINS, post(crate::posts::domain_create))
-        .route("/domains/{domain}", post(crate::posts::domain_change))
+        .route("/patients/{person}/reveal", post(crate::posts::post))
+        .route(crate::app::DOMAINS, post(crate::posts::post))
+        .route("/domains/{domain}", post(crate::posts::post))
         .route(
             crate::pages::about::METADATA_DOWNLOAD,
             get(capability_download),
         )
-        .route(crate::app::SEARCH_DEMOGRAPHICS, post(crate::posts::search))
+        .route(crate::app::SEARCH_DEMOGRAPHICS, post(crate::posts::post))
         .leptos_routes_with_context(&options, routes, context.clone(), {
             let options = options.clone();
             move || crate::app::document(options.clone())
@@ -222,57 +209,156 @@ pub fn is_public(path: &str) -> bool {
             FAVICON,
             MARK_LIGHT,
             MARK_DARK,
-            crate::oidc::LOGIN,
+            crate::paths::LOGIN,
             crate::oidc::CALLBACK,
             crate::oidc::logout::LOGOUT,
         ]
         .contains(&path)
 }
 
-/// Whether `path` is a sign-in page, drawn for a reader with no session.
+/// What a request to the page at `path` (with its query) is drawn from:
+/// the steward's name, the call to the server's liveness route, on About
+/// the server's `CapabilityStatement`, and the page's document, with the
+/// request's preferences and locale. A request with no live session gets
+/// the sign-in as its redirect, one whose session has ended the sign-in
+/// that says so.
+///
+/// # Errors
+///
+/// Returns the session store's error when it cannot be read.
+pub async fn page_for(
+    state: &ConsoleState,
+    headers: &http::HeaderMap,
+    path: &str,
+) -> Result<PageContext, crate::session::SessionError> {
+    let route = path.split(['?', '#']).next().unwrap_or_default().to_owned();
+    let prefix = state.sessions().preference_prefix();
+    let signed_out = surrounded(
+        PageContext {
+            path: path.to_owned(),
+            ..PageContext::signed_out(prefix.clone())
+        },
+        state,
+        headers,
+    );
+    if is_sign_in(&route) {
+        return Ok(signed_out);
+    }
+    let (token, operator, admin) = match held(state, headers)? {
+        Held::SignedIn {
+            token,
+            operator,
+            scopes,
+        } => {
+            let admin = scopes.contains(&state.settings().pix.admin_scope);
+            (token, operator, admin)
+        }
+        Held::Ended => {
+            return Ok(PageContext {
+                redirect: Some(format!("{SIGN_IN}/expired")),
+                ..signed_out
+            });
+        }
+        Held::Absent => {
+            return Ok(PageContext {
+                redirect: Some(String::from(SIGN_IN)),
+                ..signed_out
+            });
+        }
+    };
+    let probe = state.pix().probe(&token).await;
+    let capability = if route == ABOUT {
+        Some(state.pix().capability_statement(&token).await)
+    } else {
+        None
+    };
+    let document = if probe.is_up() {
+        crate::document::load(state.pix(), &token, &route).await
+    } else {
+        None
+    };
+    Ok(PageContext {
+        operator,
+        probe: Some(probe),
+        capability,
+        document,
+        admin,
+        ..signed_out
+    })
+}
+
+/// `context` with the request's preferences and locale and the console's
+/// own settings a page names.
 #[must_use]
-pub fn is_sign_in(path: &str) -> bool {
-    path == SIGN_IN
-        || path
-            .strip_prefix(SIGN_IN)
-            .is_some_and(|rest| rest.starts_with('/'))
+pub fn surrounded(
+    context: PageContext,
+    state: &ConsoleState,
+    headers: &http::HeaderMap,
+) -> PageContext {
+    let prefix = state.sessions().preference_prefix();
+    let preferences = crate::preferences::kept_cookies(headers, &prefix);
+    let configured = state.settings().locale.clone();
+    let chosen = crate::locale::chosen(
+        &ferrohealth_ui::theme::Preferences::read(&preferences, &prefix),
+        headers,
+        configured.clone(),
+    );
+    let provider = state
+        .settings()
+        .oidc
+        .as_ref()
+        .and_then(|oidc| oidc.authorization_endpoint.host_str().map(str::to_owned))
+        .unwrap_or_default();
+    PageContext {
+        preferences,
+        locale: chosen.tag(),
+        browser: negotiated(headers, configured).tag(),
+        base: state.pix().base().to_string(),
+        provider,
+        sign_in: state.settings().oidc.is_some(),
+        today: today(),
+        prefix,
+        ..context
+    }
+}
+
+/// Today's year, month and day in UTC, `None` for a clock outside the years
+/// a `u16` holds.
+fn today() -> Option<(u16, u8, u8)> {
+    let date = jiff::Timestamp::now()
+        .to_zoned(jiff::tz::TimeZone::UTC)
+        .date();
+    Some((
+        u16::try_from(date.year()).ok()?,
+        u8::try_from(date.month()).ok()?,
+        u8::try_from(date.day()).ok()?,
+    ))
 }
 
 /// Holds every page and every route that acts to a live signed-in session,
-/// and calls the FerroPIX server once before a page is drawn.
-///
-/// A request with no session cookie goes to the sign-in page, one whose
-/// session has ended to the sign-in page that says so; a page request that
-/// holds a live session gets the [`PageContext`] it is drawn from: the
-/// steward's name, the outcome of the server's liveness route, and on About
-/// the server's `CapabilityStatement`.
+/// and calls the FerroPIX server once before a page is drawn
+/// ([`page_for`]).
 async fn gate(
     Extension(state): Extension<ConsoleState>,
     mut request: Request,
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_owned();
-    if is_public(&path) {
+    if is_public(&path) || path.starts_with(SERVER_FUNCTIONS) {
         return next.run(request).await;
     }
-    let prefix = state.sessions().preference_prefix();
-    if is_sign_in(&path) {
-        request
-            .extensions_mut()
-            .insert(PageContext::signed_out(prefix));
-        return next.run(request).await;
-    }
-    let (token, operator, admin) = match held(&state, request.headers()) {
-        Ok(Held::SignedIn {
-            token,
-            operator,
-            scopes,
-        }) => {
-            let admin = scopes.contains(&state.settings().pix.admin_scope);
-            (token, operator, admin)
-        }
-        Ok(Held::Ended) => return Redirect::to(&format!("{SIGN_IN}/expired")).into_response(),
-        Ok(Held::Absent) => return Redirect::to(SIGN_IN).into_response(),
+    let read = request
+        .uri()
+        .path_and_query()
+        .map_or_else(|| path.clone(), |read| read.as_str().to_owned());
+    let drawn = request.method() == Method::GET || request.method() == Method::HEAD;
+    let page = if drawn {
+        page_for(&state, request.headers(), &read).await
+    } else {
+        refused(&state, request.headers(), &path)
+    };
+    let page = match page {
+        Ok(page) => page,
         Err(error) => {
             tracing::error!(%error, "the session store could not be read");
             let locale = negotiated(request.headers(), state.settings().locale.clone());
@@ -284,28 +370,33 @@ async fn gate(
                 .into_response();
         }
     };
-    if request.method() == Method::GET || request.method() == Method::HEAD {
-        let probe = state.pix().probe(&token).await;
-        let capability = if path == ABOUT {
-            Some(state.pix().capability_statement(&token).await)
-        } else {
-            None
-        };
-        let document = if probe.is_up() {
-            crate::document::load(state.pix(), &token, &path).await
-        } else {
-            None
-        };
-        request.extensions_mut().insert(PageContext {
-            operator,
-            probe: Some(probe),
-            capability,
-            prefix,
-            document,
-            admin,
-        });
+    if let Some(to) = &page.redirect {
+        return Redirect::to(to).into_response();
+    }
+    if drawn {
+        request.extensions_mut().insert(page);
     }
     next.run(request).await
+}
+
+/// Whether a request that draws no page (a post) holds a live session: its
+/// context carries the sign-in as its redirect when it does not, and
+/// nothing else is read.
+fn refused(
+    state: &ConsoleState,
+    headers: &http::HeaderMap,
+    path: &str,
+) -> Result<PageContext, crate::session::SessionError> {
+    let mut page = PageContext::signed_out(state.sessions().preference_prefix());
+    if is_sign_in(path) {
+        return Ok(page);
+    }
+    page.redirect = match held(state, headers)? {
+        Held::SignedIn { .. } => None,
+        Held::Ended => Some(format!("{SIGN_IN}/expired")),
+        Held::Absent => Some(String::from(SIGN_IN)),
+    };
+    Ok(page)
 }
 
 /// Draws the page at the address of `parts`, whose extensions carry the
@@ -334,7 +425,7 @@ async fn capability_download(
         return Redirect::to(SIGN_IN).into_response();
     };
     match state.pix().capability_statement(&token).await {
-        crate::pix::Capability::Declared(text) => (
+        crate::model::Capability::Declared(text) => (
             [
                 (
                     CONTENT_TYPE,
@@ -348,7 +439,7 @@ async fn capability_download(
             text,
         )
             .into_response(),
-        crate::pix::Capability::Missing(_) => StatusCode::BAD_GATEWAY.into_response(),
+        crate::model::Capability::Missing(_) => StatusCode::BAD_GATEWAY.into_response(),
     }
 }
 
@@ -368,6 +459,10 @@ fn provide_request_context() {
         leptos::context::provide_context(page.clone());
     }
 }
+
+/// The prefix of the console's server functions, which check the session
+/// themselves and answer as data, never with a redirect.
+pub const SERVER_FUNCTIONS: &str = "/api/";
 
 /// The fetch metadata header that names where a request comes from.
 const SEC_FETCH_SITE: &str = "sec-fetch-site";

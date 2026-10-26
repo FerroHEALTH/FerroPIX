@@ -22,6 +22,7 @@ queue-depth-unknown = Not known: the server did not answer
 search-label = Find a patient
 search-placeholder = Identifier, name or birth date
 search-find = Find
+search-patients-for = Search patients for “{ $query }”
 
 pill-up = Server up
 pill-unreachable = Unreachable

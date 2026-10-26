@@ -128,7 +128,7 @@ pub async fn refresh_session(
     next: Next,
 ) -> Response {
     let path = request.uri().path().trim_end_matches('/');
-    if [super::LOGIN, super::CALLBACK, super::logout::LOGOUT].contains(&path) {
+    if [crate::paths::LOGIN, super::CALLBACK, super::logout::LOGOUT].contains(&path) {
         return next.run(request).await;
     }
     let Some(id) = state.sessions().cookie_in(request.headers(), COOKIE) else {

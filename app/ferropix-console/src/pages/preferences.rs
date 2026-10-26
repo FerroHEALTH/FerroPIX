@@ -18,22 +18,18 @@ use ferrohealth_ui::view::preferences::{
     preference_row, preferences_page, select_preference, switch_preference,
 };
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
 
-use crate::app::{PREFERENCES, current_query, framed, page_context, preferences};
-use crate::locale::{Msg, choices, negotiated, tr, tr_with};
+use crate::app::{PREFERENCES, current_query, page_context, preferences};
+use crate::locale::{Msg, choices, tr, tr_with};
 use crate::pages::not_found::NotFound;
 use crate::pages::title;
 use crate::preferences::{
     HIDE, PREFERENCE_ROUTE, RESET_ROUTE, REVEAL, REVEAL_CHOICES, REVEAL_DEFAULT,
 };
-use crate::server::ConsoleState;
-
 /// The console's own preference `name` the request keeps.
 fn own(name: &str) -> Option<String> {
-    let prefix = page_context().prefix;
-    use_context::<http::request::Parts>()
-        .and_then(|parts| crate::preferences::own(&parts.headers, &prefix, name))
+    let page = page_context();
+    crate::preferences::own_in(&page.preferences, &page.prefix, name)
 }
 
 /// The console's own rows in Appearance: how long a revealed identifier
@@ -85,11 +81,8 @@ fn reveal_rows(post: &Post, saved: Option<&str>) -> Vec<AnyView> {
 /// Your preferences, on the tab the route names.
 #[component]
 pub fn PreferencesPage() -> impl IntoView {
-    let section = use_params_map().with_untracked(|params| {
-        params
-            .get_str("section")
-            .map_or(Some(Section::Appearance), Section::parse)
-    });
+    let section = crate::app::param("section")
+        .map_or(Some(Section::Appearance), |name| Section::parse(&name));
     let Some(section) = section else {
         return view! { <NotFound /> }.into_any();
     };
@@ -111,12 +104,11 @@ pub fn PreferencesPage() -> impl IntoView {
         Section::Appearance => reveal_rows(&post, saved.as_deref()),
         _ => Vec::new(),
     };
-    let configured = use_context::<ConsoleState>()
-        .map(|state| state.settings().locale.clone())
-        .unwrap_or_default();
-    let browser = use_context::<http::request::Parts>().map_or(configured.clone(), |parts| {
-        negotiated(&parts.headers, configured)
-    });
+    let tag = page_context().browser;
+    let browser = choices()
+        .into_iter()
+        .find(|locale| locale.tag() == tag)
+        .unwrap_or_else(ferrohealth_ui::i18n::Locale::english);
     let page = preferences_page(ferrohealth_ui::view::preferences::PreferencesPage {
         section,
         routes,
@@ -132,11 +124,9 @@ pub fn PreferencesPage() -> impl IntoView {
         reset: String::from(RESET_ROUTE),
         own,
     });
-    framed(
-        view! {
-            {title(tr(Msg::Preferences))}
-            {page}
-        }
-        .into_any(),
-    )
+    view! {
+        {title(tr(Msg::Preferences))}
+        {page}
+    }
+    .into_any()
 }

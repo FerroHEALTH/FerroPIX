@@ -24,8 +24,7 @@ use ferropix_operator_api::search::{DemographicsSearch, IdentifierSearch, Result
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use http::{HeaderMap, StatusCode};
 
-use crate::app::PageContext;
-use crate::document::{Document, Prefill, Read, Segment};
+use crate::model::{Document, PageContext, Prefill, Read, Segment};
 use crate::pix::AccessToken;
 use crate::server::ConsoleState;
 use crate::session::request::{Held, held};
@@ -56,7 +55,7 @@ fn field(pairs: &[(String, String)], name: &str) -> Option<String> {
 /// Who a live session holds: the steward's name and whether the provider
 /// granted the server's administrator scope.
 #[derive(Debug)]
-struct Steward {
+pub struct Steward {
     /// The steward's name as the provider gave it.
     name: Option<String>,
     /// Whether the administrator scope was granted.
@@ -85,25 +84,126 @@ fn signed_in(state: &ConsoleState, headers: &HeaderMap) -> Option<(AccessToken, 
     }
 }
 
-/// Draws the page at the address of `parts` from `document`, beside the
+/// The context of the page at `path` drawn from `document`, beside the
 /// call to the server's liveness route a page's state is drawn from.
-async fn drawn(
-    state: ConsoleState,
-    mut parts: http::request::Parts,
+pub async fn posted_context(
+    state: &ConsoleState,
+    headers: &HeaderMap,
+    path: &str,
     token: &AccessToken,
     steward: Steward,
     document: Document,
-) -> Response {
+) -> PageContext {
     let probe = state.pix().probe(token).await;
-    parts.extensions.insert(PageContext {
-        operator: steward.name,
-        admin: steward.admin,
-        probe: Some(probe),
-        capability: None,
-        prefix: state.sessions().preference_prefix(),
-        document: Some(document),
-    });
-    crate::server::render(state, parts).await
+    crate::server::surrounded(
+        PageContext {
+            path: path.to_owned(),
+            operator: steward.name,
+            admin: steward.admin,
+            probe: Some(probe),
+            document: Some(document),
+            ..PageContext::signed_out(state.sessions().preference_prefix())
+        },
+        state,
+        headers,
+    )
+}
+
+/// What a form post comes to: the page it draws, the page it sends the
+/// browser back to, or no such form.
+#[derive(Debug)]
+pub enum Answer {
+    /// The page at the address `path` drawn from `document`.
+    Drawn {
+        /// The page's address.
+        path: String,
+        /// The steward's token, for the liveness call beside it.
+        token: AccessToken,
+        /// Who the steward is.
+        steward: Steward,
+        /// The document the post brought back.
+        document: Document,
+    },
+    /// The page to send the browser back to: a post with no live session,
+    /// or one that names no target.
+    Back(String),
+    /// No form posts to this address.
+    Unknown,
+}
+
+/// Answers the form `pairs` posted to `path` by the request with
+/// `headers`: a search, a trail filter, a reveal, or an administrator's
+/// domain create or change.
+pub async fn answer(
+    state: &ConsoleState,
+    headers: &HeaderMap,
+    path: &str,
+    pairs: &[(String, String)],
+) -> Answer {
+    let path = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('/');
+    let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    let back = match segments.as_slice() {
+        ["patients", person, crate::pages::patient::REVEAL] => format!("/patients/{person}"),
+        _ => path.to_owned(),
+    };
+    let Some((token, steward)) = signed_in(state, headers) else {
+        return Answer::Back(back);
+    };
+    let document = match segments.as_slice() {
+        ["search"] | ["search", "demographics"] => searched(state, &token, pairs).await,
+        ["audit"] => crate::document::trail(state.pix(), &token, filter_of(pairs)).await,
+        ["patients", person, crate::pages::patient::REVEAL]
+            if crate::pages::screens::is_uuid(person) =>
+        {
+            match revealed(state, headers, &token, person, pairs).await {
+                Some(document) => document,
+                None => return Answer::Back(back),
+            }
+        }
+        ["domains"] => created(state, &token, pairs).await,
+        ["domains", domain] if crate::pages::screens::is_uuid(domain) => {
+            changed(state, &token, domain, pairs).await
+        }
+        _ => return Answer::Unknown,
+    };
+    Answer::Drawn {
+        path: back,
+        token,
+        steward,
+        document,
+    }
+}
+
+/// Serves a form post (a search, a trail filter, a reveal, a domain's
+/// create or change): the page it names drawn again with the server's
+/// answer, at that page's address.
+pub async fn post(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
+    let (mut parts, pairs) = match form(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    match answer(&state, &parts.headers, parts.uri.path(), &pairs).await {
+        Answer::Drawn {
+            path,
+            token,
+            steward,
+            document,
+        } => {
+            let page =
+                posted_context(&state, &parts.headers, &path, &token, steward, document).await;
+            if let Ok(uri) = path.parse() {
+                parts.uri = uri;
+            }
+            parts.extensions.insert(page);
+            crate::server::render(state, parts).await
+        }
+        Answer::Back(path) => Redirect::to(&path).into_response(),
+        Answer::Unknown => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 /// The shape of what the top bar's field carried.
@@ -145,68 +245,63 @@ pub fn shape(typed: &str) -> Shape {
     }
 }
 
-/// Serves a search post: the identifier or the demographics forwarded to
-/// the operator API, and the search page drawn with the results.
+/// A search post: the identifier or the demographics forwarded to the
+/// operator API, and the search page's document with the results.
 ///
 /// A post of the top bar's one field is read by its shape: a date or a name
 /// searches by demographics with the field filled, and anything else is an
 /// identifier, searched in every domain the server holds.
-pub async fn search(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
-    let (parts, pairs) = match form(request).await {
-        Ok(read) => read,
-        Err(answer) => return *answer,
-    };
-    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
-        return Redirect::to(parts.uri.path()).into_response();
-    };
+async fn searched(
+    state: &ConsoleState,
+    token: &AccessToken,
+    pairs: &[(String, String)],
+) -> Document {
     let pix = state.pix();
     let domains: Read<ferropix_operator_api::domain::Domains> =
-        pix.read("operator/domains?limit=200", &token).await;
-    let typed = field(&pairs, "q").map(|typed| shape(&typed));
+        pix.read("operator/domains?limit=200", token).await;
+    let typed = field(pairs, "q").map(|typed| shape(&typed));
     let mut prefill = Prefill::default();
-    let (segment, results) = match (field(&pairs, "segment").as_deref(), typed) {
+    let (segment, results) = match (field(pairs, "segment").as_deref(), typed) {
         (Some("demographics"), _) => (
             Segment::Demographics,
-            demographics(pix, &token, &pairs, &Prefill::default()).await,
+            demographics(pix, token, pairs, &Prefill::default()).await,
         ),
         (None, Some(Shape::Date(born))) => {
             prefill.born = Some(born);
             (
                 Segment::Demographics,
-                demographics(pix, &token, &[], &prefill).await,
+                demographics(pix, token, &[], &prefill).await,
             )
         }
         (None, Some(Shape::Name(family))) => {
             prefill.family = Some(family);
             (
                 Segment::Demographics,
-                demographics(pix, &token, &[], &prefill).await,
+                demographics(pix, token, &[], &prefill).await,
             )
         }
         (None, Some(Shape::Identifier(value))) => (
             Segment::Identifier,
-            everywhere(pix, &token, domains.as_ref().ok(), &value).await,
+            everywhere(pix, token, domains.as_ref().ok(), &value).await,
         ),
         _ => {
             let search = IdentifierSearch {
-                system: field(&pairs, "domain").unwrap_or_default(),
-                value: field(&pairs, "identifier").unwrap_or_default(),
+                system: field(pairs, "domain").unwrap_or_default(),
+                value: field(pairs, "identifier").unwrap_or_default(),
                 offset: None,
                 limit: None,
             };
             (
                 Segment::Identifier,
-                pix.post("operator/search/identifier", &search, &token)
-                    .await,
+                pix.post("operator/search/identifier", &search, token).await,
             )
         }
     };
-    let document = Document::Search {
+    Document::Search {
         domains,
         results: Some((segment, results)),
         prefill,
-    };
-    drawn(state, parts, &token, steward, document).await
+    }
 }
 
 /// Searches by the demographics `pairs` posts, or those `prefill` carries.
@@ -286,20 +381,6 @@ fn filter_of(pairs: &[(String, String)]) -> ActionFilter {
     }
 }
 
-/// Serves a trail post: the filter and the page drawn with the actions it
-/// names.
-pub async fn trail(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
-    let (parts, pairs) = match form(request).await {
-        Ok(read) => read,
-        Err(answer) => return *answer,
-    };
-    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
-        return Redirect::to(parts.uri.path()).into_response();
-    };
-    let document = crate::document::trail(state.pix(), &token, filter_of(&pairs)).await;
-    drawn(state, parts, &token, steward, document).await
-}
-
 /// Serves the trail's export: the filter posted to the operator API's
 /// export, its CSV answered as a file, or `502` when the server sends none.
 pub async fn export(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
@@ -354,133 +435,92 @@ fn reveal_seconds(state: &ConsoleState, headers: &HeaderMap) -> u32 {
         .map_or(MAX_SECONDS, |seconds| seconds.min(MAX_SECONDS))
 }
 
-/// Serves a reveal post: the target and the reason posted to the operator
-/// API, and the patient drawn again with the value or the refusal.
-pub async fn reveal(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
-    let (mut parts, pairs) = match form(request).await {
-        Ok(read) => read,
-        Err(answer) => return *answer,
-    };
-    let path = parts.uri.path().to_owned();
-    let person = path
-        .trim_end_matches('/')
-        .strip_suffix(&format!("/{}", crate::pages::patient::REVEAL))
-        .and_then(|rest| rest.strip_prefix("/patients/"))
-        .filter(|person| crate::pages::screens::is_uuid(person))
-        .map(str::to_owned);
-    let Some(person) = person else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let page = format!("/patients/{person}");
-    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
-        return Redirect::to(&page).into_response();
-    };
-    let target = match (field(&pairs, "target").as_deref(), field(&pairs, "id")) {
+/// A reveal post: the target and the reason posted to the operator API,
+/// and the patient's document with the value or the refusal; `None` when
+/// the post names no target or no reason.
+async fn revealed(
+    state: &ConsoleState,
+    headers: &HeaderMap,
+    token: &AccessToken,
+    person: &str,
+    pairs: &[(String, String)],
+) -> Option<Document> {
+    let target = match (field(pairs, "target").as_deref(), field(pairs, "id")) {
         (Some("record"), Some(id)) => Some(Target::Record(id)),
         (Some("carried"), Some(id)) => Some(Target::Carried(id)),
         (Some("pseudonym"), Some(id)) => Some(Target::Pseudonym(id)),
         _ => None,
     };
-    let (Some(target), Some(reason)) = (target, field(&pairs, "reason")) else {
-        return Redirect::to(&page).into_response();
+    let (Some(target), Some(reason)) = (target, field(pairs, "reason")) else {
+        return None;
     };
     let reveal = Reveal {
         target,
         reason,
-        seconds: Some(reveal_seconds(&state, &parts.headers)),
+        seconds: Some(reveal_seconds(state, headers)),
     };
     let revealed = state
         .pix()
-        .post(
-            &format!("operator/persons/{person}/reveal"),
-            &reveal,
-            &token,
-        )
+        .post(&format!("operator/persons/{person}/reveal"), &reveal, token)
         .await;
     let person_read = state
         .pix()
-        .read(&format!("operator/persons/{person}"), &token)
+        .read(&format!("operator/persons/{person}"), token)
         .await;
-    if let Ok(uri) = page.parse() {
-        parts.uri = uri;
-    }
-    let document = Document::Person {
+    Some(Document::Person {
         person: person_read,
         revealed: Some(revealed),
-    };
-    drawn(state, parts, &token, steward, document).await
+    })
 }
 
-/// Serves a domain create: the administrator's form posted to the
-/// operator API, and the domains drawn with the outcome.
-pub async fn domain_create(
-    Extension(state): Extension<ConsoleState>,
-    request: Request,
-) -> Response {
-    let (parts, pairs) = match form(request).await {
-        Ok(read) => read,
-        Err(answer) => return *answer,
-    };
-    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
-        return Redirect::to(parts.uri.path()).into_response();
-    };
-    let kind = match field(&pairs, "kind").as_deref() {
+/// A domain create: the administrator's form posted to the operator API,
+/// and the domains' document with the outcome.
+async fn created(
+    state: &ConsoleState,
+    token: &AccessToken,
+    pairs: &[(String, String)],
+) -> Document {
+    let kind = match field(pairs, "kind").as_deref() {
         Some("authoritative") => DomainKind::Authoritative,
         _ => DomainKind::Local,
     };
     let new = NewDomain {
-        system: field(&pairs, "system").unwrap_or_default(),
-        name: field(&pairs, "name").unwrap_or_default(),
+        system: field(pairs, "system").unwrap_or_default(),
+        name: field(pairs, "name").unwrap_or_default(),
         kind,
-        source_client_id: field(&pairs, "source").unwrap_or_default(),
-        sensitive: Some(field(&pairs, "sensitive").is_some()),
-        reason: field(&pairs, "reason"),
+        source_client_id: field(pairs, "source").unwrap_or_default(),
+        sensitive: Some(field(pairs, "sensitive").is_some()),
+        reason: field(pairs, "reason"),
     };
     let pix = state.pix();
-    let written: Read<Domain> = pix.post("operator/domains", &new, &token).await;
-    let document = Document::Domains {
-        domains: pix.read("operator/domains?limit=200", &token).await,
+    let written: Read<Domain> = pix.post("operator/domains", &new, token).await;
+    Document::Domains {
+        domains: pix.read("operator/domains?limit=200", token).await,
         written: Some(written.map(|_| ())),
-    };
-    drawn(state, parts, &token, steward, document).await
+    }
 }
 
-/// Serves a domain change: the administrator's form patched to the
-/// operator API, and the domain drawn with the outcome.
-pub async fn domain_change(
-    Extension(state): Extension<ConsoleState>,
-    request: Request,
-) -> Response {
-    let (parts, pairs) = match form(request).await {
-        Ok(read) => read,
-        Err(answer) => return *answer,
-    };
-    let Some(domain) = parts
-        .uri
-        .path()
-        .strip_prefix("/domains/")
-        .filter(|id| crate::pages::screens::is_uuid(id))
-        .map(str::to_owned)
-    else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let Some((token, steward)) = signed_in(&state, &parts.headers) else {
-        return Redirect::to(parts.uri.path()).into_response();
-    };
+/// A domain change: the administrator's form patched to the operator API,
+/// and the domain's document with the outcome.
+async fn changed(
+    state: &ConsoleState,
+    token: &AccessToken,
+    domain: &str,
+    pairs: &[(String, String)],
+) -> Document {
     let change = DomainChange {
-        name: field(&pairs, "name"),
-        source_client_id: field(&pairs, "source"),
-        retire: field(&pairs, "retire").is_some(),
-        reason: field(&pairs, "reason").unwrap_or_default(),
+        name: field(pairs, "name"),
+        source_client_id: field(pairs, "source"),
+        retire: field(pairs, "retire").is_some(),
+        reason: field(pairs, "reason").unwrap_or_default(),
     };
     let pix = state.pix();
     let route = format!("operator/domains/{domain}");
-    let written: Read<serde::de::IgnoredAny> = pix.patch(&route, &change, &token).await;
-    let document = Document::Domain {
-        page: pix.read(&route, &token).await,
+    let written: Read<serde::de::IgnoredAny> = pix.patch(&route, &change, token).await;
+    Document::Domain {
+        page: pix.read(&route, token).await,
         written: Some(written.map(|_| ())),
-    };
-    drawn(state, parts, &token, steward, document).await
+    }
 }
 
 #[cfg(test)]

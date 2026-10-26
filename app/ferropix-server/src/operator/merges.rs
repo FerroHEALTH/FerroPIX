@@ -182,6 +182,7 @@ async fn finish(
     if let Err(error) = transaction.commit().await {
         return wire::failed(&error.into());
     }
+    operator.store.announced();
     tracing::info!(
         moved = change.moved,
         "a steward merged or unmerged two persons"

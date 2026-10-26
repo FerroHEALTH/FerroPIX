@@ -29,7 +29,7 @@ use axum::Router;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{MethodFilter, on};
-use ferropix_operator_api::health::Dependencies;
+use ferropix_operator_api::health::{Dependencies, IndicatorState, Upstream, UpstreamKind};
 use http::StatusCode;
 
 use crate::audit::Audit;
@@ -209,8 +209,10 @@ pub fn routes(
                 })
             }
             "operator-dependencies" => {
-                let (health, audit) = (health.clone(), audit.clone());
-                on(filter, move || dependencies(health.clone(), audit.clone()))
+                let (health, audit, store) = (health.clone(), audit.clone(), backend.store.clone());
+                on(filter, move || {
+                    dependencies(health.clone(), audit.clone(), store.clone())
+                })
             }
             _ if route.mount == Mount::Operator => on(filter, pending_operator),
             _ => on(filter, pending_fhir),
@@ -280,14 +282,49 @@ fn discovery(configuration: Option<&Discovery>) -> Response {
 /// `GET {base}/operator/dependencies`: the readiness report with the last
 /// outcome of every upstream, behind the steward scope so an anonymous
 /// reader learns no endpoint (FerroFED's decision A83; no specification
-/// governs this: our own design).
-// TODO(#104): name every PMIR subscriber with its last outcome.
-async fn dependencies(health: Registry, audit: Audit) -> Response {
+/// governs this: our own design), with every PMIR subscriber and the
+/// outcome of its latest ITI-93 message.
+async fn dependencies(health: Registry, audit: Audit, store: Store) -> Response {
+    let subscribers = match crate::store::subscription::deliveries(&store).await {
+        Ok(deliveries) => deliveries.into_iter().map(subscriber).collect(),
+        Err(error) => {
+            tracing::error!(error = %crate::chain(&error), "the PMIR subscribers could not be read");
+            Vec::new()
+        }
+    };
     let report = Dependencies {
         readiness: health.evaluate().await,
-        upstreams: audit.upstream().into_iter().collect(),
+        upstreams: audit.upstream().into_iter().chain(subscribers).collect(),
     };
     body(StatusCode::OK, &report, "application/json")
+}
+
+/// The upstream entry of one PMIR subscriber: its endpoint without userinfo,
+/// query or fragment, and the state of its latest message or its error.
+fn subscriber(delivery: crate::store::subscription::LastDelivery) -> Upstream {
+    let endpoint = url::Url::parse(&delivery.endpoint).map_or_else(
+        |_| String::from("(an endpoint that is no URL)"),
+        |mut url| {
+            // NOTE: no specification governs this: our own design; userinfo and query may carry a credential, which the report never shows.
+            let _no_user = url.set_username("");
+            let _no_password = url.set_password(None);
+            url.set_query(None);
+            url.set_fragment(None);
+            url.to_string()
+        },
+    );
+    let last = match (delivery.error, delivery.last) {
+        (Some(error), _) => Some(IndicatorState::down(error)),
+        (None, Some(Ok(()))) => Some(IndicatorState::up()),
+        (None, Some(Err(failure))) => Some(IndicatorState::down(failure)),
+        (None, None) => None,
+    };
+    Upstream {
+        kind: UpstreamKind::Subscriber,
+        endpoint,
+        last,
+        at: delivery.at,
+    }
 }
 
 /// A row of the FHIR face that no handler serves: none today, so a row

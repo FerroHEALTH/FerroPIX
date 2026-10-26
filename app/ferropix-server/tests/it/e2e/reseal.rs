@@ -219,6 +219,7 @@ async fn db_reseal_rewrites_the_payloads_waiting_in_the_outbox() {
         media_type: "application/soap+xml; charset=UTF-8",
         payload: SecretString::from(String::from("<answer>a synthetic patient</answer>")),
         max_attempts: 3,
+        subscription: None,
     };
     outbox::enqueue(old.pool(), old.sealer(), &message)
         .await

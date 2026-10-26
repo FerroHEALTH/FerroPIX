@@ -20,11 +20,12 @@ of the server applies its migrations with `db migrate` or at the start of
 
 The `database` indicator is down while no statement reaches PostgreSQL,
 and the `audit_spool` indicator is down when less than a tenth of the
-spool's record or byte bound is left. The other indicators are added with
-the subsystems they check: the MLLP
-listener ([#85](https://github.com/FerroHEALTH/FerroPIX/issues/85)) and the
-PMIR feed sender's backlog
-([#104](https://github.com/FerroHEALTH/FerroPIX/issues/104)). Each check
+spool's record or byte bound is left. The `outbox` indicator is down while
+a due outbound message, an XCPD answer or an ITI-93 message, has waited
+past the sender's lease and two idle wakes, which a running sender never
+lets happen; a subscriber that refuses its messages leaves the server
+ready. With the HL7 v2 face on, the `hl7v2_listener` indicator is down
+while the MLLP listener is not accepting. Each check
 gets two seconds; one that takes longer counts as down. The dependency
 report sits behind the steward scope so an anonymous reader learns no
 endpoint. `ferropix healthcheck` asks the readiness route of the server on

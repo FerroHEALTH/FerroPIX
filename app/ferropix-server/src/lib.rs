@@ -362,6 +362,9 @@ pub enum ServeError {
     /// The XCPD Responding Gateway's HTTP client could not be built.
     #[error("the XCPD Responding Gateway could not start")]
     Xcpd(#[source] reqwest::Error),
+    /// The client that delivers ITI-93 to subscribers could not be built.
+    #[error("the ITI-93 sender's HTTP client could not be built")]
+    Pmir(#[source] reqwest::Error),
     /// The listener could not be bound, or serving failed.
     #[error("the listener could not serve")]
     Io(#[source] std::io::Error),
@@ -382,16 +385,13 @@ pub enum ServeError {
 /// [`ServeError::Auth`] when an authorization server cannot be read,
 /// [`ServeError::Audit`] when the audit spool or its repository cannot
 /// start, [`ServeError::Xcpd`] when the XCPD gateway's client cannot be
-/// built, and [`ServeError::Io`] for the I/O error from binding, accepting or
+/// built, [`ServeError::Pmir`] when the ITI-93 sender's cannot, and
+/// [`ServeError::Io`] for the I/O error from binding, accepting or
 /// serving.
 pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let started = Instant::now();
-    let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
-        .await
-        .map_err(ServeError::Store)?;
-    store::pseudonym::seed(&store, &settings.pseudonym_domains)
-        .await
-        .map_err(ServeError::Store)?;
+    let wake = outbox::Wake::default();
+    let store = start_store(&settings, &wake).await?;
     let domains = store::seed::stored(&store)
         .await
         .map_err(ServeError::Store)?;
@@ -433,8 +433,9 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &audit,
         &backend,
     );
-    let wake = outbox::Wake::default();
-    let (guarded, channels) = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
+    let (guarded, mut channels) =
+        with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
+    channels.pmir = pmir_channel(&pmir)?;
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = bind(&server).await?;
     let reporting = usage_report::reporter::start(
@@ -527,8 +528,69 @@ fn with_xcpd(
     .map_err(ServeError::Xcpd)?;
     let channels = outbox::Channels {
         xcpd: Some(gateway.channel()),
+        pmir: None,
     };
     Ok((guarded.merge(xcpd::routes(gateway)), channels))
+}
+
+/// Starts the store `settings` name for `serve`, seeds its pseudonymisation
+/// domains and has it announce changes when `[pmir]` is on, waking `wake`.
+///
+/// # Errors
+/// Returns [`ServeError::Store`] when the store refuses to start or seed.
+async fn start_store(settings: &Settings, wake: &outbox::Wake) -> Result<store::Store, ServeError> {
+    let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
+        .await
+        .map_err(ServeError::Store)?;
+    store::pseudonym::seed(&store, &settings.pseudonym_domains)
+        .await
+        .map_err(ServeError::Store)?;
+    Ok(with_feed(store, settings, wake))
+}
+
+/// Returns `store` announcing every change to a person as an ITI-93 message
+/// when `[pmir]` is on (PMIR 1.6.0 §2:3.93.4.1.1).
+fn with_feed(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> store::Store {
+    if !settings.pmir.enabled {
+        return store;
+    }
+    let public = &settings.server.public_base_url;
+    let master = public.as_str().trim_end_matches('/').to_owned();
+    let registry = url::Url::parse(&format!("{master}/fhir")).unwrap_or_else(|_| public.clone());
+    store.with_feed(store::subscription::FeedSettings {
+        registry,
+        master,
+        max_attempts: settings.pmir.feed.max_attempts,
+        wake: wake.clone(),
+    })
+}
+
+/// The outbox channel of the ITI-93 messages to subscribers when `[pmir]`
+/// is on: a client that follows no redirect, with the `[pmir.feed]` retry
+/// waits.
+///
+/// # Errors
+/// Returns [`ServeError::Pmir`] when the client cannot be built.
+fn pmir_channel(
+    pmir: &config::section::profiles::Pmir,
+) -> Result<Option<outbox::HttpChannel>, ServeError> {
+    if !pmir.enabled {
+        return Ok(None);
+    }
+    let feed = &pmir.feed;
+    // NOTE: no specification governs this: our own design; a subscriber's redirect would steer the server's posts, as D33 refuses for XCPD.
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(ServeError::Pmir)?;
+    Ok(Some(outbox::HttpChannel {
+        client,
+        backoff: outbox::Backoff {
+            initial: std::time::Duration::from_millis(feed.initial_backoff_ms),
+            max: std::time::Duration::from_millis(feed.max_backoff_ms),
+        },
+    }))
 }
 
 /// Waits for the outbox sender to finish the message in flight, at most
@@ -566,7 +628,8 @@ fn backend(store: &store::Store, settings: &Settings) -> fhir::Backend {
 }
 
 /// Returns the readiness registry: the database, the audit spool's
-/// headroom and, when the HL7 v2 face runs, its listener.
+/// headroom, the outbox sender's backlog and, when the HL7 v2 face runs, its
+/// listener.
 fn registry(
     store: &store::Store,
     audit: &audit::Audit,
@@ -574,7 +637,8 @@ fn registry(
 ) -> health::Registry {
     let health = health::Registry::default()
         .and(Arc::new(store::indicator::Database::new(store.clone())))
-        .and(Arc::new(audit::Headroom(audit.clone())));
+        .and(Arc::new(audit::Headroom(audit.clone())))
+        .and(Arc::new(outbox::Backlog::new(store.clone())));
     match listening {
         Some(listening) => health.and(Arc::new(listening.clone())),
         None => health,

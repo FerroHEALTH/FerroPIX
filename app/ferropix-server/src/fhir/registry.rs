@@ -301,7 +301,7 @@ fn settled<T>(result: Result<T, FeedError>) -> Result<Applied, Case> {
             tracing::error!(error = %crate::chain(&error), "an ITI-93 change could not be stored");
             Err(Case::StoreUnavailable)
         }
-        Err(error @ (FeedError::Demographics(_) | FeedError::Evidence)) => {
+        Err(error @ (FeedError::Demographics(_) | FeedError::Evidence | FeedError::Notice)) => {
             tracing::error!(error = %crate::chain(&error), "an ITI-93 change could not be written");
             Err(Case::Internal)
         }

@@ -171,6 +171,7 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
     if let Err(error) = transaction.commit().await {
         return wire::failed(&error.into());
     }
+    operator.store.announced();
     tracing::info!(
         verdict = verdict_name(decision.verdict),
         merged = decided.merge.is_some(),

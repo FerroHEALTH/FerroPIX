@@ -3,11 +3,10 @@
 
 # The PMIR Registry
 
-FerroPIX is building the Patient Identity Registry of IHE PMIR 1.6.0. It
-receives ITI-93, the Mobile Patient Identity Feed, from the Source of the
-master domain, and answers ITI-94, Subscribe to Patient Updates. Sending
-ITI-93 to each subscriber is planned
-([#104](https://github.com/FerroHEALTH/FerroPIX/issues/104)).
+FerroPIX is the Patient Identity Registry of IHE PMIR 1.6.0. It receives
+ITI-93, the Mobile Patient Identity Feed, from the Source of the master
+domain, answers ITI-94, Subscribe to Patient Updates, and sends ITI-93 to
+each subscriber.
 
 Turn PMIR on with `[pmir] enabled = true`
 ([Configuration](../operate/configuration.md)).
@@ -51,6 +50,24 @@ The changes before a refused one stay applied. When the store fails the
 answer is `503` and the Source sends the message again. Each message writes
 one BALP record, following PMIR's Feed audit profile, before its answer
 leaves.
+
+## The feed FerroPIX sends (ITI-93)
+
+Every committed change to a patient is an ITI-93 message to each active
+subscription whose criteria match. A message is written in the same
+transaction as the change, so a change is never left unannounced, and it is
+written in the format the subscription's `channel.payload` names. A
+merged patient is sent as the deprecated `Patient`, `active` false with its
+`replaced-by` link.
+
+The sender posts a subscription's messages to its channel endpoint one at a
+time and in order, with the headers the subscription's `channel.header`
+lists. It follows no redirect. A failed post is tried again with a doubling
+wait, within `[pmir.feed]`. Once the attempts are spent, the subscription's
+`status` becomes `error` and its `error` says why. Its later messages wait,
+and an enable (`PUT` with `status` `requested`) resumes from the next one.
+The operator API's dependency report names each subscriber with the outcome
+of its latest message ([Operations](../operate/operations.md)).
 
 ## Subscriptions (ITI-94)
 

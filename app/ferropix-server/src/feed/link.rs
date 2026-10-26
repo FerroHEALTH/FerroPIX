@@ -658,7 +658,6 @@ async fn merge_moving(
         .map_err(store)?;
     }
     close_candidates(connection, survivor, &context.actor).await?;
-    // TODO(#104): queue the PMIR merge message for each matching subscription.
     Ok(Merged { merge, action })
 }
 

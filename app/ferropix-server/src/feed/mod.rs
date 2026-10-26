@@ -25,6 +25,7 @@
 //! [`record()`]. PIXm leaves the cross-referencing to the Manager
 //! (§2:3.104.4.1.3): the rules are our own design.
 
+pub mod announce;
 pub mod demographics;
 mod link;
 pub mod master;
@@ -249,16 +250,19 @@ impl Feeder {
         self.removing(
             identifier.system(),
             identifier.value().expose_secret(),
+            false,
             context,
         )
         .await
     }
 
-    /// Removes the identifier `value` of the domain `system`.
+    /// Removes the identifier `value` of the domain `system`, announced as
+    /// the deletion of its person's master identity when `deleted`.
     async fn removing(
         &self,
         system: &str,
         value: &str,
+        deleted: bool,
         context: &Context,
     ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
@@ -288,8 +292,20 @@ impl Feeder {
             .execute(&mut *transaction)
             .await
             .map_err(store)?;
-        link::close_link(&mut transaction, locked.id, action).await?;
+        let former = link::close_link(&mut transaction, locked.id, action).await?;
+        let changes: Vec<announce::Change> = former
+            .map(|person| {
+                if deleted {
+                    announce::Change::Deleted(person)
+                } else {
+                    announce::Change::Updated(person)
+                }
+            })
+            .into_iter()
+            .collect();
+        announce::announce(&mut transaction, &self.store, &changes).await?;
         transaction.commit().await.map_err(store)?;
+        self.store.announced();
         tracing::info!(record = %locked.id.uuid(), "an identifier is removed");
         Ok(Applied {
             action: Action::Remove,
@@ -352,7 +368,11 @@ impl Feeder {
         );
         me.identity = revising.master.map(|master| master.identity);
         let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
+        let created = revising.master.is_some_and(|master| !master.known) && locked.created;
+        let changes = announced(linked.person, &linked.merged, created);
+        announce::announce(&mut transaction, &self.store, &changes).await?;
         transaction.commit().await.map_err(store)?;
+        self.store.announced();
         let action = if locked.created {
             Action::Create
         } else {
@@ -459,8 +479,11 @@ impl Feeder {
             domain.kind == DomainKind::Master,
         );
         let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
-        transaction.commit().await.map_err(store)?;
         merged.extend(linked.merged);
+        let changes = announced(linked.person, &merged, false);
+        announce::announce(&mut transaction, &self.store, &changes).await?;
+        transaction.commit().await.map_err(store)?;
+        self.store.announced();
         tracing::info!(
             record = %locked.id.uuid(),
             survivor = %kept.id.uuid(),
@@ -497,6 +520,28 @@ impl Feeder {
         write::insert_carried(connection, self.store.sealer(), locked.id, version, carried).await?;
         Ok((version, subject))
     }
+}
+
+/// The changes a feed made to persons: each merged person, then the person
+/// its record is in, created when `created` and updated otherwise.
+fn announced(
+    person: Option<PersonId>,
+    merged: &[PersonId],
+    created: bool,
+) -> Vec<announce::Change> {
+    let mut changes: Vec<announce::Change> = merged
+        .iter()
+        .copied()
+        .map(announce::Change::Merged)
+        .collect();
+    changes.extend(person.map(|person| {
+        if created {
+            announce::Change::Created(person)
+        } else {
+            announce::Change::Updated(person)
+        }
+    }));
+    changes
 }
 
 /// Which record a revision writes.
@@ -725,6 +770,9 @@ pub enum FeedError {
     /// The evidence of a candidate cannot be written.
     #[error("the evidence of a candidate cannot be written")]
     Evidence,
+    /// The ITI-93 message announcing the change cannot be written.
+    #[error("the ITI-93 message announcing the change cannot be written")]
+    Notice,
     /// Concurrent transactions moved what this one read.
     #[error("concurrent transactions moved the persons this feed joins")]
     Contention,

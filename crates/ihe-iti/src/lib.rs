@@ -18,6 +18,8 @@
 //!   ITI-83 and ITI-104, typed and with no store and no HTTP server.
 //! - `pdqm-server`: the Patient Demographics Supplier side of ITI-78 and
 //!   ITI-119, typed and with no store and no HTTP server.
+//! - `pmir-server`: the Patient Identity Registry side of ITI-93 and ITI-94,
+//!   typed and with no store and no HTTP server.
 //!
 //! The audit trail the records go to (ATNA ITI-20 and its FHIR Feed) is the
 //! `ihe-atna` crate.
@@ -52,7 +54,11 @@ pub mod pixm;
 pub mod pmir;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 mod search;
-#[cfg(any(feature = "pixm-server", feature = "pdqm-server"))]
+#[cfg(any(
+    feature = "pixm-server",
+    feature = "pdqm-server",
+    feature = "pmir-server"
+))]
 pub mod server;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

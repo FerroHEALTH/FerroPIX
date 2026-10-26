@@ -9,6 +9,8 @@
 mod contract;
 mod feed;
 mod hygiene;
+#[cfg(feature = "pmir-server")]
+mod registry;
 mod subscription;
 
 use std::path::PathBuf;

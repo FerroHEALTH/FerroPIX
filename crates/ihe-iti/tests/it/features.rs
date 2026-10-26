@@ -31,11 +31,12 @@ const FEATURES: &[&str] = &[
     "xcpd",
     "pixm-server",
     "pdqm-server",
+    "pmir-server",
 ];
 
 /// The server sides are typed readers and writers: no HTTP server, store or
 /// database crate is in their graph, so any server can take them.
-const SERVER_FEATURES: &[&str] = &["pixm-server", "pdqm-server"];
+const SERVER_FEATURES: &[&str] = &["pixm-server", "pdqm-server", "pmir-server"];
 
 /// The HTTP server frameworks, stores and database clients a server side
 /// must not compile.

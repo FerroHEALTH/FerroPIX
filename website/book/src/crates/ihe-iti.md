@@ -21,6 +21,7 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
 | `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
+| `pmir-server` | The server side of PMIR, with no store and no HTTP server | ITI-93, ITI-94 | Patient Identity Registry |
 
 Only `xcpd` carries the SOAP 1.2, HL7 v3 and SAML XUA stack; a build without
 it compiles none of it. The FHIR features decode FHIR R4 through
@@ -96,7 +97,7 @@ The specification leaves the authentication of the Registry to your channel
 to the two parties, so your code authenticates each message before it reads
 it.
 
-## The server sides (`pixm-server`, `pdqm-server`)
+## The server sides (`pixm-server`, `pdqm-server`, `pmir-server`)
 
 A server side is the profile's request readers and answer writers. It holds
 no store and no HTTP framework: your server hands a reader the query string,
@@ -126,6 +127,14 @@ XML.
   a bare `Patient` posted with `onlyCertainMatches` or `count`, and writes
   the Match Output Bundle, most likely first, each entry with its score and
   `match-grade`.
+- **`pmir-server`** reads an ITI-93 feed message in FHIR JSON or XML into
+  creates, updates, deletes and merges that keep their Patients, refusing a
+  message whose first entry is no `MessageHeader` and a merge that departs
+  from the merged Patient profile. It writes the response message, with a
+  correlated refusal for each entry the Registry did not apply, such as the
+  `405` of an unmerge. It reads an ITI-94 `Subscription` with one of the four
+  criteria, refusing any other, says whether a Patient falls under the
+  criteria, and builds the ITI-93 message a subscriber receives.
 
 The FerroPIX server answers with them as the PIXm Manager and the PDQm
 Supplier ([The PIXm Manager](../integrate/pixm-manager.md),

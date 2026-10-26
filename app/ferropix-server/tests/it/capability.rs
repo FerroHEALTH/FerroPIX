@@ -146,6 +146,22 @@ fn routes_declared(resource: &Value) -> BTreeSet<(Method, String)> {
     routes
 }
 
+/// Asserts `subscription` declares the four ITI-94 interactions (PMIR 1.6.0
+/// §2:3.94.4.1 to §2:3.94.4.5).
+fn assert_subscription(subscription: &Value) {
+    let interactions: BTreeSet<&str> = subscription["interaction"]
+        .as_array()
+        .expect("interactions")
+        .iter()
+        .filter_map(|interaction| interaction["code"].as_str())
+        .collect();
+    assert_eq!(
+        BTreeSet::from(["create", "delete", "read", "update"]),
+        interactions,
+        "the ITI-94 interactions"
+    );
+}
+
 #[tokio::test]
 async fn the_statement_meets_the_pixm_and_pdqm_actor_statements_and_names_only_mounted_routes() {
     let issuer = Issuer::start().await;
@@ -183,8 +199,17 @@ async fn the_statement_meets_the_pixm_and_pdqm_actor_statements_and_names_only_m
     let resources = statement["rest"][0]["resource"]
         .as_array()
         .expect("resources");
-    assert_eq!(1, resources.len(), "one entry per type");
+    let types: Vec<&str> = resources
+        .iter()
+        .filter_map(|resource| resource["type"].as_str())
+        .collect();
+    assert_eq!(
+        vec!["Patient", "Subscription"],
+        types,
+        "one entry per type: the Patient and, with [pmir] on, the ITI-94 Subscription"
+    );
     let patient = &resources[0];
+    assert_subscription(&resources[1]);
     let wanted = &vendored["rest"][0]["resource"][0];
     let pdqm = &supplier["rest"][0]["resource"][0];
     assert_eq!(wanted["type"], patient["type"]);

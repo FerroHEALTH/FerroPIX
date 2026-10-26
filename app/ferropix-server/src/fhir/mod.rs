@@ -17,6 +17,7 @@ pub mod capability;
 pub mod outcome;
 pub mod pdqm;
 pub mod pixm;
+pub mod pmir;
 pub mod status;
 pub mod wire;
 
@@ -54,6 +55,9 @@ pub struct Backend {
     pub deprecated: Deprecated,
     /// The rest of the configuration the operator API shows.
     pub configured: crate::operator::Configured,
+    /// Whether the development profile's `[dev]` table is set, which admits
+    /// a loopback `http` subscription endpoint.
+    pub development: bool,
 }
 
 /// Which switches of the configuration are on.
@@ -157,6 +161,12 @@ pub fn routes(
         smart.sources().clone(),
         public_base_url,
     ));
+    let pmir = Arc::new(pmir::Face::new(
+        backend.store.clone(),
+        audit.clone(),
+        public_base_url,
+        backend.development,
+    ));
     let mut router = Router::new();
     for route in table::ROUTES
         .iter()
@@ -166,6 +176,7 @@ pub fn routes(
             continue;
         };
         if let Some(handler) = pdqm::handler(route, filter, &pdqm)
+            .or_else(|| pmir::handler(route, filter, &pmir))
             .or_else(|| crate::operator::handler(route, filter, &operator))
         {
             router = router.route(route.path, handler);
@@ -270,7 +281,7 @@ async fn dependencies(health: Registry, audit: Audit) -> Response {
 }
 
 /// A transaction of the FHIR face that is not served yet.
-// TODO(#101): serve ITI-93 and ITI-94.
+// TODO(#103): serve ITI-93.
 async fn pending_fhir() -> Response {
     respond(
         StatusCode::NOT_IMPLEMENTED,

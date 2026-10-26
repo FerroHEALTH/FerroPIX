@@ -51,7 +51,7 @@ const IDENTIFIER: &str = "SYNTHETIC-ID-4711";
 /// The FHIR transactions served today; every other one answers `501` until its
 /// issue lands, as does an operator route [`crate::operator::SERVED`] does
 /// not name.
-const SERVED: [&str; 4] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119"];
+const SERVED: [&str; 5] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119", "ITI-94"];
 
 /// Returns whether `status` is an answer of the route's handler: neither a
 /// refusal of the guard nor the pending handler's `501`.
@@ -190,6 +190,7 @@ pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
         matching: settings.matching.clone(),
         deprecated: settings.pdqm.deprecated,
         configured: ferropix_server::operator::Configured::default(),
+        development: false,
     }
 }
 

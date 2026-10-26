@@ -149,6 +149,7 @@ impl Harness {
                         domain: HOSPITAL_DOMAIN.to_owned(),
                     }],
                 },
+                development: false,
             },
         );
         Self {

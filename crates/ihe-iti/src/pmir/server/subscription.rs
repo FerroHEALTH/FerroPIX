@@ -261,6 +261,21 @@ impl RequestedSubscription {
     }
 }
 
+/// Returns the `201` answer of a create: the `Subscription` as the Registry
+/// stored it (§2:3.94.4.2.2, FHIR R4 http.html#create). The caller sets the
+/// `Location` header.
+#[must_use]
+pub fn created(subscription: Subscription) -> Answer<Subscription> {
+    Answer::new(StatusCode::CREATED, subscription)
+}
+
+/// Returns the `200` answer of a read or an update: the `Subscription` as it
+/// now stands (§2:3.94.4.3, §2:3.94.4.4).
+#[must_use]
+pub fn current(subscription: Subscription) -> Answer<Subscription> {
+    Answer::new(StatusCode::OK, subscription)
+}
+
 /// Why a `Subscription` is refused.
 ///
 /// No variant carries text from the body.

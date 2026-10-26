@@ -387,6 +387,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         .await
         .map_err(ServeError::Store)?;
     let services = services(&settings);
+    let backend = backend(&store, &settings);
     let Settings {
         profile,
         server,
@@ -401,7 +402,6 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         audit,
         matching,
         usage_report: report_settings,
-        origins,
         ..
     } = settings;
     let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
@@ -422,7 +422,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         &smart,
         &health,
         &audit,
-        &backend(&store, &matching, pdqm.deprecated, origins, hl7v2.as_ref()),
+        &backend,
     );
     let wake = outbox::Wake::default();
     let (guarded, channels) = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
@@ -535,24 +535,24 @@ async fn sent(sender: tokio::task::JoinHandle<()>, drain: std::time::Duration) {
     }
 }
 
-/// Returns what the FHIR routes and the operator API read: the store, the
-/// matching settings, the deprecated PDQm search parameters, and where each
-/// setting came from with the HL7 v2 senders.
-fn backend(
-    store: &store::Store,
-    matching: &config::section::matching::Matching,
-    deprecated: config::section::profiles::Deprecated,
-    origins: config::origin::Origins,
-    hl7v2: Option<&config::section::hl7v2::Hl7v2Settings>,
-) -> fhir::Backend {
+/// Returns what the FHIR routes and the operator API read from `settings`:
+/// the store, the matching settings, the deprecated PDQm search parameters,
+/// where each setting came from with the HL7 v2 senders, and whether the
+/// `[dev]` table is set.
+fn backend(store: &store::Store, settings: &Settings) -> fhir::Backend {
     fhir::Backend {
         store: store.clone(),
-        matching: matching.clone(),
-        deprecated,
+        matching: settings.matching.clone(),
+        deprecated: settings.pdqm.deprecated,
         configured: operator::Configured {
-            origins,
-            senders: hl7v2.map(|h| h.senders.clone()).unwrap_or_default(),
+            origins: settings.origins.clone(),
+            senders: settings
+                .hl7v2
+                .as_ref()
+                .map(|h| h.senders.clone())
+                .unwrap_or_default(),
         },
+        development: settings.dev.is_some(),
     }
 }
 

@@ -18,6 +18,7 @@
 - [The PDQm Supplier](integrate/pdqm-supplier.md)
 - [The HL7 v2 face](integrate/hl7v2-face.md)
 - [The XCPD Responding Gateway](integrate/xcpd-gateway.md)
+- [The PMIR Registry](integrate/pmir-registry.md)
 - [The published crates](crates/index.md)
   - [ihe-iti](crates/ihe-iti.md)
   - [nl-generic-functions](crates/nl-generic-functions.md)

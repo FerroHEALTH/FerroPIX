@@ -30,6 +30,7 @@ pub mod reseal;
 pub mod schema;
 pub mod seal;
 pub mod seed;
+pub mod subscription;
 pub mod xref;
 
 use std::error::Error;

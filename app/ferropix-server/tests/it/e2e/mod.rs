@@ -28,6 +28,7 @@ mod pixm;
 mod reseal;
 mod schema;
 mod sealing;
+mod subscriptions;
 mod supplier;
 mod xcpd;
 mod xcpd_examples;

@@ -22,6 +22,9 @@ pub enum Conflict {
     BirthYear,
     /// The administrative genders differ.
     Gender,
+    /// Both records are master identities, which only their Source merges
+    /// (PMIR 1.6.0 §2:3.93.4.1.3).
+    MasterIdentities,
 }
 
 /// Returns the hard conflicts between `a` and `b`, in order.

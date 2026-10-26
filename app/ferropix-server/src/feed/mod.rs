@@ -283,7 +283,13 @@ impl Feeder {
             },
         )
         .await?;
-        let me = me(locked.id, version, &subject, &carried);
+        let me = me(
+            locked.id,
+            version,
+            &subject,
+            &carried,
+            domain.kind == DomainKind::Master,
+        );
         let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
         transaction.commit().await.map_err(store)?;
         let action = if locked.created {
@@ -380,7 +386,13 @@ impl Feeder {
             link::merge(&mut transaction, former, held, MergeKind::Source, context).await?;
             merged.push(former);
         }
-        let me = me(kept.id, version, &subject, &survivor_carried);
+        let me = me(
+            kept.id,
+            version,
+            &subject,
+            &survivor_carried,
+            domain.kind == DomainKind::Master,
+        );
         let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
         transaction.commit().await.map_err(store)?;
         merged.extend(linked.merged);
@@ -463,8 +475,15 @@ fn local_keys(carried: &[Carried]) -> BTreeSet<IdentifierKey> {
         .collect()
 }
 
-/// Returns the version the cross-referencing runs over.
-fn me<'s>(record: RecordId, version: i32, subject: &'s Subject, carried: &[Carried]) -> Me<'s> {
+/// Returns the version the cross-referencing runs over, of a record in the
+/// master domain when `master`.
+fn me<'s>(
+    record: RecordId,
+    version: i32,
+    subject: &'s Subject,
+    carried: &[Carried],
+    master: bool,
+) -> Me<'s> {
     let keys = |kind: DomainKind| {
         carried
             .iter()
@@ -475,6 +494,7 @@ fn me<'s>(record: RecordId, version: i32, subject: &'s Subject, carried: &[Carri
     Me {
         record,
         version,
+        master,
         subject,
         authoritative: keys(DomainKind::Authoritative),
         local: keys(DomainKind::Local),

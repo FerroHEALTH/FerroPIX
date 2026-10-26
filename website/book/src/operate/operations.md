@@ -21,10 +21,12 @@ of the server applies its migrations with `db migrate` or at the start of
 The `database` indicator is down while no statement reaches PostgreSQL,
 and the `audit_spool` indicator is down when less than a tenth of the
 spool's record or byte bound is left. The `outbox` indicator is down while
-a due outbound message, an XCPD answer or an ITI-93 message, has waited
-past the sender's lease and two idle wakes, which a running sender never
-lets happen; a subscriber that refuses its messages leaves the server
-ready. With the HL7 v2 face on, the `hl7v2_listener` indicator is down
+a due outbound message, an XCPD answer, an ITI-93 message or an ITI-10
+notification, has waited past the sender's lease and two idle wakes, which
+a running sender never lets happen; a subscriber or consumer that refuses
+its messages leaves the server ready. The dependency report names every
+PMIR subscriber and every HL7 v2 consumer, the consumer as `mllp://` and its
+`host:port`, with the outcome of its latest message. With the HL7 v2 face on, the `hl7v2_listener` indicator is down
 while the MLLP listener is not accepting. Each check
 gets two seconds; one that takes longer counts as down. The dependency
 report sits behind the steward scope so an anonymous reader learns no

@@ -283,7 +283,8 @@ fn discovery(configuration: Option<&Discovery>) -> Response {
 /// outcome of every upstream, behind the steward scope so an anonymous
 /// reader learns no endpoint (FerroFED's decision A83; no specification
 /// governs this: our own design), with every PMIR subscriber and the
-/// outcome of its latest ITI-93 message.
+/// outcome of its latest ITI-93 message, and every HL7 v2 consumer and the
+/// outcome of its latest ITI-10 notification.
 async fn dependencies(health: Registry, audit: Audit, store: Store) -> Response {
     let subscribers = match crate::store::subscription::deliveries(&store).await {
         Ok(deliveries) => deliveries.into_iter().map(subscriber).collect(),
@@ -292,9 +293,15 @@ async fn dependencies(health: Registry, audit: Audit, store: Store) -> Response 
             Vec::new()
         }
     };
+    let consumers = consumers(&store).await;
     let report = Dependencies {
         readiness: health.evaluate().await,
-        upstreams: audit.upstream().into_iter().chain(subscribers).collect(),
+        upstreams: audit
+            .upstream()
+            .into_iter()
+            .chain(subscribers)
+            .chain(consumers)
+            .collect(),
     };
     body(StatusCode::OK, &report, "application/json")
 }
@@ -327,6 +334,48 @@ fn subscriber(delivery: crate::store::subscription::LastDelivery) -> Upstream {
     }
 }
 
+/// The upstream entries of the configured HL7 v2 consumers, in
+/// configuration order.
+async fn consumers(store: &Store) -> Vec<Upstream> {
+    let Some(settings) = store.consumers() else {
+        return Vec::new();
+    };
+    let mut entries = Vec::with_capacity(settings.consumers.len());
+    for configured in settings.consumers.iter() {
+        let last = match crate::store::outbox::last_notification(store, &configured.name).await {
+            Ok(last) => last,
+            Err(error) => {
+                tracing::error!(consumer = %configured.name, error = %crate::chain(&error), "the last ITI-10 notification could not be read");
+                None
+            }
+        };
+        entries.push(consumer(&configured.address, last));
+    }
+    entries
+}
+
+/// The upstream entry of one HL7 v2 consumer at `address`: `mllp://` and its
+/// `host:port`, and the state of its latest notification. No specification
+/// governs the `mllp` scheme: our own design names the transport.
+fn consumer(address: &str, last: Option<crate::store::outbox::LastNotification>) -> Upstream {
+    let (last, at) = match last {
+        None => (None, None),
+        Some(notified) => (
+            Some(match notified.last {
+                Ok(()) => IndicatorState::up(),
+                Err(failure) => IndicatorState::down(failure),
+            }),
+            notified.at,
+        ),
+    };
+    Upstream {
+        kind: UpstreamKind::Consumer,
+        endpoint: format!("mllp://{address}"),
+        last,
+        at,
+    }
+}
+
 /// A row of the FHIR face that no handler serves: none today, so a row
 /// added without its handler answers `501` rather than `404`.
 async fn pending_fhir() -> Response {
@@ -353,7 +402,8 @@ async fn pending_operator() -> Response {
 mod tests {
     use ferropix_operator_api::health::{IndicatorState, UpstreamKind};
 
-    use super::subscriber;
+    use super::{consumer, subscriber};
+    use crate::store::outbox::LastNotification;
     use crate::store::subscription::LastDelivery;
 
     fn delivery(endpoint: &str) -> LastDelivery {
@@ -399,6 +449,25 @@ mod tests {
                 "an ITI-93 message could not be delivered"
             )),
             subscriber(delivered).last
+        );
+    }
+
+    #[test]
+    fn a_consumer_entry_names_its_mllp_address_and_its_latest_outcome() {
+        let before = consumer("consumer.example.org:2575", None);
+        assert_eq!(UpstreamKind::Consumer, before.kind);
+        assert_eq!("mllp://consumer.example.org:2575", before.endpoint);
+        assert_eq!(None, before.last, "before the first notification");
+        let refused = consumer(
+            "consumer.example.org:2575",
+            Some(LastNotification {
+                last: Err(String::from("the consumer refused the connection")),
+                at: None,
+            }),
+        );
+        assert_eq!(
+            Some(IndicatorState::down("the consumer refused the connection")),
+            refused.last
         );
     }
 }

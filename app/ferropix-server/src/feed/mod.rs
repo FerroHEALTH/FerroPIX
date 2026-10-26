@@ -30,6 +30,7 @@ pub mod demographics;
 mod link;
 pub mod master;
 pub mod merging;
+pub mod notify;
 pub mod steward;
 mod write;
 

@@ -220,6 +220,7 @@ async fn db_reseal_rewrites_the_payloads_waiting_in_the_outbox() {
         payload: SecretString::from(String::from("<answer>a synthetic patient</answer>")),
         max_attempts: 3,
         subscription: None,
+        consumer: None,
     };
     outbox::enqueue(old.pool(), old.sealer(), &message)
         .await

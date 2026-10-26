@@ -42,6 +42,9 @@ serde.workspace = true
 serde_json.workspace = true
 testcontainers.workspace = true
 thiserror.workspace = true
+# The stub ITI-10 consumer (`consumer`): FerroBRIDGE's MLLP listener and
+# acknowledgment, never a second codec.
+ferrobridge-hl7v2.workspace = true
 # The MLLP sender (`mllp`) writes and reads a TCP stream.
 tokio = { workspace = true, features = ["time", "rt", "net", "sync", "io-util"] }
 

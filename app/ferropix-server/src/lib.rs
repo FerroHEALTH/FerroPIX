@@ -436,6 +436,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let (guarded, mut channels) =
         with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
     channels.pmir = pmir_channel(&pmir)?;
+    channels.hl7v2 = mllp_channel(hl7v2.as_ref(), &audit);
     let window = Arc::new(usage_report::window::Window::new(&server.base_path));
     let listener = bind(&server).await?;
     let reporting = usage_report::reporter::start(
@@ -529,6 +530,7 @@ fn with_xcpd(
     let channels = outbox::Channels {
         xcpd: Some(gateway.channel()),
         pmir: None,
+        hl7v2: None,
     };
     Ok((guarded.merge(xcpd::routes(gateway)), channels))
 }
@@ -545,7 +547,47 @@ async fn start_store(settings: &Settings, wake: &outbox::Wake) -> Result<store::
     store::pseudonym::seed(&store, &settings.pseudonym_domains)
         .await
         .map_err(ServeError::Store)?;
-    Ok(with_feed(store, settings, wake))
+    Ok(with_consumers(
+        with_feed(store, settings, wake),
+        settings,
+        wake,
+    ))
+}
+
+/// Returns `store` notifying every cross-reference change as an ITI-10
+/// message to each consumer it concerns, when `[[hl7v2.consumers]]` names
+/// one (ITI TF-2 §3.10.4.1.1).
+fn with_consumers(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> store::Store {
+    let Some(hl7v2) = settings.hl7v2.as_ref().filter(|h| !h.consumers.is_empty()) else {
+        return store;
+    };
+    store.with_consumers(feed::notify::Notifying {
+        manager: hl7v2.manager.clone(),
+        consumers: hl7v2.consumers.clone().into(),
+        authorities: hl7v2::authority::Authorities::new(&hl7v2.namespaces),
+        notification: hl7v2.notification,
+        wake: wake.clone(),
+    })
+}
+
+/// The outbox channel of the ITI-10 notifications when `[[hl7v2.consumers]]`
+/// names one: the consumers, the `[hl7v2.notification]` retry waits, the
+/// listener's frame limit for an acknowledgment, and the audit trail.
+fn mllp_channel(
+    hl7v2: Option<&config::section::hl7v2::Hl7v2Settings>,
+    audit: &audit::Audit,
+) -> Option<outbox::MllpChannel> {
+    let hl7v2 = hl7v2.filter(|h| !h.consumers.is_empty())?;
+    Some(outbox::MllpChannel {
+        consumers: hl7v2.consumers.clone().into(),
+        authorities: hl7v2::authority::Authorities::new(&hl7v2.namespaces),
+        frame_limit: hl7v2.frame_limit,
+        backoff: outbox::Backoff {
+            initial: std::time::Duration::from_millis(hl7v2.notification.initial_backoff_ms),
+            max: std::time::Duration::from_millis(hl7v2.notification.max_backoff_ms),
+        },
+        audit: audit.clone(),
+    })
 }
 
 /// Returns `store` announcing every change to a person as an ITI-93 message

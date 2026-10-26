@@ -58,6 +58,9 @@ pub struct Store {
     sealer: std::sync::Arc<Sealer>,
     /// What a change to a person is announced with, while PMIR is on.
     feed: Option<std::sync::Arc<subscription::FeedSettings>>,
+    /// What a cross-reference change is notified with, while HL7 v2
+    /// consumers are configured.
+    consumers: Option<std::sync::Arc<crate::feed::notify::Notifying>>,
 }
 
 /// The job a store is started for, which decides the steps it runs.
@@ -117,6 +120,7 @@ impl Store {
             pool,
             sealer: std::sync::Arc::new(sealer),
             feed: None,
+            consumers: None,
         })
     }
 
@@ -141,6 +145,7 @@ impl Store {
             pool,
             sealer: std::sync::Arc::new(sealer),
             feed: None,
+            consumers: None,
         })
     }
 
@@ -165,12 +170,30 @@ impl Store {
         self.feed.as_deref()
     }
 
+    /// Returns this store notifying every cross-reference change as an
+    /// ITI-10 message to each consumer it concerns, under `consumers`.
+    #[must_use]
+    pub fn with_consumers(mut self, consumers: crate::feed::notify::Notifying) -> Self {
+        self.consumers = Some(std::sync::Arc::new(consumers));
+        self
+    }
+
+    /// Returns what the store notifies changes with, `None` while no HL7 v2
+    /// consumer is configured.
+    #[must_use]
+    pub fn consumers(&self) -> Option<&crate::feed::notify::Notifying> {
+        self.consumers.as_deref()
+    }
+
     /// Wakes the outbox sender once a transaction that announced a change
     /// has committed, so its messages leave without waiting for the
     /// sender's next look.
     pub fn announced(&self) {
         if let Some(feed) = &self.feed {
             feed.wake.now();
+        }
+        if let Some(consumers) = &self.consumers {
+            consumers.wake.now();
         }
     }
 

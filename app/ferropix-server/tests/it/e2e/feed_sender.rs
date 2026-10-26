@@ -165,6 +165,7 @@ fn sender(store: &Store, wake: &Wake) -> tokio::sync::watch::Sender<bool> {
                 max: Duration::from_millis(40),
             },
         }),
+        hl7v2: None,
     };
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let retention = Outbox::default().resolve().expect("the default retention");

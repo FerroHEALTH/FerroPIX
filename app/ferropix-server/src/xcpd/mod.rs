@@ -245,6 +245,7 @@ impl Gateway {
             payload: SecretString::from(String::from_utf8_lossy(&bytes).into_owned()),
             max_attempts: self.settings.delivery.attempts,
             subscription: None,
+            consumer: None,
         };
         if let Err(error) = outbox::enqueue(self.store.pool(), self.store.sealer(), &message).await
         {

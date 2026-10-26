@@ -9,7 +9,8 @@
 //! message naming every change of the transaction it matches, in the
 //! subscription's payload format (§2:3.94.4.1.2.1.1). A person is matched
 //! as the PDQm Supplier serves it. The sender delivers each subscription's
-//! messages in order. No specification governs the outbox: our own design.
+//! messages in order. The same call writes the ITI-10 notifications of the
+//! change. No specification governs the outbox: our own design.
 
 use fhir_types::r4::patient::Patient;
 use ihe_iti::pmir::server::notification::{self, Addressing, Notice};
@@ -62,6 +63,18 @@ impl Change {
 /// demographics do not read, and [`FeedError::Notice`] when a message cannot
 /// be encoded.
 pub async fn announce(
+    connection: &mut PgConnection,
+    store: &Store,
+    changes: &[Change],
+) -> Result<usize, FeedError> {
+    let notified = crate::feed::notify::notify(&mut *connection, store, changes).await?;
+    let announced = feed(connection, store, changes).await?;
+    Ok(announced.saturating_add(notified))
+}
+
+/// Writes the ITI-93 message of `changes` for each active subscription of
+/// `store` that matches them, and returns how many it wrote.
+async fn feed(
     connection: &mut PgConnection,
     store: &Store,
     changes: &[Change],
@@ -132,6 +145,7 @@ pub async fn announce(
                 payload: SecretString::from(payload),
                 max_attempts: settings.max_attempts,
                 subscription: Some(active.id),
+                consumer: None,
             },
         )
         .await?;

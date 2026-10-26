@@ -76,6 +76,7 @@ async fn accepted(harness: &Harness, stub: &MockServer, attempts: u32) -> (Chann
     let channels = Channels {
         xcpd: Some(gateway.channel()),
         pmir: None,
+        hl7v2: None,
     };
     let app = routes(gateway);
     let sanne = named("Sanne", "Wolderink", "19660817", FEMALE);
@@ -198,6 +199,7 @@ async fn written(harness: &Harness) -> uuid::Uuid {
         payload: SecretString::from(String::from("<answer>synthetic</answer>")),
         max_attempts: 3,
         subscription: None,
+        consumer: None,
     };
     store_outbox::enqueue(harness.store.pool(), harness.store.sealer(), &message)
         .await
@@ -339,6 +341,7 @@ async fn connected_as_the_servers_role_a_delete_is_refused_and_the_prune_functio
         payload: SecretString::from(String::from("<answer>synthetic</answer>")),
         max_attempts: 3,
         subscription: None,
+        consumer: None,
     };
     store_outbox::enqueue(store.pool(), store.sealer(), &message)
         .await

@@ -351,6 +351,8 @@ pub enum Shown {
     /// No name: an empty first PID-5 and a second whose only component is
     /// the name type `S`, for ITI-9 (ITI TF-2 §3.9.4.2.2.5).
     Pseudonymous,
+    /// A single space in PID-5, for ITI-10 (ITI TF-2 §3.10.4.1.2.3).
+    Space,
 }
 
 /// Writes the PID segment `set_id` of `identifiers` and, for
@@ -397,6 +399,11 @@ pub fn segment(
                     String::from("S"),
                 ]);
                 *slot = writer.repetitions(&[String::new(), pseudo]);
+            }
+        }
+        (Shown::Space, _) => {
+            if let Some(slot) = fields.get_mut(4) {
+                *slot = String::from(" ");
             }
         }
         (Shown::Demographics, Some(patient)) => demographics(writer, patient, &mut fields),

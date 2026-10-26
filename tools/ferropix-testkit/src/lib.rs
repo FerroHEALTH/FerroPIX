@@ -14,12 +14,14 @@
 //! outside the synthetic range or a name outside the synthetic set; and
 //! [`pins`] reads the container image rows of `docs/VERSIONS.md`; [`otlp`]
 //! is the in-process OTLP collector the span export is tested against;
-//! [`mllp`] is the MLLP sender the HL7 v2 face is driven with.
+//! [`mllp`] is the MLLP sender the HL7 v2 face is driven with, and
+//! [`consumer`] the stub HL7 v2 consumer the ITI-10 notifications go to.
 //!
 //! No specification governs the test topology: our own design, after
 //! FerroFED's and FerroBRIDGE's testkits.
 #![doc(test(attr(deny(warnings))))]
 
+pub mod consumer;
 pub mod containers;
 pub mod fixtures;
 pub mod guard;

@@ -19,6 +19,7 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway, and the Responding Gateway's messages with no HTTP server |
 | `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
+| `smart` | The authorizer over the client-credentials token of `ferrohealth-smart` | ITI-72 | the client's access token |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
 | `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
 | `pmir-server` | The server side of PMIR, with no store and no HTTP server | ITI-93, ITI-94 | Patient Identity Registry |
@@ -178,5 +179,8 @@ PMIR exchanges are always the system's own.
 
 Each client can ask an authorizer you supply for the headers of every
 request (IUA ITI-72), and with `balp` or `atna` records the audit record its
-profile defines. [Security and audit](../operate/security-and-audit.md)
+profile defines. With `smart`, `authorizer::smart::TokenAuthorizer` is that
+authorizer over `ferrohealth-smart`'s client-credentials `TokenSource`: a
+bearer token on each request, and after a `401` the refused token dropped
+and the request sent once more with a new one. [Security and audit](../operate/security-and-audit.md)
 describes both.

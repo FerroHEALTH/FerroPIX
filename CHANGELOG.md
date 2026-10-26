@@ -14,6 +14,13 @@ and this project adheres to
 
 ### Added
 
+- `ihe-iti` 0.0.61 has the feature `smart` (#268):
+  `authorizer::smart::TokenAuthorizer` is the IUA authorizer over
+  `ferrohealth-smart`'s client-credentials `TokenSource`. Each PIXm, PDQm,
+  mCSD or PMIR request carries the current token as a bearer token marked
+  sensitive. A `401` drops the refused token and sends the request once
+  more with a new one, and a token that cannot be obtained is an
+  `AuthorizerError` whose source is the `TokenError`.
 - The server receives ITI-93 as the PMIR Patient Identity Registry (#103):
   `POST {base}/fhir` from the master domain's Source, by its client id,
   applies each change of the feed message in JSON or XML. A create takes the

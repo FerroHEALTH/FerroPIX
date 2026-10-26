@@ -16,6 +16,10 @@ and this project adheres to
 
 - The server sends ITI-93 to its PMIR subscribers (#104). Every committed change to a patient, whether from a feed, a Source's merge, an ITI-93 change, or a steward's link, merge or revert, writes one message per matching active subscription to the outbox in the same transaction, in the subscription's payload format. The sender delivers each subscription's messages in order with its channel headers, retries within `[pmir.feed]`, then sets the subscription to `error` with the reason, and an enable resumes from the next message. The dependency report names each subscriber with its latest outcome, and the new `outbox` readiness indicator reports a stuck sender. The unused `feed_outbox` table is dropped.
 
+### Changed
+
+- `ihe-iti` 0.0.62 and `nl-generic-functions` 0.0.31 take caret requirements on the family's shared crates, `ferrohealth-smart` 0.7.4 and, for `ihe-iti`, `ihe-atna` 0.2.13, so a FerroAUTH or FerroAUDIT patch reaches a product's lockfile without a release of these crates first (#281). The server pins both exactly, `ferrohealth-smart` 0.7.4 and `ihe-atna` 0.2.13.
+
 ### Fixed
 
 - The release lane installs kubeconform beside helm, so the chart job validates and publishes the chart (#278). The v0.0.6 release published its images and binaries but no chart, and the chart for v0.0.6 is published through the chart fix lane.

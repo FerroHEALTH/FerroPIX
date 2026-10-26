@@ -167,6 +167,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
+name = "ferrohealth-secret"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e3ae7119d5b5d61931890e902125642d79baae5dc252525ee4bb2a28fbc5f49"
+dependencies = [
+ "secrecy",
+ "serde",
+ "thiserror",
+ "url",
+]
+
+[[package]]
 name = "ferropix-fuzz"
 version = "0.0.0"
 dependencies = [
@@ -474,16 +486,17 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.2.11"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36f8d363e379e283fe1452e235f9003cbf0207ef56b9fb2364d5aa33d44db6cf"
+checksum = "779a7dae5c1e3f0d351e94b243c66ad144920f30f35881e2df8396897bcac957"
 dependencies = [
+ "ferrohealth-secret",
  "url",
 ]
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.61"
+version = "0.0.62"
 dependencies = [
  "fhir-types",
  "http",

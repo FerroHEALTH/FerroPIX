@@ -46,7 +46,8 @@ allow = [
 confidence-threshold = 0.9
 # The project's own crates and the family's BUSL-1.1 crates (LICENSE): each
 # joins the day it is a member or a dependency (`ihe-iti` and
-# `nl-generic-functions` with the move, `ferrohealth-smart`, `ihe-atna`).
+# `nl-generic-functions` with the move, `ferrohealth-smart`, `ihe-atna`,
+# `ferrohealth-secret`).
 # The family's own crates are under the Business Source License 1.1, which
 # no permissive allow-list names, so each is admitted by name: this
 # repository's published crates, and the FerroHEALTH crates they depend on.
@@ -55,6 +56,9 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ihe-atna" },
   { allow = ["BUSL-1.1"], crate = "nl-generic-functions" },
   { allow = ["BUSL-1.1"], crate = "ferrohealth-smart" },
+  # FerroSYS's secret wrapper, which ferrohealth-smart 0.7.4 and ihe-atna
+  # 0.2.13 take.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-secret" },
   # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },
   # The FerroUI components the operator console draws with, and the console

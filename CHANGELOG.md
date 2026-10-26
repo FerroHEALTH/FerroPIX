@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-10-26
+
 ### Added
 
 - The server sends ITI-10, the PIX Update Notification, to the HL7 v2 consumers `[[hl7v2.consumers]]` names (#113). Every cross-reference change, whether a feed that creates or links a record, a merge, a revert or a removal, writes one ADT^A31 per consumer whose domains of interest the patient holds an identifier in to the outbox in the same transaction, listing the patient's identifiers in those domains (ITI TF-2 3.10.4.1.2). The sender delivers each consumer's notifications in order over MLLP through `ferrobridge-hl7v2` 0.1.158, checks the acknowledgment, retries within `[hl7v2.notification]`, and writes the Manager's audit record of ITI TF-2 3.10.5.1.1 for each notification the consumer answered. The dependency report names each consumer with its latest outcome (`consumer`, a new upstream kind), and the testkit has a stub MLLP consumer.
@@ -24,7 +26,7 @@ and this project adheres to
 ### Fixed
 
 - The release lane installs kubeconform beside helm, so the chart job validates and publishes the chart (#278). The v0.0.6 release published its images and binaries but no chart, and the chart for v0.0.6 is published through the chart fix lane.
-- The chart job logs in to the registry before it attests the chart, so the provenance attestation is pushed beside the chart (#278). Chart 0.2.0 was pushed without its attestation; chart 0.2.1, the same templates and values for v0.0.6, is published with it.
+- The chart job logs in to the registry before it attests the chart, so the provenance attestation is pushed beside the chart (#278). Chart 0.2.0 was pushed without its attestation; chart 0.2.1, the same templates and values for v0.0.6, is published with it. Chart 0.2.2 carries v0.0.7.
 
 ## [0.0.6] - 2026-10-26
 

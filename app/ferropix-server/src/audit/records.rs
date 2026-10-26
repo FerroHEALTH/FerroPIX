@@ -429,6 +429,87 @@ pub fn xcpd_query(
     )
 }
 
+/// The `ITI-94` subtype (PMIR 1.6.0 §2:3.94.5.1, the PMIR subscription audit
+/// profiles).
+pub const ITI_94: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-94", "Subscribe to Patient Updates");
+
+/// What an ITI-94 request did to a subscription.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubscriptionAction {
+    /// Created it.
+    Create,
+    /// Read it.
+    Read,
+    /// Enabled or disabled it.
+    Update,
+    /// Deleted it.
+    Delete,
+}
+
+/// Returns the record of an ITI-94 request that did `action` to the
+/// subscription `id`, ended in `outcome` (PMIR 1.6.0 §2:3.94.5.1).
+///
+/// A create, a read and a delete follow the PMIR subscription audit profile
+/// on BALP Create, Read and Delete; an enable or disable is a BALP Update,
+/// which PMIR gives no profile of its own.
+#[must_use]
+pub fn subscription(
+    call: &Call,
+    action: SubscriptionAction,
+    id: Option<&str>,
+    outcome: Outcome,
+) -> Exchange {
+    let (profile, subtype, code, client, server) = match action {
+        SubscriptionAction::Create => (
+            "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Create",
+            CREATE,
+            "C",
+            SOURCE_ROLE,
+            DESTINATION_ROLE,
+        ),
+        SubscriptionAction::Read => (
+            "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Read",
+            READ,
+            "R",
+            DESTINATION_ROLE,
+            SOURCE_ROLE,
+        ),
+        SubscriptionAction::Update => (
+            "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Update",
+            UPDATE,
+            "U",
+            SOURCE_ROLE,
+            DESTINATION_ROLE,
+        ),
+        SubscriptionAction::Delete => (
+            "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Audit.Subscription.Delete",
+            DELETE,
+            "D",
+            APPLICATION,
+            CUSTODIAN,
+        ),
+    };
+    call.exchange(
+        EventKind {
+            profile,
+            event_type: REST,
+            subtypes: vec![subtype, ITI_94],
+            action: code,
+            client,
+            server,
+        },
+        outcome,
+        vec![Entity::Resource {
+            reference: id.map(|id| format!("Subscription/{id}")),
+            resource_type: "Subscription",
+            kind: SYSTEM_OBJECT,
+            role: Some(DOMAIN_RESOURCE),
+            name: None,
+            query: None,
+        }],
+    )
+}
+
 /// The search transaction a PDQm Supplier record is of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Search {

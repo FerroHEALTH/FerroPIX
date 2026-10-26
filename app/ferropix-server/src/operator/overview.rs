@@ -52,7 +52,7 @@ pub async fn read(operator: &Operator) -> Result<Overview, OperatorError> {
                 AND r.created_at >= now() - interval '24 hours'),
              (SELECT count(*) FROM pix.source_record_version
               WHERE received_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),
-             (SELECT count(*) FROM pix.subscription WHERE status = 'error')",
+             (SELECT count(*) FROM pix.subscription WHERE status = 'error' AND deleted_at IS NULL)",
     )
     .fetch_one(&mut *snapshot)
     .await?;

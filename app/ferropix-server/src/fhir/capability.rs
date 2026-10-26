@@ -116,7 +116,10 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> C
         instantiates.push(PDQM_SUPPLIER.into());
         instantiates.push(PDQM_SUPPLIER_MATCH.into());
     }
-    let resource: Vec<CapabilityStatementRestResource> = patient(mounts).into_iter().collect();
+    let resource: Vec<CapabilityStatementRestResource> = patient(mounts)
+        .into_iter()
+        .chain(mounts.pmir.then(subscription))
+        .collect();
     CapabilityStatement {
         instantiates,
         status: "active".into(),
@@ -165,6 +168,27 @@ fn patient(mounts: Mounts) -> Option<CapabilityStatementRestResource> {
     }
     let served = !patient.interaction.is_empty() || !patient.operation.is_empty();
     served.then_some(patient)
+}
+
+/// The PMIR subscription profile ITI-94 creates against (PMIR 1.6.0
+/// §2:3.94.4.1.2.1).
+pub const PMIR_SUBSCRIPTION: &str =
+    "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Subscription";
+
+/// The `Subscription` resource of ITI-94: create, read, the update that
+/// enables or disables, and delete (PMIR 1.6.0 §2:3.94.4.1 to §2:3.94.4.5).
+fn subscription() -> CapabilityStatementRestResource {
+    CapabilityStatementRestResource {
+        r#type: "Subscription".into(),
+        supported_profile: vec![PMIR_SUBSCRIPTION.into()],
+        interaction: vec![
+            interaction("create", "ITI-94: Subscribe to Patient Updates"),
+            interaction("read", "ITI-94: Get Patient Subscription"),
+            interaction("update", "ITI-94: Enable or Disable Patient Subscription"),
+            interaction("delete", "ITI-94: Delete Patient Subscription"),
+        ],
+        ..CapabilityStatementRestResource::default()
+    }
 }
 
 /// Adds the PIXm Manager to `patient`, as `CapabilityStatement-IHE.PIXm.Manager`

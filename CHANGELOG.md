@@ -14,6 +14,15 @@ and this project adheres to
 
 ### Added
 
+- The server answers ITI-94 as the PMIR Patient Identity Registry (#105):
+  `POST {base}/fhir/Subscription` creates an active subscription held to
+  the PMIR Subscription profile with one of the four criteria, and `GET`,
+  the enable and disable `PUT` and `DELETE` of `Subscription/{id}` read,
+  switch and delete it; the channel endpoint is `https`, every request is
+  audited, the `CapabilityStatement` declares the `Subscription` resource,
+  and a deleted subscription leaves the dashboard's count in error.
+  `ihe-iti` 0.0.59 adds the `created` and `current` answers of a
+  `Subscription`.
 - The outbox keeps a delivered or abandoned message for `[outbox]
   retention_days` (30) and then prunes it, `prune_batch` at a time, once an
   hour (#251); a pending message is never pruned. The server's role prunes

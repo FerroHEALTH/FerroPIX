@@ -51,6 +51,9 @@ and this project adheres to
 
 ### Fixed
 
+- The IHE citation guard reads a vendor cache that is a symbolic link, and
+  in a git worktree with none of its own the main worktree's cache (#253),
+  so a worktree checks the cache-only citations the main checkout can.
 - The IHE citation guard reads the seventh-level headings profiles.ihe.net
   renders as `<h7>` (#237), so a citation of such a section, ITI TF-2
   §3.21.4.1.2.5.2 among them, is checked instead of refused when the HL7 v2

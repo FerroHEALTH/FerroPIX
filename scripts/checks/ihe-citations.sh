@@ -60,12 +60,33 @@ readonly UNVENDORED='2:3.55	ITI TF-2 §3.55 Cross Gateway Patient Discovery [ITI
 # and the cached ones, one path per line, the FHIR packages and the
 # provenance records left out.
 corpus_files() {
-  local dirs=("$1/docs/specs")
-  [[ -d "$1/.vendor-cache" ]] && dirs+=("$1/.vendor-cache")
-  find "${dirs[@]}" \( -path "$1/docs/specs/ihe-*" -o -path "$1/.vendor-cache/ihe-*" \) -type f \
+  local cache
+  cache="$(cache_of "$1")"
+  {
+  find "$1/docs/specs" -path "$1/docs/specs/ihe-*" -type f \
     \( -name '*.html' -o -name '*.md' -o -name '*.pdf' \) \
-    ! -path '*/package/*' ! -name 'PROVENANCE.md' ! -name 'LICENSE*' \
-    | LC_ALL=C sort
+    ! -path '*/package/*' ! -name 'PROVENANCE.md' ! -name 'LICENSE*'
+  # -L follows a cache that is a symbolic link, as a worktree's often is.
+  [[ -n "$cache" ]] && find -L "$cache" -path "$cache/ihe-*" -type f \
+    \( -name '*.html' -o -name '*.md' -o -name '*.pdf' \) \
+    ! -name 'PROVENANCE.md' ! -name 'LICENSE*'
+  } | LC_ALL=C sort
+}
+
+# cache_of ROOT: the vendor cache ROOT reads, or nothing when it has none:
+# ROOT/.vendor-cache, followed when it is a symbolic link, or else, in a
+# linked git worktree, the cache of the main worktree, which a vendor script
+# run there filled.
+cache_of() {
+  if [[ -d "$1/.vendor-cache" ]]; then
+    printf '%s\n' "$1/.vendor-cache"
+    return 0
+  fi
+  local common
+  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2> /dev/null || true)"
+  if [[ -n "$common" && -d "$(dirname "$common")/.vendor-cache" ]]; then
+    printf '%s\n' "$(dirname "$common")/.vendor-cache"
+  fi
 }
 
 # profile_of FILE: the "NAME VERSION" an implementation guide page directory
@@ -374,6 +395,12 @@ self_test() {
   expect 1 '/// ITI TF-2 §3.8.4.9, which the cached page does not hold.'
   expect 1 '/// ITI-21 §3.8.4.2.1 names another transaction.'
   expect 1 '/// the query of §3.21.4.1.9, which the cached page does not hold.'
+  # A cache that is a symbolic link, as a git worktree's often is, is read
+  # through the link: its sections are checked, not counted as unread.
+  mv "$work/.vendor-cache" "$work/elsewhere"
+  ln -s "$work/elsewhere" "$work/.vendor-cache"
+  expect 0 '/// the A40 merge, ITI TF-2 §3.8.4.2.1, through a linked cache.'
+  expect 1 '/// ITI TF-2 §3.8.4.9, which the linked cache does not hold.'
   # A PDF heading is read with and without a margin line number before it,
   # and a numbered body line is no heading.
   local layout

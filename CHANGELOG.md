@@ -14,6 +14,11 @@ and this project adheres to
 
 ### Added
 
+- Matching never merges two master identities (#103): a master-domain
+  record keeps its own patient, two master patients an identifier names are
+  held apart as a candidate with the `master_identities` conflict, and a
+  master identity survives any other patient. Between two patients of one
+  kind the one created first survives, whatever the format of its id.
 - The server answers ITI-94 as the PMIR Patient Identity Registry (#105):
   `POST {base}/fhir/Subscription` creates an active subscription held to
   the PMIR Subscription profile with one of the four criteria, and `GET`,

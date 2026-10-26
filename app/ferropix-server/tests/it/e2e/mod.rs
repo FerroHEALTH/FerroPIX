@@ -30,6 +30,7 @@ mod schema;
 mod sealing;
 mod subscriptions;
 mod supplier;
+mod survival;
 mod xcpd;
 mod xcpd_examples;
 mod xcpd_mtls;

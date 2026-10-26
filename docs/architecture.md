@@ -408,8 +408,14 @@ where both are stated). The rule of a BSN system keeps the nine digits
 eight-digit number restored) and requires the eleven-proof; every other
 domain trims the value and keeps its case, as FHIR R4 compares an
 `Identifier.value`. A value its domain's rule refuses refuses the feed.
-The record joins the oldest of the persons its identifiers name, and every
-other is merged into it with `kind = deterministic`. A hard conflict turns
+The record joins the person that survives the others its identifiers name,
+and every other is merged into it with `kind = deterministic`. A master
+identity survives any other person; between two of one kind the one created
+first survives, the smaller id breaking only a tie, so no rule reads the id's
+format (D36). Matching never merges two master identities: a master record
+keeps its own person, and two master persons one identifier names are held
+apart as a candidate with the `master_identities` conflict, since only
+their Source's own ITI-93 merge joins them (D36). A hard conflict turns
 the deterministic link into a candidate for review, its evidence carrying
 the conflicts (`conflicts`, which the console draws first), graded at
 least `possible`. A `local` domain never links
@@ -1794,3 +1800,4 @@ The milestones carry the order; every issue cites the section it builds.
 | D33 | XCPD's asynchronous exchange and the Deferred Response Option | the asynchronous exchange answered, posted only to a `ReplyTo` under a configured prefix with bounded retry from the durable outbox (D34); the Deferred Response Option not offered, a Deferred request answered `NS250` | ITI TF-2 §3.55.6 requires Asynchronous Web Services Exchange of the Responding Gateway, and §3.55.4.1.3 prescribes `NS250` for a gateway without the Deferred Response Option, which is a named option; restricting the reply endpoints and the retry bounds no specification governs: our own design, against a request steering the server's posts |
 | D34 | The outbound messages | one `outbox` table every sender shares (XCPD now, ITI-10 next), written before its request is acknowledged, the payload sealed under the store's key for its row id, claimed with `FOR UPDATE SKIP LOCKED` under a lease, retried with a doubling wait and abandoned with its failure when its attempts are spent; the sender finishes its message in flight on `SIGTERM` within the drain; `db reseal` rewrites the payloads; delivered and abandoned rows past `[outbox] retention_days` are pruned hourly through the `SECURITY DEFINER` function `pix.prune_outbox`, the server's role holding `EXECUTE` on it and no `DELETE` on the table | no specification governs it: our own design; an acknowledged message lost on a restart would be a silent failure, and a payload that names a patient is sealed as an identifier is (D7) |
 | D35 | A refused ITI-93 entry in the response | the response `MessageHeader.response.code` `fatal-error`, its `details` a contained `OperationOutcome` with one issue per refused entry: the history entry as `expression`, the correlated status (an unmerge's `405`) in `diagnostics` | PMIR 1.6.0 §2:3.93.4.1.3 asks for a "correlated entry.response.code" while §2:3.93.4.2.2 allows the response one `MessageHeader` entry; FHIR R4 `MessageHeader.response.details` references the outcome of a message; the gap is reported upstream (#250) |
+| D36 | Master identities in the cross-reference | an ITI-93 create carries a UUID `Patient.id` that becomes the person's id, a create of a known person applies as an update, a non-UUID id is refused per entry as `invalid` (D35); a master identity survives any other person, between two of one kind the earlier `person.created_at` survives and the smaller id breaks only a tie; matching never merges two master identities and holds them apart as a candidate with the `master_identities` conflict; only the Source's own merge (`replaced-by`) joins them | PMIR 1.6.0 §2:3.93.4.1.1 has the Registry assign `Patient.id` while §2:3.93.4.2.2's one-`MessageHeader` response cannot return it, so the Source owns the master identity and the Registry keeps it (reported upstream, #262); the survival order and the conflict no specification governs: our own design |

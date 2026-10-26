@@ -26,11 +26,14 @@ Each ITI-104 message is one database transaction:
   version. FerroPIX then looks for every other record whose current version
   carries one of the same identifiers in an `authoritative` domain, such as
   the BSN. Those records are one patient with this one, so the record joins
-  the oldest of their patients and any other is merged into it, unless the
+  the patient that survives (a master identity first, then the one created
+  first) and any other is merged into it, unless the
   two records disagree on the birth year or on a stated administrative
   gender. Such a hard conflict links nothing: the pair becomes a candidate
   for review, with the conflict in its evidence. A value in a `local`
-  domain never links across domains, even when two domains share it.
+  domain never links across domains, even when two domains share it. Two
+  master identities are never merged by matching: they become a candidate
+  with the `master_identities` conflict, and only their Source merges them.
 - **Scoring.** The new version is scored against every record in another
   patient that shares a blocking key with it. A pair graded `possible` or
   better becomes an open candidate, or refreshes the open candidate of the

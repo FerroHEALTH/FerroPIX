@@ -24,7 +24,7 @@ use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
 use crate::feed::write::{self, Subjects};
 use crate::feed::{CandidateId, Context, FeedError, Feeder, demographics};
-use crate::matching::conflict;
+use crate::matching::conflict::{self, Conflict};
 use crate::matching::scorer::{Grade, Scored};
 use crate::matching::subject::{IdentifierKey, Subject};
 use crate::store::record::{PersonId, RecordId};
@@ -86,6 +86,8 @@ pub(super) struct Me<'a> {
     pub record: RecordId,
     /// Its version.
     pub version: i32,
+    /// Whether it is a record of the master domain, a master identity.
+    pub master: bool,
     /// Its demographics as the scorer compares them.
     pub subject: &'a Subject,
     /// The identifiers it carries in `authoritative` domains.
@@ -139,10 +141,16 @@ pub(super) async fn cross_reference(
     Ok(linked)
 }
 
-/// The deterministic tier: links `me` into the oldest of the persons its
-/// authoritative identifiers name, merges the others into it, records a
-/// candidate for each record a hard conflict holds apart, and returns the
+/// The deterministic tier: links `me` into the person that survives the
+/// others its authoritative identifiers name, merges those into it, records
+/// a candidate for each record a hard conflict holds apart, and returns the
 /// person `me` is in.
+///
+/// A master identity is never merged into another by matching: a master
+/// record keeps its own person, a second master person the identifiers name
+/// is held apart as a candidate with the [`Conflict::MasterIdentities`]
+/// conflict, and only the Source's own merge joins them (PMIR 1.6.0
+/// §2:3.93.4.1.3).
 async fn join(
     connection: &mut PgConnection,
     feeder: &Feeder,
@@ -170,10 +178,32 @@ async fn join(
     persons.sort_unstable();
     persons.dedup();
     lock_persons(connection, &persons).await?;
-    let survivor = match persons.first() {
-        Some(oldest) => *oldest,
-        None => new_person(connection).await?,
+    let ranked = by_survival(connection, &persons).await?;
+    let current_master = current.is_some_and(|current| {
+        ranked
+            .iter()
+            .any(|(person, master)| *person == current && *master)
+    });
+    let survivor = if me.master || current_master {
+        match current {
+            Some(current) => current,
+            None => new_person(connection).await?,
+        }
+    } else {
+        match ranked.first() {
+            Some((first, _)) => *first,
+            None => new_person(connection).await?,
+        }
     };
+    let survivor_master = me.master
+        || ranked
+            .iter()
+            .any(|(person, master)| *person == survivor && *master);
+    let held: BTreeSet<PersonId> = ranked
+        .iter()
+        .filter(|(person, master)| *master && survivor_master && *person != survivor)
+        .map(|(person, _)| *person)
+        .collect();
     if current.is_none() {
         let kind = if joinable.is_empty() {
             LinkKind::Feed
@@ -182,7 +212,10 @@ async fn join(
         };
         open_link(connection, me.record, survivor, kind, None, context).await?;
     }
-    for person in persons.iter().skip(1) {
+    for (person, _) in ranked
+        .iter()
+        .filter(|(person, _)| *person != survivor && !held.contains(person))
+    {
         merge(
             connection,
             *person,
@@ -193,7 +226,11 @@ async fn join(
         .await?;
         linked.merged.push(*person);
     }
-    for (other, found) in conflicting {
+    let masters = matches
+        .iter()
+        .filter(|other| held.contains(&other.person))
+        .map(|other| (other, vec![Conflict::MasterIdentities]));
+    for (other, found) in conflicting.into_iter().chain(masters) {
         let mut scored = score_pair(feeder, me, other);
         scored.evidence.conflicts = found;
         scored.grade = scored.grade.max(Grade::Possible);
@@ -229,13 +266,24 @@ async fn probabilistic(
         if scored.grade == Grade::CertainlyNot {
             continue;
         }
+        let mut pair = [other.person, survivor];
+        pair.sort_unstable();
+        let ranked = by_survival(connection, &pair).await?;
+        if ranked.iter().all(|(_, master)| *master) {
+            scored.evidence.conflicts = vec![Conflict::MasterIdentities];
+            if let Some(id) = candidate(connection, me, other, &scored, context).await? {
+                linked.candidates.push(id);
+            }
+            continue;
+        }
         if scored.grade == Grade::Certain && feeder.auto_link {
-            let (older, younger) = if other.person < survivor {
-                (other.person, survivor)
-            } else {
-                (survivor, other.person)
+            lock_persons(connection, &pair).await?;
+            let ranked = by_survival(connection, &pair).await?;
+            let (Some((older, _)), Some((younger, _))) =
+                (ranked.first().copied(), ranked.get(1).copied())
+            else {
+                return Err(FeedError::Contention);
             };
-            lock_persons(connection, &[older, younger]).await?;
             let recording = Recording {
                 context,
                 kind: "auto-link",
@@ -260,6 +308,35 @@ async fn probabilistic(
         }
     }
     Ok(survivor)
+}
+
+/// Returns `persons` in the order they survive one another, each with
+/// whether it is a master identity: a master identity first, then the one
+/// created first, the smaller id breaking a tie. The id's format orders
+/// nothing, since a Source may assign a master identity's id.
+pub(super) async fn by_survival(
+    connection: &mut PgConnection,
+    persons: &[PersonId],
+) -> Result<Vec<(PersonId, bool)>, FeedError> {
+    let ids: Vec<Uuid> = persons.iter().map(|person| person.uuid()).collect();
+    let rows: Vec<(Uuid, bool)> = sqlx::query_as(
+        "SELECT p.id, EXISTS (
+             SELECT 1 FROM pix.link l
+             JOIN pix.source_record r ON r.id = l.record_id
+             JOIN pix.identifier_domain d ON d.id = r.domain_id
+             WHERE l.person_id = p.id AND upper_inf(l.valid) AND d.kind = 'master'
+         ) AS master
+         FROM pix.person p WHERE p.id = ANY($1)
+         ORDER BY master DESC, p.created_at, p.id",
+    )
+    .bind(&ids)
+    .fetch_all(&mut *connection)
+    .await
+    .map_err(store)?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, master)| (PersonId::from_uuid(id), master))
+        .collect())
 }
 
 /// Takes the advisory lock of each of `persons` in key order and refuses

@@ -12,6 +12,10 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- The server sends ITI-93 to its PMIR subscribers (#104). Every committed change to a patient, whether from a feed, a Source's merge, an ITI-93 change, or a steward's link, merge or revert, writes one message per matching active subscription to the outbox in the same transaction, in the subscription's payload format. The sender delivers each subscription's messages in order with its channel headers, retries within `[pmir.feed]`, then sets the subscription to `error` with the reason, and an enable resumes from the next message. The dependency report names each subscriber with its latest outcome, and the new `outbox` readiness indicator reports a stuck sender. The unused `feed_outbox` table is dropped.
+
 ## [0.0.6] - 2026-10-26
 
 ### Added

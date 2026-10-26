@@ -40,7 +40,6 @@ pub trait HealthIndicator: fmt::Debug + Send + Sync {
 }
 
 /// The indicators readiness evaluates.
-// TODO(#104): register the feed sender's backlog.
 #[derive(Debug, Clone, Default)]
 pub struct Registry {
     /// The indicators, in registration order.

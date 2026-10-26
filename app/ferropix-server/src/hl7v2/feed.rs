@@ -352,10 +352,12 @@ fn refusal(error: &FeedError) -> Settled {
             ErrorCode::UnknownKeyIdentifier,
             "the surviving identifier names no active record of the domain",
         )),
-        FeedError::Demographics(_) | FeedError::Evidence => Settled::refused(Fault::anywhere(
-            ErrorCode::Application,
-            "the demographics could not be stored",
-        )),
+        FeedError::Demographics(_) | FeedError::Evidence | FeedError::Notice => {
+            Settled::refused(Fault::anywhere(
+                ErrorCode::Application,
+                "the demographics could not be stored",
+            ))
+        }
         FeedError::Contention => {
             Settled::rejected("concurrent messages moved the same persons; send the message again")
         }

@@ -134,6 +134,28 @@ pub struct Active {
     pub criteria: String,
     /// Its channel endpoint.
     pub endpoint: String,
+    /// The media type its channel asks the messages in (FHIR R4
+    /// `Subscription.channel.payload`).
+    pub payload: String,
+}
+
+/// What the Registry sends a subscriber with.
+///
+/// It holds the Registry's FHIR base, the Master Patient Identification
+/// Domain's system, the attempts one message is given (`[pmir.feed]`), and
+/// what wakes the sender once a message is committed.
+#[derive(Debug, Clone)]
+pub struct FeedSettings {
+    /// The Registry's FHIR base, `{public_base_url}/fhir`, the messages'
+    /// source (PMIR 1.6.0 §2:3.93.4.1.3).
+    pub registry: url::Url,
+    /// The system of the Master Patient Identification Domain, the public
+    /// base URL.
+    pub master: String,
+    /// The most attempts one message is given.
+    pub max_attempts: u32,
+    /// What wakes the outbox sender.
+    pub wake: crate::outbox::Wake,
 }
 
 /// Returns every live subscription whose status is `active`, by id: a
@@ -143,19 +165,128 @@ pub struct Active {
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails.
 pub async fn active(store: &Store) -> Result<Vec<Active>, StoreError> {
-    let rows: Vec<(Uuid, String, String)> = sqlx::query_as(
-        "SELECT id, criteria, endpoint FROM pix.subscription
+    active_in(store.pool()).await
+}
+
+/// Returns every live, active subscription through `executor`, by id, as
+/// [`active`] does: a transaction that changes a person reads them inside
+/// itself.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn active_in<'c, E>(executor: E) -> Result<Vec<Active>, StoreError>
+where
+    E: sqlx::PgExecutor<'c>,
+{
+    let rows: Vec<(Uuid, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT id, criteria, endpoint, resource #>> '{channel,payload}' FROM pix.subscription
          WHERE status = 'active' AND deleted_at IS NULL ORDER BY id",
+    )
+    .fetch_all(executor)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, criteria, endpoint, payload)| Active {
+            id,
+            criteria,
+            endpoint,
+            payload: payload.unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// Returns the headers the live subscription `id` asks each message to carry
+/// (FHIR R4 `Subscription.channel.header`), empty when it asks none or is
+/// gone.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn headers(store: &Store, id: Uuid) -> Result<Vec<String>, StoreError> {
+    let headers: Option<sqlx::types::Json<Vec<String>>> = sqlx::query_scalar(
+        "SELECT coalesce(resource #> '{channel,header}', '[]'::jsonb) FROM pix.subscription
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(store.pool())
+    .await?;
+    Ok(headers.map(|headers| headers.0).unwrap_or_default())
+}
+
+/// Sets the active subscription `id` to `error` with `text`, once its
+/// message could not be delivered within the retry bounds (PMIR 1.6.0
+/// §2:3.94.4.1.3); returns whether it was active.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn failed(store: &Store, id: Uuid, text: &str) -> Result<bool, StoreError> {
+    let changed = sqlx::query(
+        "UPDATE pix.subscription SET status = 'error', error = $2
+         WHERE id = $1 AND status = 'active' AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(text)
+    .execute(store.pool())
+    .await?
+    .rows_affected();
+    Ok(changed > 0)
+}
+
+/// The last delivery to one live subscription, as the dependency report
+/// names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastDelivery {
+    /// The channel endpoint.
+    pub endpoint: String,
+    /// Whether the subscription is in error, with the error text.
+    pub error: Option<String>,
+    /// Whether the latest attempted message was delivered, with its last
+    /// failure when it was not; `None` before the first attempt.
+    pub last: Option<Result<(), String>>,
+    /// When the latest message was delivered, RFC 3339 UTC.
+    pub at: Option<String>,
+}
+
+/// Returns the last delivery to every live subscription, by id.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn deliveries(store: &Store) -> Result<Vec<LastDelivery>, StoreError> {
+    type Row = (
+        String,
+        String,
+        Option<String>,
+        Option<bool>,
+        Option<String>,
+        Option<String>,
+    );
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT s.endpoint, s.status, s.error, o.delivered_at IS NOT NULL, o.last_failure,
+                to_char(o.delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')
+         FROM pix.subscription s
+         LEFT JOIN LATERAL (
+             SELECT delivered_at, last_failure FROM pix.outbox
+             WHERE subscription_id = s.id AND attempts > 0
+             ORDER BY created_at DESC, id DESC LIMIT 1) o ON true
+         WHERE s.deleted_at IS NULL ORDER BY s.id",
     )
     .fetch_all(store.pool())
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(id, criteria, endpoint)| Active {
-            id,
-            criteria,
-            endpoint,
-        })
+        .map(
+            |(endpoint, status, error, delivered, failure, at)| LastDelivery {
+                endpoint,
+                error: (status == "error").then(|| error.unwrap_or_default()),
+                last: delivered.map(|delivered| {
+                    if delivered {
+                        Ok(())
+                    } else {
+                        Err(failure.unwrap_or_default())
+                    }
+                }),
+                at,
+            },
+        )
         .collect())
 }
 

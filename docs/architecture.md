@@ -262,8 +262,7 @@ row reads in order without a sequence.
 | `pseudonym` | `person_id`, `domain_id`, `value` (uuid, unique), `minted_at` | immutable; resolved through the merge chain (section 8) |
 | `steward_action` | `id`, `kind`, `actor`, `at`, `person_id`, `record_id`, `candidate_id`, `merge_id`, `reason`, `request_id` | the console's audit trail; every row also goes out as a BALP record (section 9) |
 | `subscription` | `id`, `resource` (jsonb), `status`, `criteria`, `endpoint`, `error`, `created_at` | ITI-94 |
-| `feed_outbox` | `id`, `subscription_id`, `bundle` (jsonb), `attempts`, `next_at`, `delivered_at` | ITI-93 messages to subscribers, delivered with bounded retry |
-| `outbox` | `id`, `channel`, `destination`, `media_type`, `payload_sealed`, `key_id`, `attempts`, `max_attempts`, `next_at`, `delivered_at`, `abandoned_at`, `last_failure` | outbound messages written before their request is acknowledged: XCPD asynchronous answers, and ITI-10's notifications next; the payload sealed under the store's key for its row id, claimed under a lease, retried, abandoned when spent, resealed by `db reseal` (D34) |
+| `outbox` | `id`, `channel`, `destination`, `media_type`, `payload_sealed`, `key_id`, `attempts`, `max_attempts`, `next_at`, `delivered_at`, `abandoned_at`, `last_failure`, `subscription_id` | outbound messages written before their request is acknowledged: XCPD asynchronous answers, the ITI-93 messages to PMIR subscribers (each naming its subscription, delivered in order per subscription while it is active), and ITI-10's notifications next; the payload sealed under the store's key for its row id, claimed under a lease, retried, abandoned when spent, resealed by `db reseal` (D34) |
 | `v2_receipt` | `control_id`, `sending_facility`, `received_at`, `ack_code` | the MSH-10 of each v2 message, so a resent message is acknowledged again and not applied twice (section 7) |
 | `seal_key` | `key_id`, `pending_key_id`, `set_at` | one row: the id of the key the identifier columns are written under, and the key an unfinished `db reseal` moves them to |
 
@@ -337,8 +336,8 @@ boundaries: our own design.
   and insert the open ones; insert the `steward_action` row the system
   action produces; commit. The BALP record is written to the audit spool
   after the commit, by the request handler, and the ITI-93 message to each
-  matching subscription is inserted into `feed_outbox` inside the
-  transaction, so a committed change is never unannounced (#104).
+  matching subscription is inserted into the `outbox` inside the
+  transaction, so a committed change is never unannounced (section 6.3).
 - **A Source's duplicate resolution** (ITI-104 with `replaced-by`,
   §2:3.104.4.2.3, or an ITI-93 merge, PMIR 1.6.0 §2:3.93.4.1.2.4): both
   records of the domain locked, the subsumed one inserted when the store
@@ -373,7 +372,7 @@ boundaries: our own design.
   gets `status = merged` and `merged_into`; every open link of the merged
   person is closed and reopened on the survivor, each move a `merge_effect`
   row; the candidates between the two persons' records are closed as
-  `linked`; a PMIR merge message goes to `feed_outbox` (section 6.3); the
+  `linked`; a PMIR merge message goes to the `outbox` (section 6.3); the
   action is recorded; commit.
 - **An unmerge**: only the latest merge whose survivor is this person can
   be reverted, so reverts unwind in order; a revert replays
@@ -700,11 +699,21 @@ response is a message Bundle with one `MessageHeader` carrying the outcome
 profile (§2:3.93.5.1).
 
 **ITI-93, sent.** Every committed change to a person is an ITI-93 message to
-each active subscription whose criteria match (section 4.3 inserts it into
-`feed_outbox`). A sender delivers in order per subscription, with the retry
-bounds of `[pmir] feed`, and sets the subscription's `status` to `error`
-with the error text when the bounds are spent (PMIR 1.6.0 §2:3.94.4.1.3).
-The subscriber side is `ihe_iti::pmir`, already built.
+each active subscription whose criteria match, in the subscription's payload
+format: the transaction that made the change writes it to the `outbox`
+(section 4.3, D34). A feed, a Source's merge, an ITI-93 change, a steward's
+merge, link or revert each announce the persons they changed, a merged
+person as the deprecated `Patient` (PMIR 1.6.0 §2:3.93.4.1.2.4). The
+sender delivers a subscription's messages one at a time and in order, with
+the headers the subscription's `channel.header` asks for (FHIR R4
+`Subscription.channel.header`), within the retry bounds of `[pmir] feed`.
+When the bounds are spent it sets the subscription's `status` to `error`
+with the error text (PMIR 1.6.0 §2:3.94.4.1.3), and its later messages wait
+until an enable makes it `active` again. The dependency report names each
+subscriber with the outcome of its latest message, and the `outbox`
+readiness indicator is down only while a due message waits past the
+sender's lease, a stuck sender rather than a refusing subscriber. The
+subscriber side is `ihe_iti::pmir`, already built.
 
 **ITI-94.** `POST {base}/fhir/Subscription` creates one (`201`,
 `Location`), with the criteria the Registry must accept: `Patient`,

@@ -524,7 +524,7 @@ fn feed_case(error: &FeedError, removal: bool) -> Case {
         FeedError::NotFound | FeedError::SurvivorNotFound => Case::FeedSurvivorNotFound,
         FeedError::Contention => Case::Contention,
         FeedError::Store(_) => Case::StoreUnavailable,
-        FeedError::Demographics(_) | FeedError::Evidence => Case::Internal,
+        FeedError::Demographics(_) | FeedError::Evidence | FeedError::Notice => Case::Internal,
     }
 }
 

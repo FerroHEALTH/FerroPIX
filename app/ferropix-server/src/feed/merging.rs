@@ -19,7 +19,7 @@ use uuid::Uuid;
 use crate::feed::link::{self, MergeKind, Recording};
 use crate::feed::steward::DecideError;
 use crate::feed::write::{self, Subjects};
-use crate::feed::{Context, FeedError};
+use crate::feed::{Context, FeedError, announce};
 use crate::store::Store;
 use crate::store::record::PersonId;
 
@@ -165,6 +165,11 @@ pub async fn merge(
         other => DecideError::Feed(other),
     })?;
     let moved = effects(&mut transaction, made.merge).await?;
+    let changes = [
+        announce::Change::Merged(request.merged),
+        announce::Change::Updated(request.survivor),
+    ];
+    announce::announce(&mut transaction, store, &changes).await?;
     Ok((
         transaction,
         Change {
@@ -249,7 +254,13 @@ pub async fn revert(
         .bind(merged.uuid())
         .execute(&mut *transaction)
         .await?;
-    // TODO(#104): queue the PMIR message of the revert for each matching subscription.
+    let changes = [
+        announce::Change::Updated(survivor),
+        announce::Change::Updated(merged),
+    ];
+    announce::announce(&mut transaction, store, &changes)
+        .await
+        .map_err(DecideError::Feed)?;
     sqlx::query(
         "UPDATE pix.merge SET reverted_at = now(), reverted_by = $2, revert_reason = $3 WHERE id = $1",
     )

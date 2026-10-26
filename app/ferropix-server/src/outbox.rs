@@ -11,11 +11,13 @@
 //! never a pending one. On `SIGTERM` it finishes the message in
 //! flight and claims no other; the server waits for it within its drain
 //! timeout, and a message it never reached stays in the outbox for the next
-//! start. No specification governs the sender: our own design.
+//! start. [`Backlog`] is its readiness indicator. No specification governs
+//! the sender: our own design.
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferropix_operator_api::health::IndicatorState;
 use secrecy::ExposeSecret as _;
 use tokio::sync::{Notify, watch};
 
@@ -68,6 +70,8 @@ pub struct HttpChannel {
 pub struct Channels {
     /// The XCPD asynchronous answers, when `[xcpd]` is on.
     pub xcpd: Option<HttpChannel>,
+    /// The ITI-93 messages to PMIR subscribers, when `[pmir]` is on.
+    pub pmir: Option<HttpChannel>,
 }
 
 /// What wakes the sender: a message written.
@@ -144,6 +148,54 @@ async fn run(
     }
 }
 
+/// How long a due message may wait before the sender counts as stuck: a
+/// lease and two idle wakes, past which a running sender has claimed it.
+pub const STUCK: Duration = Duration::from_secs(LEASE.as_secs() + 2 * IDLE.as_secs());
+
+/// The readiness indicator of the outbox sender's backlog.
+///
+/// It is down while a due message has waited past [`STUCK`], which a running
+/// sender never lets happen. A subscriber that refuses its messages leaves them retried or
+/// abandoned, never overdue, so it keeps the server ready.
+#[derive(Debug, Clone)]
+pub struct Backlog {
+    /// The store whose outbox is read.
+    store: Store,
+}
+
+impl Backlog {
+    /// The name the indicator answers under in the readiness document.
+    pub const NAME: &'static str = "outbox";
+
+    /// Returns the indicator of `store`'s outbox.
+    #[must_use]
+    pub fn new(store: Store) -> Self {
+        Self { store }
+    }
+}
+
+impl crate::health::HealthIndicator for Backlog {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    fn check(&self) -> crate::health::Check<'_> {
+        Box::pin(async move {
+            match outbox::overdue(&self.store).await {
+                Ok(Some(late)) if late > STUCK => IndicatorState::down(format!(
+                    "a due outbox message has waited {} s; the sender claims none",
+                    late.as_secs()
+                )),
+                Ok(_) => IndicatorState::up(),
+                Err(error) => IndicatorState::down(format!(
+                    "the outbox could not be read: {}",
+                    crate::chain(&error)
+                )),
+            }
+        })
+    }
+}
+
 /// Deletes every settled message past `retention`, a batch at a time.
 async fn prune(store: &Store, retention: Retention) {
     let mut total: u64 = 0;
@@ -173,10 +225,14 @@ async fn prune(store: &Store, retention: Retention) {
 async fn deliver(store: &Store, channels: &Channels, row: Claimed) {
     let channel = match row.channel {
         Channel::Xcpd => channels.xcpd.as_ref(),
+        Channel::Pmir => channels.pmir.as_ref(),
     };
     let attempt = row.attempts.saturating_add(1);
     let outcome = match channel {
-        Some(channel) => post(channel, &row).await,
+        Some(channel) => match headers(store, &row).await {
+            Ok(headers) => post(channel, &row, headers).await,
+            Err(failure) => Err(failure),
+        },
         None => Err(String::from("the channel is switched off")),
     };
     let recorded = match outcome {
@@ -192,6 +248,7 @@ async fn deliver(store: &Store, channels: &Channels, row: Claimed) {
                 tracing::warn!(row = %row.id, channel = row.channel.as_str(), attempt, failure = %failure, "an outbox message is not delivered; it is tried again");
             } else {
                 tracing::error!(row = %row.id, channel = row.channel.as_str(), attempt, failure = %failure, "an outbox message is abandoned after its last attempt");
+                subscription_failed(store, &row, &failure).await;
             }
             outbox::failed(store, row.id, &failure, retry).await
         }
@@ -201,12 +258,63 @@ async fn deliver(store: &Store, channels: &Channels, row: Claimed) {
     }
 }
 
-/// Posts the row's payload to its destination: a `2xx` is delivered, and
-/// anything else a failure named by its status or its kind, never its body.
-async fn post(channel: &HttpChannel, row: &Claimed) -> Result<(), String> {
+/// Sets the subscription of an abandoned ITI-93 row to `error` with the
+/// failure, so the subscriber reads why it is sent nothing more (PMIR 1.6.0
+/// §2:3.94.4.1.3); its later messages wait until it is enabled again.
+async fn subscription_failed(store: &Store, row: &Claimed, failure: &str) {
+    let Some(subscription) = row.subscription else {
+        return;
+    };
+    let text = format!("an ITI-93 message could not be delivered: {failure}");
+    match crate::store::subscription::failed(store, subscription, &text).await {
+        Ok(true) => {
+            tracing::warn!(subscription = %subscription, "a PMIR subscription is set to error");
+        }
+        Ok(false) => {}
+        Err(error) => {
+            tracing::error!(subscription = %subscription, error = %crate::chain(&error), "a PMIR subscription could not be set to error");
+        }
+    }
+}
+
+/// The headers the row's subscription asks each message to carry (FHIR R4
+/// `Subscription.channel.header`, each `name: value`), marked sensitive, as
+/// one may carry the subscriber's credential; none for another channel.
+async fn headers(store: &Store, row: &Claimed) -> Result<http::HeaderMap, String> {
+    let mut map = http::HeaderMap::new();
+    let Some(subscription) = row.subscription else {
+        return Ok(map);
+    };
+    let written = crate::store::subscription::headers(store, subscription)
+        .await
+        .map_err(|_error| String::from("the subscription's headers could not be read"))?;
+    for header in written {
+        let parsed = header.split_once(':').and_then(|(name, value)| {
+            let name = http::HeaderName::from_bytes(name.trim().as_bytes()).ok()?;
+            let mut value = http::HeaderValue::from_str(value.trim()).ok()?;
+            value.set_sensitive(true);
+            Some((name, value))
+        });
+        let Some((name, value)) = parsed else {
+            return Err(String::from("a channel header is no `name: value` field"));
+        };
+        map.append(name, value);
+    }
+    Ok(map)
+}
+
+/// Posts the row's payload to its destination with `headers`: a `2xx` is
+/// delivered, and anything else a failure named by its status or its kind,
+/// never its body.
+async fn post(
+    channel: &HttpChannel,
+    row: &Claimed,
+    headers: http::HeaderMap,
+) -> Result<(), String> {
     let sent = channel
         .client
         .post(row.destination.as_str())
+        .headers(headers)
         .header(http::header::CONTENT_TYPE, row.media_type.as_str())
         .body(row.payload.expose_secret().to_owned())
         .send()

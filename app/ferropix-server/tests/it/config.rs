@@ -60,6 +60,7 @@ fn every_section_loads_and_resolves() {
             .map(|xcpd| xcpd.community.to_string())
             .as_deref()
     );
+    assert_eq!(200, settings.outbox.batch);
     assert!(settings.audit.url.is_some());
     assert!(settings.operator.enabled);
     assert!(settings.usage_report.enabled);
@@ -88,6 +89,7 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[hl7v2]", "[hl7v2]\n"),
         ("[[hl7v2.senders]]", "[[hl7v2.senders]]\n"),
         ("[xcpd]", "[xcpd]\n"),
+        ("[outbox]", "[outbox]\n"),
         ("[audit]", "[audit]\n"),
         ("[operator]", "[operator]\n"),
         ("[usage_report]", "[usage_report]\n"),

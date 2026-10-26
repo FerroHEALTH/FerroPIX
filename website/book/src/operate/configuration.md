@@ -323,6 +323,17 @@ file that cannot be read or is empty are refused at load; an identity or
 trust file that holds no PEM the delivery reads refuses the start. See
 [The XCPD Responding Gateway](../integrate/xcpd-gateway.md).
 
+### `[outbox]`
+
+| Key | Default | What it sets |
+|---|---|---|
+| `outbox.retention_days` | `30` | The days a delivered or abandoned outbound message is kept before it is pruned; a pending one is never pruned. |
+| `outbox.prune_batch` | `500` | The most messages one prune deletes in one statement. |
+
+The sender prunes once an hour. The server's database role has no `DELETE`
+on the outbox: it calls `pix.prune_outbox`, which deletes only what the rule
+allows. A zero value is refused at load.
+
 ### `[audit]`
 
 | Key | Default | What it sets |

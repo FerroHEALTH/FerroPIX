@@ -6,7 +6,9 @@
 //! its attempts are spent.
 //!
 //! The sender wakes when a message is written, when the next one falls due,
-//! and at least every [`IDLE`]. On `SIGTERM` it finishes the message in
+//! and at least every [`IDLE`]. Every [`PRUNE_EVERY`] it deletes the
+//! delivered and abandoned messages older than the `[outbox]` retention,
+//! never a pending one. On `SIGTERM` it finishes the message in
 //! flight and claims no other; the server waits for it within its drain
 //! timeout, and a message it never reached stays in the outbox for the next
 //! start. No specification governs the sender: our own design.
@@ -17,11 +19,15 @@ use std::time::Duration;
 use secrecy::ExposeSecret as _;
 use tokio::sync::{Notify, watch};
 
+use crate::config::section::outbox::Retention;
 use crate::store::Store;
 use crate::store::outbox::{self, Channel, Claimed, LEASE};
 
 /// The longest the sender sleeps without looking at the outbox.
 pub const IDLE: Duration = Duration::from_secs(30);
+
+/// How often the sender prunes the settled messages past their retention.
+pub const PRUNE_EVERY: Duration = Duration::from_secs(3600);
 
 /// The rows one claim takes.
 const BATCH: i64 = 16;
@@ -75,23 +81,35 @@ impl Wake {
     }
 }
 
-/// Starts the sender over `store`, delivering through `channels`, woken by
-/// `wake`, until `stopped` is raised.
+/// Starts the sender over `store`, delivering through `channels` and pruning
+/// by `retention`, woken by `wake`, until `stopped` is raised.
 #[must_use]
 pub fn start(
     store: Store,
     channels: Channels,
+    retention: Retention,
     wake: Wake,
     stopped: watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(run(store, channels, wake, stopped))
+    tokio::spawn(run(store, channels, retention, wake, stopped))
 }
 
 /// The sender's loop.
-async fn run(store: Store, channels: Channels, wake: Wake, mut stopped: watch::Receiver<bool>) {
+async fn run(
+    store: Store,
+    channels: Channels,
+    retention: Retention,
+    wake: Wake,
+    mut stopped: watch::Receiver<bool>,
+) {
+    let mut pruned: Option<tokio::time::Instant> = None;
     loop {
         if *stopped.borrow() {
             return;
+        }
+        if pruned.is_none_or(|at| at.elapsed() >= PRUNE_EVERY) {
+            prune(&store, retention).await;
+            pruned = Some(tokio::time::Instant::now());
         }
         match outbox::claim(&store, BATCH, LEASE).await {
             Ok(claimed) => {
@@ -123,6 +141,31 @@ async fn run(store: Store, channels: Channels, wake: Wake, mut stopped: watch::R
             () = wake.0.notified() => {}
             _ = stopped.wait_for(|stop| *stop) => return,
         }
+    }
+}
+
+/// Deletes every settled message past `retention`, a batch at a time.
+async fn prune(store: &Store, retention: Retention) {
+    let mut total: u64 = 0;
+    loop {
+        match outbox::prune(store, retention.keep, retention.batch).await {
+            Ok(deleted) => {
+                total = total.saturating_add(deleted);
+                if deleted < u64::from(retention.batch) {
+                    break;
+                }
+            }
+            Err(error) => {
+                tracing::error!(error = %crate::chain(&error), "the outbox could not be pruned");
+                break;
+            }
+        }
+    }
+    if total > 0 {
+        tracing::info!(
+            deleted = total,
+            "settled outbox messages past their retention are pruned"
+        );
     }
 }
 

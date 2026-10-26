@@ -14,6 +14,15 @@ and this project adheres to
 
 ### Added
 
+- Each release publishes the Helm chart to
+  `oci://ghcr.io/ferrohealth/charts/ferropix` (#269): the reusable
+  `build-chart.yml` packages it with the release as its app version and the
+  server and console images pinned by the digests the release scanned,
+  pushes it and attests its build provenance. `publish-chart.yml` publishes
+  a chart fix between releases. The chart, now 0.2.0, documents the Service
+  that serves PIXm and PDQm and the values that declare a domain and its
+  Source, and adds the named template `ferropix.fhirBaseUrl` for a parent
+  chart.
 - The server receives ITI-93 as the PMIR Patient Identity Registry (#103):
   `POST {base}/fhir` from the master domain's Source, by its client id,
   applies each change of the feed message in JSON or XML. A create takes the

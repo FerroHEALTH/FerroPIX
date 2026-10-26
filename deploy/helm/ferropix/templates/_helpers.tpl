@@ -12,6 +12,17 @@ SPDX-License-Identifier: BUSL-1.1
 {{- end -}}
 {{- end -}}
 
+{{/*
+The in-cluster FHIR base the PIXm Manager and the PDQm Supplier answer
+under: the server's Service, its port, `[server] base_path` and `/fhir`. A
+parent chart that takes this chart as a dependency includes it to reach
+PIXm (ITI-83) and PDQm (ITI-78).
+*/}}
+{{- define "ferropix.fhirBaseUrl" -}}
+{{- $base := .Values.config.server.base_path | default "" | trimSuffix "/" -}}
+{{- printf "http://%s.%s.svc:%v%s/fhir" (include "ferropix.fullname" .) .Release.Namespace .Values.service.port $base -}}
+{{- end -}}
+
 {{/* The console's name. */}}
 {{- define "ferropix.console" -}}
 {{- printf "%s-console" (include "ferropix.fullname" .) | trunc 63 | trimSuffix "-" -}}

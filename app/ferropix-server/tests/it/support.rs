@@ -171,6 +171,10 @@ initiating_communities = ["urn:oid:2.999.70.1"]
 reply_endpoints = ["https://ig.example.org/xcpd/"]
 delivery_attempts = 3
 
+[outbox]
+retention_days = 14
+prune_batch = 200
+
 [audit]
 url = "https://arr.example.org/fhir"
 spool_dir = "/var/lib/ferropix/audit"

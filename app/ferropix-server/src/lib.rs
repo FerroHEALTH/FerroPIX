@@ -396,6 +396,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         pmir,
         hl7v2,
         xcpd,
+        outbox: retention,
         operator,
         audit,
         matching,
@@ -439,7 +440,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     )
     .await;
     let (signal, stopped) = stop_signal();
-    let sender = outbox::start(store.clone(), channels, wake, stopped.clone());
+    let sender = outbox::start(store.clone(), channels, retention, wake, stopped.clone());
     let mllp = match &hl7v2 {
         Some(settings) => Some(
             start_mllp(

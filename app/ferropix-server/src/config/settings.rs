@@ -13,6 +13,7 @@ use crate::config::section::dev::Dev;
 use crate::config::section::domain::{self, DomainSeed};
 use crate::config::section::hl7v2::Hl7v2Settings;
 use crate::config::section::matching::Matching;
+use crate::config::section::outbox::Retention;
 use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
 use crate::config::section::server::ServerSettings;
 use crate::config::section::telemetry::TelemetrySettings;
@@ -48,6 +49,8 @@ pub struct Settings {
     pub hl7v2: Option<Hl7v2Settings>,
     /// The XCPD Responding Gateway, when it is on.
     pub xcpd: Option<XcpdSettings>,
+    /// The outbox's retention.
+    pub outbox: Retention,
     /// The BALP audit trail.
     pub audit: AuditSettings,
     /// The operator API switch.
@@ -89,6 +92,7 @@ impl Config {
         let pmir = self.pmir.resolve()?;
         let hl7v2 = self.hl7v2.resolve()?;
         let xcpd = self.xcpd.resolve()?;
+        let outbox = self.outbox.resolve()?;
         let audit = self.audit.resolve(self.profile)?;
         let usage_report = self.usage_report.resolve()?;
         if self.dev.as_ref().is_some_and(|dev| dev.loopback) {
@@ -119,6 +123,7 @@ impl Config {
             pmir,
             hl7v2,
             xcpd,
+            outbox,
             audit,
             operator: self.operator.clone(),
             usage_report,

@@ -12,6 +12,7 @@ pub mod domain;
 pub mod hl7v2;
 pub mod matching;
 pub mod operator;
+pub mod outbox;
 pub mod profiles;
 pub mod server;
 pub mod telemetry;

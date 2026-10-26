@@ -215,6 +215,25 @@ pub async fn next_due(store: &Store) -> Result<Option<Duration>, StoreError> {
     Ok(wait.map(|seconds| Duration::from_secs_f64(seconds.clamp(0.0, 86_400.0))))
 }
 
+/// Deletes up to `batch` rows settled longer ago than `keep`.
+///
+/// A row is settled when it was delivered or abandoned. The delete runs
+/// through the `pix.prune_outbox` function, which the server's role may call
+/// in place of a `DELETE` grant, and returns how many rows it deleted.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn prune(store: &Store, keep: Duration, batch: u32) -> Result<u64, StoreError> {
+    let deleted: i32 = sqlx::query_scalar(
+        "SELECT pix.prune_outbox(make_interval(secs => $1::double precision), $2)",
+    )
+    .bind(keep.as_secs_f64())
+    .bind(i32::try_from(batch).unwrap_or(i32::MAX))
+    .fetch_one(store.pool())
+    .await?;
+    Ok(u64::try_from(deleted).unwrap_or(0))
+}
+
 /// Records the row `id` as delivered.
 ///
 /// # Errors

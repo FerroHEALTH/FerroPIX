@@ -108,6 +108,9 @@ pub(super) fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSet
         Channels {
             xcpd: Some(gateway.channel()),
         },
+        ferropix_server::config::section::outbox::Outbox::default()
+            .resolve()
+            .expect("the default retention"),
         wake,
         stopped,
     );

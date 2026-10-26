@@ -72,6 +72,8 @@ pub struct Config {
     pub hl7v2: section::hl7v2::Hl7v2,
     /// The XCPD Responding Gateway (`[xcpd]`).
     pub xcpd: section::xcpd::Xcpd,
+    /// The outbox's retention (`[outbox]`).
+    pub outbox: section::outbox::Outbox,
     /// The BALP audit trail (`[audit]`).
     pub audit: section::audit::Audit,
     /// The operator API (`[operator]`).

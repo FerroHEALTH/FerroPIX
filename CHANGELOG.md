@@ -14,6 +14,11 @@ and this project adheres to
 
 ### Added
 
+- The outbox keeps a delivered or abandoned message for `[outbox]
+  retention_days` (30) and then prunes it, `prune_batch` at a time, once an
+  hour (#251); a pending message is never pruned. The server's role prunes
+  through the `pix.prune_outbox` function and holds no `DELETE` on the
+  outbox.
 - `ihe-iti` 0.0.58 carries the PMIR Patient Identity Registry side behind
   `pmir-server` (#102): `pmir::server::feed::FeedMessage` reads an ITI-93
   feed message in FHIR JSON or XML with its Patients, `feed::response`

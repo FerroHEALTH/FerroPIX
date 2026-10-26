@@ -21,6 +21,11 @@ and this project adheres to
   spent, and finishes the message in flight on `SIGTERM` within the drain;
   `db reseal` rewrites the waiting payloads. ITI-10 will deliver through the
   same outbox.
+- IHE's twelve ITI-55 example messages are vendored by
+  `scripts/vendor/ihe-xcpd-examples.sh` (#228), and `ihe-iti`'s tests read
+  them: the Responding Gateway reads IHE's request, every element its
+  answers and its `NS250` refusal write is one IHE's examples carry, and the
+  Initiating Gateway reads IHE's Case 2, 3 and 5 answers.
 - The W3C Web Services Addressing 1.0 SOAP Binding Recommendation is vendored
   by `scripts/vendor/w3c-ws-addressing.sh` (#241), so the XCPD Responding
   Gateway's citation of its §5.2.2 is checked against the text in the
@@ -29,6 +34,12 @@ and this project adheres to
   TLS (#240): `[xcpd] client_certificate_file` and `client_key_file` name the
   PEM chain and key, and `reply_trust_file` the authorities trusted for a
   reply endpoint beside the system roots.
+
+### Changed
+
+- `ihe-iti` 0.0.57 names the receiver of a Responding Gateway answer by its
+  device alone, as IHE's example answers do (#228); the answer no longer
+  repeats the initiating community as the receiver's organization.
 
 ### Fixed
 

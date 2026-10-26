@@ -30,6 +30,7 @@ mod schema;
 mod sealing;
 mod supplier;
 mod xcpd;
+mod xcpd_examples;
 mod xcpd_mtls;
 
 use base64::Engine as _;

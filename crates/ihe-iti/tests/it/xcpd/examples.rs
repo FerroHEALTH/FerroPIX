@@ -8,8 +8,8 @@
 //! IHE's answers.
 //!
 //! Five of the twelve files are not well-formed XML upstream and one spells
-//! a code otherwise than ITI TF-2 Table 3.55.4.2.2.6-1 does; the tests read
-//! the files as published and say where they work around them.
+//! a code otherwise than ITI TF-2 Table 3.55.4.2.2.6-1 does (#247); the tests
+//! read the files as published and say where they work around them.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -352,7 +352,7 @@ async fn the_initiating_gateway_reads_ihes_answers() {
     )))
     .await
     {
-        // NOTE: ITI TF-2 Table 3.55.4.2.2.6-1 names PatientAddressRequested; IHE's example spells it PatientAdressRequested.
+        // NOTE: ITI TF-2 Table 3.55.4.2.2.6-1 names PatientAddressRequested; IHE's example misspells it (#247).
         Ok(Discovery::MoreAttributesRequested(asked)) => assert_eq!(
             vec![
                 RequestedAttribute::Other,

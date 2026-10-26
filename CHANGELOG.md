@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-10-26
+
 ### Added
 
 - Pseudonyms (#114, #115):

@@ -10,7 +10,7 @@ description: >-
 type: application
 # The chart's own version line, SemVer over its values and rendered output
 # (https://helm.sh/docs/topics/charts/#charts-and-versioning).
-version: 0.2.0
+version: 0.2.1
 # The default image tag of the server and the console: the product version,
 # which scripts/checks/versions.sh holds equal to the workspace version.
 appVersion: "0.0.5"

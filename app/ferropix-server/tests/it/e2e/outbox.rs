@@ -260,18 +260,41 @@ async fn the_settled_messages_past_their_retention_are_pruned_and_a_pending_one_
     assert_eq!(want, left, "the fresh and the pending message stay");
 }
 
+/// Starts PostgreSQL with the server's role created before the migrations,
+/// and returns it with the store, migrated by its owner, and the URL the
+/// server's role connects with.
+async fn with_server_role() -> (
+    ferropix_testkit::containers::Postgres,
+    ferropix_server::store::Store,
+    String,
+) {
+    let postgres = ferropix_testkit::containers::postgres()
+        .await
+        .expect("PostgreSQL starts");
+    let server = super::server_role(&postgres).await;
+    let owner = super::app_role(&postgres).await;
+    let store = ferropix_server::store::Store::start(
+        &super::settings(&owner, &super::fresh_key(), true),
+        &[],
+        ferropix_server::store::Job::Migrate,
+    )
+    .await
+    .expect("the store starts and grants the server's role");
+    (postgres, store, server)
+}
+
 #[tokio::test]
 async fn the_servers_role_may_prune_the_outbox_but_not_delete_from_it() {
     if !e2e_enabled() {
         return;
     }
-    let harness = Harness::start(synthetic_seeds()).await;
+    let (_postgres, store, _server) = with_server_role().await;
     let privileges: Vec<String> = sqlx::query_scalar(
         "SELECT a.privilege_type FROM pg_class c, aclexplode(c.relacl) a
          WHERE c.oid = 'pix.outbox'::regclass AND a.grantee = 'ferropix'::regrole
          ORDER BY 1",
     )
-    .fetch_all(harness.store.pool())
+    .fetch_all(store.pool())
     .await
     .expect("the grants read");
     assert_eq!(
@@ -284,7 +307,7 @@ async fn the_servers_role_may_prune_the_outbox_but_not_delete_from_it() {
          WHERE p.oid = 'pix.prune_outbox(interval, integer)'::regprocedure
            AND a.grantee = 'ferropix'::regrole",
     )
-    .fetch_all(harness.store.pool())
+    .fetch_all(store.pool())
     .await
     .expect("the function's grants read");
     assert_eq!(
@@ -295,8 +318,50 @@ async fn the_servers_role_may_prune_the_outbox_but_not_delete_from_it() {
     let public: bool = sqlx::query_scalar(
         "SELECT has_function_privilege('public', 'pix.prune_outbox(interval, integer)', 'EXECUTE')",
     )
-    .fetch_one(harness.store.pool())
+    .fetch_one(store.pool())
     .await
     .expect("reads");
     assert!(!public, "no other role may prune");
+}
+
+#[tokio::test]
+async fn connected_as_the_servers_role_a_delete_is_refused_and_the_prune_function_works() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, server) = with_server_role().await;
+    let message = Message {
+        channel: Channel::Xcpd,
+        destination: String::from("https://ig.example.org/replies"),
+        media_type: "application/soap+xml; charset=UTF-8",
+        payload: SecretString::from(String::from("<answer>synthetic</answer>")),
+        max_attempts: 3,
+    };
+    store_outbox::enqueue(store.pool(), store.sealer(), &message)
+        .await
+        .expect("written");
+    sqlx::query("UPDATE pix.outbox SET delivered_at = now() - interval '40 days'")
+        .execute(store.pool())
+        .await
+        .expect("settled");
+    let as_server = sqlx::PgPool::connect(&server)
+        .await
+        .expect("the server's role connects");
+    let refused = sqlx::query("DELETE FROM pix.outbox")
+        .execute(&as_server)
+        .await
+        .expect_err("the server's role holds no DELETE on the outbox");
+    assert_eq!(
+        Some("42501"),
+        refused
+            .as_database_error()
+            .and_then(sqlx::error::DatabaseError::code)
+            .as_deref(),
+        "insufficient privilege: {refused}"
+    );
+    let pruned: i32 = sqlx::query_scalar("SELECT pix.prune_outbox(interval '30 days', 10)")
+        .fetch_one(&as_server)
+        .await
+        .expect("the server's role may prune");
+    assert_eq!(1, pruned);
 }

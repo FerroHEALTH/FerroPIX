@@ -21,7 +21,7 @@ async fn the_boot_gate_refuses_a_role_that_can_read_a_schema_beside_pix() {
         .await
         .expect_err("a superuser reads every schema");
     assert!(
-        matches!(&superuser, StoreError::Superuser { role } if role == "ferropix"),
+        matches!(&superuser, StoreError::Superuser { role } if role == "pix_super"),
         "{superuser:?}"
     );
 

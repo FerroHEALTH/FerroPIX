@@ -8,9 +8,9 @@
 //! The capability statement, the SMART discovery document, the PIXm
 //! Manager ([`pixm`]), the PDQm Supplier ([`pdqm`]), the PMIR Registry
 //! ([`registry`] for ITI-93, [`pmir`] for ITI-94) and the operator API
-//! ([`crate::operator`]) answer; an operator route not served yet answers
-//! `501` with a `not-supported` issue until the issue that serves it lands,
-//! so the guard in front of it is in place and tested first. [`status`] is
+//! ([`crate::operator`]) answer; a row no handler serves answers `501` with
+//! a `not-supported` issue, so the guard in front of a new route is in place
+//! and tested first. [`status`] is
 //! the one table of every outcome a transaction answers, and [`wire`] puts
 //! each in JSON or XML.
 
@@ -301,8 +301,8 @@ async fn pending_fhir() -> Response {
     )
 }
 
-/// A route of the operator API that is not served yet.
-// TODO(#115): serve the pseudonymisation domains and the resolution.
+/// A row of the operator API that no handler serves: none today, so a row
+/// added without its handler answers `501` rather than `404`.
 async fn pending_operator() -> Response {
     respond(
         StatusCode::NOT_IMPLEMENTED,

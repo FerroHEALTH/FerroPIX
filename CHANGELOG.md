@@ -14,6 +14,10 @@ and this project adheres to
 
 ### Added
 
+- Pseudonyms (#114, #115):
+  - An ITI-83 query that names a pseudonymisation domain as `targetSystem` answers the person's pseudonym in it. The domain's consumer mints it on the first ask, as one value however many first asks arrive at once. Any other caller reads only a minted pseudonym, a query that names no `targetSystem` mints nothing, and each mint writes its own BALP Create record.
+  - The domains are seeded from `[[pseudonym_domain]]` with their `consumer_client_id`. The operator API lists, adds, changes and retires them, a steward mints through `POST /operator/pseudonyms`, and the reverse resolution `POST /operator/pseudonyms/resolve` is a steward action and a BALP disclosure.
+  - A pseudonym resolves to the survivor while its person is merged, and to its own person again after the revert.
 - `ihe-iti` 0.0.61 has the feature `smart` (#268):
   `authorizer::smart::TokenAuthorizer` is the IUA authorizer over
   `ferrohealth-smart`'s client-credentials `TokenSource`. Each PIXm, PDQm,

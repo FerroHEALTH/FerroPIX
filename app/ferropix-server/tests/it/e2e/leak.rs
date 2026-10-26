@@ -20,7 +20,7 @@ use super::{BSN_SYSTEM, app_role, bsn, create, demographics, domain, fresh_key, 
 
 /// A log sink the case reads back.
 #[derive(Clone, Default)]
-struct Capture(Arc<Mutex<Vec<u8>>>);
+pub(super) struct Capture(Arc<Mutex<Vec<u8>>>);
 
 impl Write for Capture {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
@@ -35,13 +35,18 @@ impl Write for Capture {
 
 impl Capture {
     /// Returns a subscriber that writes every event, at every level, here.
-    fn subscriber(&self) -> impl tracing::Subscriber + Send + Sync + use<> {
+    pub(super) fn subscriber(&self) -> impl tracing::Subscriber + Send + Sync + use<> {
         let sink = self.clone();
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .with_ansi(false)
             .with_writer(move || sink.clone())
             .finish()
+    }
+
+    /// Returns every line written so far.
+    pub(super) fn text(&self) -> String {
+        String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
     }
 }
 

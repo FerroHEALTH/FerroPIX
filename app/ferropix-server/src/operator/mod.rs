@@ -12,6 +12,8 @@
 //! - [`reveal`]: one identifier or pseudonym unmasked, a privacy disclosure.
 //! - [`domains`]: the identifier domains and, behind the administrator
 //!   scope, their writes.
+//! - [`pseudonyms`]: the pseudonymisation domains and their writes, a
+//!   steward's mint and the audited reverse resolution.
 //! - [`sources`]: the systems allowed to feed, read from the configuration.
 //! - [`matching`]: the matching configuration in effect, and
 //!   [`configuration`] its settings with where each came from.
@@ -38,6 +40,7 @@ pub mod matching;
 pub mod merges;
 pub mod overview;
 pub mod person;
+pub mod pseudonyms;
 pub mod reveal;
 pub mod search;
 pub mod sources;
@@ -157,6 +160,9 @@ pub fn handler(
     filter: MethodFilter,
     operator: &Arc<Operator>,
 ) -> Option<MethodRouter> {
+    if let Some(handler) = pseudonyms::handler(route, filter, operator) {
+        return Some(handler);
+    }
     let operator = Arc::clone(operator);
     let handler = match (route.method.clone(), route.path) {
         (Method::GET, "/operator/overview") => on(filter, move || {

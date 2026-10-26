@@ -60,6 +60,8 @@ pub struct Config {
     pub auth: section::auth::Auth,
     /// The identifier domains seeded at start (`[[domain]]`).
     pub domain: Vec<section::domain::Domain>,
+    /// The pseudonymisation domains seeded at start (`[[pseudonym_domain]]`).
+    pub pseudonym_domain: Vec<section::pseudonym::PseudonymDomain>,
     /// The scorer's thresholds, weights and blocking keys (`[matching]`).
     pub matching: section::matching::Matching,
     /// The PIXm Manager (`[pixm]`).

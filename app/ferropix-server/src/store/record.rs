@@ -64,7 +64,8 @@ impl PersonId {
     }
 
     /// Returns the id of the person the store calls `uuid`.
-    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
+    #[must_use]
+    pub const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 }

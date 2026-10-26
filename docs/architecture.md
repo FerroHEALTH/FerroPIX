@@ -258,7 +258,7 @@ row reads in order without a sequence.
 | `candidate` | `id`, `record_a`, `record_b`, `a_version`, `b_version`, `score`, `grade`, `evidence` (jsonb), `status` (`open`, `linked`, `not-a-match`, `deferred`), `decided_by`, `decided_at`, `reason`, `deferred_until` | the review queue; a `not-a-match` pair is not queued again until either record changes |
 | `merge` | `id`, `survivor_id`, `merged_id`, `kind` (`steward`, `source`, `deterministic`, `probabilistic`), `made_by`, `made_at`, `reason`, `reverted_at`, `reverted_by`, `revert_reason` | one row per merge |
 | `merge_effect` | `merge_id`, `record_id`, `from_person`, `link_closed`, `link_opened` | what the merge moved, which the revert replays backwards |
-| `pseudonym_domain` | `id`, `namespace` (unique), `name`, `created_at`, `retired_at` | |
+| `pseudonym_domain` | `id`, `namespace` (unique), `name`, `consumer_client_id`, `created_at`, `retired_at` | the consumer is the one client whose ITI-83 query mints in it (D38); seeded from `[[pseudonym_domain]]` |
 | `pseudonym` | `person_id`, `domain_id`, `value` (uuid, unique), `minted_at` | immutable; resolved through the merge chain (section 8) |
 | `steward_action` | `id`, `kind`, `actor`, `at`, `person_id`, `record_id`, `candidate_id`, `merge_id`, `reason`, `request_id` | the console's audit trail; every row also goes out as a BALP record (section 9) |
 | `subscription` | `id`, `resource` (jsonb), `status`, `criteria`, `endpoint`, `error`, `created_at` | ITI-94 |
@@ -833,10 +833,21 @@ web services text, is committed beside ITI-38.
 
 **Pseudonyms.** FerroEHR names a patient by a value that identifies no one
 on its own: a UUID per patient and `subject_namespace`. FerroPIX mints it.
-A pseudonymisation domain is a namespace; `POST {base}/operator/pseudonyms`
-(and the console) resolves a person, through the merge chain to the active
-survivor, to its pseudonym in a domain, minting one when the survivor has
-none. A pseudonym row is immutable and attached to the person it was minted
+A pseudonymisation domain is a namespace, an absolute URI that no identifier
+domain holds, and names its one consumer (`consumer_client_id`). The
+namespace is a Patient Identifier Domain a Consumer names as `targetSystem`
+in ITI-83 (PIXm 3.1.0 §2:3.83.4.1.2.2):
+- the answer carries the person's pseudonym in it, as a `targetIdentifier`;
+- when the person has none and the caller is the domain's consumer, the
+  Manager mints it in that request (D38);
+- another caller reads only a minted pseudonym and never causes a mint, and
+  a query naming no `targetSystem` answers the pseudonyms already minted;
+- a mint is an insert that returns the row already there, so concurrent first
+  asks yield one pseudonym, and each mint writes its own BALP Create record.
+
+`POST {base}/operator/pseudonyms` (and the console) resolves a person,
+through the merge chain to the active survivor, to its pseudonym in a domain,
+minting one when the survivor has none. A pseudonym row is immutable and attached to the person it was minted
 for: after a merge, both persons' pseudonyms resolve to the survivor,
 through `merged_into`; after an unmerge, each resolves to its own person
 again. The reverse resolution, from a pseudonym to a person, is a steward
@@ -1820,3 +1831,4 @@ The milestones carry the order; every issue cites the section it builds.
 | D35 | A refused ITI-93 entry in the response | the response `MessageHeader.response.code` `fatal-error`, its `details` a contained `OperationOutcome` with one issue per refused entry: the history entry as `expression`, the correlated status (an unmerge's `405`) in `diagnostics` | PMIR 1.6.0 §2:3.93.4.1.3 asks for a "correlated entry.response.code" while §2:3.93.4.2.2 allows the response one `MessageHeader` entry; FHIR R4 `MessageHeader.response.details` references the outcome of a message; the gap is reported upstream (#250) |
 | D36 | Master identities in the cross-reference | an ITI-93 create carries a UUID `Patient.id` that becomes the person's id, a create of a known person applies as an update, a non-UUID id is refused per entry as `invalid` (D35); a master identity survives any other person, between two of one kind the earlier `person.created_at` survives and the smaller id breaks only a tie; matching never merges two master identities and holds them apart as a candidate with the `master_identities` conflict; only the Source's own merge (`replaced-by`) joins them | PMIR 1.6.0 §2:3.93.4.1.1 has the Registry assign `Patient.id` while §2:3.93.4.2.2's one-`MessageHeader` response cannot return it, so the Source owns the master identity and the Registry keeps it (reported upstream, #262); the survival order and the conflict no specification governs: our own design |
 | D37 | The changes of one ITI-93 message | applied in history order, each in its own transaction; a refused change leaves the changes before and after it applied, and the response names it; a store failure ends the message with `503` and the changes before it stay applied, so a resent message applies again (a create of a held identity is an update, a merge already made changes nothing) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry, which presumes each entry is applied or refused on its own; how the entries share transactions no specification governs: our own design |
+| D38 | Minting a pseudonym on the ITI-83 ask | a pseudonymisation domain is a `targetSystem` of ITI-83; the consumer's first ask mints the person's pseudonym and answers it, any other caller reads only a minted one, a query naming no `targetSystem` mints nothing; one pseudonym per `(person, domain)` under concurrency; each mint its own BALP Create record; PIXm resolves no pseudonym back, which stays the steward's audited resolution | PIXm 3.1.0 §2:3.83.4.1.3 has the Manager use the `targetSystem` to determine the identifiers that match, and §2:3.83.4.1.2.2 selects the answer from the domains it names; the clinical record carries only the pseudonym, so it must exist on the clinical domain's first ask (FerroHEALTH/FerroEHR#3380); who may mint no specification governs: our own design |

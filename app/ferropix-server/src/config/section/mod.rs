@@ -14,6 +14,7 @@ pub mod matching;
 pub mod operator;
 pub mod outbox;
 pub mod profiles;
+pub mod pseudonym;
 pub mod server;
 pub mod telemetry;
 pub mod usage_report;

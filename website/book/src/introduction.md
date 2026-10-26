@@ -33,7 +33,9 @@ parts exist today.
   [PIXm Manager](integrate/pixm-manager.md) and the
   [PDQm Supplier](integrate/pdqm-supplier.md) run today, as does the
   [HL7 v2 face](integrate/hl7v2-face.md) with ITI-8, ITI-9 and ITI-21; the
-  PMIR Registry and pseudonym minting are planned, and the pages under Operate say which is which.
+  PMIR Registry receives ITI-93 and answers ITI-94, and
+  [pseudonym minting](integrate/pseudonyms.md) runs; the pages under Operate
+  say what is built and what is planned.
 
 [What FerroPIX is](evaluate/what-ferropix-is.md) lists every capability with
 its status.

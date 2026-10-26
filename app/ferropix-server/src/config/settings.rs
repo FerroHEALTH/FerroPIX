@@ -15,6 +15,7 @@ use crate::config::section::hl7v2::Hl7v2Settings;
 use crate::config::section::matching::Matching;
 use crate::config::section::outbox::Retention;
 use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
+use crate::config::section::pseudonym::{self, PseudonymSeed};
 use crate::config::section::server::ServerSettings;
 use crate::config::section::telemetry::TelemetrySettings;
 use crate::config::section::usage_report::UsageReportSettings;
@@ -37,6 +38,8 @@ pub struct Settings {
     pub auth: AuthSettings,
     /// The identifier domains seeded at start.
     pub domains: Vec<DomainSeed>,
+    /// The pseudonymisation domains seeded at start.
+    pub pseudonym_domains: Vec<PseudonymSeed>,
     /// The scorer's configuration.
     pub matching: Matching,
     /// The PIXm Manager.
@@ -88,6 +91,7 @@ impl Config {
             });
         }
         let domains = domain::resolve(&self.domain, &auth)?;
+        let pseudonym_domains = pseudonym::resolve(&self.pseudonym_domain, &domains)?;
         let matching = self.matching.resolve()?;
         let pmir = self.pmir.resolve()?;
         let hl7v2 = self.hl7v2.resolve()?;
@@ -117,6 +121,7 @@ impl Config {
             db,
             auth,
             domains,
+            pseudonym_domains,
             matching,
             pixm: self.pixm.clone(),
             pdqm: self.pdqm.clone(),

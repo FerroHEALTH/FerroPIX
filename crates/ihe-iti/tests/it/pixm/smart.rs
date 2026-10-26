@@ -20,16 +20,14 @@ use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::CrossReference;
 use secrecy::SecretString;
 use url::Url;
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{FHIR_JSON, OPERATION, PROMPT, client, red_source, vendored};
+use super::authorized::manager_accepting;
+use super::{PROMPT, client, red_source};
 
 /// The token endpoint's path on the stub authorization server.
 const TOKEN: &str = "/token";
-
-/// The IG's answer for the red patient in every domain.
-const ALL: &str = "example/Parameters-pixm-response-mohralice-red-all.json";
 
 /// A token response issuing `token` (RFC 6749 §5.1).
 fn issued(token: &str) -> ResponseTemplate {
@@ -71,28 +69,6 @@ fn authorizer(server: &MockServer) -> Arc<TokenAuthorizer> {
     Arc::new(TokenAuthorizer::new(
         TokenSource::new(config).expect("a token source"),
     ))
-}
-
-/// A stub Manager that answers a request carrying `accepted` with the IG's
-/// answer, and every other with `401`.
-async fn manager_accepting(accepted: &str) -> MockServer {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path(OPERATION))
-        .and(header(AUTHORIZATION, accepted))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(vendored(ALL).into_bytes(), FHIR_JSON),
-        )
-        .with_priority(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(OPERATION))
-        .respond_with(ResponseTemplate::new(401))
-        .with_priority(2)
-        .mount(&server)
-        .await;
-    server
 }
 
 /// The `Authorization` values `server` received, in order.

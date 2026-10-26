@@ -17,6 +17,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
 | `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna) | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
+| `smart` | The IUA authorizer over the OAuth 2.0 client-credentials token of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) | ITI-72 |
 | `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |
 | `pdqm-server` | The Patient Demographics Supplier side of PDQm, typed, with no store and no HTTP server | ITI-78, ITI-119 |
 | `pmir-server` | The Patient Identity Registry side of PMIR, typed, with no store and no HTTP server | ITI-93, ITI-94 |
@@ -38,6 +39,13 @@ is sent once more with new headers (§3.72.4.3), never more than twice in all.
 The authorizer is handed the request URL without its query, so no patient
 identifier or search criterion reaches it, and a request it cannot
 authenticate is not sent.
+
+With `smart`, `ihe_iti::authorizer::smart::TokenAuthorizer` is that
+authorizer over a `ferrohealth_smart::client::cache::TokenSource`: each
+request carries the source's current token as a bearer token, marked
+sensitive, and a `401` drops the refused token, so the one resend carries a
+new one. A token the source cannot obtain is an `AuthorizerError` whose
+source is the `TokenError`, and nothing is sent.
 
 ## PIXm (`pixm`)
 

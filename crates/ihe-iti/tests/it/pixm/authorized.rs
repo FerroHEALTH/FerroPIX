@@ -22,7 +22,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::{FHIR_JSON, OPERATION, PROMPT, RED_VALUE, client, red_source, vendored};
 
 /// The IG's answer for the red patient in every domain.
-const ALL: &str = "example/Parameters-pixm-response-mohralice-red-all.json";
+pub(super) const ALL: &str = "example/Parameters-pixm-response-mohralice-red-all.json";
 
 /// How the test authorizer behaves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,7 +106,7 @@ impl Authorizer for Counting {
 
 /// A stub Manager that answers a request carrying `accepted` with the IG's
 /// answer, and every other with `401`.
-async fn manager_accepting(accepted: &str) -> MockServer {
+pub(super) async fn manager_accepting(accepted: &str) -> MockServer {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path(OPERATION))

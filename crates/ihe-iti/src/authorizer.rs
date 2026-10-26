@@ -11,16 +11,22 @@
 //! that was refused (§3.72.4.3). A default header of the HTTP client cannot
 //! change between requests, so an [`Authorizer`] the caller supplies gives
 //! the headers of each request and reads each answer. The PIXm, PDQm, mCSD
-//! and PMIR clients each take one with `with_authorizer`.
+//! and PMIR clients each take one with `with_authorizer`. With the feature
+//! `smart`, [`smart::TokenAuthorizer`] is one over the client-credentials
+//! token of `ferrohealth-smart`.
 //!
 //! The authorizer is handed the request URL without its query and fragment,
 //! so a patient identifier or a search criterion in the query never reaches
 //! it. A client sends a request at most twice: once, and once more when the
 //! authorizer asks for it after the first answer.
 
+#[cfg(feature = "smart")]
+pub mod smart;
+
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 use std::time::{Duration, Instant};
 
 use http::{HeaderMap, Method, StatusCode};
@@ -83,6 +89,7 @@ impl AuthorizerError {
     }
 }
 
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 /// Why [`send`] produced no answer.
 #[derive(Debug)]
 pub(crate) enum Unsent {
@@ -94,6 +101,7 @@ pub(crate) enum Unsent {
     Transport(reqwest::Error),
 }
 
+#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 /// Sends `request` over `http` within `timeout`, with the headers of
 /// `authorizer` when there is one, once more when the authorizer asks for
 /// it after the first answer and the request can be repeated.

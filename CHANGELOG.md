@@ -14,6 +14,13 @@ and this project adheres to
 
 ### Added
 
+- `ihe-iti` 0.0.61 has the feature `smart` (#268):
+  `authorizer::smart::TokenAuthorizer` is the IUA authorizer over
+  `ferrohealth-smart`'s client-credentials `TokenSource`. Each PIXm, PDQm,
+  mCSD or PMIR request carries the current token as a bearer token marked
+  sensitive. A `401` drops the refused token and sends the request once
+  more with a new one, and a token that cannot be obtained is an
+  `AuthorizerError` whose source is the `TokenError`.
 - Each release publishes the Helm chart to
   `oci://ghcr.io/ferrohealth/charts/ferropix` (#269): the reusable
   `build-chart.yml` packages it with the release as its app version and the

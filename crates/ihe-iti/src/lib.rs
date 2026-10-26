@@ -26,7 +26,9 @@
 //!
 //! The PIXm, PDQm, mCSD and PMIR clients authenticate with a credential the
 //! HTTP client carries, or with an access token incorporated in each request
-//! by an authorizer the caller supplies (module `authorizer`, IUA ITI-72).
+//! by an authorizer the caller supplies (module `authorizer`, IUA ITI-72),
+//! such as the one over `ferrohealth-smart`'s client-credentials token
+//! (feature `smart`).
 //!
 //! A PIXm, PDQm or XCPD exchange names whom it is made for, a user or the
 //! client's own system (`ihe_atna::user`), and its audit record names that
@@ -40,7 +42,13 @@
 //! stack and its own store (module `server`).
 #![doc(test(attr(deny(warnings))))]
 
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "smart"
+))]
 pub mod authorizer;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;

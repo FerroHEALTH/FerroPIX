@@ -10,7 +10,8 @@
 //! feature's graph already, through `fhir-types`, which depends on it
 //! unconditionally; what `xcpd` adds is the crate's own use of it, its
 //! message and query ids, and its clock. `balp` stamps each record with its
-//! time, so it shares the clock, and never the message ids; `atna` writes
+//! time, so it shares the clock, and never the message ids; `smart` takes
+//! the clock with `ferrohealth-smart`, never the message ids; `atna` writes
 //! the ITI-55 message with `xcpd` and compiles no FHIR model. No feature
 //! reaches another member of this workspace or an application of the
 //! family, so any caller can use the crate as it is, and the server sides
@@ -32,6 +33,7 @@ const FEATURES: &[&str] = &[
     "pixm-server",
     "pdqm-server",
     "pmir-server",
+    "smart",
 ];
 
 /// The server sides are typed readers and writers: no HTTP server, store or
@@ -154,7 +156,7 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
     for name in XCPD_DIRECT {
         assert!(xcpd_direct.contains(*name), "xcpd names {name}");
     }
-    for feature in ["atna", "balp"] {
+    for feature in ["atna", "balp", "smart"] {
         let closure = tree(feature, None);
         assert!(
             !closure.contains("uuid"),
@@ -163,7 +165,7 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
     }
     for feature in FEATURES
         .iter()
-        .filter(|feature| !["xcpd", "atna", "balp"].contains(*feature))
+        .filter(|feature| !["xcpd", "atna", "balp", "smart"].contains(*feature))
     {
         let closure = tree(feature, None);
         let leaked: Vec<&&str> = XCPD_ONLY

@@ -2318,10 +2318,11 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.60"
+version = "0.0.61"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
+ "ferrohealth-smart",
  "fhir-types",
  "http",
  "ihe-atna",

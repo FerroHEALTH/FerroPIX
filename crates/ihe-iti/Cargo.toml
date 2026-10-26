@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.60"
+version = "0.0.61"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -138,12 +138,23 @@ xcpd = [
 # carries the time of its event, and the recorder's wait is bounded by the
 # exchange's own deadline.
 balp = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
+# The IUA authorizer over the OAuth 2.0 client-credentials token of
+# `ferrohealth-smart`: the bearer token of each request taken from its
+# `TokenSource`, and a refused token dropped before the one resend.
+smart = [
+  "dep:ferrohealth-smart",
+  "ferrohealth-smart/fetch",
+  "dep:http",
+  "dep:thiserror",
+  "dep:url",
+]
 # ATNA, the audit record of XCPD: with `xcpd` the DICOM audit message of
 # ITI-55 (§3.55.5.1), written in `ihe-atna`'s ATNA model, with no FHIR model.
 atna = ["dep:ihe-atna", "ihe-atna/atna"]
 
 [dependencies]
 async-trait = { workspace = true, optional = true }
+ferrohealth-smart = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 ihe-atna = { workspace = true, optional = true }

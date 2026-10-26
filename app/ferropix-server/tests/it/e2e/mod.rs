@@ -26,6 +26,7 @@ mod pdqm_match;
 mod pdqm_search;
 mod pixm;
 mod pseudonyms;
+mod pseudo_bsn;
 mod registry;
 mod reseal;
 mod schema;

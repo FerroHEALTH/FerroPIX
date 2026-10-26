@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# A chart-only publish between releases, by hand: a dry run unless `publish`
+# is set. A release publishes the chart itself (release.yml's `chart` leg);
+# this dispatch is for a chart fix that cannot wait for one, and packages the
+# committed appVersion with the images' tags, since no new image exists.
+name: Publish chart
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Push and attest the chart (false packages only).
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: publish-chart
+  cancel-in-progress: false
+
+jobs:
+  chart:
+    name: chart
+    permissions:
+      contents: read # check out the chart
+      packages: write # push the chart to GHCR
+      id-token: write # Sigstore, for the provenance attestation
+      attestations: write # store it against this repository
+    uses: ./.github/workflows/build-chart.yml
+    with:
+      publish: ${{ inputs.publish }}

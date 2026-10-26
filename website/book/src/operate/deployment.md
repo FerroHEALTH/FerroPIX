@@ -144,6 +144,27 @@ helm install ferropix deploy/helm/ferropix \
   -f my-values.yaml
 ```
 
+The release lane publishes the chart as an OCI artifact,
+`oci://ghcr.io/ferrohealth/charts/ferropix`, with the release as its app
+version and both images pinned by the digests it scanned, and attests its
+build provenance. The first release that carries the lane publishes the
+first package ([#269](https://github.com/FerroHEALTH/FerroPIX/issues/269)).
+Install a published chart by its version and verify it first:
+
+```sh
+gh attestation verify oci://ghcr.io/ferrohealth/charts/ferropix:<chart version> \
+  --repo FerroHEALTH/FerroPIX \
+  --signer-workflow FerroHEALTH/FerroPIX/.github/workflows/build-chart.yml
+helm install ferropix oci://ghcr.io/ferrohealth/charts/ferropix \
+  --version <chart version> -f my-values.yaml
+```
+
+The server's Service is `<release>-ferropix` on port `8080`, and PIXm and
+PDQm answer under its `/fhir`. A chart that takes this one as a dependency
+reads that base from the named template `ferropix.fhirBaseUrl`. The chart's
+README lists the addresses and shows how a domain and its Source client are
+declared.
+
 No credential is a value of the chart. The PostgreSQL URL, the sealing key
 and the console's OIDC client secret are Secrets you create; the chart
 mounts each as a file and the configuration names it by its `_file` key, so

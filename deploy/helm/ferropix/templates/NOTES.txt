@@ -4,6 +4,8 @@ SPDX-License-Identifier: BUSL-1.1
 */ -}}
 FerroPIX {{ .Chart.AppVersion }} is installed as {{ include "ferropix.fullname" . }}.
 
+PIXm and PDQm answer in the cluster under {{ include "ferropix.fhirBaseUrl" . }}.
+
 Its readiness:
   kubectl port-forward svc/{{ include "ferropix.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
   curl http://localhost:{{ .Values.service.port }}/health/readiness

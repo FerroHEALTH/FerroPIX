@@ -59,6 +59,9 @@ pub(crate) struct Case {
     id: String,
     /// Why the example fails, or `None` when it passes.
     failure: Option<String>,
+    /// How a passing example was handled when that is not the plain read and
+    /// write: the refusal the specification requires, with its citation.
+    note: Option<String>,
 }
 
 /// Runs `check` on the example `id` in a task of its own: the example passes
@@ -67,14 +70,30 @@ pub(crate) async fn verdict<F>(id: String, check: F) -> Case
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    let failure = match tokio::spawn(check).await {
-        Ok(()) => None,
-        Err(error) => Some(match error.try_into_panic() {
-            Ok(payload) => reason(payload.as_ref()),
-            Err(error) => format!("the check did not finish: {error}"),
-        }),
+    verdict_noted(id, async move {
+        check.await;
+        None
+    })
+    .await
+}
+
+/// Runs `check` as [`verdict`] does, keeping the note a passing check
+/// returns: how it handled the example, such as the refusal it asserted.
+pub(crate) async fn verdict_noted<F>(id: String, check: F) -> Case
+where
+    F: Future<Output = Option<String>> + Send + 'static,
+{
+    let (failure, note) = match tokio::spawn(check).await {
+        Ok(note) => (None, note),
+        Err(error) => (
+            Some(match error.try_into_panic() {
+                Ok(payload) => reason(payload.as_ref()),
+                Err(error) => format!("the check did not finish: {error}"),
+            }),
+            None,
+        ),
     };
-    Case { id, failure }
+    Case { id, failure, note }
 }
 
 /// The first line of a panic, cut to [`REASON_LIMIT`] characters.
@@ -173,15 +192,17 @@ fn render(title: &str, cases: &[Case]) -> String {
          # SPDX-License-Identifier: BUSL-1.1\n\
          #\n\
          # {title}.\n\
-         # One example per line: a passing example is its path, a failing one is\n\
-         # `fail <path>: <reason>`; the last line is the total. The corpus test\n\
-         # writes it under scripts/checks/conformance.sh --update, and fails when a\n\
-         # listed pass stops passing.\n"
+         # One example per line: a passing example is its path, followed by\n\
+         # `: <how>` when the pass is a refusal the specification requires, and\n\
+         # a failing one is `fail <path>: <reason>`; the last line is the total.\n\
+         # The corpus test writes it under scripts/checks/conformance.sh\n\
+         # --update, and fails when a listed pass stops passing.\n"
     );
     for case in cases {
-        match &case.failure {
-            None => writeln!(list, "{}", case.id),
-            Some(failure) => writeln!(list, "{FAIL}{}: {failure}", case.id),
+        match (&case.failure, &case.note) {
+            (None, None) => writeln!(list, "{}", case.id),
+            (None, Some(note)) => writeln!(list, "{}: {note}", case.id),
+            (Some(failure), _) => writeln!(list, "{FAIL}{}: {failure}", case.id),
         }
         .expect("a String takes any text");
     }
@@ -198,6 +219,7 @@ fn passes(list: &str) -> BTreeSet<&str> {
                 && !line.starts_with(FAIL)
                 && !line.starts_with(TOTAL)
         })
+        .map(|line| line.split_once(": ").map_or(line, |(id, _note)| id))
         .collect()
 }
 

@@ -181,10 +181,7 @@ async fn a_demanded_nonce_is_answered_with_a_new_presentation() {
             Verdict::Issued
         ]
     );
-    assert_eq!(
-        *fixture.prover.nonces.lock().expect("lock"),
-        vec![demanded]
-    );
+    assert_eq!(*fixture.prover.nonces.lock().expect("lock"), vec![demanded]);
     let forms = fixture.node.forms();
     let nonces: Vec<Value> = forms
         .iter()

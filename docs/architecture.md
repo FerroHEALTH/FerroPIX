@@ -150,13 +150,17 @@ checks the sealing key and applies the `[[domain]]` seed, and exits (`serve`
 does the same at start, the migrations unless `[db] migrate = false`); `db
 reseal --old-key-file <path>` rotates the sealing key (section 4.2).
 
-**Configuration.** One TOML file named by `FERROPIX_CONFIG` or `--config`,
-overridden by environment variables `FERROPIX__<SECTION>__<KEY>` (two
-underscores between levels), every table `deny_unknown_fields`, so a
-misspelled key refuses the start. Every secret is a `Secret` type that
-renders as `***` through `Debug`, `Display` and `Serialize`, read from the
-value or from a `<key>_file` sibling (the file's text trimmed, then zeroed),
-so no consumer ever holds a bare string. A URL that may carry a password
+**Configuration.** `ferrohealth-config`, the family loader, reads the
+defaults, one TOML file named by `FERROPIX_CONFIG` or `--config`, the
+environment variables `FERROPIX__<SECTION>__<KEY>` (two underscores between
+levels) and the `--set key=value` arguments, each over the one before, with
+`RUST_LOG` as the alias of `telemetry.filter`; every table is
+`deny_unknown_fields`, so a misspelled key refuses the start, and `config
+check` prints each key with the layer that set it. Every secret is a
+`ferrohealth-secret` `Secret` that renders as `***` through `Debug`,
+`Display` and `Serialize`, read from the value or from a `<key>_file`
+sibling (the file's trailing line ending removed, the text read zeroed), so
+no consumer ever holds a bare string. A URL that may carry a password
 (`[db] url`) is a `SecretUrl`, rendered with its userinfo and query replaced.
 `profile = "production"` is the default and refuses every development
 setting: the `[dev]` table, Basic users, a secret set inline instead of

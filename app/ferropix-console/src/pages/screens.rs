@@ -184,15 +184,22 @@ pub fn Pair() -> impl IntoView {
     let Some(candidate) = param("candidate").filter(|id| is_uuid(id)) else {
         return view! { <NotFound /> }.into_any();
     };
-    // TODO(#110): draw the record compare, the score breakdown and the decision bar.
-    Screen::new(
+    let mut screen = Screen::new(
         Msg::Pair,
         Msg::PairSub,
         Msg::WhatPair,
         format!("GET /operator/candidates/{candidate}"),
     )
-    .under(vec![Crumb::new(tr(Msg::Queue), QUEUE)])
-    .view()
+    .under(vec![Crumb::new(tr(Msg::Queue), QUEUE)]);
+    screen.body = match page_context().document {
+        Some(Document::Pair { candidate, outcome }) => {
+            Some(drawn(&candidate, &screen, |candidate| {
+                crate::pages::pair::pair(candidate, outcome.as_ref())
+            }))
+        }
+        _ => None,
+    };
+    screen.view()
 }
 
 /// The patient page of `person`, or of a merge or unmerge from it.

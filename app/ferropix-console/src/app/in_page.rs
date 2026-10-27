@@ -4,9 +4,10 @@
 //! The forms the browser posts in place once the page has hydrated.
 //!
 //! A search, a trail filter, a reveal, an identifier domain's form, the
-//! pseudonymisation domains' forms and the queue's filters, paging and
-//! deferral are each drawn from their answer with no new document. No
-//! specification governs the console's pages: our own design.
+//! pseudonymisation domains' forms, the queue's filters, paging and
+//! deferral, and a pair's decision are each drawn from their answer with no
+//! new document. No specification governs the console's pages: our own
+//! design.
 
 use leptos::prelude::*;
 
@@ -27,7 +28,7 @@ pub fn posts_in_page(path: &str) -> bool {
         parts.as_slice(),
         ["search" | "audit" | "domains" | "pseudonym-domains" | "queue"]
             | ["search", "demographics"]
-            | ["domains", _]
+            | ["domains" | "queue", _]
     ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL)
 }
 

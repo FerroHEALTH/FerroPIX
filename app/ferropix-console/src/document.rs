@@ -33,6 +33,12 @@ pub async fn load(pix: &Pix, token: &AccessToken, path: &str) -> Option<Document
             candidates: pix.read("operator/candidates", token).await,
             deferred: None,
         },
+        ["queue", candidate] if crate::pages::screens::is_uuid(candidate) => Document::Pair {
+            candidate: pix
+                .read(&format!("operator/candidates/{candidate}"), token)
+                .await,
+            outcome: None,
+        },
         ["patients", person] if crate::pages::screens::is_uuid(person) => Document::Person {
             person: pix.read(&format!("operator/persons/{person}"), token).await,
             revealed: None,

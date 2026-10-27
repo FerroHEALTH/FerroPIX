@@ -69,8 +69,9 @@ return Array.from(found).join('\n');
 /// The words that are the same in every language and so are never
 /// stretched: the maker's legal name, the steward's name, which the
 /// provider sent and the console draws as it came, and the data the filled
-/// stand-in serves, drawn as the server sent it.
-const KEPT: [&str; 13] = [
+/// stand-in serves, drawn as the server sent it: names, a comparator's
+/// name and the scheme of an identifier system.
+const KEPT: [&str; 16] = [
     "Cadasto B.V.",
     STEWARD,
     "Ada Proefsma",
@@ -81,6 +82,9 @@ const KEPT: [&str; 13] = [
     "Synthetic research domain",
     "Synthetic phone call",
     "Synthetic laboratory",
+    "A. Proefsma",
+    "exact",
+    "urn:oid:",
     "EAST|ADT",
     "AA",
     "AE",

@@ -432,7 +432,7 @@ fn pager(filter: &CandidateQuery, candidates: &Candidates) -> Option<AnyView> {
     };
     Some(
         view! {
-            <div class="fui-pager">
+            <div class="fui-actions">
                 {previous.map(|offset| page(offset, Msg::QueuePrevious, Glyph::CHEVRON_LEFT))}
                 {candidates.next.map(|offset| page(offset, Msg::QueueNext, Glyph::CHEVRON_RIGHT))}
             </div>

@@ -18,6 +18,7 @@ mod captures;
 mod config;
 mod filled;
 mod pages;
+mod pair;
 mod preferences;
 mod pseudonyms;
 mod queue;

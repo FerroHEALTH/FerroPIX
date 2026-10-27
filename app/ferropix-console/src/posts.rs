@@ -18,6 +18,7 @@ use axum::extract::{FromRequest as _, Request};
 use axum::response::{IntoResponse as _, Redirect, Response};
 use ferropix_operator_api::actions::ActionFilter;
 use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Decided, Decision, Verdict};
+
 use ferropix_operator_api::domain::{Domain, DomainChange, NewDomain};
 use ferropix_operator_api::patient::DomainKind;
 use ferropix_operator_api::pseudonym::{
@@ -28,7 +29,7 @@ use ferropix_operator_api::search::{DemographicsSearch, IdentifierSearch, Result
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use http::{HeaderMap, StatusCode};
 
-use crate::model::{Document, PageContext, Prefill, Read, Segment};
+use crate::model::{DecisionOutcome, Document, PageContext, Prefill, Read, Segment};
 use crate::pix::AccessToken;
 use crate::server::ConsoleState;
 use crate::session::request::{Held, held};
@@ -161,6 +162,12 @@ pub async fn answer(
         ["search"] | ["search", "demographics"] => searched(state, &token, pairs).await,
         ["audit"] => crate::document::trail(state.pix(), &token, filter_of(pairs)).await,
         ["queue"] => queued(state, &token, pairs).await,
+        ["queue", candidate] if crate::pages::screens::is_uuid(candidate) => {
+            match decided(state, &token, candidate, pairs).await {
+                Ok(next) => return Answer::Back(next),
+                Err(document) => *document,
+            }
+        }
         ["patients", person, crate::pages::patient::REVEAL]
             if crate::pages::screens::is_uuid(person) =>
         {
@@ -607,6 +614,62 @@ async fn queued(state: &ConsoleState, token: &AccessToken, pairs: &[(String, Str
         filter,
         deferred,
     }
+}
+
+/// A decision posted on the pair `candidate`: the address of the next pair
+/// in the queue's order (the queue when none follows) once the server took
+/// it, or the pair's document with what it came to.
+///
+/// # Errors
+///
+/// The pair's document, re-read, when the decision names no verdict or
+/// versions, carries no reason, or the server refused it.
+async fn decided(
+    state: &ConsoleState,
+    token: &AccessToken,
+    candidate: &str,
+    pairs: &[(String, String)],
+) -> Result<String, Box<Document>> {
+    let pix = state.pix();
+    let route = format!("operator/candidates/{candidate}");
+    let verdict = match field(pairs, "decision").as_deref() {
+        Some("link") => Some(Verdict::Link),
+        Some("not-a-match") => Some(Verdict::NotAMatch),
+        Some("defer") => Some(Verdict::Defer),
+        _ => None,
+    };
+    let version = |name: &str| field(pairs, name).and_then(|version| version.parse::<i32>().ok());
+    let reason = field(pairs, "reason");
+    let outcome = match (verdict, version("a_version"), version("b_version"), reason) {
+        (Some(verdict), Some(a_version), Some(b_version), Some(reason)) => {
+            let decision = Decision {
+                verdict,
+                until: (verdict == Verdict::Defer)
+                    .then(|| field(pairs, "until"))
+                    .flatten(),
+                a_version,
+                b_version,
+                reason,
+            };
+            match pix
+                .post::<_, Decided>(&format!("{route}/decide"), &decision, token)
+                .await
+            {
+                Ok(decided) => {
+                    return Ok(decided.next.map_or_else(
+                        || String::from(crate::app::QUEUE),
+                        |next| format!("{}/{next}", crate::app::QUEUE),
+                    ));
+                }
+                Err(probe) => DecisionOutcome::Refused(probe),
+            }
+        }
+        _ => DecisionOutcome::NoReason,
+    };
+    Err(Box::new(Document::Pair {
+        candidate: pix.read(&route, token).await,
+        outcome: Some(outcome),
+    }))
 }
 
 /// The query string of `GET /operator/candidates` for `filter`.

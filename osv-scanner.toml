@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+#
+# The OSV findings judged not to affect FerroPIX, beside Cargo.lock where
+# OSV-Scanner and the OpenSSF Scorecard Vulnerabilities check read them
+# (https://github.com/ossf/scorecard/blob/main/docs/checks.md#vulnerabilities).
+# An entry names the event that deletes it; a finding that can be fixed is
+# fixed (security/vex/README.md). A RustSec advisory's judgement lives in
+# deny.toml and security/vex/rust-advisories.toml, and its entry here only
+# points there.
+
+# 2026-10-27 (#361): block-buffer 0.10.4, under digest 0.10 (sha1 through axum
+# and tungstenite, sha2 through sqlx), has no fixed release on its line; the fix is 0.12.1, which digest 0.10 cannot take. The advisory's
+# panic corrupts a cursor kept inside the buffer's own block, and 0.10.4 keeps
+# its cursor in a separate `pos` field that a panicking `compress` leaves at its
+# old, in-range value. Deleted when no crate in the lock depends on
+# block-buffer below 0.12.1.
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+reason = "block-buffer 0.10.4 keeps its cursor in a separate pos field, so a panic in compress cannot corrupt it; the fix exists only on the 0.12 line, which digest 0.10 cannot take"
+
+# 2026-10-27 (#361): paste is unmaintained, with no fix to move to; judged in
+# deny.toml and its OpenVEX statement in security/vex/rust-advisories.toml.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "paste is unmaintained; a compile-time proc-macro under the Leptos 0.8 family of the operator console, with no runtime surface (deny.toml, security/vex/rust-advisories.toml)"

@@ -70,7 +70,7 @@ return Array.from(found).join('\n');
 /// stretched: the maker's legal name, the steward's name, which the
 /// provider sent and the console draws as it came, and the data the filled
 /// stand-in serves, drawn as the server sent it.
-const KEPT: [&str; 12] = [
+const KEPT: [&str; 13] = [
     "Cadasto B.V.",
     STEWARD,
     "Ada Proefsma",
@@ -80,6 +80,7 @@ const KEPT: [&str; 12] = [
     "Synthetic clinical domain",
     "Synthetic research domain",
     "Synthetic phone call",
+    "Synthetic laboratory",
     "EAST|ADT",
     "AA",
     "AE",

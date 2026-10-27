@@ -17,6 +17,7 @@ use axum::Extension;
 use axum::extract::{FromRequest as _, Request};
 use axum::response::{IntoResponse as _, Redirect, Response};
 use ferropix_operator_api::actions::ActionFilter;
+use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Decided, Decision, Verdict};
 use ferropix_operator_api::domain::{Domain, DomainChange, NewDomain};
 use ferropix_operator_api::patient::DomainKind;
 use ferropix_operator_api::pseudonym::{
@@ -159,6 +160,7 @@ pub async fn answer(
     let document = match segments.as_slice() {
         ["search"] | ["search", "demographics"] => searched(state, &token, pairs).await,
         ["audit"] => crate::document::trail(state.pix(), &token, filter_of(pairs)).await,
+        ["queue"] => queued(state, &token, pairs).await,
         ["patients", person, crate::pages::patient::REVEAL]
             if crate::pages::screens::is_uuid(person) =>
         {
@@ -563,6 +565,102 @@ async fn changed(
         page: pix.read(&route, token).await,
         written: Some(written.map(|_| ())),
     }
+}
+
+/// The queue's filter a form posts, every filter dropped by Clear.
+fn queue_filter(pairs: &[(String, String)]) -> CandidateQuery {
+    if field(pairs, "clear").is_some() {
+        return CandidateQuery::default();
+    }
+    // NOTE: no specification governs this: our own design; a filter or page field that reads
+    // as no number is absent, as an empty field is, and the queue is read without it.
+    CandidateQuery {
+        grade: field(pairs, "grade").and_then(|grade| crate::pages::queue::grade_of(&grade)),
+        domain: field(pairs, "domain"),
+        older_than_days: field(pairs, "older").and_then(|days| days.parse().ok()),
+        deferred: field(pairs, "deferred").is_some(),
+        offset: field(pairs, "offset")
+            .and_then(|offset| offset.parse().ok())
+            .unwrap_or_default(),
+    }
+}
+
+/// A post of the queue: the filters or a page, or a deferral from a row's
+/// side panel; and the queue's document under the filter.
+async fn queued(state: &ConsoleState, token: &AccessToken, pairs: &[(String, String)]) -> Document {
+    let pix = state.pix();
+    let filter = queue_filter(pairs);
+    let deferred =
+        if field(pairs, crate::pages::queue::FORM).as_deref() == Some(crate::pages::queue::DEFER) {
+            Some(deferral(state, token, pairs).await)
+        } else {
+            None
+        };
+    let query = candidate_query(&filter);
+    let route = if query.is_empty() {
+        String::from("operator/candidates")
+    } else {
+        format!("operator/candidates?{query}")
+    };
+    Document::Queue {
+        candidates: pix.read(&route, token).await,
+        filter,
+        deferred,
+    }
+}
+
+/// The query string of `GET /operator/candidates` for `filter`.
+fn candidate_query(filter: &CandidateQuery) -> String {
+    let mut query = url::form_urlencoded::Serializer::new(String::new());
+    if let Some(grade) = filter.grade {
+        query.append_pair("grade", crate::pages::queue::grade_key(grade));
+    }
+    if let Some(domain) = filter.domain.as_deref().filter(|domain| !domain.is_empty()) {
+        query.append_pair("domain", domain);
+    }
+    if let Some(days) = filter.older_than_days {
+        query.append_pair("older_than_days", &days.to_string());
+    }
+    if filter.deferred {
+        query.append_pair("deferred", "true");
+    }
+    if filter.offset > 0 {
+        query.append_pair("offset", &filter.offset.to_string());
+    }
+    query.finish()
+}
+
+/// A deferral from the queue: the candidate read for the versions its
+/// records stand at, then decided as deferred to the posted date with the
+/// posted reason.
+async fn deferral(
+    state: &ConsoleState,
+    token: &AccessToken,
+    pairs: &[(String, String)],
+) -> Read<()> {
+    let pix = state.pix();
+    let id = field(pairs, "candidate")
+        .filter(|id| crate::pages::screens::is_uuid(id))
+        .unwrap_or_default();
+    // NOTE: no specification governs this: our own design; the queue's row shows no record
+    // version, so a deferral from it carries the versions the candidate stands at now.
+    let candidate: Candidate = pix
+        .read(&format!("operator/candidates/{id}"), token)
+        .await?;
+    let decision = Decision {
+        verdict: Verdict::Defer,
+        until: field(pairs, "until"),
+        a_version: candidate.a.version,
+        b_version: candidate.b.version,
+        reason: field(pairs, "reason").unwrap_or_default(),
+    };
+    pix.post::<_, Decided>(
+        &format!("operator/candidates/{id}/decide"),
+        &decision,
+        token,
+    )
+    .await
+    .map(|_| ())
 }
 
 /// A post of the pseudonymisation domains page: a resolve, or an

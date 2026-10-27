@@ -1,0 +1,126 @@
+{
+  "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01",
+  "status": "open",
+  "score": 0.91,
+  "grade": "probable",
+  "evidence": {
+    "blocking_key": "family_birth",
+    "total": 11.4,
+    "score": 0.91,
+    "grade": "probable",
+    "fields": [
+      {
+        "field": "family",
+        "comparator": "jaro_winkler",
+        "a": "Proefsma",
+        "b": "Proefsma",
+        "agreement": "agree",
+        "reading": 1.0,
+        "weight": 4.2
+      },
+      {
+        "field": "given",
+        "comparator": "jaro_winkler",
+        "a": "Ada",
+        "b": "A.",
+        "agreement": "partial",
+        "reading": 0.72,
+        "weight": 1.1
+      },
+      {
+        "field": "birth_date",
+        "comparator": "exact",
+        "a": "1980-02-29",
+        "b": "1980-02-29",
+        "agreement": "agree",
+        "weight": 6.1
+      },
+      {
+        "field": "postal_code",
+        "comparator": "exact",
+        "agreement": "absent",
+        "weight": 0.0
+      }
+    ]
+  },
+  "a": {
+    "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4c01",
+    "version": 2,
+    "head_version": 2,
+    "domain": {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+      "system": "urn:oid:2.999.1.1",
+      "name": "Synthetic hospital",
+      "kind": "local"
+    },
+    "demographics": {
+      "names": [
+        {
+          "family": "Proefsma",
+          "given": [
+            "Ada"
+          ]
+        }
+      ],
+      "birth_date": "1980-02-29",
+      "gender": "female"
+    },
+    "person": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "person_status": "active",
+    "identifiers": [
+      {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+          "system": "urn:oid:2.999.1.1",
+          "name": "Synthetic hospital",
+          "kind": "local"
+        },
+        "masked": "••••4711"
+      }
+    ]
+  },
+  "b": {
+    "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4c02",
+    "version": 1,
+    "head_version": 1,
+    "domain": {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+      "system": "urn:oid:2.999.1.2",
+      "name": "Synthetic laboratory",
+      "kind": "local"
+    },
+    "demographics": {
+      "names": [
+        {
+          "family": "Proefsma",
+          "given": [
+            "A."
+          ]
+        }
+      ],
+      "birth_date": "1980-02-29",
+      "gender": "female"
+    },
+    "person": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e",
+    "person_status": "active",
+    "identifiers": [
+      {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+          "system": "urn:oid:2.999.1.2",
+          "name": "Synthetic laboratory",
+          "kind": "local"
+        },
+        "masked": "••••0815"
+      }
+    ]
+  },
+  "thresholds": {
+    "certain": 0.95,
+    "probable": 0.8,
+    "possible": 0.6
+  },
+  "merges": true,
+  "created_at": "2026-10-18T08:00:00Z",
+  "next": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b02"
+}

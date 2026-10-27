@@ -14,6 +14,7 @@
 //! design.
 
 use ferropix_operator_api::actions::ActionFilter;
+use ferropix_operator_api::candidate::CandidateQuery;
 
 use crate::model::{Document, Prefill};
 use crate::pix::{AccessToken, Pix};
@@ -26,6 +27,11 @@ pub async fn load(pix: &Pix, token: &AccessToken, path: &str) -> Option<Document
         [""] => Document::Dashboard {
             overview: pix.read("operator/overview", token).await,
             dependencies: pix.read("operator/dependencies", token).await,
+        },
+        ["queue"] => Document::Queue {
+            filter: CandidateQuery::default(),
+            candidates: pix.read("operator/candidates", token).await,
+            deferred: None,
         },
         ["patients", person] if crate::pages::screens::is_uuid(person) => Document::Person {
             person: pix.read(&format!("operator/persons/{person}"), token).await,

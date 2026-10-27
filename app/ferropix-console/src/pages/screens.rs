@@ -155,14 +155,23 @@ pub fn Dashboard() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Queue() -> impl IntoView {
-    // TODO(#109): draw the work-list of candidates.
-    Screen::new(
+    let screen = Screen::new(
         Msg::Queue,
         Msg::QueueSub,
         Msg::WhatQueue,
         "GET /operator/candidates",
-    )
-    .view()
+    );
+    let body = match page_context().document {
+        Some(Document::Queue {
+            filter,
+            candidates,
+            deferred,
+        }) => Some(drawn(&candidates, &screen, |candidates| {
+            crate::pages::queue::queue(&filter, candidates, deferred.as_ref())
+        })),
+        _ => None,
+    };
+    screen.with(body).view()
 }
 
 /// One pair to compare and decide at `/queue/{candidate}` (design 03).

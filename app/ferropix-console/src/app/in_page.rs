@@ -3,10 +3,10 @@
 
 //! The forms the browser posts in place once the page has hydrated.
 //!
-//! A search, a trail filter, a reveal, an identifier domain's form and the
-//! pseudonymisation domains' forms are each drawn from their answer with no
-//! new document. No specification governs the console's pages: our own
-//! design.
+//! A search, a trail filter, a reveal, an identifier domain's form, the
+//! pseudonymisation domains' forms and the queue's filters, paging and
+//! deferral are each drawn from their answer with no new document. No
+//! specification governs the console's pages: our own design.
 
 use leptos::prelude::*;
 
@@ -18,14 +18,14 @@ use crate::model::PageContext;
 pub struct Posted(pub RwSignal<Option<PageContext>>);
 
 /// The paths whose plain post draws a page the browser can draw in place:
-/// a search, a trail filter, a reveal, an identifier domain's form and the
-/// pseudonymisation domains' forms.
+/// a search, a trail filter, a reveal, an identifier domain's form, the
+/// pseudonymisation domains' forms and the queue's forms.
 #[must_use]
 pub fn posts_in_page(path: &str) -> bool {
     let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
     matches!(
         parts.as_slice(),
-        ["search" | "audit" | "domains" | "pseudonym-domains"]
+        ["search" | "audit" | "domains" | "pseudonym-domains" | "queue"]
             | ["search", "demographics"]
             | ["domains", _]
     ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL)
@@ -110,6 +110,16 @@ fn post_in_page(
                 }
                 let shown = page.path.clone();
                 drop(posted.try_set(Some(page)));
+                // NOTE: no specification governs this: our own design; a form posted from a
+                // dialog closes it, as the new document a plain post loads would.
+                if let Some(dialog) = form
+                    .closest("dialog")
+                    .ok()
+                    .flatten()
+                    .and_then(|dialog| dialog.dyn_into::<web_sys::HtmlDialogElement>().ok())
+                {
+                    dialog.close();
+                }
                 if window().location().pathname().ok().as_deref() != Some(shown.as_str()) {
                     navigate(&shown, leptos_router::NavigateOptions::default());
                 }

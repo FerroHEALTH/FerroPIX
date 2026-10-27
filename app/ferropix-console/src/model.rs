@@ -13,6 +13,7 @@
 
 use ferrohealth_ui::widget::session::Left;
 use ferropix_operator_api::actions::{ActionFilter, Actions};
+use ferropix_operator_api::candidate::{CandidateQuery, Candidates};
 use ferropix_operator_api::configuration::Configuration;
 use ferropix_operator_api::domain::{DomainPage, Domains};
 use ferropix_operator_api::health::Dependencies;
@@ -145,6 +146,16 @@ pub enum Document {
         overview: Read<Overview>,
         /// `GET /operator/dependencies`.
         dependencies: Read<Dependencies>,
+    },
+    /// The review queue under a filter, `GET /operator/candidates`, with a
+    /// deferral just posted.
+    Queue {
+        /// The filter and the page the steward chose.
+        filter: CandidateQuery,
+        /// The page of candidates.
+        candidates: Read<Candidates>,
+        /// The outcome of the deferral just posted.
+        deferred: Option<Read<()>>,
     },
     /// A person, `GET /operator/persons/{id}`, with a reveal the steward
     /// just asked for.

@@ -300,13 +300,16 @@ pub async fn post_now(
 pub struct Posted(pub RwSignal<Option<PageContext>>);
 
 /// The paths whose plain post draws a page the browser can draw in place:
-/// a search, a trail filter, a reveal and an identifier domain's form.
+/// a search, a trail filter, a reveal, an identifier domain's form and the
+/// pseudonymisation domains' forms.
 #[must_use]
 pub fn posts_in_page(path: &str) -> bool {
     let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
     matches!(
         parts.as_slice(),
-        ["search" | "audit" | "domains"] | ["search", "demographics"] | ["domains", _]
+        ["search" | "audit" | "domains" | "pseudonym-domains"]
+            | ["search", "demographics"]
+            | ["domains", _]
     ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL)
 }
 

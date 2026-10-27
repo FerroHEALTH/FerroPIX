@@ -43,6 +43,11 @@ pub async fn load(pix: &Pix, token: &AccessToken, path: &str) -> Option<Document
             page: pix.read(&format!("operator/domains/{domain}"), token).await,
             written: None,
         },
+        ["pseudonym-domains"] => Document::PseudonymDomains {
+            domains: pix.read("operator/pseudonym-domains", token).await,
+            written: None,
+            resolved: None,
+        },
         ["configuration"] => {
             Document::Configuration(pix.read("operator/configuration", token).await)
         }

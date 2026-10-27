@@ -18,6 +18,7 @@ use ferropix_operator_api::domain::{DomainPage, Domains};
 use ferropix_operator_api::health::Dependencies;
 use ferropix_operator_api::overview::Overview;
 use ferropix_operator_api::person::Person;
+use ferropix_operator_api::pseudonym::{PseudonymDomains, Resolution};
 use ferropix_operator_api::reveal::Revealed;
 use ferropix_operator_api::search::Results;
 use ferropix_operator_api::source::{SourcePage, Sources};
@@ -172,6 +173,16 @@ pub enum Document {
         page: Read<DomainPage>,
         /// The outcome of the change just posted.
         written: Option<Read<()>>,
+    },
+    /// The pseudonymisation domains, `GET /operator/pseudonym-domains`,
+    /// with a write or a resolve just posted.
+    PseudonymDomains {
+        /// The domains.
+        domains: Read<PseudonymDomains>,
+        /// The outcome of the create or change just posted.
+        written: Option<Read<()>>,
+        /// The person a pseudonym just posted resolves to, or the refusal.
+        resolved: Option<Read<Resolution>>,
     },
     /// The configuration, `GET /operator/configuration`.
     Configuration(Read<Configuration>),

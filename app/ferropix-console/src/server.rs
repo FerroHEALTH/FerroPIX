@@ -271,6 +271,7 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .route("/patients/{person}/reveal", post(crate::posts::post))
         .route(crate::app::DOMAINS, post(crate::posts::post))
         .route("/domains/{domain}", post(crate::posts::post))
+        .route(crate::app::PSEUDONYM_DOMAINS, post(crate::posts::post))
         .route(
             crate::pages::about::METADATA_DOWNLOAD,
             get(capability_download),

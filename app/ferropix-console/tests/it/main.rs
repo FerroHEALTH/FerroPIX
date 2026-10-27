@@ -19,6 +19,7 @@ mod config;
 mod filled;
 mod pages;
 mod preferences;
+mod pseudonyms;
 mod refresh;
 mod run;
 mod server;

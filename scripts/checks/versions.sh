@@ -11,7 +11,8 @@
 #   3. Tool pins: each row REPEATED_ROWS names is carried word for word by
 #      every file its "Repeated in" cell names.
 #   4. The quickstart: the image tags compose.yaml defaults to are the
-#      [workspace.package] version of the root Cargo.toml.
+#      [workspace.package] version of the root Cargo.toml, and so is the
+#      appVersion of the Helm chart, the default tag of its images.
 #   5. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
 #      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE,
@@ -141,6 +142,17 @@ self_test() {
   sed -i.bak 's/:-1.2.3/:-1.2.2/' "$d/compose.yaml" && rm "$d/compose.yaml.bak"
   expect 1 "a quickstart behind the workspace version"
   case_dir
+  printf '[workspace.package]\nversion = "0.0.6"\n' >> "$d/Cargo.toml"
+  mkdir -p "$d/deploy/helm/ferropix"
+  printf '# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\napiVersion: v2\nversion: 0.2.3\nappVersion: "0.0.6"\n' > "$d/deploy/helm/ferropix/Chart.yaml"
+  expect 0 "a chart appVersion on the workspace version"
+  sed -i.bak 's/"0.0.6"/"0.0.5"/' "$d/deploy/helm/ferropix/Chart.yaml" && rm "$d/deploy/helm/ferropix/Chart.yaml.bak"
+  expect 1 "a chart appVersion 0.0.5 against the workspace version 0.0.6"
+  sed -i.bak 's/^appVersion: .*/appVersion: 0.0.6/' "$d/deploy/helm/ferropix/Chart.yaml" && rm "$d/deploy/helm/ferropix/Chart.yaml.bak"
+  expect 0 "an unquoted chart appVersion on the workspace version"
+  sed -i.bak '/^appVersion:/d' "$d/deploy/helm/ferropix/Chart.yaml" && rm "$d/deploy/helm/ferropix/Chart.yaml.bak"
+  expect 1 "a chart without an appVersion"
+  case_dir
   mkdir -p "$d/fuzz/seeds/pix_query"
   printf 'sourceIdentifier=urn%%3Aoid%%3A2.999.1%%7C1' > "$d/fuzz/seeds/pix_query/gen-a.txt"
   expect 0 "a fuzz seed without the header"
@@ -227,6 +239,16 @@ if [[ -f compose.yaml && -f Cargo.toml ]]; then
   got="$(sed -nE 's|^[[:space:]]*image:[[:space:]]*ghcr\.io/ferrohealth/ferropix(-console)?:\$\{FERROPIX_VERSION:-([^}]+)\}[[:space:]]*$|\2|p' compose.yaml | sort -u)"
   [[ -n "$got" ]] || drift "compose.yaml names no ghcr.io/ferrohealth/ferropix:\${FERROPIX_VERSION:-<version>} image"
   [[ -z "$got" || "$got" == "$want" ]] || drift "compose.yaml defaults its images to $(tr '\n' ' ' <<< "$got")but Cargo.toml says $want"
+fi
+
+# The chart's appVersion is the default tag of both images it deploys, so
+# it is the product version too.
+chart=deploy/helm/ferropix/Chart.yaml
+if [[ -f "$chart" && -f Cargo.toml ]]; then
+  want="$(toml_value Cargo.toml version)"
+  got="$(sed -nE 's/^appVersion:[[:space:]]*"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' "$chart")"
+  [[ -n "$got" ]] || drift "$chart has no appVersion"
+  [[ -z "$got" || "$got" == "$want" ]] || drift "$chart has appVersion $got but Cargo.toml says $want"
 fi
 
 # 5. Licence.

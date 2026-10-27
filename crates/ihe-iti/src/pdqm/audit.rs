@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The ITI-78 and ITI-119 audit records of the Patient Demographics Consumer
-//! (PDQm 3.2.0 §2:3.78.5.1 and §2:3.119.5.1.1), feature `balp`.
+//! (PDQm 3.2.0 §2:3.78.5.1 and §2:3.119.5.1.1) and of the Supplier
+//! (§2:3.78.5.1.2, §2:3.119.5.1.2), feature `balp`.
 //!
 //! [`PdqmClient::audited`](super::PdqmClient::audited) gives the client a
 //! [`AuditRecorder`](ihe_atna::balp::AuditRecorder); every search and every
@@ -21,12 +22,18 @@
 //!
 //! A search, a page or a match made for a user names them from their OAuth
 //! token, in the user agent BALP's patterns leave optional.
+//!
+//! A Supplier records each search or match it [`Received`] by
+//! [`supplier_records`], as the PDQm Query or Match Supplier audit profile
+//! fixes it: one record per patient found, as BALP 1.1.4 §1:52.4.1.6
+//! recommends, or one with no patient when none was.
 
 use jiff::Timestamp;
 use secrecy::SecretString;
 use url::Url;
 
 use super::error::PdqmError;
+use crate::received::Received;
 use ihe_atna::balp::{
     Coded, DESTINATION_ROLE, Direction, Entity, EventKind, Exchange, Outcome, Peer, REST, SEARCH,
     SOURCE_ROLE,
@@ -135,4 +142,74 @@ fn recorded<T>(
         entities,
         security: Vec::new(),
     }
+}
+
+/// What the PDQm Query Supplier audit profile fixes (§2:3.78.5.1.2).
+#[must_use]
+pub fn query_supplier() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Query.Audit.Supplier",
+        event_type: REST,
+        subtypes: vec![ITI_78, SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
+
+/// What the PDQm Match Supplier audit profile fixes (§2:3.119.5.1.2).
+#[must_use]
+pub fn match_supplier() -> EventKind {
+    EventKind {
+        profile: "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Match.Audit.Supplier",
+        event_type: REST,
+        subtypes: vec![ITI_119, SEARCH],
+        action: "E",
+        client: SOURCE_ROLE,
+        server: DESTINATION_ROLE,
+    }
+}
+
+/// The transaction a Supplier record is of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupplierSearch {
+    /// ITI-78, the Patient search.
+    Query,
+    /// ITI-119, `$match`.
+    Match,
+}
+
+/// Returns the Supplier's records of the `search` `received`.
+///
+/// `query` is the raw request, each of `patients` a `Patient/{id}` reference
+/// found, and the search ended in `outcome`: one record per patient, or one
+/// with no patient when none was found (§2:3.78.5.1.2, §2:3.119.5.1.2).
+#[must_use]
+pub fn supplier_records(
+    received: &Received,
+    search: SupplierSearch,
+    query: &SecretString,
+    patients: &[String],
+    outcome: Outcome,
+) -> Vec<Exchange> {
+    let kind = || match search {
+        SupplierSearch::Query => query_supplier(),
+        SupplierSearch::Match => match_supplier(),
+    };
+    if patients.is_empty() {
+        return vec![received.exchange(kind(), outcome, vec![Entity::Query(query.clone())])];
+    }
+    patients
+        .iter()
+        .map(|patient| {
+            received.exchange(
+                kind(),
+                outcome,
+                vec![
+                    Entity::Query(query.clone()),
+                    Entity::PatientReference(SecretString::from(patient.clone())),
+                ],
+            )
+        })
+        .collect()
 }

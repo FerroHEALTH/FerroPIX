@@ -37,13 +37,14 @@ mod write;
 
 use fhir_types::r4::patient::Patient;
 use ihe_atna::balp::Outcome;
+use ihe_iti::pixm::audit::{FeedAction, manager_feed};
 use ihe_iti::pixm::identifier::SourceIdentifier;
 use ihe_iti::pixm::server::feed::{Merge, Removal, Revision};
 use secrecy::ExposeSecret as _;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::audit::records::{self, Call, Identifier};
+use crate::audit::records::Call;
 use crate::audit::reserve::Pending;
 use crate::audit::{Audit, Unrecorded};
 use crate::config::section::domain::DomainKind;
@@ -107,11 +108,11 @@ impl Action {
     /// §2:3.104.5.1.2): a resolved duplicate is an update of the subsumed
     /// identifier.
     #[must_use]
-    pub const fn audited(self) -> records::Feed {
+    pub const fn audited(self) -> FeedAction {
         match self {
-            Self::Create => records::Feed::Create,
-            Self::Update | Self::ResolveDuplicate => records::Feed::Update,
-            Self::Remove => records::Feed::Delete,
+            Self::Create => FeedAction::Create,
+            Self::Update | Self::ResolveDuplicate => FeedAction::Update,
+            Self::Remove => FeedAction::Delete,
         }
     }
 }
@@ -545,20 +546,22 @@ pub async fn record(
     removal: bool,
     outcome: Result<&Applied, &FeedError>,
 ) -> Result<(), Unrecorded> {
-    let identifier = Identifier {
-        system: identifier.system().to_owned(),
-        value: identifier.value().clone(),
-    };
     let (action, person, outcome) = match outcome {
         Ok(applied) => (
             applied.action.audited(),
             applied.person.map(|p| format!("Patient/{}", p.uuid())),
             Outcome::Success,
         ),
-        Err(_) if removal => (records::Feed::Delete, None, Outcome::MinorFailure),
-        Err(_) => (records::Feed::Update, None, Outcome::MinorFailure),
+        Err(_) if removal => (FeedAction::Delete, None, Outcome::MinorFailure),
+        Err(_) => (FeedAction::Update, None, Outcome::MinorFailure),
     };
-    let exchange = records::feed(call, action, &identifier, person.as_deref(), outcome);
+    let exchange = manager_feed(
+        &call.received(),
+        action,
+        identifier,
+        person.as_deref(),
+        outcome,
+    );
     match pending {
         Some(pending) => pending.record(audit, &exchange).await,
         None => audit.record(vec![exchange]).await,

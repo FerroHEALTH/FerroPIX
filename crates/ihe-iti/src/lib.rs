@@ -60,6 +60,8 @@ pub mod pdqm;
 pub mod pixm;
 #[cfg(feature = "pmir")]
 pub mod pmir;
+#[cfg(all(feature = "balp", any(feature = "pixm", feature = "pdqm")))]
+pub mod received;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 mod search;
 #[cfg(any(

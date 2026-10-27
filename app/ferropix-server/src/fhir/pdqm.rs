@@ -38,11 +38,12 @@ use ihe_iti::server::format::Format;
 use secrecy::SecretString;
 use uuid::Uuid;
 
-use crate::audit::records::{self, Call, Search};
+use crate::audit::records::{self, Call};
 use crate::audit::reserve::{Pending, UNAUDITED};
 use crate::audit::{Audit, Unrecorded};
 use crate::auth::table::Route;
 use crate::pdqm::{PAGE_PARAMETER, PdqError, Retrieved, Searched, Supplier};
+use ihe_iti::pdqm::audit::{SupplierSearch as Search, supplier_records};
 
 /// The media type of a search posted as a form (FHIR R4 http.html, search).
 const FORM: &str = "application/x-www-form-urlencoded";
@@ -171,8 +172,8 @@ async fn search(face: Arc<Face>, request: Request, post: bool) -> Response {
     };
     match face.supplier.search(&search, after).await {
         Ok(Searched::Found { answer, persons }) => {
-            let exchanges = records::pdq_search(
-                &call,
+            let exchanges = supplier_records(
+                &call.received(),
                 Search::Query,
                 &raw,
                 &references(&persons),
@@ -181,8 +182,7 @@ async fn search(face: Arc<Face>, request: Request, post: bool) -> Response {
             send(&face, &parts, exchanges, answer.as_ref(), format).await
         }
         Ok(Searched::Refused(refusal)) => {
-            let exchanges =
-                records::pdq_search(&call, Search::Query, &raw, &[], Outcome::MinorFailure);
+            let exchanges = none_found(&call, Search::Query, &raw, Outcome::MinorFailure);
             send(&face, &parts, exchanges, &refusal.answer(), format).await
         }
         Err(error) => failed(&face, &parts, &call, Search::Query, &raw, &error, format).await,
@@ -215,8 +215,8 @@ async fn retrieve(face: Arc<Face>, request: Request) -> Response {
     };
     match face.supplier.retrieve(&id).await {
         Ok(Retrieved::Found { answer, person }) => {
-            let exchanges = records::pdq_search(
-                &call,
+            let exchanges = supplier_records(
+                &call.received(),
                 Search::Query,
                 &raw,
                 &references(&[person]),
@@ -225,8 +225,7 @@ async fn retrieve(face: Arc<Face>, request: Request) -> Response {
             send(&face, &parts, exchanges, answer.as_ref(), format).await
         }
         Ok(Retrieved::NotFound) => {
-            let exchanges =
-                records::pdq_search(&call, Search::Query, &raw, &[], Outcome::MinorFailure);
+            let exchanges = none_found(&call, Search::Query, &raw, Outcome::MinorFailure);
             send(
                 &face,
                 &parts,
@@ -279,15 +278,14 @@ async fn matches(face: Arc<Face>, request: Request) -> Response {
     let request = match MatchRequest::from_request(&query, body_format, &bytes) {
         Ok(request) => request,
         Err(error) => {
-            let exchanges =
-                records::pdq_search(&call, Search::Match, &raw, &[], Outcome::MinorFailure);
+            let exchanges = none_found(&call, Search::Match, &raw, Outcome::MinorFailure);
             return send(&face, &parts, exchanges, &error.refusal(), format).await;
         }
     };
     match face.supplier.matches(&request).await {
         Ok(found) => {
-            let exchanges = records::pdq_search(
-                &call,
+            let exchanges = supplier_records(
+                &call.received(),
                 Search::Match,
                 &raw,
                 &references(&found.persons),
@@ -336,7 +334,7 @@ async fn refuse<T: Resource>(
 ) -> Response {
     let format =
         Format::negotiate(raw_format(query).as_deref(), accept(parts)).unwrap_or(Format::Json);
-    let exchanges = records::pdq_search(call, search, &raw, &[], Outcome::MinorFailure);
+    let exchanges = none_found(call, search, &raw, Outcome::MinorFailure);
     send(face, parts, exchanges, answer, format).await
 }
 
@@ -366,7 +364,7 @@ async fn failed(
             "the request could not be answered",
         ),
     };
-    let exchanges = records::pdq_search(call, search, raw, &[], Outcome::SeriousFailure);
+    let exchanges = none_found(call, search, raw, Outcome::SeriousFailure);
     send(face, parts, exchanges, &answer, format).await
 }
 
@@ -511,6 +509,12 @@ async fn read(body: Body) -> Option<Vec<u8>> {
         .await
         .ok()
         .map(|bytes| bytes.to_vec())
+}
+
+/// The Supplier's one record of a `search` `call` made, its raw request
+/// `raw`, that found no patient and ended in `outcome`.
+fn none_found(call: &Call, search: Search, raw: &SecretString, outcome: Outcome) -> Vec<Exchange> {
+    supplier_records(&call.received(), search, raw, &[], outcome)
 }
 
 #[cfg(test)]

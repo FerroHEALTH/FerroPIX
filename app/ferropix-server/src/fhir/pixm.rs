@@ -30,6 +30,7 @@ use ferrohealth_smart::resource::Access;
 use http::request::Parts;
 use http::{HeaderValue, Method, header};
 use ihe_atna::balp::Outcome;
+use ihe_iti::pixm::audit::manager_query;
 use ihe_iti::pixm::identifier::{PatientReference, SourceIdentifier, TargetIdentifier};
 use ihe_iti::pixm::server::answer;
 use ihe_iti::pixm::server::feed::{Feed, Removal};
@@ -39,7 +40,7 @@ use ihe_iti::server::format::Format;
 use secrecy::{ExposeSecret as _, SecretString};
 
 use crate::audit::Audit;
-use crate::audit::records::{self, Call, Identifier};
+use crate::audit::records::{self, Call};
 use crate::audit::reserve::Pending;
 use crate::auth::Smart;
 use crate::config::section::matching::Matching;
@@ -181,8 +182,7 @@ impl Manager {
                 .as_ref()
                 .map(|(body_format, text)| (body_format.media_type(), text)),
         );
-        let exchange =
-            records::pix_query(&self.call(&parts), raw, &identifier(pix.source()), outcome);
+        let exchange = manager_query(&self.call(&parts).received(), raw, pix.source(), outcome);
         if let Err(error) = record(&self.audit, &parts, &exchange).await {
             tracing::error!(error = %crate::chain(&error), "an ITI-83 answer is withheld: its audit record could not be stored");
             return wire::send(&Case::Unaudited.answer(), format);
@@ -491,14 +491,6 @@ async fn bytes(body: Body) -> Result<axum::body::Bytes, Case> {
     axum::body::to_bytes(body, usize::MAX)
         .await
         .map_err(|_too_large| Case::PayloadTooLarge)
-}
-
-/// Returns the audit record's identifier of `source`.
-fn identifier(source: &SourceIdentifier) -> Identifier {
-    Identifier {
-        system: source.system().to_owned(),
-        value: source.value().clone(),
-    }
 }
 
 /// Returns the BALP outcome of a refusal or a failure (FHIR R4

@@ -40,6 +40,9 @@ never act while you type in a field, and a phone shows none.
 
 ## The pages
 
+The [steward's guide](steward-guide.md) walks the review work in the order
+you do it.
+
 | Page | What it shows |
 |---|---|
 | Dashboard, `/` | The open queue with the pairs waiting more than seven days, the share of records linked automatically over 24 hours, the versions fed today and the subscriptions in error; the queue's depth and the feeds per hour by channel as charts, each with its figures table; the HTTP and MLLP listeners and the feed sender; the oldest pairs in the queue. |

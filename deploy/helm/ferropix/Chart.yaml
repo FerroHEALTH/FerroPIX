@@ -13,7 +13,7 @@ type: application
 version: 0.3.2
 # The default image tag of the server and the console: the product version,
 # which scripts/checks/versions.sh holds equal to the workspace version.
-appVersion: "0.0.9"
+appVersion: "0.0.10"
 # PodDisruptionBudget.unhealthyPodEvictionPolicy is stable from 1.31
 # (KEP-3017), the newest field this chart renders.
 kubeVersion: ">=1.31.0-0"

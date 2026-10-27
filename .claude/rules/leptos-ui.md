@@ -58,19 +58,20 @@ the workspace resolves, never memory.
   half turns on the `leptos` feature `islands`, and the crate has no `ssr`
   or `hydrate` feature, so a workspace `--all-features` build never turns
   both on.
-- **The pages sit in four lazy route groups** (`app`'s `Work`, `Patients`,
-  `Registry` and `Aside`), each a chunk of its own under `--split`, loaded
+- **The pages sit in four lazy route groups** (`app::routes`: `Work`,
+  `Patients`, `Registry` and `Aside`), each a chunk of its own under `--split`, loaded
   the first time the browser draws one of its pages. The shell is FerroUI's,
   drawn once around them and following the router
   (`widget::nav::follow_path`).
 - **Every page is drawn from its `PageContext`.** The `gate` middleware of
-  `server.rs` holds the session, and `page_for` calls the FerroPIX server
-  once before the first page renders (the steward's name, the outcome of the
-  liveness route, on About the `CapabilityStatement`); the context reaches
-  the hydrating page serialized. After a navigation the page is read
-  through the `page` server function (`app::page_now`), and a form drawn in
-  place (a search, a trail filter, a reveal, a domain's form) posts through
-  the `post` server function (`app::post_now`). Both reads are a resource
+  `server::context` holds the session, and `page_for` calls the FerroPIX
+  server once before the first page renders (the steward's name, the
+  outcome of the liveness route, on About the `CapabilityStatement`); the
+  context reaches the hydrating page serialized. After a navigation the
+  page is read through the `page` server function (`app::page_now`), and a
+  form drawn in place (`app::in_page`: a search, a trail filter, a reveal,
+  a domain's form) posts through the `post` server function
+  (`app::post_now`). Both reads are a resource
   taken in the page's `Transition` and in an effect, never in a memo
   (#323), and the old page stays until the new one comes.
 - **The session's end is watched** (FerroUI `docs/consoles.md`, "The
@@ -112,10 +113,12 @@ the workspace resolves, never memory.
   audience and nonce, one opaque `__Host-` cookie in the browser, a token, a
   code, a verifier or a client secret never in a page, a cookie, a `Debug`
   rendering or a log line. Sign-in, refresh and sign-out are tested against
-  the test provider in `tests/it/provider.rs`.
+  the test provider in `tests/it/sign_in.rs`, `refresh.rs` and
+  `sign_out.rs`.
 - **Every request that is not a safe method comes from the console's own
-  pages** (`server::same_origin_only`), and every page and route that acts
-  needs a live session (`server::gate`), else it goes to the sign-in page.
+  pages** (`server`'s `same_origin_check`, over `ferrohealth-server`'s
+  `same_origin`), and every page and route that acts needs a live session
+  (`server::context`'s `gate`), else it goes to the sign-in page.
 - **The headers are tested in-process** (`tests/it/server.rs`): the CSP
   nonce with `style-src 'self'`, `nosniff`, `DENY`, `no-referrer`, `no-store`
   on documents, and only the site bundle compressed.

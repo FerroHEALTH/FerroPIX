@@ -19,7 +19,8 @@ use super::{
     ABOUT, AUDIT, CONFIGURATION, DASHBOARD, DOMAINS, PSEUDONYM_DOMAINS, QUEUE, SEARCH, SOURCES,
     VERSION,
 };
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::{Probe, Reach};
 use crate::paths::{MARK_DARK, MARK_LIGHT};
 

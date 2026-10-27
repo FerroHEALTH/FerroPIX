@@ -28,7 +28,8 @@ use ferrohealth_ui::widget::date::{DateField, DateWords};
 use crate::app::{
     SEARCH, SEARCH_DEMOGRAPHICS, current_path, current_query, page_context, preferences,
 };
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::{Document, Prefill, Segment};
 use crate::pages::patient::full_name;
 use crate::pages::{Needs, server_state, title};

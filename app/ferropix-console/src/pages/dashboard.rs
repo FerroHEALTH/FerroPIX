@@ -31,7 +31,8 @@ use ferropix_operator_api::patient::Grade;
 use leptos::prelude::*;
 
 use crate::app::QUEUE;
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::Read;
 use crate::pages::{Needs, server_state};
 

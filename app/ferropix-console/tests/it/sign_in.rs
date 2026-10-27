@@ -13,7 +13,8 @@ use std::error::Error;
 
 use base64::Engine as _;
 use ferrohealth_ui::i18n::Locale;
-use ferropix_console::locale::{Msg, catalog, tr_in};
+use ferropix_console::locale::messages::Msg;
+use ferropix_console::locale::{catalog, tr_in};
 use ferropix_console::session::Occupancy;
 use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
 use http::StatusCode;

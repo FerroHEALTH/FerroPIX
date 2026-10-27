@@ -41,7 +41,7 @@ identifiers are the records each Source fed and every identifier in an
 as the BSN on a hospital's `Patient`; you can ask by that BSN too. A
 pseudonymisation domain is a `targetSystem` too: the answer carries the
 person's pseudonym in it, minted on the first ask of the domain's consumer
-([Pseudonyms](pseudonyms.md)).
+and answered to that consumer alone ([Pseudonyms](pseudonyms.md)).
 
 | Case | Answer |
 |---|---|

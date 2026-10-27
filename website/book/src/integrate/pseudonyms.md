@@ -43,12 +43,19 @@ namespace. Every later ask answers the same value, by `GET` and by `POST`.
 Two first asks at once answer one value. Each mint writes its own BALP
 Create record, which names the patient and the domain and never the value.
 
-These calls never mint:
+## Who reads a pseudonym
 
-- **Another client** that names the namespace gets the pseudonym already
-  minted, or none.
-- **A query that names no `targetSystem`** answers the pseudonyms the
-  person already has.
+Only the domain's consumer reads its pseudonyms, so no other client can
+link two domains:
+
+- **Another client** that names the namespace as `targetSystem` gets no
+  pseudonym for it and never causes a mint. The answer is `200` with the
+  other identifiers it asked for.
+- **A query that names no `targetSystem`** mints nothing. It answers the
+  pseudonyms the person already has in the caller's own domains, and none
+  of any other domain.
+
+Both hold by `GET` and by `POST`.
 
 A steward can also mint through `POST {base}/operator/pseudonyms`.
 

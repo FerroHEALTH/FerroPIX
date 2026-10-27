@@ -182,11 +182,17 @@ a chart without them refuses to render.
 | `networkPolicy.enabled`, `networkPolicy.ingressFrom` | `true`, every source | The NetworkPolicy of the serving ports and the sources it admits. |
 | `podDisruptionBudget.enabled` | `true` | A PodDisruptionBudget of one pod unavailable at a time. |
 | `extraContainers` | none | Containers beside the server, such as a TLS proxy. |
+| `hostUsers` | `false` | Whether the server's and the console's pods share the node's user namespace. `false` gives each pod its own, which needs nodes whose container runtime and kernel support user namespaces; a pod on a node without them does not start. |
+| `supplementalGroupsPolicy` | `Strict` | `Strict` gives a container only the groups the pod spec names, never those of the image's `/etc/group`; `Merge` is the Kubernetes default, and an empty value sets no field. |
 | `console.enabled`, `console.config`, `console.clientSecret.existingSecret` | `false`, an OIDC example, none | The console, its configuration as a map (the server's Service is its default `pix.base_url`), and the Secret of its client secret. |
 
 Every container runs as user 65532 with a read-only root filesystem, no
 privilege escalation, every capability dropped and the `RuntimeDefault`
-seccomp profile, the Restricted Pod Security Standard. The server's startup
+seccomp profile, the Restricted Pod Security Standard. Both pods set
+`enableServiceLinks: false`, so no Service of the namespace reaches a
+container as environment variables. Before Kubernetes 1.33 the feature gates
+of `hostUsers` and `supplementalGroupsPolicy` are off by default, and the API
+server drops both fields. The server's startup
 and readiness probes ask `/health/readiness` and its liveness probe
 `/health/liveness`; the console's ask `/health/readiness` and
 `/health/liveness`. `deploy/helm/validate.sh` lints and renders the chart and holds

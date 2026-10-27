@@ -52,11 +52,9 @@ spec:
     spec:
       serviceAccountName: {{ include "ferropix.serviceAccount" . }}
       automountServiceAccountToken: false
+      {{- include "ferropix.podIsolation" . | nindent 6 }}
       securityContext:
-        runAsNonRoot: true
-        fsGroup: 65532
-        seccompProfile:
-          type: RuntimeDefault
+        {{- include "ferropix.podSecurity" . | nindent 8 }}
       containers:
         - name: console
           image: {{ include "ferropix.image" (list .Values.console.image .Chart) | quote }}

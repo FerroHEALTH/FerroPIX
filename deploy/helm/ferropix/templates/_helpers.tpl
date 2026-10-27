@@ -84,6 +84,35 @@ seccompProfile:
   type: RuntimeDefault
 {{- end -}}
 
+{{/*
+The pod-level isolation both workloads share: no Service environment
+variables, the user namespace and the supplemental groups policy of the
+values. hostUsers true is the API default, so it renders only when false.
+*/}}
+{{- define "ferropix.podIsolation" -}}
+enableServiceLinks: false
+{{- if not (kindIs "bool" .Values.hostUsers) }}
+{{- fail "hostUsers must be true or false" }}
+{{- end }}
+{{- if not .Values.hostUsers }}
+hostUsers: false
+{{- end }}
+{{- end -}}
+
+{{/* The pod security context both workloads share. */}}
+{{- define "ferropix.podSecurity" -}}
+runAsNonRoot: true
+fsGroup: 65532
+{{- with .Values.supplementalGroupsPolicy }}
+{{- if not (has . (list "Merge" "Strict")) }}
+{{- fail "supplementalGroupsPolicy must be Merge, Strict or empty" }}
+{{- end }}
+supplementalGroupsPolicy: {{ . }}
+{{- end }}
+seccompProfile:
+  type: RuntimeDefault
+{{- end -}}
+
 {{/* The server's configuration: the values' map with the chart's own keys. */}}
 {{- define "ferropix.config" -}}
 {{- $config := deepCopy .Values.config -}}

@@ -168,7 +168,8 @@ async fn a_client_id_is_sent_when_the_grant_names_one() {
 #[tokio::test]
 async fn a_demanded_nonce_is_answered_with_a_new_presentation() {
     let fixture = Fixture::start().await;
-    fixture.node.require_nonce("synthetic-nonce-1");
+    let demanded = format!("synthetic-nonce-{}", uuid::Uuid::new_v4());
+    fixture.node.require_nonce(&demanded);
     Fixture::client()
         .request_access_token(&fixture.grant, &fixture.holder, &fixture.prover, PROMPT)
         .await
@@ -180,10 +181,7 @@ async fn a_demanded_nonce_is_answered_with_a_new_presentation() {
             Verdict::Issued
         ]
     );
-    assert_eq!(
-        *fixture.prover.nonces.lock().expect("lock"),
-        vec![String::from("synthetic-nonce-1")]
-    );
+    assert_eq!(*fixture.prover.nonces.lock().expect("lock"), vec![demanded]);
     let forms = fixture.node.forms();
     let nonces: Vec<Value> = forms
         .iter()

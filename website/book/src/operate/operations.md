@@ -6,7 +6,7 @@
 This page covers the server's health checks and request log, and what
 operating the crates involves. The installation report the server sends
 is set under [`[usage_report]`](configuration.md#usage_report), the span
-export under [`[telemetry]`](configuration.md#telemetry), and an upgrade
+and metric export under [`[telemetry]`](configuration.md#telemetry), and an upgrade
 of the server applies its migrations with `db migrate` or at the start of
 `serve` ([Deployment](deployment.md)).
 
@@ -16,6 +16,7 @@ of the server applies its migrations with `db migrate` or at the start of
 |---|---|---|
 | `GET {base}/health` | none | `200` while the process is up. |
 | `GET {base}/health/readiness` | none | `200` while every readiness indicator is up, `503` while one is down, with a JSON document naming each indicator, its state and, when it is down, why. |
+| `GET {base}/metrics` | none | `200` with every metric in the Prometheus text format. |
 | `GET {base}/operator/dependencies` | `auth.steward_scope` | `200` with the readiness document and the last outcome of every upstream the server sends to. |
 
 The `database` indicator is down while no statement reaches PostgreSQL,
@@ -36,21 +37,28 @@ health check.
 
 ## The request log
 
-The server writes one line per request under the `tracing` target
-`ferropix_server::request`, with these fields:
+The request log is the one of `ferrohealth-telemetry` that every
+FerroHEALTH product writes: one line per request under the `tracing` target
+`ferrohealth_telemetry::request`, with these fields:
 
 | Field | What it holds |
 |---|---|
-| `request_id` | The `X-Request-Id` the client sent, or the one the server minted. |
+| `request_id` | The UUID the server minted for the request. The steward trail of `GET {base}/operator/actions` carries the same id; a BALP record carries the `X-Request-Id` of the exchange, the client's when it sent one. |
+| `client_named` | Whether the client sent an `X-Request-Id` of its own. Its value is echoed on the response and never logged. |
 | `method` | The HTTP method. |
 | `route` | The matched route template, such as `/fhir/Patient/$ihe-pix`, or `<unmatched>`. |
 | `status` | The status answered. |
 | `latency_ms` | The time to the response, in milliseconds. |
-| `caller` | The token's `client_id`, or its subject when it names none, or `-` when no credential held. |
-| `domain` | The identifier domains a feed wrote to, or `-`. |
+| `query` | The values of the parameters `telemetry.logged_query_parameters` names; empty by default. |
+| `caller` | The token's `client_id`, or its subject when it names none, or `-` when the credential names neither. A request the gate refused has no `caller`. |
+| `domain` | The identifier domains a successful feed wrote to, comma-separated. A request that wrote none has no `domain`. |
 
-The line never holds the path as sent, a query string, a body or a header
-value. A PIXm Consumer that calls `$ihe-pix` by `GET` puts the patient's
+Every request also runs inside a `request` span, which `[telemetry.otlp]`
+exports, and lands in the `http_server_request_duration_seconds` histogram
+that `GET {base}/metrics` serves and `[telemetry.otlp]` pushes.
+
+The line never holds the path as sent, a query string outside
+`telemetry.logged_query_parameters`, a body or a header value. A PIXm Consumer that calls `$ihe-pix` by `GET` puts the patient's
 identifier in the query, and the line still names only the route template.
 A proxy in front of the server must keep query strings out of its own logs
 for the same reason. The gate of `ferrohealth-smart` writes its own audit

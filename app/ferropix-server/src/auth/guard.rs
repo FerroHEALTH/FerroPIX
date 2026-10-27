@@ -23,6 +23,7 @@ use axum::response::Response;
 use ferrohealth_smart::guard::{AuthLayer, Classify, Render, Requirement, Target};
 use ferrohealth_smart::refusal::Refusal;
 use ferrohealth_smart::resource::{Access, Compartment};
+use ferrohealth_telemetry::request_log::fields::{LineFields, Token};
 use http::request::Parts;
 use http::{Extensions, Method, StatusCode, Uri};
 
@@ -30,7 +31,6 @@ use crate::auth::Smart;
 use crate::auth::source::{Verdict, domains_of};
 use crate::auth::table::{self, Need, Route, SourceRule};
 use crate::fhir::outcome::{IssueType, respond};
-use crate::http::request_log::{Caller, Written};
 
 /// The diagnostics of a request that carries no valid credential.
 pub const UNAUTHENTICATED: &str = "the request carries no valid access token for this server";
@@ -179,20 +179,50 @@ pub async fn confine(
     let Some(access) = request.extensions().get::<Access>().cloned() else {
         return next.run(request).await;
     };
-    let caller = Caller(caller_of(&access));
-    let mut response = match check(&confine, &access, &request) {
-        Checked::Refused(response) => response,
-        Checked::Pass => next.run(request).await,
+    let caller = caller_of(&access);
+    let (mut response, written) = match check(&confine, &access, &request) {
+        Checked::Refused(response) => (response, None),
+        Checked::Pass => (next.run(request).await, None),
         Checked::Feed(systems) => {
-            let mut response = next.run(request).await;
-            if response.status().is_success() {
-                response.extensions_mut().insert(Written(systems));
-            }
-            response
+            let response = next.run(request).await;
+            let written = response.status().is_success().then(|| systems.join(","));
+            (response, written)
         }
     };
-    response.extensions_mut().insert(caller);
+    let mut fields = response
+        .extensions_mut()
+        .remove::<LineFields>()
+        .unwrap_or_default();
+    add_field(&mut fields, CALLER, caller);
+    if let Some(written) = written {
+        add_field(&mut fields, DOMAIN, written);
+    }
+    response.extensions_mut().insert(fields);
     response
+}
+
+/// The request line field naming who called, as the guard admitted the
+/// credential: the token's `client_id`, or its subject or the Basic user-id
+/// when it names none.
+pub const CALLER: &str = "caller";
+
+/// The request line field naming the identifier domains a feed wrote to, by
+/// system, comma-separated.
+pub const DOMAIN: &str = "domain";
+
+/// Adds `value` to `fields` under `name`.
+fn add_field(fields: &mut LineFields, name: &'static str, value: String) {
+    // NOTE: no specification governs this: our own design. A value the line cannot
+    // carry (empty, over long, or not visible ASCII) is legitimately left off it.
+    let Ok(token) = Token::new(value) else {
+        tracing::debug!(field = name, "a request line field was left off");
+        return;
+    };
+    // NOTE: no specification governs this: our own design. Both names are legal and
+    // fewer than the limit, so a refusal only drops a log field.
+    if let Err(error) = fields.insert(name, token) {
+        tracing::debug!(%error, field = name, "a request line field was left off");
+    }
 }
 
 /// What the check behind the gate decided.

@@ -174,7 +174,7 @@ message and position without quoting the line.
 | Section | Holds |
 |---|---|
 | `[server]` | `listen`, `base_path`, `public_base_url` (the `[base]` the `CapabilityStatement` and every `targetId` name), `body_limit_bytes`, `request_timeout_ms`, `drain_timeout_ms` (the drain window on `SIGTERM`) |
-| `[telemetry]` | the `tracing` filter and format, the OTLP endpoint |
+| `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
 | `[auth]` | the `ferrohealth-smart` resource-server settings: `[[auth.issuer]]` entries with their RFC 8414 metadata, each listing the `clients` it may vouch for as a Source, the audience, `[[auth.basic.users]]` under the development profile only, and the two product scopes, `steward_scope` and `admin_scope` |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
@@ -987,19 +987,26 @@ the bound is down, so a wedged subsystem cannot hang the probe, and the
 probe runs the checks on the request instead of reading a cache a
 background loop fills (our own design, after FerroBRIDGE's registry).
 
-**The request log** records, per request, the request id, the matched route
-template, the method, the status, the latency, the caller's client id or
-subject, and the domain a feed wrote to. It never records a query string,
+**The request log** is `ferrohealth-telemetry`'s, behind the request id of
+`ferrohealth-server`. It records, per request, the server's request id,
+whether the client named one, the matched route template, the method, the
+status and the latency, and FerroPIX adds the caller's client id or subject
+and the domains a feed wrote to as line fields. It never records a query string,
 a body, a header value or an identifier: the ITI-83 `GET` form carries the
 identifier in the query, and the log records `/fhir/Patient/$ihe-pix` and
 nothing after it, which the test of #52 proves over a BSN sent by `GET`.
-`tracing` spans carry the same fields and no more. The line is written
-under the target `ferropix_server::request` after routing, so it reads the
-matched template; a request no route matched is logged as `<unmatched>`
+The `request` span carries the method, the route template, the status and
+the server's request id. The line is written under the target
+`ferrohealth_telemetry::request` after routing, so it reads the matched
+template; a request no route matched is logged as `<unmatched>`
 with no part of its path. The guard leaves the caller (the token's
 `client_id`, or its subject when it names none) and the domains a
 successful feed wrote to on the response, where the log reads them; a
-request the gate refused names no caller (our own design).
+request the gate refused names no caller (our own design). The client's
+`X-Request-Id`, echoed on the response, is never logged; the audit trail
+records the `X-Request-Id` the exchange carried, the client's or else the
+server's (IHE BALP 1.1.4, entity type `XrequestId`), and the steward trail
+the server's.
 
 **The usage report.** FerroEHR, FerroTERM and FerroBRIDGE send an
 installation report to FerroPULSE on its envelope v2; FerroPIX does the

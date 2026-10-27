@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ferrohealth_smart::resource::{Access, Caller};
+use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::records::operator::{StewardAction, steward};
 use ferropix_server::audit::records::{
     Call, Feed, Identifier, Search, feed, pdq_search, pix_query, raw_request,
@@ -572,6 +573,8 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
             &audit,
             &backend,
         )),
+        RequestLog::default(),
+        None,
     );
     let token = bearer(&issuer.token("east-lab", EVERY_SCOPE));
     let admitted = send(&app, Method::POST, "/fhir/Patient/$ihe-pix", Some(&token)).await;

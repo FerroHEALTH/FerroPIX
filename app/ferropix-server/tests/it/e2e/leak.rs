@@ -311,7 +311,12 @@ async fn no_identifier_or_name_reaches_a_log_a_span_or_a_refusal_through_the_pix
     let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
     let requests = logs
         .lines()
-        .filter(|line| line.contains("\"target\":\"ferropix_server::request\""))
+        .filter(|line| {
+            line.contains(&format!(
+                "\"target\":\"{}\"",
+                ferrohealth_telemetry::request_log::TARGET
+            ))
+        })
         .count();
     assert_eq!(
         11, requests,

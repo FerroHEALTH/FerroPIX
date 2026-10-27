@@ -28,7 +28,13 @@ fn every_section_loads_and_resolves() {
     let settings = resolve(FULL, &secrets).expect("the full configuration resolves");
     assert_eq!("/pix", settings.server.base_path);
     assert_eq!(8080, settings.server.listen.port());
-    assert!(settings.telemetry.otlp_endpoint.is_some());
+    assert!(
+        settings
+            .telemetry
+            .otlp
+            .as_ref()
+            .is_some_and(|otlp| !otlp.endpoint.is_empty())
+    );
     assert_eq!(20, settings.db.pool_size);
     assert!(!settings.db.migrate);
     assert_eq!(1, settings.auth.resolved.issuers.len());

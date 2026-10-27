@@ -15,6 +15,7 @@ and this project adheres to
 ### Added
 
 - Both binaries take `--set key=value`, any number of times, which sets a key over the file and the environment (#295). `RUST_LOG` sets the server's `telemetry.filter`. `config check` prints every key of the running configuration as `key = value  # source`, naming the file, the default, the variable or the `--set` argument that set it, with every secret shown as `***`.
+- The server serves `GET {base}/metrics`, every metric in the Prometheus text format, with no token, and its request log records each request in `http_server_request_duration_seconds` (OpenTelemetry `http.server.request.duration`) by method, route template and status (#296). `[telemetry]` gains `logged_query_parameters`, `environment` and the `[telemetry.otlp]` table (`endpoint`, `traces`, `metrics`, `sample_ratio`, `trust_roots_file`, `client_identity_file`), which pushes the metrics beside the spans. The operator console reads the same `[telemetry]` section, with `RUST_LOG` as the alias of its `telemetry.filter`.
 
 ### Changed
 
@@ -23,6 +24,15 @@ and this project adheres to
   - A refused configuration names every refusal (up to 16) on one line, each with its key, the variable or `--set` argument that set it, and the closest known key, where it named the first fault with its line and column.
   - A top-level key can be set from the environment, `FERROPIX__PROFILE=development`, where a variable needed a section and a key. A list key also takes comma-separated values.
   - The console reads a `FERROPIX_CONSOLE__` value as the type its key wants, where it read any value that parsed as TOML as that TOML value.
+- **Breaking:** the server and the operator console run their console log, request log, span export and panic hook on `ferrohealth-telemetry` 0.2.2, pinned exactly, and the request id on `ferrohealth-server`, and FerroPIX's own `telemetry.rs`, `request_log.rs` and `request_id.rs` are deleted (#296). What changes for an operator:
+  - `telemetry.otlp_endpoint` is removed: set `[telemetry.otlp] endpoint`. An `https` collector is trusted through the platform's roots and `trust_roots_file`, where it was the WebPKI roots compiled in.
+  - `telemetry.filter` defaults to `info,hyper=warn,tower=warn,h2=warn`, where it was `info`.
+  - The request log is written under the target `ferrohealth_telemetry::request`, where it was `ferropix_server::request`. Its `request_id` is the id the server minted, and the new `client_named` says whether the client sent one; the client's `X-Request-Id` is echoed on the response and no longer logged. The line gains `query`, empty unless `telemetry.logged_query_parameters` names a parameter.
+  - The request line's `caller` and `domain` are left off a line they do not apply to, where they were `-`, and `domain` separates several domains with a comma, where it used a space.
+  - The steward trail of `GET /operator/actions` records the server's request id. A BALP record keeps the `X-Request-Id` of the exchange, the client's when it sent a legal one.
+  - The body of a `500` from a panicking handler names the server's request id, which the log line carries, where it named the client's.
+  - The exported `request` span carries the server's request id.
+  - The console's log takes `[telemetry]` (`format`, `filter`) where it read only `RUST_LOG`, and it renders as the server's does.
 - The server pins `ferrohealth-smart` 0.8.1 exactly, and `ihe-iti` 0.0.63 and `nl-generic-functions` 0.0.32 require it as a caret, `0.8.1` (#294). A product that takes either crate moves its own `ferrohealth-smart` pin to the 0.8 line with it. Between 0.7.4 and 0.8.1 the crate renders every secret and masked URL through `ferrohealth-secret`.
 - The operator console signs stewards in, refreshes their access tokens and signs them out through `ferrohealth_smart::oidc::RelyingParty`, the family's OpenID Connect relying-party client, and its own copy of the client is deleted (#294). The `[oidc]` keys, the routes, the cookies and the session store are unchanged. When a token answer names no scope, the scopes a session holds now include `offline_access` where `[oidc] offline_access` asked for it.
 

@@ -4,12 +4,14 @@
 //! The HTTP surface: the routes under `{base}`, the family's middleware and
 //! the bounded drain on `SIGTERM`.
 //!
+//! The request id is `ferrohealth-server`'s and the request log is
+//! `ferrohealth-telemetry`'s, so every request's line names the server's id
+//! and never the client's.
+//!
 //! No specification governs the process model: our own design, after
 //! FerroBRIDGE's and FerroFED's servers.
 
 pub mod panic;
-pub mod request_id;
-pub mod request_log;
 
 use std::future::Future;
 use std::sync::Arc;
@@ -19,11 +21,13 @@ use axum::Router;
 use axum::extract::State;
 use axum::response::Response;
 use axum::routing::get;
+use ferrohealth_telemetry::request_log::{RequestId, RequestLog};
+use ferrohealth_telemetry::telemetry::{Telemetry, prometheus_route};
 use http::StatusCode;
+use http::request::Parts;
 use tokio::net::TcpListener;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::limit::RequestBodyLimitLayer;
-use tower_http::request_id::{PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
 
 use crate::config::section::server::ServerSettings;
@@ -36,17 +40,33 @@ pub const LIVENESS: &str = "/health";
 /// The path of the readiness route under `{base}`.
 pub const READINESS: &str = "/health/readiness";
 
+/// The path of the Prometheus exposition under `{base}`.
+pub const METRICS: &str = "/metrics";
+
 /// Builds the HTTP application under `server`'s base path, with the shared
-/// middleware: the health routes over `health`, and the `guarded` routes of
-/// the FHIR face and the operator API when given.
+/// middleware and `log` as the request log.
 ///
-/// `GET {base}/health` answers `200` while the process is up, and
+/// The routes are the health routes over `health`, the Prometheus exposition
+/// of `metrics` when given, and the `guarded` routes of the FHIR face and the
+/// operator API when given.
+///
+/// `GET {base}/health` answers `200` while the process is up,
 /// `GET {base}/health/readiness` answers `200` while every indicator of
-/// `health` is up and `503` naming each one that is down.
-pub fn router(server: &ServerSettings, health: &Registry, guarded: Option<Router>) -> Router {
+/// `health` is up and `503` naming each one that is down, and
+/// `GET {base}/metrics` answers every metric in the Prometheus text format.
+pub fn router(
+    server: &ServerSettings,
+    health: &Registry,
+    guarded: Option<Router>,
+    log: RequestLog,
+    metrics: Option<Arc<Telemetry>>,
+) -> Router {
     let mut routes = Router::new()
         .route(LIVENESS, get(liveness))
         .route(READINESS, get(readiness).with_state(health.clone()));
+    if let Some(telemetry) = metrics {
+        routes = routes.route(METRICS, prometheus_route(telemetry));
+    }
     if let Some(guarded) = guarded {
         routes = routes.merge(guarded);
     }
@@ -55,30 +75,43 @@ pub fn router(server: &ServerSettings, health: &Registry, guarded: Option<Router
     } else {
         Router::new().nest(&server.base_path, routes)
     };
-    with_middleware(mounted, server)
+    with_middleware(mounted, server, log)
 }
 
-/// Applies the middleware every FerroPIX route carries to `router`.
+/// Applies the middleware every FerroPIX route carries to `router`, with
+/// `log` as the request log.
 ///
-/// Outermost first: the request-id normalizer, the layer that mints one, the
-/// panic renderer, the layer that propagates the id onto the response, the
-/// panic catcher, the request timeout, the body ceiling and the request log.
-/// The renderer sits outside the propagate layer because it reads the id
-/// from the response that layer has just stamped; the request log runs after
-/// routing, so it reads the matched route template.
-pub fn with_middleware(router: Router, server: &ServerSettings) -> Router {
+/// Outermost first: the panic renderer, the request id of
+/// `ferrohealth-server`, the panic catcher, the request timeout, the body
+/// ceiling and the request log. The renderer sits outside the request id
+/// because it reads the server's id from the response that layer has just
+/// marked; the request log runs after routing, so it reads the matched route
+/// template, and inside the request id, so it reads the server's id.
+pub fn with_middleware(router: Router, server: &ServerSettings, log: RequestLog) -> Router {
     router
-        .layer(axum::middleware::from_fn(request_log::log))
+        .layer(log)
         .layer(RequestBodyLimitLayer::new(server.body_limit))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             server.request_timeout,
         ))
         .layer(CatchPanicLayer::custom(panic::caught))
-        .layer(PropagateRequestIdLayer::new(request_id::HEADER))
+        .layer(axum::middleware::from_fn(
+            ferrohealth_server::request_id::assign,
+        ))
         .layer(axum::middleware::from_fn(panic::render))
-        .layer(SetRequestIdLayer::new(request_id::HEADER, request_id::Mint))
-        .layer(axum::middleware::map_request(request_id::strip_illegal))
+}
+
+/// Returns the `X-Request-Id` of the exchange `parts` belongs to, as the
+/// response carries it: the client's when it sent a legal one, else the
+/// server's own.
+///
+/// The audit trail records this value (IHE BALP 1.1.4, `BasicAuditEntityType`
+/// `XrequestId`: "the value of X-Request-Id").
+#[must_use]
+pub fn exchanged_request_id(parts: &Parts) -> Option<&str> {
+    ferrohealth_server::request_id::of_client(&parts.headers)
+        .or_else(|| parts.extensions.get::<RequestId>().map(RequestId::id))
 }
 
 /// `GET {base}/health`: `200` while the process is up.

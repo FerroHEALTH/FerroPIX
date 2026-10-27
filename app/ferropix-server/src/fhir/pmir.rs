@@ -398,7 +398,7 @@ pub(super) fn call(fhir_base: &Url, parts: &Parts) -> Call {
         &access,
         remote,
         fhir_base,
-        crate::http::request_id::of(&parts.headers),
+        crate::http::exchanged_request_id(parts),
     )
 }
 

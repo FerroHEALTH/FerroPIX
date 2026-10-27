@@ -124,14 +124,15 @@ The build order is the milestones:
   and `db migrate`, the configuration tree of `docs/architecture.md` §3
   (`src/config/`, one module per section read by `ferrohealth-config`, with
   the `ferrohealth-secret` types, `FERROPIX__` overrides, `--set` and the
-  production and development profiles), the `tracing` console and the family's `tower-http` stack with
-  the bounded drain (`src/http/`), the authorization over
+  production and development profiles), the console, the request log, the
+  span export and `/metrics` of `ferrohealth-telemetry` with the request id
+  of `ferrohealth-server`, and the family's `tower-http` stack with the
+  bounded drain (`src/http/`), the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it
   (`src/fhir/`), the BALP audit trail over `ihe-atna` with its spool,
   its reservation layer and the record of each transaction
-  (`src/audit/`), the readiness registry (`src/health.rs`), the request log
-  (`src/http/request_log.rs`), the usage report to FerroPULSE with the
+  (`src/audit/`), the readiness registry (`src/health.rs`), the usage report to FerroPULSE with the
   window the request log fills (`src/usage_report/`, the schema under
   `tests/fixtures/ferropulse/`), and `quickstart.toml`.
 - `app/ferropix-operator-api`: the health and operator documents as serde

@@ -228,6 +228,7 @@ redirect_uri = "https://console.example.org/auth/callback"
 | `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[auth] admin_scope` names (default `__ferropix.admin`). |
 | `[session]` | Whether the cookies are `Secure` (only off on loopback), and the sign-in and session timeouts and bounds. |
 | `[oidc]` | The OpenID Provider stewards sign in at. Without it the console offers no sign-in. |
+| `[telemetry]` | The console log: `format` and `filter`, the section the server reads ([`[telemetry]`](configuration.md#telemetry)). `RUST_LOG` sets `telemetry.filter`. |
 
 ## Sign-in and the session
 

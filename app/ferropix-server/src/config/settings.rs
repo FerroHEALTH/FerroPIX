@@ -17,7 +17,6 @@ use crate::config::section::outbox::Retention;
 use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
 use crate::config::section::pseudonym::{self, PseudonymSeed};
 use crate::config::section::server::ServerSettings;
-use crate::config::section::telemetry::TelemetrySettings;
 use crate::config::section::usage_report::UsageReportSettings;
 use crate::config::section::xcpd::XcpdSettings;
 use crate::config::section::{is_loopback_address, operator::Operator};
@@ -30,8 +29,8 @@ pub struct Settings {
     pub profile: Profile,
     /// The HTTP surface.
     pub server: ServerSettings,
-    /// The console and the OTLP endpoint.
-    pub telemetry: TelemetrySettings,
+    /// The console, the request log and the OTLP export.
+    pub telemetry: ferrohealth_telemetry::section::TelemetrySection,
     /// The PostgreSQL store.
     pub db: DbSettings,
     /// The resource server.
@@ -81,7 +80,6 @@ impl Config {
             return Err(Error::DevUnderProduction);
         }
         let server = self.server.resolve(self.profile)?;
-        let telemetry = self.telemetry.resolve()?;
         let db = self.db.resolve(self.profile)?;
         let auth = self.auth.resolve(self.profile)?;
         // NOTE: no specification governs this: our own design; a Basic user sends a
@@ -118,7 +116,7 @@ impl Config {
         Ok(Settings {
             profile: self.profile,
             server,
-            telemetry,
+            telemetry: self.telemetry.clone(),
             db,
             auth,
             domains,

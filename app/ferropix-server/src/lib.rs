@@ -5,10 +5,11 @@
 //! integration tests share.
 //!
 //! [`cli`] parses the command line, [`config`] reads the file and the
-//! environment into one [`config::settings::Settings`], [`telemetry`]
-//! installs the subscriber, and [`http`] builds the routes under `{base}` and
-//! serves them until the process is asked to stop. `main.rs` only hands in
-//! the arguments and returns the exit code.
+//! environment into one [`config::settings::Settings`],
+//! `ferrohealth-telemetry` installs the console, the export and the panic
+//! hook, and [`http`] builds the routes under `{base}` and serves them until
+//! the process is asked to stop. `main.rs` only hands in the arguments and
+//! returns the exit code.
 
 pub mod audit;
 pub mod auth;
@@ -25,24 +26,29 @@ pub mod operator;
 pub mod outbox;
 pub mod pdqm;
 pub mod store;
-pub mod telemetry;
 pub mod usage_report;
 pub mod xcpd;
 
 use std::error::Error;
 use std::fmt::Write as _;
-use std::io::IsTerminal as _;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
 
 use clap::Parser;
 use ferrohealth_config::loader::Loaded;
+use ferrohealth_telemetry::request_log::RequestLog;
+use ferrohealth_telemetry::section::TelemetrySection;
+use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
 use tokio::net::TcpListener;
 
 use crate::cli::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
 use crate::config::Config;
 use crate::config::settings::Settings;
+
+/// The scope of the meter the request log records
+/// `http.server.request.duration` in.
+pub const METER: &str = "ferropix_server";
 
 /// The exit code of a job that parses and does not run yet: the conventional
 /// usage exit.
@@ -123,12 +129,14 @@ where
     reason = "the job prints its tables on standard output and a failure on stderr"
 )]
 fn estimate(settings: Settings) -> ExitCode {
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal(), None)
-    {
-        eprintln!("ferropix: cannot start: {}", chain(&error));
-        return ExitCode::from(EXIT_CONFIG);
-    }
     runtime_then(|| async move {
+        let telemetry = match telemetry(&settings.telemetry) {
+            Ok(telemetry) => telemetry,
+            Err(error) => {
+                eprintln!("ferropix: cannot start: {}", chain(&error));
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
         let outcome = async {
             let store = store::Store::connect(&settings.db).await?;
             store::key::verify(&store).await?;
@@ -137,7 +145,7 @@ fn estimate(settings: Settings) -> ExitCode {
             estimates
         }
         .await;
-        match outcome {
+        let code = match outcome {
             Ok(estimates) => {
                 println!("{}", estimate_tables(&settings.matching, &estimates));
                 ExitCode::SUCCESS
@@ -146,8 +154,33 @@ fn estimate(settings: Settings) -> ExitCode {
                 eprintln!("ferropix: the estimate failed: {}", chain(&error));
                 ExitCode::FAILURE
             }
-        }
+        };
+        shut_down(&telemetry);
+        code
     })
+}
+
+/// Builds the telemetry `section` asks for, described as the `ferropix`
+/// service, and installs its console, its span export and the panic hook.
+///
+/// With `[telemetry.otlp]` the exporters speak gRPC, so this runs inside the
+/// Tokio runtime that carries the export.
+///
+/// # Errors
+/// Returns the [`InitError`] of `ferrohealth-telemetry` when the providers
+/// cannot be built or a subscriber is installed already.
+pub fn telemetry(section: &TelemetrySection) -> Result<Arc<Telemetry>, InitError> {
+    let telemetry = Telemetry::new(section, Service::new("ferropix", env!("CARGO_PKG_VERSION")))?;
+    let _filter = telemetry.install(section, &Console::detect())?;
+    ferrohealth_telemetry::panic::install_hook();
+    Ok(Arc::new(telemetry))
+}
+
+/// Flushes and stops the span and metric export of `telemetry`.
+fn shut_down(telemetry: &Telemetry) {
+    if let Err(error) = telemetry.shutdown() {
+        tracing::warn!(error = %chain(&error), "the telemetry did not flush");
+    }
 }
 
 /// Writes `estimates` as `[matching.fields]` tables, each with the `m` of
@@ -237,29 +270,14 @@ async fn healthcheck(settings: Settings) -> ExitCode {
 )]
 fn serve(settings: Settings) -> ExitCode {
     runtime_then(|| async move {
-        let traces = match settings
-            .telemetry
-            .otlp_endpoint
-            .as_ref()
-            .map(telemetry::Traces::new)
-        {
-            None => None,
-            Some(Ok(traces)) => Some(traces),
-            Some(Err(error)) => {
+        let telemetry = match telemetry(&settings.telemetry) {
+            Ok(telemetry) => telemetry,
+            Err(error) => {
                 eprintln!("ferropix: cannot start: {}", chain(&error));
                 return ExitCode::from(EXIT_CONFIG);
             }
         };
-        let exporting = traces.as_ref().map(telemetry::Traces::tracer);
-        if let Err(error) = telemetry::init(
-            &settings.telemetry,
-            std::io::stdout().is_terminal(),
-            exporting,
-        ) {
-            eprintln!("ferropix: cannot start: {}", chain(&error));
-            return ExitCode::from(EXIT_CONFIG);
-        }
-        let code = match serve_settings(settings).await {
+        let code = match serve_settings(settings, Arc::clone(&telemetry)).await {
             Ok(()) => {
                 tracing::info!("ferropix stopped");
                 ExitCode::SUCCESS
@@ -269,11 +287,7 @@ fn serve(settings: Settings) -> ExitCode {
                 ExitCode::FAILURE
             }
         };
-        if let Some(traces) = traces
-            && let Err(error) = traces.shutdown()
-        {
-            tracing::warn!(error = %chain(&error), "the span export did not flush");
-        }
+        shut_down(&telemetry);
         code
     })
 }
@@ -300,12 +314,14 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
             }
         },
     };
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal(), None)
-    {
-        eprintln!("ferropix: cannot start: {}", chain(&error));
-        return ExitCode::from(EXIT_CONFIG);
-    }
     runtime_then(|| async move {
+        let telemetry = match telemetry(&settings.telemetry) {
+            Ok(telemetry) => telemetry,
+            Err(error) => {
+                eprintln!("ferropix: cannot start: {}", chain(&error));
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
         let outcome = match old_key {
             None => match store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
                 .await
@@ -323,7 +339,7 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
             }),
             Some(old) => reseal(&settings, &old).await,
         };
-        match outcome {
+        let code = match outcome {
             Ok((store, line)) => {
                 store.close().await;
                 println!("ferropix: {line}");
@@ -333,7 +349,9 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
                 eprintln!("ferropix: the db job failed: {}", chain(&error));
                 ExitCode::FAILURE
             }
-        }
+        };
+        shut_down(&telemetry);
+        code
     })
 }
 
@@ -406,7 +424,10 @@ pub enum ServeError {
 /// built, [`ServeError::Pmir`] when the ITI-93 sender's cannot, and
 /// [`ServeError::Io`] for the I/O error from binding, accepting or
 /// serving.
-pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
+pub async fn serve_settings(
+    settings: Settings,
+    telemetry: Arc<Telemetry>,
+) -> Result<(), ServeError> {
     let started = Instant::now();
     let wake = outbox::Wake::default();
     let store = start_store(&settings, &wake).await?;
@@ -429,6 +450,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         audit,
         matching,
         usage_report: report_settings,
+        telemetry: telemetry_section,
         ..
     } = settings;
     let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
@@ -491,18 +513,28 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         ),
         None => None,
     };
-    let served = http::serve_until(
-        listener,
-        http::router(&server, &health, Some(guarded)).layer(axum::Extension(window)),
-        server.drain_timeout,
-        stopped_by(stopped),
-    )
-    .await
-    .map_err(ServeError::Io);
+    let log = request_log(&telemetry_section, &telemetry, window);
+    let app = http::router(&server, &health, Some(guarded), log, Some(telemetry));
+    let served = http::serve_until(listener, app, server.drain_timeout, stopped_by(stopped))
+        .await
+        .map_err(ServeError::Io);
     signal.abort();
     wound_down(mllp, sender, server.drain_timeout, [draining, reporting]).await;
     store.close().await;
     served
+}
+
+/// Returns the request log of the HTTP listener: the query values `section`
+/// allows, the duration histogram of `telemetry`, and the usage report's
+/// `window` fed with every finished request.
+fn request_log(
+    section: &TelemetrySection,
+    telemetry: &Telemetry,
+    window: Arc<usage_report::window::Window>,
+) -> RequestLog {
+    RequestLog::new(&section.logged_query_parameters)
+        .with_metrics(&telemetry.meter(METER))
+        .with_recorder(window)
 }
 
 /// Waits for the MLLP listener's drain and the outbox sender's message in

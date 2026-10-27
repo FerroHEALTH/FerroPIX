@@ -12,7 +12,8 @@
 //! [`Config::resolve`](crate::config::Config::resolve) turns it into the
 //! checked [`settings::Settings`] the server runs on. An override names its
 //! key by path, `FERROPIX_CONSOLE__PIX__BASE_URL` for `[pix]
-//! base_url`. No specification governs the configuration: our own design.
+//! base_url`, and `RUST_LOG` sets `telemetry.filter`. No specification
+//! governs the configuration: our own design.
 //!
 //! ```toml
 //! [server]
@@ -46,6 +47,7 @@ use std::path::PathBuf;
 use ferrohealth_config::loader::{Loaded, Loader};
 use ferrohealth_secret::secret::Secret;
 use ferrohealth_server::cli::ConfigArgs;
+use ferrohealth_telemetry::section::TelemetrySection;
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
@@ -53,6 +55,17 @@ use crate::config::error::Error;
 /// The prefix of every environment override and of
 /// `FERROPIX_CONSOLE_CONFIG`.
 pub const PREFIX: &str = "FERROPIX_CONSOLE";
+
+/// Returns the loader of the console's configuration: the
+/// `FERROPIX_CONSOLE` namespace, with `RUST_LOG` as the alias of
+/// `telemetry.filter`.
+///
+/// # Errors
+/// Returns [`Error::Load`] when the namespace is refused, which it never is
+/// for [`PREFIX`].
+pub fn loader() -> Result<Loader, Error> {
+    Ok(Loader::new(PREFIX)?.alias("RUST_LOG", "telemetry.filter"))
+}
 
 impl Config {
     /// Reads the configuration of the running process: the file `args`
@@ -62,7 +75,7 @@ impl Config {
     /// # Errors
     /// Returns [`Error::Load`] with every refusal of the loader.
     pub fn load(args: &ConfigArgs) -> Result<Loaded<Self>, Error> {
-        Ok(Loader::new(PREFIX)?.load_with(args.config.as_deref(), &args.sets)?)
+        Ok(loader()?.load_with(args.config.as_deref(), &args.sets)?)
     }
 
     /// Reads `text` as the configuration file and applies `environment`
@@ -75,7 +88,7 @@ impl Config {
         text: Option<&str>,
         environment: &BTreeMap<String, String>,
     ) -> Result<Self, Error> {
-        let loaded = Loader::new(PREFIX)?.load_sources::<Self>(text, None, environment)?;
+        let loaded = loader()?.load_sources::<Self>(text, None, environment)?;
         Ok(loaded.into_parts().0)
     }
 }
@@ -90,6 +103,8 @@ pub struct Config {
     pub pix: Pix,
     /// `[session]`: the server-side sign-in sessions.
     pub session: Session,
+    /// `[telemetry]`: the console log of `ferrohealth-telemetry`.
+    pub telemetry: TelemetrySection,
     /// `[oidc]`: the OpenID Provider operators sign in with; without it the
     /// console offers no sign-in.
     #[serde(skip_serializing_if = "Option::is_none")]

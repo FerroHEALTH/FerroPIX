@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
@@ -153,7 +154,13 @@ impl Harness {
             },
         );
         Self {
-            app: router(&settings.server, &health, Some(routes)),
+            app: router(
+                &settings.server,
+                &health,
+                Some(routes),
+                RequestLog::default(),
+                None,
+            ),
             issuer,
             spool,
             store,

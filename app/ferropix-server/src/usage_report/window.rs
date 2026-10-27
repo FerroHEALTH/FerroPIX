@@ -15,10 +15,11 @@ use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use ferrobridge_hl7v2::ack::Code;
+use ferrohealth_telemetry::request_log::{Completed, Recorder};
 use http::{Method, StatusCode};
 
 use crate::auth::table::{self, Mount};
-use crate::http::{LIVENESS, READINESS};
+use crate::http::{LIVENESS, METRICS, READINESS};
 use crate::usage_report::payload::{
     BUCKET_BOUNDS_MS, BUCKETS, Counters, Group, GroupStats, MAX_COUNT, MAX_MS, Metrics,
     RequestsBucket, Window24h,
@@ -30,7 +31,8 @@ impl Group {
     /// count.
     ///
     /// `template` is `None` for a request no route matched, which is `other`.
-    /// The health routes are probes and are not counted. The group is the
+    /// The health routes are probes and the metrics route a scrape, and
+    /// neither is counted. The group is the
     /// transaction the permission table names for the route, so a template's
     /// parameter segments are never read.
     #[must_use]
@@ -38,7 +40,7 @@ impl Group {
         let Some(template) = template else {
             return Some(Self::Other);
         };
-        if template == LIVENESS || template == READINESS {
+        if template == LIVENESS || template == READINESS || template == METRICS {
             return None;
         }
         let Some(route) = table::ROUTES
@@ -202,6 +204,20 @@ impl Counts {
 pub struct Window {
     base: String,
     counts: Mutex<Counts>,
+}
+
+/// The request log of `ferrohealth-telemetry` records every finished request
+/// into the window.
+impl Recorder for Window {
+    fn record(&self, completed: &Completed<'_>) {
+        Self::record(
+            self,
+            completed.method,
+            completed.route,
+            completed.status,
+            completed.latency,
+        );
+    }
 }
 
 impl Window {

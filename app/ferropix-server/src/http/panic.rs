@@ -7,14 +7,16 @@
 //! `std::panic::catch_unwind` turn an unwound handler into a response
 //! (<https://doc.rust-lang.org/cargo/reference/profiles.html#panic>). The
 //! panic message reaches neither the body nor the log, since a handler may
-//! have panicked over an identifier or a demographic; the log line names the
-//! request id. No specification governs this: our own design.
+//! have panicked over an identifier or a demographic; the log line and the
+//! body name the server's request id. No specification governs this: our own
+//! design.
 
 use std::any::Any;
 
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use ferrohealth_telemetry::request_log::RequestId;
 use http::{StatusCode, header};
 
 /// The marker a caught panic leaves on its response.
@@ -31,17 +33,18 @@ pub fn caught(_payload: Box<dyn Any + Send + 'static>) -> Response {
 
 /// Fills the request id into a panic response and logs the panic.
 ///
-/// It runs outside the layer that propagates the request id, so the header is
-/// on the response already and the body and the log line name the request
-/// the client sees.
+/// It runs outside the request id of `ferrohealth-server`, which leaves the
+/// server's id on the response, so the body and the log line name the id
+/// the request log wrote.
 pub async fn render(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if response.extensions().get::<Panicked>().is_none() {
         return response;
     }
-    let request_id = super::request_id::of(response.headers())
-        .unwrap_or_default()
-        .to_owned();
+    let request_id = response
+        .extensions()
+        .get::<RequestId>()
+        .map_or_else(String::new, |id| id.id().to_owned());
     tracing::error!(
         request_id = request_id.as_str(),
         "the request handler panicked"

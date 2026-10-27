@@ -16,7 +16,6 @@ pub mod outbox;
 pub mod profiles;
 pub mod pseudonym;
 pub mod server;
-pub mod telemetry;
 pub mod usage_report;
 pub mod xcpd;
 

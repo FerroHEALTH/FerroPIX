@@ -79,7 +79,9 @@ drain_timeout_ms = 5000
 [telemetry]
 filter = "info,ferropix_server=debug"
 format = "json"
-otlp_endpoint = "https://collector.example.org:4318"
+
+[telemetry.otlp]
+endpoint = "https://collector.example.org:4318"
 
 [db]
 pool_size = 20

@@ -89,6 +89,7 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[db]", "[db]\n"),
         ("[auth]", "[auth]\n"),
         ("[[auth.issuer]]", "[[auth.issuer]]\n"),
+        ("[[trust.issuer]]", "[[trust.issuer]]\n"),
         ("[[domain]]", "[[domain]]\n"),
         ("[matching]", "[matching]\n"),
         (

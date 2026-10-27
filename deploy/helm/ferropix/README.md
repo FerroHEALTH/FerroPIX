@@ -63,8 +63,9 @@ With `config.hl7v2.enabled`, the MLLP listener has its own Service,
 ## Declaring a domain and its Source
 
 An identifier domain and the one client that feeds it are values under
-`config`. The issuer that signs the client's tokens lists the client in its
-`clients`, and the domain names it as its `source_client_id`:
+`config`. The issuer that signs the client's tokens lists the client in the
+`clients` of its `trust.issuer` entry, and the domain names it as its
+`source_client_id`:
 
 ```yaml
 config:
@@ -72,6 +73,9 @@ config:
   auth:
     audience:
       - "https://pix.example.org/fhir"
+    issuer:
+      - issuer: "https://idp.example.org/realms/care"
+  trust:
     issuer:
       - issuer: "https://idp.example.org/realms/care"
         clients: ["ferroehr"]

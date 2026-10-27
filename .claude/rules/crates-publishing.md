@@ -54,8 +54,8 @@ FerroHEALTH/FerroFED#367; no specification governs it: our own design):
   moves its pin deliberately.
 - **A shared crate takes a caret requirement on another family shared
   crate** (owner decision 2026-10-26): `ihe-iti` requires
-  `ihe-atna = "0.3.0"` and `ferrohealth-smart = "0.8.1"`, and
-  `nl-generic-functions` requires `ferrohealth-smart = "0.8.1"`, never an
+  `ihe-atna = "0.3.0"` and `ferrohealth-smart = "0.8.2"`, and
+  `nl-generic-functions` requires `ferrohealth-smart = "0.8.2"`, never an
   `=` pin, because the FerroAUTH, FerroAUDIT and FerroSYS lines never break
   on a patch. A patch of theirs then reaches a product through its lockfile
   without a release of these crates first. A product, the FerroPIX server

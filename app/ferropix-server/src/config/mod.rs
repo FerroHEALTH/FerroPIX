@@ -70,8 +70,10 @@ pub struct Config {
     pub telemetry: ferrohealth_telemetry::section::TelemetrySection,
     /// The PostgreSQL store (`[db]`).
     pub db: section::db::Db,
-    /// The resource server (`[auth]`).
+    /// The resource server (`[auth]`), `ferrohealth-smart`'s section.
     pub auth: section::auth::Auth,
+    /// What each issuer's tokens are honoured for (`[trust]`).
+    pub trust: section::auth::Trust,
     /// The identifier domains seeded at start (`[[domain]]`).
     pub domain: Vec<section::domain::Domain>,
     /// The pseudonymisation domains seeded at start (`[[pseudonym_domain]]`).

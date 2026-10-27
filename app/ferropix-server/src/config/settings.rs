@@ -91,10 +91,12 @@ impl Config {
         }
         let public_base_url = public::resolve(&self.public_base_url, self.profile)?;
         let db = self.db.resolve(self.profile)?;
-        let auth = self.auth.resolve(self.profile)?;
+        let auth = self
+            .auth
+            .resolve(self.profile, &self.trust, &self.operator.admin_scope)?;
         // NOTE: no specification governs this: our own design; a Basic user sends a
         // reusable password, so it rides only with the [dev] table's loopback rule.
-        if self.auth.basic.is_some() && self.dev.is_none() {
+        if self.auth.0.basic.is_some() && self.dev.is_none() {
             return Err(Error::DevTableRequired {
                 key: String::from("auth.basic"),
             });

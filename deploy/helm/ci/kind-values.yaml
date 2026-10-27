@@ -21,8 +21,11 @@ config:
       - "http://localhost:8080/fhir"
     issuer:
       - issuer: "http://localhost:8180/ferropix"
-        clients: ["quickstart-source"]
         token_profile: jwt
+  trust:
+    issuer:
+      - issuer: "http://localhost:8180/ferropix"
+        clients: ["quickstart-source"]
   domain:
     - system: "urn:oid:2.999.1.1"
       name: "Chart check hospital"

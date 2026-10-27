@@ -50,7 +50,9 @@ check_files() {
     esac
     checked=$((checked + 1))
     check "$file" '—' 'em dash: use a comma, a period, parentheses, or a colon.' || fail=1
-    check "$file" "(^|[^[:alnum:]_-])($BUZZWORDS)([^[:alnum:]_-]|$)" 'buzzword: use the plain word.' || fail=1
+    # A word after a dot is a segment of a key path (`auth.realm`), a name
+    # the configuration fixes, never prose.
+    check "$file" "(^|[^[:alnum:]_.-])($BUZZWORDS)([^[:alnum:]_-]|$)" 'buzzword: use the plain word.' || fail=1
     check "$file" "$ATTRIBUTION" 'AI attribution: text describes only the change.' || fail=1
   done
   if [[ "$fail" -ne 0 ]]; then
@@ -70,6 +72,7 @@ self_test() {
   printf 'A robust index.\n' > "$work/buzzword.md"
   printf 'The index is built by harnessing the store.\n' > "$work/verb.md"
   printf 'The test harness starts PostgreSQL.\n' > "$work/noun.md"
+  printf 'Set auth.realm for the challenge.\n' > "$work/key.md"
   printf 'Co-Authored-By: Claude <noreply@anthropic.com>\n' > "$work/attribution.md"
   if check_files "$work/sound.md" > /dev/null 2>&1; then
     echo "  ok: plain prose passes, an identifier with an underscore included"
@@ -81,6 +84,12 @@ self_test() {
     echo "  ok: harness as a noun passes"
   else
     echo "  FAIL: harness as a noun was refused" >&2
+    failed=1
+  fi
+  if check_files "$work/key.md" > /dev/null 2>&1; then
+    echo "  ok: a buzzword as a key path segment passes"
+  else
+    echo "  FAIL: a key path segment was refused" >&2
     failed=1
   fi
   for case in dash buzzword verb attribution; do

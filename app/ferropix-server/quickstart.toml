@@ -28,8 +28,13 @@ audience = ["http://localhost:8080/fhir"]
 # RFC 9068 tokens leaves `token_profile` out.
 [[auth.issuer]]
 issuer = "http://localhost:8180/ferropix"
-clients = ["quickstart-source"]
 token_profile = "jwt"
+
+# The clients the development issuer may vouch for as the Source of a
+# domain (PIXm 3.1.0 §2:3.104.5).
+[[trust.issuer]]
+issuer = "http://localhost:8180/ferropix"
+clients = ["quickstart-source"]
 
 # An identifier domain under the OID arc 2.999, which ITU-T X.660 reserves
 # for examples, so the quickstart names no real assigning authority.

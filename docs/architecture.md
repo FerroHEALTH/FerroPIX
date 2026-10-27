@@ -177,7 +177,8 @@ message and position without quoting the line.
 | `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
 | `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
-| `[auth]` | the `ferrohealth-smart` resource-server settings: `[[auth.issuer]]` entries with their RFC 8414 metadata, each listing the `clients` it may vouch for as a Source, the audience, `[[auth.basic.users]]` under the development profile only, and the two product scopes, `steward_scope` and `admin_scope` |
+| `[auth]` | `ferrohealth-smart`'s `AuthSection`: the issuer or `[[auth.issuer]]` entries with their RFC 8414 metadata, key sets or RFC 7662 introspection, `ca_file`, the audience, `[[auth.basic.users]]` under the development profile only, and `product_scope`, the steward scope |
+| `[trust]` | `[[trust.issuer]]`: the `clients` each issuer may vouch for as a Source |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |
 | `[pixm]`, `[pdqm]`, `[pmir]` | each profile's switch and options: `[pixm] remove_patient` (PIXm 3.1.0 §1:41.2.1), `[pdqm] deprecated` (which of the policy choices of PDQm 3.2.0 §2:3.78.4.1.3 case 6 the supplier takes), `[pmir] feed` (the outbound ITI-93 sender's retry bounds) |
@@ -903,8 +904,8 @@ scopes:
 | a PIXm or PDQm Consumer | `system/Patient.rs` (SMART App Launch 2.2.0 scopes) | ITI-83, ITI-78, ITI-119, ITI-9, ITI-21 |
 | a Patient Identity Source | `system/Patient.cud`, and the token's client id equal to the domain's `source_client_id` | ITI-104 and ITI-93 for that domain |
 | a PMIR subscriber | `system/Subscription.cruds` | ITI-94 |
-| a data steward | `[auth] steward_scope` (`__ferropix.steward`) | the operator API: search, the record, the queue and its decisions, merge and unmerge, pseudonym resolution, the audit trail |
-| an administrator | `[auth] admin_scope` (`__ferropix.admin`) | the domains and the pseudonymisation domains, the matching thresholds in effect |
+| a data steward | `[auth] product_scope` (`__ferropix.steward`) | the operator API: search, the record, the queue and its decisions, merge and unmerge, pseudonym resolution, the audit trail |
+| an administrator | `[operator] admin_scope` (`__ferropix.admin`) | the domains and the pseudonymisation domains, the matching thresholds in effect |
 
 The product scopes take the extension form SMART App Launch 2.2.0 gives
 (a string starting with `__`), as FerroBRIDGE's operator scope does. A

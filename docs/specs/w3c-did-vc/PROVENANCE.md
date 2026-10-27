@@ -12,11 +12,11 @@ change the pins in docs/VERSIONS.md and re-run the script.
 - Pins, one row of docs/VERSIONS.md each:
 - W3C Verifiable Credentials Data Model 1.1: <https://www.w3.org/TR/2022/REC-vc-data-model-20220303/>, sha256 `d7c796e1f7e9a233d9037eec03e9d9fe7d69220a71639b07f5038684949a3091`
 - W3C Decentralized Identifiers 1.0: <https://www.w3.org/TR/2022/REC-did-core-20220719/>, sha256 `5e44345740d9bfaa852d3b66c57e98c9beb6c5bf6083b0126dd5daac377b9993`
-- W3C DID Resolution 1.0: <https://www.w3.org/TR/2026/CRD-did-resolution-1.0-20261025/>, sha256 `6ccb57ec70c645fa643d6d111dcac8b47f24b68d1eedf9fe178cd78088e91b3e`
+- W3C DID Resolution 1.0: <https://www.w3.org/TR/2026/CRD-did-resolution-1.0-20261026/>, sha256 `2ca67fcccc42028c8f4dbf67560517d2c3218b09232cdd24f587e0456b647351`
 - W3C Bitstring Status List 1.0: <https://www.w3.org/TR/2025/REC-vc-bitstring-status-list-20250515/>, sha256 `3cdf3358a09f3b02f2a97e5dac13cf2b63115c2db1260bf7b7c236d8702924ec`
 - did:web Method Specification: commit `ea423c114e6f2537498ee6f94e8d794c64f60c18` of `w3c-ccg/did-method-web`, its
   `index.html` (the report's source) and `LICENSE.md`
-- Fetched: 2026-10-26
+- Fetched: 2026-10-27
 - Upstream licence: the W3C documents carry the W3C copyright notice and
   name the W3C Software and Document License, the 2015 text
   (<https://www.w3.org/Consortium/Legal/2015/copyright-software-and-document>) for the two 2022 Recommendations and the 2023 text
@@ -30,7 +30,7 @@ change the pins in docs/VERSIONS.md and re-run the script.
   repository's own paths
 - Files: 6
 - Tree digest (sha256 over the sorted per-file `sha256  path` listing,
-  `PROVENANCE.md` excluded): `22f1fb95fe332bb1bace91fcd438b4bca60305837ef280530849de11bdf9aa94`
+  `PROVENANCE.md` excluded): `13b20a7183bae8b8c9abf9752f3337fca39dcfff9619a1cc6955d8b81c18b62c`
 - Read by: the Verifiable Presentation of the access token request of
   `crates/nl-generic-functions` feature `nuts-auth`: VC Data Model 1.1
   §4.10 and §6.3.1, and the did:web holder identifier
@@ -50,6 +50,6 @@ what the track requires is complete.
 | `did-core-1.0.html` | `5e44345740d9bfaa852d3b66c57e98c9beb6c5bf6083b0126dd5daac377b9993` |
 | `did-method-web/LICENSE.md` | `cad8da6404199f732387340029f0f91d55acb98092bf45089064b4a9b8bb0295` |
 | `did-method-web/index.html` | `7e48b1ad2d658452bc9ce23b975d243abe095f7696c06671fc332705a1290610` |
-| `did-resolution-1.0.html` | `6ccb57ec70c645fa643d6d111dcac8b47f24b68d1eedf9fe178cd78088e91b3e` |
+| `did-resolution-1.0.html` | `2ca67fcccc42028c8f4dbf67560517d2c3218b09232cdd24f587e0456b647351` |
 | `vc-bitstring-status-list-1.0.html` | `3cdf3358a09f3b02f2a97e5dac13cf2b63115c2db1260bf7b7c236d8702924ec` |
 | `vc-data-model-1.1.html` | `d7c796e1f7e9a233d9037eec03e9d9fe7d69220a71639b07f5038684949a3091` |

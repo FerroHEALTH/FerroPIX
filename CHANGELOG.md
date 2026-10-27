@@ -29,6 +29,12 @@ and this project adheres to
   extends it) and extends it on the steward's own activity (`POST`), with
   `401` once the session is gone.
 
+### Changed
+
+- W3C DID Resolution 1.0 moves to the Candidate Recommendation Draft of
+  2026-10-26, re-vendored by version and digest, as the freshness check
+  reported (#275).
+
 ## [0.0.8] - 2026-10-27
 
 ### Added

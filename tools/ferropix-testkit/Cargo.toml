@@ -57,7 +57,9 @@ tokio-util.workspace = true
 ferropix-console = { path = "../../app/ferropix-console" }
 # The filled stack's documents are read back into the operator API's types.
 ferropix-operator-api = { path = "../../app/ferropix-operator-api" }
-rustix.workspace = true
+# A journey reads what the console it runs in process writes to the
+# standard error, through a pipe.
+rustix = { workspace = true, features = ["stdio", "pipe"] }
 tempfile.workspace = true
 thirtyfour.workspace = true
 # The end-to-end case connects to the started PostgreSQL and reads its

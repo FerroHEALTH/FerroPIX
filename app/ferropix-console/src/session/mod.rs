@@ -7,8 +7,9 @@
 //! else; every fact behind an id stays in this process (RFC 6749 §10.12,
 //! RFC 7636 §4.1).
 //!
-//! - **Sign-ins** are the pre-login state of `GET /login`: the `state`, the
-//!   OpenID Connect `nonce` and the PKCE verifier. They live for a short
+//! - **Sign-ins** are the pre-login state of `GET /login`: the
+//!   `ferrohealth_smart::oidc::PendingSignIn` with its `state`, its OpenID
+//!   Connect `nonce` and its PKCE verifier. They live for a short
 //!   timeout and are taken once by the callback. The pool is bounded, and a
 //!   full pool drops its oldest sign-in to admit a new one, so a flood of
 //!   login starts costs at most the bound and stops costing anything once it
@@ -30,7 +31,8 @@ use std::time::{Duration, Instant};
 use aws_lc_rs::rand::{SecureRandom as _, SystemRandom};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use secrecy::{ExposeSecret as _, SecretString};
+use ferrohealth_smart::oidc::PendingSignIn;
+use secrecy::SecretString;
 
 use crate::config::settings::SessionSettings;
 
@@ -58,8 +60,7 @@ pub const PREFERENCE_PREFIX: &str = "ferropix_console_";
 /// it on a cookie that is not `Secure`.
 pub const HOST_PREFIX: &str = "__Host-";
 
-/// How many random bytes an id, a `state`, a `nonce` and a PKCE verifier
-/// carry: 256 bits, the entropy RFC 7636 §7.1 recommends for the verifier.
+/// How many random bytes an id carries: 256 bits.
 const RANDOM_BYTES: usize = 32;
 
 /// Why a sign-in or a session could not be begun or read.
@@ -102,63 +103,6 @@ impl SessionId {
 impl fmt::Debug for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("SessionId(..)")
-    }
-}
-
-/// A sign-in the console sent to the OpenID Provider and is waiting on.
-pub struct PendingSignIn {
-    /// The `state` the authorization request carried (RFC 6749 §4.1.1).
-    state: String,
-    /// The `nonce` the ID Token must carry back (OpenID Connect Core 1.0
-    /// §3.1.2.1).
-    nonce: String,
-    /// The PKCE code verifier its challenge was made from (RFC 7636 §4.1).
-    verifier: SecretString,
-}
-
-impl PendingSignIn {
-    /// Mints a fresh `state`, `nonce` and PKCE verifier.
-    ///
-    /// # Errors
-    /// Returns [`SessionError::Random`] when the system random source fails.
-    pub fn mint() -> Result<Self, SessionError> {
-        Ok(Self {
-            state: random_token()?,
-            nonce: random_token()?,
-            verifier: SecretString::from(random_token()?),
-        })
-    }
-
-    /// The `state` the authorization request carries.
-    #[must_use]
-    pub fn state(&self) -> &str {
-        &self.state
-    }
-
-    /// The `nonce` the authorization request carries.
-    #[must_use]
-    pub fn nonce(&self) -> &str {
-        &self.nonce
-    }
-
-    /// The PKCE code verifier.
-    #[must_use]
-    pub fn verifier(&self) -> &SecretString {
-        &self.verifier
-    }
-
-    /// Whether `state` is the one this sign-in sent, compared in constant
-    /// time.
-    #[must_use]
-    pub fn answers(&self, state: &str) -> bool {
-        aws_lc_rs::constant_time::verify_slices_are_equal(self.state.as_bytes(), state.as_bytes())
-            .is_ok()
-    }
-}
-
-impl fmt::Debug for PendingSignIn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PendingSignIn").finish_non_exhaustive()
     }
 }
 
@@ -485,19 +429,8 @@ fn live(settings: &SessionSettings, session: &Session, now: Instant) -> bool {
         && (session.refresh_token.is_some() || session.expires.is_none_or(|expires| now < expires))
 }
 
-/// The PKCE `S256` challenge of `verifier`: the base64url of its SHA-256
-/// (RFC 7636 §4.2).
-#[must_use]
-pub fn challenge(verifier: &SecretString) -> String {
-    let digest = aws_lc_rs::digest::digest(
-        &aws_lc_rs::digest::SHA256,
-        verifier.expose_secret().as_bytes(),
-    );
-    URL_SAFE_NO_PAD.encode(digest.as_ref())
-}
-
 /// Returns [`RANDOM_BYTES`] fresh random bytes as base64url, 43 characters
-/// of the unreserved set RFC 7636 §4.1 admits for a verifier.
+/// a cookie value carries unescaped.
 fn random_token() -> Result<String, SessionError> {
     let mut bytes = [0_u8; RANDOM_BYTES];
     SystemRandom::new()
@@ -508,7 +441,7 @@ fn random_token() -> Result<String, SessionError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Occupancy, PendingSignIn, SessionError, SessionId, Sessions, SignedIn, challenge};
+    use super::{Occupancy, PendingSignIn, SessionError, SessionId, Sessions, SignedIn};
     use crate::config::settings::SessionSettings;
     use secrecy::{ExposeSecret, SecretString};
     use std::time::Duration;
@@ -540,24 +473,6 @@ mod tests {
     }
 
     #[test]
-    fn the_s256_challenge_is_the_one_rfc_7636_appendix_b_derives() {
-        let verifier = SecretString::from("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk");
-        assert_eq!(
-            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-            challenge(&verifier)
-        );
-    }
-
-    #[test]
-    fn a_minted_sign_in_carries_a_verifier_of_the_length_rfc_7636_admits() {
-        let pending = sign_in();
-        let verifier = pending.verifier().expose_secret().len();
-        assert!((43..=128).contains(&verifier), "{verifier}");
-        assert_ne!(pending.state(), pending.verifier().expose_secret());
-        assert_ne!(pending.state(), pending.nonce());
-    }
-
-    #[test]
     fn a_pending_sign_in_is_taken_once_and_only_with_its_own_id() {
         let sessions = Sessions::new(settings());
         let pending = sign_in();
@@ -573,8 +488,7 @@ mod tests {
             .take_pending(&id)
             .expect("usable")
             .expect("pending");
-        assert!(taken.answers(&state));
-        assert!(!taken.answers("another-state"));
+        assert_eq!(state, taken.state(), "the sign-in taken is the one begun");
         assert!(sessions.take_pending(&id).expect("usable").is_none());
     }
 

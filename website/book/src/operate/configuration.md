@@ -241,7 +241,7 @@ Source client id. Who needs which scope is on the
 
 | Key | Default | What it sets |
 |---|---|---|
-| `auth.basic.cache_ttl_seconds` | `0` | How long a verified credential is remembered. |
+| `auth.basic.cache_ttl_seconds` | `300` | How long a verified credential is remembered; `0` remembers none. |
 | `auth.basic.users[].user` | none | The user-id. |
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |

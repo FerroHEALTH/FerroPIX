@@ -56,8 +56,8 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ihe-atna" },
   { allow = ["BUSL-1.1"], crate = "nl-generic-functions" },
   { allow = ["BUSL-1.1"], crate = "ferrohealth-smart" },
-  # FerroSYS's secret wrapper, which ferrohealth-smart 0.7.4 and ihe-atna
-  # 0.2.13 take.
+  # FerroSYS's secret wrapper, which ferrohealth-smart, ihe-atna and the
+  # operator console take.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-secret" },
   # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },

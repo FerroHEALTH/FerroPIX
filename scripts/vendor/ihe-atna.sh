@@ -92,6 +92,7 @@ page_date="$(sed -nE 's/.*Revision [0-9.]+, ([A-Za-z]+ [0-9]+, [0-9]+) - Final T
 supplement_date="$(awk '/^Date:/ { seen = 1; next } seen && NF { print; exit }' "$tmp/supplement.txt")"
 [ -n "$page_date" ] && [ -n "$supplement_date" ] || die "a document declares no date"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest/Volume2/media"
 cp "$tmp/ITI-20.html" "$dest/Volume2/ITI-20.html"
@@ -166,6 +167,7 @@ into the Technical Framework.
 | File | sha256 |
 |---|---|$rows
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

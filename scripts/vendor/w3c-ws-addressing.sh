@@ -47,6 +47,7 @@ grep -qF "$licence" "$tmp/$file" \
   || die "$item no longer links the W3C Document License"
 pin="$(corpus_pin_cell "$item")"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 cp "$tmp/$file" "$dest/$file"
@@ -85,6 +86,7 @@ file here: change the pin in docs/VERSIONS.md and re-run the script.
 |---|---|
 | \`$file\` | \`$(corpus_sha256 "$dest/$file")\` |
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

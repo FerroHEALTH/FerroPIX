@@ -57,6 +57,7 @@ trap 'rm -rf "$tmp"' EXIT
 say "fetching $repo at $commit"
 tree_root="$(corpus_fetch "$repo" "$commit" "$tmp")"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 corpus_take "$tree_root" "$dest" "${paths[@]}"
@@ -115,6 +116,7 @@ taken.
 | File | sha256 | git blob id |
 |---|---|---|$rows
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

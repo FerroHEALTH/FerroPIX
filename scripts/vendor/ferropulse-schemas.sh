@@ -57,6 +57,9 @@ list() {
 }
 
 say "$repo at $sha"
+old="$(mktemp)"
+trap 'rm -f "$old"' EXIT
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$old"
 # A file the pin no longer carries must not linger in the copy.
 [ ! -d "$dest" ] || find "$dest" -type f -delete
 fetch "$schema"
@@ -93,4 +96,5 @@ check the validator against the examples, then validate every report the
 server builds against the schema. Never hand-edit these files; change the pin
 in \`docs/VERSIONS.md\` and re-run the script.
 PROV
+corpus_keep_fetched "$old" "$dest/PROVENANCE.md"
 say "vendored $count files under $dest"

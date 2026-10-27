@@ -13,7 +13,8 @@
 //! not answer, or fails on its side, leaves the session as it was, so the
 //! next request tries again. The idle and the absolute timeouts end a
 //! session whatever its tokens say. The refresh token never leaves the
-//! server (RFC 6749 §10.4) and is never logged.
+//! server (RFC 6749 §10.4) and is never logged. The refresh request is
+//! `ferrohealth_smart::oidc::RelyingParty::refresh`.
 
 use std::time::Duration;
 
@@ -21,12 +22,12 @@ use axum::Extension;
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::Response;
+use ferrohealth_secret::secret::Secret;
+use ferrohealth_smart::oidc::{OidcError, RelyingParty};
 use http::header::SET_COOKIE;
 use http::{HeaderValue, StatusCode};
-use secrecy::{ExposeSecret as _, SecretString};
+use secrecy::SecretString;
 
-use crate::config::settings::OidcSettings;
-use crate::oidc::exchange::{ExchangeError, token_request};
 use crate::server::ConsoleState;
 use crate::session::refresh::Refreshed;
 use crate::session::{COOKIE, SessionError, SessionId};
@@ -61,11 +62,11 @@ pub async fn keep_fresh(state: &ConsoleState, id: &SessionId) -> Result<Freshnes
     let Some(refresh_token) = sessions.refresh_grant(id, MARGIN)? else {
         return Ok(Freshness::Current);
     };
-    let Some(oidc) = state.settings().oidc.as_ref() else {
+    let Some(relying_party) = state.relying_party() else {
         sessions.end(id)?;
         return Ok(Freshness::Ended);
     };
-    match refresh(state.provider(), oidc, &refresh_token).await {
+    match refresh(relying_party, refresh_token).await {
         Ok(refreshed) => {
             sessions.refreshed(id, refreshed)?;
             Ok(Freshness::Current)
@@ -92,28 +93,20 @@ pub async fn keep_fresh(state: &ConsoleState, id: &SessionId) -> Result<Freshnes
 /// token (RFC 6749 §6), with the scope the operator granted at sign-in.
 ///
 /// # Errors
-/// Returns the [`ExchangeError`] of a provider that cannot be reached,
-/// refuses the refresh, or answers no bearer token.
+/// Returns the [`OidcError`] of a provider that cannot be reached, refuses
+/// the refresh, or answers no bearer token.
 pub async fn refresh(
-    client: &reqwest::Client,
-    oidc: &OidcSettings,
-    refresh_token: &SecretString,
-) -> Result<Refreshed, ExchangeError> {
-    let grant = [
-        ("grant_type", "refresh_token"),
-        ("refresh_token", refresh_token.expose_secret()),
-    ];
-    let tokens = token_request(client, oidc, &grant).await?;
+    relying_party: &RelyingParty,
+    refresh_token: SecretString,
+) -> Result<Refreshed, OidcError> {
+    let tokens = relying_party.refresh(&Secret::from(refresh_token)).await?;
     // NOTE: OpenID Connect Core 1.0 §12.2: an ID Token a refresh answers is not
     // read; the sign-in's verified one stays the sign-out hint.
     Ok(Refreshed {
-        access_token: SecretString::from(tokens.access_token),
-        expires_in: tokens.expires_in.map(Duration::from_secs),
-        refresh_token: tokens.refresh_token.map(SecretString::from),
-        scopes: tokens
-            .scope
-            .as_deref()
-            .map(|scope| super::exchange::granted(Some(scope), &[])),
+        access_token: tokens.access_token.to_secret_string(),
+        expires_in: tokens.expires_in,
+        refresh_token: tokens.refresh_token.as_ref().map(Secret::to_secret_string),
+        scopes: tokens.scopes,
     })
 }
 

@@ -57,7 +57,11 @@ fhir-types = { version = "0.1.128", default-features = false }
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers. The server pins it exactly, as a product pins every family crate;
 # the published crates take their own caret requirement on it.
-ferrohealth-smart = { version = "=0.7.4", default-features = false }
+ferrohealth-smart = { version = "=0.8.1", default-features = false }
+# The secret the operator console hands the OpenID Connect relying party of
+# ferrohealth-smart, at the version that crate requires. Verified against
+# crates.io on 2026-10-27.
+ferrohealth-secret = "=0.2.0"
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser and the original-mode acknowledgment, over the generated v2 tables,

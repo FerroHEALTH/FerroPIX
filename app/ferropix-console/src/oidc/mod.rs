@@ -2,35 +2,34 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Operator sign-in at an OpenID Provider: the OAuth 2.0 authorization code
-//! grant with PKCE, run by the console's server half.
+//! grant with PKCE, run by the console's server half through
+//! `ferrohealth_smart::oidc::RelyingParty`.
 //!
 //! `GET /login` mints the `state`, the `nonce` and the PKCE verifier, keeps
 //! them in the bounded pool of pending sign-ins, and redirects the browser to
 //! the provider's authorization endpoint (RFC 6749 §4.1.1, RFC 7636 §4.3,
 //! OpenID Connect Core 1.0 §3.1.2.1). `GET /auth/callback` is where the
-//! provider sends the operator back: it takes the pending sign-in once and
-//! holds the returned `state` to it (RFC 6749 §10.12), then [`exchange`]
-//! trades the code for the operator's tokens and checks the ID Token, and
-//! only then is a signed-in session begun; [`refresh`] renews its access
-//! token before it expires, and [`logout`] ends it. The browser never sees a
-//! token. No specification of FerroPIX governs sign-in to the console: our
-//! own design on RFC 6749, RFC 7636 and OpenID Connect Core 1.0.
+//! provider sends the operator back: it takes the pending sign-in once, and
+//! the relying party holds the returned `state` to it (RFC 6749 §10.12),
+//! trades the code for the operator's tokens and checks the ID Token; only
+//! then is a signed-in session begun. [`refresh`] renews its access token
+//! before it expires, and [`logout`] ends it. The browser never sees a
+//! token. The session store is the console's: no specification governs it,
+//! our own design.
 
 use axum::Extension;
 use axum::extract::Query;
 use axum::response::{IntoResponse, Response};
+use ferrohealth_secret::secret::Secret;
+use ferrohealth_smart::oidc::{Callback, OidcError, PendingSignIn};
 use ferrohealth_ui::i18n::Locale;
 use http::header::{CACHE_CONTROL, LOCATION, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
-use serde::Deserialize;
-use url::Url;
 
-use crate::config::settings::{OFFLINE_ACCESS, OidcSettings};
 use crate::locale::{Msg, catalog, negotiated, tr_in};
 use crate::server::ConsoleState;
-use crate::session::{COOKIE, PendingSignIn, SIGN_IN_COOKIE, SessionError, challenge};
+use crate::session::{COOKIE, SIGN_IN_COOKIE, SessionError, SignedIn};
 
-pub mod exchange;
 pub mod logout;
 pub mod refresh;
 
@@ -41,54 +40,29 @@ pub const LOGIN: &str = "/login";
 /// to.
 pub const CALLBACK: &str = "/auth/callback";
 
-/// Returns the authorization request for `pending` at the provider `oidc`.
-///
-/// The request is the authorization endpoint with the code grant's
-/// parameters and the `S256` PKCE challenge appended to whatever query it
-/// already carries, which RFC 6749 §3.1 requires a client to keep.
-#[must_use]
-pub fn authorization_request(oidc: &OidcSettings, pending: &PendingSignIn) -> Url {
-    let mut scopes: Vec<&str> = oidc.scopes.iter().map(String::as_str).collect();
-    if oidc.offline_access {
-        scopes.push(OFFLINE_ACCESS);
-    }
-    let mut url = oidc.authorization_endpoint.clone();
-    {
-        let mut query = url.query_pairs_mut();
-        query
-            .append_pair("response_type", "code")
-            .append_pair("client_id", &oidc.client_id)
-            .append_pair("redirect_uri", oidc.redirect_uri.as_str())
-            .append_pair("scope", &scopes.join(" "))
-            .append_pair("state", pending.state())
-            .append_pair("nonce", pending.nonce())
-            .append_pair("code_challenge", &challenge(pending.verifier()))
-            .append_pair("code_challenge_method", "S256");
-        // NOTE: OpenID Connect Core 1.0 §11: a request for `offline_access`
-        // MUST carry the `prompt` value `consent`.
-        if oidc.offline_access {
-            query.append_pair("prompt", "consent");
-        }
-    }
-    url
-}
-
 /// Serves `GET /login`: begins a sign-in and redirects to the provider.
 pub async fn login(Extension(state): Extension<ConsoleState>, headers: HeaderMap) -> Response {
     let locale = locale_of(&state, &headers);
-    let Some(oidc) = state.settings().oidc.as_ref() else {
+    let Some(relying_party) = state.relying_party() else {
         return plain(
             StatusCode::SERVICE_UNAVAILABLE,
             &locale,
             Msg::SignInNotConfigured,
         );
     };
-    let pending = match PendingSignIn::mint() {
-        Ok(pending) => pending,
-        Err(error) => return refused(&locale, &error),
+    let request = match relying_party.authorization_request() {
+        Ok(request) => request,
+        Err(error) => {
+            tracing::error!(%error, "a sign-in could not be minted");
+            return plain(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &locale,
+                Msg::SignInSessionNotBegun,
+            );
+        }
     };
-    let location = authorization_request(oidc, &pending);
-    let id = match state.sessions().begin(pending) {
+    let location = request.url;
+    let id = match state.sessions().begin(request.pending) {
         Ok(id) => id,
         Err(error) => return refused(&locale, &error),
     };
@@ -112,25 +86,12 @@ pub async fn login(Extension(state): Extension<ConsoleState>, headers: HeaderMap
     response
 }
 
-/// The query the provider sends the operator back with (RFC 6749 §4.1.2 and
-/// §4.1.2.1).
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct CallbackQuery {
-    /// The authorization code.
-    pub code: Option<String>,
-    /// The `state` the authorization request carried.
-    pub state: Option<String>,
-    /// The error code of a refused request.
-    pub error: Option<String>,
-}
-
 /// Serves `GET /auth/callback`: holds the returned `state` to the pending
 /// sign-in the browser's cookie names, and completes it.
 pub async fn callback(
     Extension(state): Extension<ConsoleState>,
     headers: HeaderMap,
-    Query(query): Query<CallbackQuery>,
+    Query(query): Query<Callback>,
 ) -> Response {
     let locale = locale_of(&state, &headers);
     let Some(id) = state.sessions().cookie_in(&headers, SIGN_IN_COOKIE) else {
@@ -157,33 +118,39 @@ async fn redirected(
     state: &ConsoleState,
     headers: &HeaderMap,
     pending: &PendingSignIn,
-    query: &CallbackQuery,
+    query: &Callback,
 ) -> Response {
     let locale = &locale_of(state, headers);
-    // NOTE: RFC 6749 §10.12: a redirect whose `state` is not the one the
-    // request carried is refused before anything else it says is read.
-    if !query
-        .state
-        .as_deref()
-        .is_some_and(|sent| pending.answers(sent))
-    {
-        return plain(StatusCode::BAD_REQUEST, locale, Msg::SignInStateMismatch);
-    }
-    if query.error.is_some() {
-        return plain(StatusCode::UNAUTHORIZED, locale, Msg::ProviderDidNotSignIn);
-    }
-    let Some(code) = query.code.as_deref() else {
-        return plain(StatusCode::BAD_REQUEST, locale, Msg::RedirectCarriesNoCode);
-    };
-    let Some(oidc) = state.settings().oidc.as_ref() else {
+    let Some(relying_party) = state.relying_party() else {
         return plain(
             StatusCode::SERVICE_UNAVAILABLE,
             locale,
             Msg::SignInNotConfigured,
         );
     };
-    let signed_in = match exchange::exchange(state.provider(), oidc, pending, code).await {
-        Ok(signed_in) => signed_in,
+    let signed_in = match relying_party.exchange(pending, query).await {
+        Ok(signed_in) => SignedIn {
+            operator: signed_in.claims.display_name().map(str::to_owned),
+            access_token: signed_in.access_token.to_secret_string(),
+            expires_in: signed_in.expires_in,
+            refresh_token: signed_in
+                .refresh_token
+                .as_ref()
+                .map(Secret::to_secret_string),
+            id_token: Some(signed_in.id_token.to_secret_string()),
+            scopes: signed_in.scopes,
+        },
+        // NOTE: RFC 6749 §10.12: a redirect whose `state` is not the one the
+        // request carried is refused before anything else it says is read.
+        Err(OidcError::StateMismatch) => {
+            return plain(StatusCode::BAD_REQUEST, locale, Msg::SignInStateMismatch);
+        }
+        Err(OidcError::Authorization { .. }) => {
+            return plain(StatusCode::UNAUTHORIZED, locale, Msg::ProviderDidNotSignIn);
+        }
+        Err(OidcError::NoCode) => {
+            return plain(StatusCode::BAD_REQUEST, locale, Msg::RedirectCarriesNoCode);
+        }
         Err(error) if error.refuses_the_operator() => {
             tracing::warn!(error = %error, "a sign-in's ID Token was refused");
             return plain(StatusCode::UNAUTHORIZED, locale, Msg::IdTokenDidNotVerify);

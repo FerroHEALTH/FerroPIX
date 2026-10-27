@@ -227,7 +227,8 @@ redirect_uri = "https://console.example.org/auth/callback"
 ## Sign-in and the session
 
 Stewards sign in at an OpenID Provider with the authorization code grant and
-PKCE. The console checks the ID Token against the provider's keys, its
+PKCE, through the OpenID Connect client of `ferrohealth-smart`, the
+FerroHEALTH authorization crate. The console checks the ID Token against the provider's keys, its
 issuer, its audience and the sign-in's nonce before a session begins. The
 session lives on the console's server; the browser holds one opaque
 `HttpOnly`, `SameSite=Lax` cookie and never a token. The console calls the

@@ -79,7 +79,7 @@ console are that open part, and they are FerroPIX's own design.
 | HL7 v2 | the version each transaction names in ITI TF-2 | the segments and fields of the v2 messages |
 | `hl7v2-types`, `ferrobridge-hl7v2` | FerroBRIDGE's published line, pinned exactly | the v2 tables, the MLLP codec, the parser and the acknowledgment; FerroPIX writes no second parser (`CLAUDE.md` §Scope) |
 | `ihe-atna` | the FerroAUDIT line, pinned exactly | the BALP `AuditEvent` builder and the audit spool |
-| `ferrohealth-smart` | the FerroAUTH line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users |
+| `ferrohealth-smart` | the FerroAUTH line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users; and the console's OpenID Connect relying-party client |
 | `ferrohealth-ui` | the FerroUI line, pinned exactly | every component the console draws (`.claude/memory/ferroui-lockstep.md`) |
 | PostgreSQL | 18 | the one store (section 4); `uuidv7()` for every database-minted id, `UNIQUE … WITHOUT OVERLAPS` for the temporal link table |
 | Netherlands Generic Functions | `fhir.nl.gf` 0.3.0 | the BSN, the pseudonymised BSN and the NVI (section 8) |
@@ -1110,7 +1110,7 @@ element with `ferrohealth-ui` in the library's FerroPIX brand, Plum & Iron
 (`Brand::Pix`, section 12.7 gap 7); a component the library lacks is
 filed and built there (section 12.7). It holds no token in the browser: the steward
 signs in at the console's server (OpenID Connect Core 1.0 §3.1,
-authorization code with PKCE), the session lives on the console's server
+authorization code with PKCE, through `ferrohealth_smart::oidc`), the session lives on the console's server
 behind one `HttpOnly` cookie, and the console calls the operator API with
 the steward's own token, so the server records the steward as the actor of
 every action. Every server function is a `POST` and checks the session

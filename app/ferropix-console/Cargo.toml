@@ -61,9 +61,13 @@ http.workspace = true
 jiff.workspace = true
 # The OpenID Connect relying party the operator signs in with: the
 # authorization request with PKCE, the code exchange, the ID Token check, the
-# refresh grant and the end-session URL, and the secret it holds tokens in.
+# refresh grant and the end-session URL.
 ferrohealth-smart = { workspace = true, features = ["oidc"] }
+# The configuration loader, the secret types and the `--config` and `--set`
+# arguments the family shares.
+ferrohealth-config.workspace = true
 ferrohealth-secret.workspace = true
+ferrohealth-server.workspace = true
 # The calls to the FerroPIX server and to the OpenID Provider.
 reqwest = { workspace = true, features = ["rustls", "json"] }
 secrecy = { workspace = true, features = ["serde"] }
@@ -71,7 +75,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
-toml.workspace = true
 # The site bundle is served brotli- or gzip-compressed, as the request's
 # Accept-Encoding chooses.
 tower-http = { workspace = true, features = ["set-header", "compression-br", "compression-gzip"] }

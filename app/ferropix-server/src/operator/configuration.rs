@@ -16,7 +16,8 @@
 use axum::response::Response;
 use ferropix_operator_api::configuration::{Configuration, Mode, Origin, Section, Setting};
 
-use crate::config::origin::{self, Origins};
+use ferrohealth_config::provenance::{Provenance, Source};
+
 use crate::config::section::matching::Matching;
 use crate::matching::scorer::{FIELDS, default_weights};
 use crate::operator::{Operator, matching, wire};
@@ -40,17 +41,20 @@ pub const RULES: [(&str, &str); 3] = [
 /// Answers the configuration in effect.
 #[must_use]
 pub fn answer(operator: &Operator) -> Response {
-    wire::answer(&document(&operator.matching, &operator.configured.origins))
+    wire::answer(&document(
+        &operator.matching,
+        &operator.configured.provenance,
+    ))
 }
 
 /// Returns the configuration document of `matching`, its settings marked by
-/// `origins`.
+/// `provenance`.
 #[must_use]
-pub fn document(matching: &Matching, origins: &Origins) -> Configuration {
+pub fn document(matching: &Matching, provenance: &Provenance) -> Configuration {
     let setting = |key: &str, value: String| Setting {
         key: key.to_owned(),
         value,
-        origin: origin_of(origins.origin(key)),
+        origin: origin_of(provenance.source(key)),
     };
     let thresholds = vec![
         setting("matching.link_at", matching.link_at.to_string()),
@@ -88,7 +92,7 @@ pub fn document(matching: &Matching, origins: &Origins) -> Configuration {
         .collect();
     Configuration {
         mode: Mode::File,
-        file: origins.file().map(str::to_owned),
+        file: file_name(provenance),
         sections: vec![
             section("thresholds", thresholds),
             section("weights", weights),
@@ -106,12 +110,24 @@ fn section(name: &str, settings: Vec<Setting>) -> Section {
     }
 }
 
-/// The wire origin of a configuration origin.
-const fn origin_of(origin: origin::Origin) -> Origin {
-    match origin {
-        origin::Origin::File => Origin::File,
-        origin::Origin::Environment => Origin::Environment,
-        origin::Origin::Default => Origin::Default,
+/// The name of the configuration file the load read, without its
+/// directory, when it read one.
+#[must_use]
+pub fn file_name(provenance: &Provenance) -> Option<String> {
+    provenance
+        .file()
+        .and_then(std::path::Path::file_name)
+        .map(|name| name.to_string_lossy().into_owned())
+}
+
+/// The wire origin of the layer a key's value came from.
+const fn origin_of(source: Source) -> Origin {
+    match source {
+        Source::File => Origin::File,
+        // NOTE: no specification governs this: our own design; FerroUI draws no
+        // source for a `--set` value, which overrides the start as a variable does.
+        Source::Environment | Source::Set => Origin::Environment,
+        Source::Default => Origin::Default,
     }
 }
 
@@ -119,16 +135,28 @@ const fn origin_of(origin: origin::Origin) -> Origin {
 mod tests {
     use ferropix_operator_api::configuration::{Mode, Origin};
 
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
     use super::document;
-    use crate::config::origin::Origins;
     use crate::config::section::matching::Matching;
+    use crate::config::{Config, loader};
 
     #[test]
     fn every_setting_names_its_origin_and_the_rules_are_built_in() {
-        let file: toml::Table = toml::from_str("[matching]\nlink_at = 0.95\n").expect("TOML");
-        let origins = Origins::of(&file, &[String::from("matching.auto_link")])
-            .with_file(Some(String::from("ferropix.toml")));
-        let read = document(&Matching::default(), &origins);
+        let environment = BTreeMap::from([(
+            String::from("FERROPIX__MATCHING__AUTO_LINK"),
+            String::from("false"),
+        )]);
+        let loaded = loader()
+            .expect("the namespace is valid")
+            .load_sources::<Config>(
+                Some("[matching]\nlink_at = 0.95\n"),
+                Some(Path::new("/etc/ferropix/ferropix.toml")),
+                &environment,
+            )
+            .expect("the tree loads");
+        let read = document(&Matching::default(), loaded.provenance());
         assert_eq!(read.mode, Mode::File);
         assert_eq!(read.file.as_deref(), Some("ferropix.toml"));
         let names: Vec<&str> = read.sections.iter().map(|s| s.name.as_str()).collect();

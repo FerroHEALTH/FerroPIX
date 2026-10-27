@@ -12,8 +12,17 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Both binaries take `--set key=value`, any number of times, which sets a key over the file and the environment (#295). `RUST_LOG` sets the server's `telemetry.filter`. `config check` prints every key of the running configuration as `key = value  # source`, naming the file, the default, the variable or the `--set` argument that set it, with every secret shown as `***`.
+
 ### Changed
 
+- **Breaking:** the server and the operator console read their configuration through `ferrohealth-config` 0.2.5 and hold their secrets in `ferrohealth-secret` 0.2.0, both pinned exactly, and FerroPIX's own loaders, provenance and secret types are deleted (#295). The file, `FERROPIX_CONFIG`, `FERROPIX_CONSOLE_CONFIG` and every `FERROPIX__…` and `FERROPIX_CONSOLE__…` key keep their names. What changes for an operator:
+  - A secret file loses only its trailing line ending. Leading and other whitespace is now part of the secret, where it was trimmed, so a file holding only spaces is a secret of spaces and no longer refused as empty.
+  - A refused configuration names every refusal (up to 16) on one line, each with its key, the variable or `--set` argument that set it, and the closest known key, where it named the first fault with its line and column.
+  - A top-level key can be set from the environment, `FERROPIX__PROFILE=development`, where a variable needed a section and a key. A list key also takes comma-separated values.
+  - The console reads a `FERROPIX_CONSOLE__` value as the type its key wants, where it read any value that parsed as TOML as that TOML value.
 - The server pins `ferrohealth-smart` 0.8.1 exactly, and `ihe-iti` 0.0.63 and `nl-generic-functions` 0.0.32 require it as a caret, `0.8.1` (#294). A product that takes either crate moves its own `ferrohealth-smart` pin to the 0.8 line with it. Between 0.7.4 and 0.8.1 the crate renders every secret and masked URL through `ferrohealth-secret`.
 - The operator console signs stewards in, refreshes their access tokens and signs them out through `ferrohealth_smart::oidc::RelyingParty`, the family's OpenID Connect relying-party client, and its own copy of the client is deleted (#294). The `[oidc]` keys, the routes, the cookies and the session store are unchanged. When a token answer names no scope, the scopes a session holds now include `offline_access` where `[oidc] offline_access` asked for it.
 

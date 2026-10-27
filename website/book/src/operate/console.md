@@ -149,7 +149,7 @@ ferropix-console serve --config console.toml
 | Command | What it does |
 |---|---|
 | `ferropix-console serve` | Serves the console until the process is asked to stop. |
-| `ferropix-console config check` | Reads and resolves the configuration, secrets included, and exits. |
+| `ferropix-console config check` | Reads and resolves the configuration, secrets included, prints every key as `key = value  # source` with every secret shown as `***`, and exits. |
 | `ferropix-console healthcheck` | Asks the console on this host whether it answers, for a container runtime. |
 
 ## The image
@@ -190,12 +190,17 @@ docker compose --profile console up --wait
 
 ## Configuration
 
-The configuration is a TOML file named by `--config` or
-`FERROPIX_CONSOLE_CONFIG`. Every key can be set from the environment as
-`FERROPIX_CONSOLE__<SECTION>__<KEY>`, so `FERROPIX_CONSOLE__PIX__BASE_URL`
-sets `[pix] base_url`. A secret can be read from a file with the `_file`
-form of its key, the shape a container runtime mounts a secret in. An unknown
-key is refused, and a refusal names the key, never its value.
+The console reads its configuration through `ferrohealth-config`, the
+FerroHEALTH configuration loader. The file is a TOML file named by
+`--config` or `FERROPIX_CONSOLE_CONFIG`. Every key can be set from the
+environment as `FERROPIX_CONSOLE__<SECTION>__<KEY>`, so
+`FERROPIX_CONSOLE__PIX__BASE_URL` sets `[pix] base_url`, and with
+`--set key=value` on the command line, which wins over both. A secret can be
+read from a file with the `_file` form of its key, the shape a container
+runtime mounts a secret in; the file's trailing line ending is removed. An
+unknown key, in the file, a variable or a `--set` argument, is refused, and a
+refusal names the key, never its value. A server variable such as
+`FERROPIX__SERVER__LISTEN` is left alone.
 
 ```toml
 [server]

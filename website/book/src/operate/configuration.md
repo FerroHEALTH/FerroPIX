@@ -3,8 +3,9 @@
 
 # Configuration
 
-The FerroPIX server, the `ferropix` binary, reads one TOML file and the
-environment. This page lists every key. The second half of the page covers
+The FerroPIX server, the `ferropix` binary, reads one TOML file, the
+environment and its `--set` arguments, through `ferrohealth-config`, the
+FerroHEALTH configuration loader. This page lists every key. The second half of the page covers
 the crates, which you configure in your own code.
 
 ## The server
@@ -30,12 +31,13 @@ keeps working when the service lands.
 | Command | What it does |
 |---|---|
 | `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
-| `ferropix config check` | Reads and resolves the configuration, secret files included, and exits 0 when the server would start on it. Otherwise it prints the first error on one line and exits 78. |
+| `ferropix config check` | Reads and resolves the configuration, secret files included, prints every key as `key = value  # source` (the file, the default, the environment variable or the `--set` argument that set it, with every secret shown as `***`), and exits 0 when the server would start on it. Otherwise it prints the refusals on one line, each naming its key, and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down exits 1. Use it as the container health check. |
 | `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 
-Every command takes `--config <PATH>`. A refused configuration exits 78
+Every command takes `--config <PATH>` and any number of `--set key=value`
+arguments. A refused configuration exits 78
 (`EX_CONFIG`), so an orchestrator can tell a bad configuration from a server
 that failed to serve.
 
@@ -46,10 +48,19 @@ that failed to serve.
   the keys that have none.
 - `FERROPIX__<SECTION>__<KEY>` overrides any key, with two underscores
   between levels: `FERROPIX__SERVER__LISTEN=0.0.0.0:8080` sets
-  `server.listen`, and `FERROPIX__PMIR__FEED__MAX_ATTEMPTS=5` sets
-  `pmir.feed.max_attempts`. The value is read as the type the key wants.
-- Every table refuses a key it does not know, so a misspelt key stops the
-  start and the error names it.
+  `server.listen`, `FERROPIX__PMIR__FEED__MAX_ATTEMPTS=5` sets
+  `pmir.feed.max_attempts`, and `FERROPIX__PROFILE=development` sets the
+  top-level `profile`. The value is read as the type the key wants; a list
+  takes TOML array syntax or comma-separated values.
+- `RUST_LOG` sets `telemetry.filter`, over the file and over
+  `FERROPIX__TELEMETRY__FILTER`.
+- `--set key=value` sets the dotted key last, over the file and the
+  environment: `--set server.listen=0.0.0.0:8080`.
+- Every table refuses a key it does not know, so a misspelt key, in the file,
+  in a `FERROPIX__` variable or in a `--set` argument, stops the start and the
+  error names it with the closest known key. Another variable that starts
+  with `FERROPIX_` and is no override, such as `FERROPIX_CONFIG`, is left
+  alone.
 - An error names the key and never the value, so no secret reaches your
   terminal or your log.
 
@@ -68,8 +79,9 @@ run on your own machine, and only it admits:
 ### Secrets
 
 A secret is set under its key or read from the file its `<key>_file`
-sibling names, never both. The file's text is trimmed, and a file that holds
-only whitespace is refused. Under production, only the `_file` form is
+sibling names, never both. The file's trailing line ending is removed, and
+any other whitespace is part of the secret; a file with nothing left is
+refused. Under production, only the `_file` form is
 accepted. A secret renders as `***` wherever the server prints its
 configuration, and a URL that may carry a password renders with its user
 information and its query replaced by `***`.

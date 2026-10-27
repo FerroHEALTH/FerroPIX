@@ -122,9 +122,9 @@ The build order is the milestones:
 - `app/ferropix-server`: the server (#58), its own binary `ferropix`,
   `publish = false`: the subcommands `serve`, `config check`, `healthcheck`
   and `db migrate`, the configuration tree of `docs/architecture.md` §3
-  (`src/config/`, one module per section, the redacting `Secret` and
-  `SecretUrl`, `FERROPIX__` overrides, the production and development
-  profiles), the `tracing` console and the family's `tower-http` stack with
+  (`src/config/`, one module per section read by `ferrohealth-config`, with
+  the `ferrohealth-secret` types, `FERROPIX__` overrides, `--set` and the
+  production and development profiles), the `tracing` console and the family's `tower-http` stack with
   the bounded drain (`src/http/`), the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it

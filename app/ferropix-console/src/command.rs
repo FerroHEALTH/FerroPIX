@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 use std::process::ExitCode;
 
 use clap::Parser;
+use ferrohealth_config::loader::Loaded;
 
 use crate::cli::{Cli, Command, ConfigCommand};
 use crate::config::Config;
@@ -44,8 +45,14 @@ where
             return u8::try_from(code).map_or(ExitCode::FAILURE, ExitCode::from);
         }
     };
-    let settings = match Config::load(cli.config.as_deref()).and_then(|config| config.resolve()) {
-        Ok(settings) => settings,
+    let loaded = Config::load(&cli.config).and_then(|loaded| {
+        loaded
+            .settings()
+            .resolve()
+            .map(|settings| (loaded, settings))
+    });
+    let (loaded, settings) = match loaded {
+        Ok(loaded) => loaded,
         Err(error) if cli.command == Command::Healthcheck => {
             eprintln!("ferropix-console: not up: {}", chain(&error));
             return ExitCode::FAILURE;
@@ -59,7 +66,7 @@ where
         Command::Healthcheck => runtime_then(|| healthcheck(&settings)),
         Command::Config {
             command: ConfigCommand::Check,
-        } => config_check(settings),
+        } => config_check(&loaded, settings),
         Command::Serve => runtime_then(|| serve(settings)),
     }
 }
@@ -86,8 +93,9 @@ where
     }
 }
 
-/// Runs `config check`: the state the server would start with is built, and
-/// nothing is bound.
+/// Runs `config check`: every key printed with where it came from and every
+/// secret masked, the state the server would start with built, and nothing
+/// bound.
 #[expect(
     clippy::print_stdout,
     reason = "the job's one answer goes to standard output"
@@ -96,7 +104,17 @@ where
     clippy::print_stderr,
     reason = "the job's refusal goes to standard error"
 )]
-fn config_check(settings: Settings) -> ExitCode {
+fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
+    match ferrohealth_config::report::check_report(loaded) {
+        Ok(report) => println!("{report}"),
+        Err(error) => {
+            eprintln!(
+                "ferropix-console: cannot show the configuration: {}",
+                chain(&error)
+            );
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    }
     match ConsoleState::new(settings) {
         Ok(_state) => {
             println!("ferropix-console: the configuration is valid");

@@ -41,7 +41,7 @@ mod xcpd_examples;
 mod xcpd_mtls;
 
 use base64::Engine as _;
-use ferropix_server::config::secret::SecretUrl;
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferropix_server::config::section::db::DbSettings;
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
 use ferropix_server::store::Store;

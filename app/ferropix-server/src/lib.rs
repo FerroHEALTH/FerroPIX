@@ -37,6 +37,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use clap::Parser;
+use ferrohealth_config::loader::Loaded;
 use tokio::net::TcpListener;
 
 use crate::cli::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
@@ -84,8 +85,13 @@ where
         );
         return ExitCode::from(EXIT_PENDING_JOB);
     }
-    let settings = match Config::load(cli.config.as_deref()).and_then(|config| config.resolve()) {
-        Ok(settings) => settings,
+    let loaded = Config::load(&cli.config).and_then(|loaded| {
+        let mut settings = loaded.settings().resolve()?;
+        settings.provenance = loaded.provenance().clone();
+        Ok((loaded, settings))
+    });
+    let (loaded, settings) = match loaded {
+        Ok(loaded) => loaded,
         Err(error) if cli.command == Command::Healthcheck => {
             eprintln!("ferropix: not up: {}", chain(&error));
             return ExitCode::FAILURE;
@@ -98,7 +104,7 @@ where
     match cli.command {
         Command::Config {
             command: ConfigCommand::Check,
-        } => config_check(&settings),
+        } => config_check(&loaded, &settings),
         Command::Healthcheck => runtime_then(|| healthcheck(settings)),
         Command::Serve => serve(settings),
         Command::Db { command } => db(settings, &command),
@@ -177,12 +183,24 @@ pub fn estimate_tables(
     text
 }
 
-/// Runs `config check`: the settings resolved, and nothing bound.
+/// Runs `config check`: the settings resolved, every key printed with where
+/// it came from and every secret masked, and nothing bound.
 #[expect(
     clippy::print_stdout,
-    reason = "the job's one answer goes to standard output"
+    clippy::print_stderr,
+    reason = "the job's report goes to standard output and a refusal to stderr"
 )]
-fn config_check(settings: &Settings) -> ExitCode {
+fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> ExitCode {
+    match ferrohealth_config::report::check_report(loaded) {
+        Ok(report) => println!("{report}"),
+        Err(error) => {
+            eprintln!(
+                "ferropix: the configuration cannot be shown: {}",
+                chain(&error)
+            );
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    }
     println!(
         "ferropix: the configuration is accepted ({} profile, {} seeded domain(s))",
         match settings.profile {
@@ -321,13 +339,13 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
 
 /// Reads the old sealing key of `db reseal` from `path`.
 fn read_old_key(path: &std::path::Path) -> Result<store::seal::SealingKey, config::error::Error> {
-    let text = config::secret::read_file("old_key_file", path)?;
-    store::seal::SealingKey::from_base64(text.expose()).map_err(|store::seal::KeyFormatError| {
-        config::error::Error::Value {
+    let text = ferrohealth_secret::file::read_secret_file("old_key", path)?;
+    store::seal::SealingKey::from_base64(secrecy::ExposeSecret::expose_secret(&text)).map_err(
+        |store::seal::KeyFormatError| config::error::Error::Value {
             key: String::from("old_key_file"),
             rule: "the file holds the base64 of exactly 32 bytes",
-        }
-    })
+        },
+    )
 }
 
 /// Connects to the store and rewrites every identifier column from `old` to
@@ -658,7 +676,7 @@ fn backend(store: &store::Store, settings: &Settings) -> fhir::Backend {
         matching: settings.matching.clone(),
         deprecated: settings.pdqm.deprecated,
         configured: operator::Configured {
-            origins: settings.origins.clone(),
+            provenance: settings.provenance.clone(),
             senders: settings
                 .hl7v2
                 .as_ref()

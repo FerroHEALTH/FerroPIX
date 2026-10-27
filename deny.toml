@@ -59,6 +59,12 @@ exceptions = [
   # FerroSYS's secret wrapper, which ferrohealth-smart, ihe-atna and the
   # operator console take.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-secret" },
+  # FerroSYS's configuration loader and its server pieces, which bring the
+  # family's telemetry and health crates with them.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-config" },
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-server" },
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-telemetry" },
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-health" },
   # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },
   # The FerroUI components the operator console draws with, and the console

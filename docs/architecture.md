@@ -173,7 +173,8 @@ message and position without quoting the line.
 
 | Section | Holds |
 |---|---|
-| `[server]` | `listen`, `base_path`, `public_base_url` (the `[base]` the `CapabilityStatement` and every `targetId` name), `body_limit_bytes`, `request_timeout_ms`, `drain_timeout_ms` (the drain window on `SIGTERM`) |
+| `public_base_url` | the top-level key: the `[base]` the `CapabilityStatement` and every `targetId` name |
+| `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
 | `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
 | `[auth]` | the `ferrohealth-smart` resource-server settings: `[[auth.issuer]]` entries with their RFC 8414 metadata, each listing the `clients` it may vouch for as a Source, the audience, `[[auth.basic.users]]` under the development profile only, and the two product scopes, `steward_scope` and `admin_scope` |
@@ -530,7 +531,7 @@ an `OperationOutcome` with the issue the profile prescribes.
 
 **The Patient resource FerroPIX serves is the person.** `Patient/{id}` is
 the person's `uuid`; its `identifier[]` is the person's id in the Master
-Patient Identification Domain (`[server] public_base_url`, PMIR 1.6.0
+Patient Identification Domain (`public_base_url`, PMIR 1.6.0
 §2:3.93.4.1.3), then every identifier a PIX query answers for the person
 (section 6.1), each with its domain's `system`; its demographics are the
 current version of one open link's record, an `authoritative` domain's
@@ -680,7 +681,7 @@ sends it: the guard admits the client the master domain's
 `source_client_id` names and answers any other `403` with a `forbidden`
 issue, every client when no master domain is seeded. The Registry creates,
 updates and deletes persons in the Master Patient Identification Domain,
-which is `[server] public_base_url` (§2:3.93.4.1.3), and merges when an
+which is `public_base_url` (§2:3.93.4.1.3), and merges when an
 entry carries `replaced-by` (§2:3.93.4.1.2.4): the deprecated person gets
 `active = false` and the `replaced-by` link, as section 4.3's merge path
 does. Each change applies in history order in its own transaction (D37):

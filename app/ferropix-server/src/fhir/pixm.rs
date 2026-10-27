@@ -73,7 +73,7 @@ pub struct Manager {
     smart: Arc<Smart>,
     /// The base path the routes are mounted under.
     base: String,
-    /// `[server] public_base_url` without its trailing slash.
+    /// `public_base_url` without its trailing slash.
     public: String,
     /// The FHIR base, `{public_base_url}/fhir`.
     endpoint: url::Url,

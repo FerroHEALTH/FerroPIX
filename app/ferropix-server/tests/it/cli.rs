@@ -258,5 +258,6 @@ fn healthcheck_exits_one_when_nothing_listens() {
         .output()
         .expect("the binary runs");
     assert_eq!(Some(1), output.status.code());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("not up"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("unhealthy: cannot connect"), "{stdout}");
 }

@@ -17,7 +17,6 @@ pub mod cli;
 pub mod config;
 pub mod feed;
 pub mod fhir;
-pub mod healthcheck;
 pub mod hl7v2;
 pub mod http;
 pub mod matching;
@@ -38,13 +37,16 @@ use clap::Parser;
 use ferrohealth_config::loader::Loaded;
 use ferrohealth_health::lifecycle::Lifecycle;
 use ferrohealth_health::registry::Registry;
+use ferrohealth_server::cli::{Common, ConfigCommand};
 use ferrohealth_server::health::Health;
+use ferrohealth_server::healthcheck::Outcome;
+use ferrohealth_server::section::ServerSection;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
 use tokio::net::TcpListener;
 
-use crate::cli::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
+use crate::cli::{Cli, Command, DbCommand, MatchingCommand};
 use crate::config::Config;
 use crate::config::settings::Settings;
 
@@ -100,7 +102,7 @@ where
     });
     let (loaded, settings) = match loaded {
         Ok(loaded) => loaded,
-        Err(error) if cli.command == Command::Healthcheck => {
+        Err(error) if cli.command == Command::Common(Common::Healthcheck) => {
             eprintln!("ferropix: not up: {}", chain(&error));
             return ExitCode::FAILURE;
         }
@@ -110,11 +112,11 @@ where
         }
     };
     match cli.command {
-        Command::Config {
+        Command::Common(Common::Config {
             command: ConfigCommand::Check,
-        } => config_check(&loaded, &settings),
-        Command::Healthcheck => runtime_then(|| healthcheck(settings)),
-        Command::Serve => serve(settings),
+        }) => config_check(&loaded, &settings),
+        Command::Common(Common::Healthcheck) => runtime_then(|| healthcheck(settings)),
+        Command::Common(Common::Serve) => serve(settings),
         Command::Db { command } => db(settings, &command),
         Command::Matching {
             command: MatchingCommand::Estimate,
@@ -253,14 +255,33 @@ fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> ExitCode {
     reason = "the job's one answer goes to standard output"
 )]
 async fn healthcheck(settings: Settings) -> ExitCode {
-    let target = healthcheck::target(settings.server.listen);
-    let outcome =
-        healthcheck::check(target, &settings.server.base_path, healthcheck::TIMEOUT).await;
+    let outcome = probe(&settings.server).await;
     println!("ferropix: {outcome}");
-    if outcome.is_up() {
+    if outcome.exit_code() == 0 {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// How long `healthcheck` waits for the readiness answer, shorter than the
+/// five seconds a container `HEALTHCHECK` commonly allows.
+pub const HEALTHCHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Asks the server `section` configures for `{base}/health/readiness`, over
+/// the TLS `[server.tls]` configures, on the loopback when it listens on
+/// every interface: the container's `HEALTHCHECK`.
+pub async fn probe(section: &ServerSection) -> Outcome {
+    use ferrohealth_server::healthcheck::{check, check_tls, target};
+
+    let address = target(section.listen);
+    let base = section.base_path.as_str();
+    match &section.tls {
+        None => check(address, base, HEALTHCHECK_TIMEOUT).await,
+        Some(tls) => match ferrohealth_server::tls::HealthcheckTls::read(tls) {
+            Ok(pinned) => check_tls(address, base, HEALTHCHECK_TIMEOUT, &pinned).await,
+            Err(error) => Outcome::Failed(format!("the TLS files do not read: {error}")),
+        },
     }
 }
 
@@ -403,9 +424,12 @@ pub enum ServeError {
     /// The client that delivers ITI-93 to subscribers could not be built.
     #[error("the ITI-93 sender's HTTP client could not be built")]
     Pmir(#[source] reqwest::Error),
-    /// The listener could not be bound, or serving failed.
-    #[error("the listener could not serve")]
+    /// The listener could not be bound.
+    #[error("the listener could not be bound")]
     Io(#[source] std::io::Error),
+    /// The listener's TLS could not be set up, or serving failed.
+    #[error("the listener could not serve")]
+    Serve(#[source] ferrohealth_server::serve::ServeError),
 }
 
 /// Starts the store, reads the authorization servers, binds the listener
@@ -423,9 +447,9 @@ pub enum ServeError {
 /// [`ServeError::Auth`] when an authorization server cannot be read,
 /// [`ServeError::Audit`] when the audit spool or its repository cannot
 /// start, [`ServeError::Xcpd`] when the XCPD gateway's client cannot be
-/// built, [`ServeError::Pmir`] when the ITI-93 sender's cannot, and
-/// [`ServeError::Io`] for the I/O error from binding, accepting or
-/// serving.
+/// built, [`ServeError::Pmir`] when the ITI-93 sender's cannot,
+/// [`ServeError::Io`] when the listener cannot be bound, and
+/// [`ServeError::Serve`] when its TLS cannot be set up or serving fails.
 pub async fn serve_settings(
     settings: Settings,
     telemetry: Arc<Telemetry>,
@@ -441,6 +465,7 @@ pub async fn serve_settings(
     let Settings {
         profile,
         server,
+        public_base_url,
         auth,
         pixm,
         pdqm,
@@ -462,19 +487,20 @@ pub async fn serve_settings(
             .map_err(ServeError::Auth)?,
     );
     let mounts = fhir::Mounts::of(&pixm, &pdqm, &pmir, &operator);
-    let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
+    let audit = audit::Audit::open(&audit, &public_base_url).map_err(ServeError::Audit)?;
     let draining = audit.drain();
     let listening = hl7v2::Listening::default();
     let health = registry(&store, &audit, hl7v2.as_ref().map(|_| &listening));
     let lifecycle = Lifecycle::default();
-    let guarded = fhir::routes(
-        &server, mounts, &smart, &health, &lifecycle, &audit, &backend,
-    );
-    let (guarded, mut channels) =
-        with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
+    let at = fhir::Address {
+        base: server.base_path.as_str(),
+        public_base_url: &public_base_url,
+    };
+    let guarded = fhir::routes(at, mounts, &smart, &health, &lifecycle, &audit, &backend);
+    let (guarded, mut channels) = with_xcpd(guarded, xcpd, &store, &matching, at, &audit, &wake)?;
     channels.pmir = pmir_channel(&pmir)?;
     channels.hl7v2 = mllp_channel(hl7v2.as_ref(), &audit);
-    let window = Arc::new(usage_report::window(&server.base_path));
+    let window = Arc::new(usage_report::window(server.base_path.as_str()));
     let listener = bind(&server).await?;
     let reporting = usage_report::start(
         &report_settings,
@@ -498,12 +524,12 @@ pub async fn serve_settings(
                     &store,
                     &matching,
                     pdqm.deprecated,
-                    &server.public_base_url,
+                    &public_base_url,
                     &audit,
                     settings,
                 )
                 .with_usage(Arc::clone(&window)),
-                server.drain_timeout,
+                server.shutdown_timeout(),
                 listening,
                 stopped_by(stopped.clone()),
             )
@@ -514,14 +540,37 @@ pub async fn serve_settings(
     let log = request_log(&telemetry_section, &telemetry, window);
     let health = Health::new(health, lifecycle.clone());
     let app = http::router(&server, health, Some(guarded), log, Some(telemetry));
-    lifecycle.booted();
-    let served = http::serve_until(listener, app, server.drain_timeout, stopped_by(stopped))
-        .await
-        .map_err(ServeError::Io);
+    let served = serve_http(listener, app, &server, lifecycle, stopped).await;
     signal.abort();
-    wound_down(mllp, sender, server.drain_timeout, [draining, reporting]).await;
+    wound_down(
+        mllp,
+        sender,
+        server.shutdown_timeout(),
+        [draining, reporting],
+    )
+    .await;
     store.close().await;
     served
+}
+
+/// Serves `app` on `listener` as `server` configures it, over TLS when
+/// `[server.tls]` is set, until `stopped` is raised, then drains within
+/// `server.drain_delay_ms` and `server.shutdown_timeout_ms`.
+///
+/// # Errors
+/// Returns [`ServeError::Serve`] when the TLS files cannot be read or the
+/// listener fails.
+async fn serve_http(
+    listener: TcpListener,
+    app: axum::Router,
+    server: &ServerSection,
+    lifecycle: Lifecycle,
+    stopped: tokio::sync::watch::Receiver<bool>,
+) -> Result<(), ServeError> {
+    ferrohealth_server::serve::run(listener, app, server, lifecycle, stopped_by(stopped))
+        .await
+        .map(|_drained| ())
+        .map_err(ServeError::Serve)
 }
 
 /// Returns the request log of the HTTP listener: the query values `section`
@@ -561,7 +610,7 @@ fn with_xcpd(
     settings: Option<config::section::xcpd::XcpdSettings>,
     store: &store::Store,
     matching: &config::section::matching::Matching,
-    server: &config::section::server::ServerSettings,
+    at: fhir::Address<'_>,
     audit: &audit::Audit,
     wake: &outbox::Wake,
 ) -> Result<(axum::Router, outbox::Channels), ServeError> {
@@ -572,7 +621,7 @@ fn with_xcpd(
         store,
         matching,
         settings,
-        &server.public_base_url,
+        at.public_base_url,
         audit,
         wake.clone(),
     )
@@ -646,7 +695,7 @@ fn with_feed(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> s
     if !settings.pmir.enabled {
         return store;
     }
-    let public = &settings.server.public_base_url;
+    let public = &settings.public_base_url;
     let master = public.as_str().trim_end_matches('/').to_owned();
     let registry = url::Url::parse(&format!("{master}/fhir")).unwrap_or_else(|_| public.clone());
     store.with_feed(store::subscription::FeedSettings {
@@ -741,7 +790,7 @@ fn registry(
 ///
 /// # Errors
 /// Returns [`ServeError::Io`] when the listener cannot be bound.
-async fn bind(server: &config::section::server::ServerSettings) -> Result<TcpListener, ServeError> {
+async fn bind(server: &ServerSection) -> Result<TcpListener, ServeError> {
     let listener = TcpListener::bind(server.listen)
         .await
         .map_err(ServeError::Io)?;
@@ -781,7 +830,7 @@ fn stop_signal(
 ) {
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let signal = tokio::spawn(async move {
-        http::shutdown_signal().await;
+        ferrohealth_server::serve::shutdown_signal().await;
         lifecycle.drain();
         let _sent = stop.send(true);
     });

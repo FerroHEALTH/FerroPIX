@@ -16,7 +16,7 @@ use crate::config::section::matching::Matching;
 use crate::config::section::outbox::Retention;
 use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
 use crate::config::section::pseudonym::{self, PseudonymSeed};
-use crate::config::section::server::ServerSettings;
+use crate::config::section::public;
 use crate::config::section::xcpd::XcpdSettings;
 use crate::config::section::{is_loopback_address, operator::Operator};
 use crate::config::{Config, Profile};
@@ -27,7 +27,9 @@ pub struct Settings {
     /// The deployment profile.
     pub profile: Profile,
     /// The HTTP surface.
-    pub server: ServerSettings,
+    pub server: ferrohealth_server::section::ServerSection,
+    /// The URL a client reaches `{base}` at, without a trailing `/`.
+    pub public_base_url: url::Url,
     /// The console, the request log and the OTLP export.
     pub telemetry: ferrohealth_telemetry::section::TelemetrySection,
     /// The PostgreSQL store.
@@ -78,7 +80,16 @@ impl Config {
         if self.dev.is_some() && self.profile == Profile::Production {
             return Err(Error::DevUnderProduction);
         }
-        let server = self.server.resolve(self.profile)?;
+        let server = self.server.clone();
+        // NOTE: no specification governs this: our own design; no per-caller limit
+        // is mounted, so a key that would be read and never applied is refused.
+        if server.caller_rate.is_some() {
+            return Err(Error::Value {
+                key: String::from("server.caller_rate"),
+                rule: "FerroPIX mounts no per-caller rate limit",
+            });
+        }
+        let public_base_url = public::resolve(&self.public_base_url, self.profile)?;
         let db = self.db.resolve(self.profile)?;
         let auth = self.auth.resolve(self.profile)?;
         // NOTE: no specification governs this: our own design; a Basic user sends a
@@ -114,6 +125,7 @@ impl Config {
         Ok(Settings {
             profile: self.profile,
             server,
+            public_base_url,
             telemetry: self.telemetry.clone(),
             db,
             auth,

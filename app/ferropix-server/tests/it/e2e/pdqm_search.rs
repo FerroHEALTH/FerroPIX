@@ -762,7 +762,7 @@ async fn the_first_page_of_a_search_over_100000_records_answers_within_the_reque
     bulk(&served.started.store, 100_000, "load", None).await;
     let token = served.consumer();
     let timeout = Duration::from_millis(
-        ferropix_server::config::section::server::Server::default().request_timeout_ms,
+        ferrohealth_server::section::ServerSection::default().request_timeout_ms,
     );
     for query in [
         "family=Proefsma&birthdate=1961-04-12",

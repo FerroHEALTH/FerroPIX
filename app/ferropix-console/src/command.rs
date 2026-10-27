@@ -10,14 +10,18 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use ferrohealth_config::loader::Loaded;
-use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_server::cli::{Common, ConfigCommand};
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, Service, Telemetry};
 
-use crate::cli::{Cli, Command, ConfigCommand};
+use crate::cli::Cli;
 use crate::config::Config;
 use crate::config::settings::Settings;
 use crate::server::ConsoleState;
+
+/// How long `healthcheck` waits for the readiness answer, shorter than the
+/// five seconds a container `HEALTHCHECK` commonly allows.
+pub const HEALTHCHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// The exit code of a configuration the console will not start on, from the
 /// BSD `sysexits.h` set (`EX_CONFIG`).
@@ -56,7 +60,7 @@ where
     });
     let (loaded, settings) = match loaded {
         Ok(loaded) => loaded,
-        Err(error) if cli.command == Command::Healthcheck => {
+        Err(error) if cli.command == Common::Healthcheck => {
             eprintln!("ferropix-console: not up: {}", chain(&error));
             return ExitCode::FAILURE;
         }
@@ -66,11 +70,11 @@ where
         }
     };
     match cli.command {
-        Command::Healthcheck => runtime_then(|| healthcheck(&settings)),
-        Command::Config {
+        Common::Healthcheck => runtime_then(|| healthcheck(&settings)),
+        Common::Config {
             command: ConfigCommand::Check,
         } => config_check(&loaded, settings),
-        Command::Serve => {
+        Common::Serve => {
             let telemetry = loaded.settings().telemetry.clone();
             runtime_then(|| serve(settings, telemetry))
         }
@@ -143,9 +147,9 @@ fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
     reason = "the job's one-line refusal goes to standard error"
 )]
 async fn healthcheck(settings: &Settings) -> ExitCode {
-    let target = crate::healthcheck::target(settings.listen);
-    let outcome = crate::healthcheck::check(target, crate::healthcheck::TIMEOUT).await;
-    if outcome.is_up() {
+    let target = ferrohealth_server::healthcheck::target(settings.listen);
+    let outcome = ferrohealth_server::healthcheck::check(target, "", HEALTHCHECK_TIMEOUT).await;
+    if outcome.exit_code() == 0 {
         println!("ferropix-console: {outcome}");
         ExitCode::SUCCESS
     } else {
@@ -202,47 +206,14 @@ async fn listen_and_serve(settings: Settings) -> ExitCode {
     };
     tracing::info!(%listen, "the operator console is listening");
     let lifecycle = state.lifecycle().clone();
-    let stop = shutdown_signal(lifecycle);
-    match crate::server::serve(listener, crate::server::router(state), stop).await {
-        Ok(()) => ExitCode::SUCCESS,
+    let stop = ferrohealth_server::serve::shutdown_signal();
+    match crate::server::serve(listener, crate::server::router(state), lifecycle, stop).await {
+        Ok(_drained) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "the listener failed");
             ExitCode::FAILURE
         }
     }
-}
-
-/// Completes when the process receives `SIGTERM` or `SIGINT`, with
-/// `lifecycle` turned to draining so readiness answers `503` from then on.
-///
-/// A failure to install a handler is logged and that arm never completes, so
-/// the console keeps serving and the runtime's own kill stays the backstop.
-async fn shutdown_signal(lifecycle: Lifecycle) {
-    let interrupt = async {
-        if let Err(error) = tokio::signal::ctrl_c().await {
-            tracing::error!(%error, "cannot listen for SIGINT");
-            std::future::pending::<()>().await;
-        }
-    };
-    #[cfg(unix)]
-    let terminate = async {
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(mut signal) => {
-                signal.recv().await;
-            }
-            Err(error) => {
-                tracing::error!(%error, "cannot listen for SIGTERM");
-                std::future::pending::<()>().await;
-            }
-        }
-    };
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-    tokio::select! {
-        () = interrupt => tracing::info!("SIGINT received, stopping"),
-        () = terminate => tracing::info!("SIGTERM received, stopping"),
-    }
-    lifecycle.drain();
 }
 
 /// Renders `error` with every cause in its chain, colon-separated.

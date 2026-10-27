@@ -30,9 +30,9 @@ keeps working when the service lands.
 
 | Command | What it does |
 |---|---|
-| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
+| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT`. On the signal readiness answers `503` at once, the listener keeps accepting for `server.drain_delay_ms`, then closes, and the requests in flight get `server.shutdown_timeout_ms` to finish. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, prints every key as `key = value  # source` (the file, the default, the environment variable or the `--set` argument that set it, with every secret shown as `***`), and exits 0 when the server would start on it. Otherwise it prints the refusals on one line, each naming its key, and exits 78. |
-| `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down exits 1. Use it as the container health check. |
+| `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, over TLS when `[server.tls]` is set, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down, or from a server that is draining, exits 1. Use it as the container health check. |
 | `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 
@@ -101,17 +101,48 @@ quickstart mounts it beside PostgreSQL
 | Key | Default | What it sets |
 |---|---|---|
 | `profile` | `"production"` | `"production"` or `"development"`; see [Profiles](#profiles). |
+| `public_base_url` | none, required | The URL a client reaches `{base}` at: the base of every resource location the FHIR face names, and the identifier system of FerroPIX's own master domain. `https`; plain `http` on a loopback host, or under development. No user information, query or fragment. |
 
 ### `[server]`
 
+`[server]` is the section every FerroHEALTH server shares, read by
+`ferrohealth-server`.
+
 | Key | Default | What it sets |
 |---|---|---|
-| `server.listen` | `"127.0.0.1:8080"` | The socket address the HTTP listener binds. |
+| `server.listen` | `"127.0.0.1:8080"` | The socket address the HTTP listener binds; a host name is refused. |
 | `server.base_path` | `""` | The path every route is mounted under: empty for the root, or `/` and path segments with no trailing `/`. |
-| `server.public_base_url` | none, required | The URL a client reaches `{base}` at: the base of every resource location the FHIR face names, and the identifier system of FerroPIX's own master domain. `https`; plain `http` on a loopback host, or under development. No user information, query or fragment. |
 | `server.body_limit_bytes` | `1048576` | The largest request body read; a larger one is answered `413`. |
 | `server.request_timeout_ms` | `30000` | How long one request may take; a slower one is answered `408`. |
-| `server.drain_timeout_ms` | `10000` | How long the requests in flight may take to finish after `SIGTERM`; a connection still open after it is dropped. |
+| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head; a client still sending one then is disconnected. |
+| `server.drain_delay_ms` | `0` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
+| `server.shutdown_timeout_ms` | `10000` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
+| `server.max_concurrent_requests` | unset | How many requests the server serves at once; past it a request is answered `503` with `Retry-After`. The health routes are never refused. Unset, there is no bound. |
+| `server.retry_after_s` | `1` | The seconds a request refused for load is told to wait. |
+| `server.trusted_proxies` | `[]` | The reverse proxies whose forwarded client address is believed, each an address or a CIDR block such as `10.0.0.0/8`; empty, every request is named by its peer. |
+| `server.forwarded_header` | `"forwarded"` | The header a trusted proxy names the client in: `"forwarded"` (RFC 7239) or `"x-forwarded-for"`. |
+| `server.compression` | `true` | Whether a response is compressed with gzip or Brotli when the client accepts one. |
+| `server.compression_min_bytes` | `1024` | The smallest response body that is compressed. |
+
+`[server.caller_rate]` is refused: FerroPIX mounts no per-caller rate limit.
+
+`[server.tls]` makes the listener speak TLS; without it the listener speaks
+plain HTTP behind a proxy that terminates TLS. `SIGHUP` reads its files
+again.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `server.tls.certificate_file` | none, required | The certificate chain in PEM, the leaf first. |
+| `server.tls.key_file` | none, required | The private key of the leaf, in PEM. |
+| `server.tls.client_auth` | `"none"` | Whether the listener asks a client certificate: `"none"`, `"optional"` or `"required"`. |
+| `server.tls.client_ca_file` | unset | The CA bundle a client certificate must chain to; required unless `client_auth` is `"none"`. |
+| `server.tls.reload_interval_s` | unset | How often the files are read again; unset, only `SIGHUP` reads them. |
+| `server.tls.healthcheck_identity_file` | unset | The client certificate chain and key, in one PEM, that `ferropix healthcheck` presents to a listener that asks one. |
+| `server.tls.min_version` | `"1.3"` | The oldest TLS version the listener speaks, `"1.3"` or `"1.2"`. |
+
+Every refusal the stack writes itself, a `408`, a `413` and a `503` for
+load, is a FHIR `OperationOutcome` (`timeout`, `too-long`, `throttled`), as
+is the `500` of a handler that failed, which names the server's request id.
 
 The server routes, under `server.base_path`:
 
@@ -350,8 +381,8 @@ and facility listed twice, two senders of one domain, and one namespace id
 for two domains are refused at load. A consumer without its name, address,
 application or facility, two consumers of one name, and an address without
 a port are refused too. The consumers are notified while `hl7v2.enabled`
-is `true`. The drain on `SIGTERM` is `server.drain_timeout_ms`, the HTTP
-server's.
+is `true`. The listener finishes the messages in flight within
+`server.shutdown_timeout_ms`, the HTTP server's bound.
 
 ### `[xcpd]`
 

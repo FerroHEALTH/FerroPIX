@@ -150,7 +150,7 @@ ferropix-console serve --config console.toml
 |---|---|
 | `ferropix-console serve` | Serves the console until the process is asked to stop. |
 | `ferropix-console config check` | Reads and resolves the configuration, secrets included, prints every key as `key = value  # source` with every secret shown as `***`, and exits. |
-| `ferropix-console healthcheck` | Asks the console on this host whether it answers, for a container runtime. |
+| `ferropix-console healthcheck` | Asks `GET /health/readiness` of the console on this host, for a container runtime, and exits 0 only on `200`; a console that is draining exits 1. |
 
 ## The image
 
@@ -165,7 +165,7 @@ compiled inside it.
 | User | `65532:65532` |
 | Port | `3000/tcp` (`FERROPIX_CONSOLE__SERVER__LISTEN=0.0.0.0:3000`) |
 | Site bundle | `/site` (`FERROPIX_CONSOLE__SERVER__SITE_ROOT`), root-owned |
-| Health | `HEALTHCHECK` runs `ferropix-console healthcheck`, which asks `GET /health` over loopback |
+| Health | `HEALTHCHECK` runs `ferropix-console healthcheck`, which asks `GET /health/readiness` over loopback |
 
 The console keeps its sessions in memory and writes no file, so run it with
 a read-only root filesystem. Its tags follow the server's: `<version>`, and

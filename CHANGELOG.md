@@ -16,6 +16,7 @@ and this project adheres to
 
 - Both binaries take `--set key=value`, any number of times, which sets a key over the file and the environment (#295). `RUST_LOG` sets the server's `telemetry.filter`. `config check` prints every key of the running configuration as `key = value  # source`, naming the file, the default, the variable or the `--set` argument that set it, with every secret shown as `***`.
 - The server serves `GET {base}/metrics`, every metric in the Prometheus text format, with no token, and its request log records each request in `http_server_request_duration_seconds` (OpenTelemetry `http.server.request.duration`) by method, route template and status (#296). `[telemetry]` gains `logged_query_parameters`, `environment` and the `[telemetry.otlp]` table (`endpoint`, `traces`, `metrics`, `sample_ratio`, `trust_roots_file`, `client_identity_file`), which pushes the metrics beside the spans. The operator console reads the same `[telemetry]` section, with `RUST_LOG` as the alias of its `telemetry.filter`.
+- The server takes the `[server]` keys every FerroHEALTH server shares (#299): `header_read_timeout_ms`, `max_concurrent_requests` with `retry_after_s` (past the bound a request is answered `503` with `Retry-After`, and the health routes never are), `trusted_proxies` with `forwarded_header`, `compression` with `compression_min_bytes`, and `[server.tls]`, which makes the listener speak TLS with an optional client certificate, reads its files again on `SIGHUP`, and has `healthcheck` probe over it.
 - The server and the operator console serve `GET {base}/health/liveness`, which answers `200` while the process serves and checks nothing (#297).
 
 ### Changed
@@ -43,6 +44,14 @@ and this project adheres to
   - The daily report leaves a counter out while it is zero, where it always sent `responses_4xx`.
   - The boot line ends "no clinical content, identifiers, URLs or request paths", the wording every FerroHEALTH product writes.
   - A refused `usage_report.endpoint` is named with the crate's rule, at load.
+- **Breaking:** the server and the operator console run their HTTP stack, drain, health probe and shared subcommands on `ferrohealth-server` 0.3.4, pinned exactly, and FerroPIX's own middleware, panic catch, drain, signal handling, `healthcheck.rs` (both binaries) and the console's security headers and same-origin check are deleted (#299). `[server]` is the crate's `ServerSection`. What changes for an operator:
+  - `server.public_base_url` is the top-level key `public_base_url` (`FERROPIX__PUBLIC_BASE_URL`); the Helm chart's `config.server.public_base_url` is `config.public_base_url`.
+  - `server.drain_timeout_ms` is removed: set `server.shutdown_timeout_ms` (default `10000`), the time the requests in flight get once the listener closed, and `server.drain_delay_ms` (default `0`), the time the listener keeps accepting with readiness already `503`.
+  - `[server.caller_rate]` is refused at load, since FerroPIX mounts no per-caller limit.
+  - A `408`, a `413` and a load `503` written by the stack, and the `500` of a panicking handler, are FHIR `OperationOutcome`s (`timeout`, `too-long`, `throttled`, `exception`), where they were an empty body or `{"error":"internal","request_id":…}`.
+  - Responses are compressed with gzip or Brotli when the client accepts one and the body is at least 1 KiB; `server.compression = false` turns it off.
+  - `ferropix-console healthcheck` asks `GET /health/readiness`, where it asked `GET /health`, and both probes report `healthy` or `unhealthy: …` on one line. The console's drain on `SIGTERM` is bounded at ten seconds, where it waited for every connection.
+  - The console's responses carry `Cross-Origin-Opener-Policy: same-origin`.
 - The server pins `ferrohealth-smart` 0.8.1 exactly, and `ihe-iti` 0.0.63 and `nl-generic-functions` 0.0.32 require it as a caret, `0.8.1` (#294). A product that takes either crate moves its own `ferrohealth-smart` pin to the 0.8 line with it. Between 0.7.4 and 0.8.1 the crate renders every secret and masked URL through `ferrohealth-secret`.
 - The operator console signs stewards in, refreshes their access tokens and signs them out through `ferrohealth_smart::oidc::RelyingParty`, the family's OpenID Connect relying-party client, and its own copy of the client is deleted (#294). The `[oidc]` keys, the routes, the cookies and the session store are unchanged. When a token answer names no scope, the scopes a session holds now include `offline_access` where `[oidc] offline_access` asked for it.
 

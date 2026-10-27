@@ -22,9 +22,9 @@ replicaCount: 1
 # `dataKey` below; do not set a secret inline here.
 config:
   profile: production
+  public_base_url: "https://pix.example.org"
   server:
     listen: "0.0.0.0:8080"
-    public_base_url: "https://pix.example.org"
   auth:
     audience:
       - "https://pix.example.org/fhir"

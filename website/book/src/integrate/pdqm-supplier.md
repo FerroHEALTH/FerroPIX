@@ -24,7 +24,7 @@ PIXm Manager names in `targetId`:
 
 - `id` is the person's id, and the first identifier is that id in the
   Master Patient Identification Domain, whose system is
-  `[server] public_base_url`.
+  `public_base_url`.
 - The other identifiers are the identifier of every record a Source fed for
   the person, each in its domain's system, opened from its sealed form for
   the answer alone.

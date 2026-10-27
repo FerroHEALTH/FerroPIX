@@ -42,7 +42,6 @@ use crate::auth::{Discovery, Smart};
 use crate::config::section::matching::Matching;
 use crate::config::section::operator::Operator;
 use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
-use crate::config::section::server::ServerSettings;
 use crate::fhir::outcome::{IssueType, body, respond};
 use crate::store::Store;
 
@@ -123,16 +122,25 @@ impl Mounts {
     }
 }
 
-/// Returns the guarded routes `mounts` switches on for `server`.
+/// Where the server is mounted and where a client reaches it.
+#[derive(Debug, Clone, Copy)]
+pub struct Address<'a> {
+    /// The base path every route is mounted under, empty for the root.
+    pub base: &'a str,
+    /// The URL a client reaches `{base}` at.
+    pub public_base_url: &'a url::Url,
+}
+
+/// Returns the guarded routes `mounts` switches on for a server at
+/// `address`.
 ///
-/// The server is mounted under its base path and reached at its public base
-/// URL; its transactions run over `backend`, and its dependency report over
+/// Its transactions run over `backend`, and its dependency report over
 /// `health` in `lifecycle`'s phase.
 ///
 /// The router is meant to be nested under `base` with the health routes;
 /// the guard reads the matched route templates under it.
 pub fn routes(
-    server: &ServerSettings,
+    address: Address<'_>,
     mounts: Mounts,
     smart: &Arc<Smart>,
     health: &Registry,
@@ -140,7 +148,7 @@ pub fn routes(
     audit: &Audit,
     backend: &Backend,
 ) -> Router {
-    let (base, public_base_url) = (server.base_path.as_str(), &server.public_base_url);
+    let (base, public_base_url) = (address.base, address.public_base_url);
     let statement = Arc::new(capability::statement(public_base_url, smart, mounts));
     let configuration = smart.configuration().map(Arc::new);
     let manager = Arc::new(pixm::Manager::new(

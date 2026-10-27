@@ -59,6 +59,8 @@ ferrohealth-smart = { workspace = true, features = ["axum", "fetch"] }
 # arguments the family shares.
 ferrohealth-config.workspace = true
 ferrohealth-secret.workspace = true
+# The HTTP stack, the bounded drain, the probe and the subcommands the
+# family shares, and `[server]` with `[server.tls]`.
 ferrohealth-server.workspace = true
 # The `[telemetry]` section, the console, the request log, the OTLP export,
 # the Prometheus exposition of `/metrics` and the panic hook the family shares.
@@ -94,9 +96,6 @@ strsim.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 toml.workspace = true
-# The family's middleware: the panic catch, the request timeout and the body
-# ceiling.
-tower-http = { workspace = true, features = ["catch-panic", "timeout", "limit"] }
 tracing.workspace = true
 # Names folded to their base letters before the scorer compares them.
 unicode-normalization.workspace = true

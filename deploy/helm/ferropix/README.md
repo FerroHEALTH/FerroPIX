@@ -68,8 +68,7 @@ An identifier domain and the one client that feeds it are values under
 
 ```yaml
 config:
-  server:
-    public_base_url: "https://pix.example.org"
+  public_base_url: "https://pix.example.org"
   auth:
     audience:
       - "https://pix.example.org/fhir"
@@ -88,14 +87,14 @@ that issuer: `system/Patient.rs` to read, and `system/Patient.cud` to feed
 its own domain. A domain's `kind` is `local`, `authoritative` (a national
 number such as the BSN, which links records across domains) or `master`, the
 PMIR Master Patient Identification Domain, whose system is
-`config.server.public_base_url`. The seed adds a domain the store lacks and
+`config.public_base_url`. The seed adds a domain the store lacks and
 leaves one it holds as it is; the operator console changes a domain after
 that.
 
 ## Values
 
 `values.yaml` documents every value. The ones you set for every install are
-`config.server.public_base_url`, `config.auth`, `config.domain`,
+`config.public_base_url`, `config.auth`, `config.domain`,
 `database.existingSecret` and `dataKey.existingSecret`. The installation
 report to FerroPULSE is on by default; set `usageReport.enabled=false` to
 stop it.

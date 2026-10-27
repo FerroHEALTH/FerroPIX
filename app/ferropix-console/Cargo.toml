@@ -67,7 +67,9 @@ ferrohealth-smart = { workspace = true, features = ["oidc"] }
 # arguments the family shares.
 ferrohealth-config.workspace = true
 ferrohealth-secret.workspace = true
-ferrohealth-server.workspace = true
+# The subcommands, the probe and the drain the family shares, and with
+# `console` the browser security headers and the same-origin check.
+ferrohealth-server = { workspace = true, features = ["console"] }
 # The `[telemetry]` section, the console log and the panic hook the family
 # shares.
 ferrohealth-telemetry.workspace = true
@@ -83,7 +85,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 # The site bundle is served brotli- or gzip-compressed, as the request's
 # Accept-Encoding chooses.
-tower-http = { workspace = true, features = ["set-header", "compression-br", "compression-gzip"] }
+tower-http = { workspace = true, features = ["compression-br", "compression-gzip"] }
 tracing.workspace = true
 url.workspace = true
 # The operator API's documents, as the server writes them.

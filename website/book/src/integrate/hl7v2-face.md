@@ -54,7 +54,7 @@ facility = "NORTH"
   identifier in an answer carries all three subcomponents; the namespace id
   is empty for a domain the configuration names none for.
 - **The drain:** on `SIGTERM` the listener stops accepting, finishes the
-  messages it is answering within `[server] drain_timeout_ms`, and closes.
+  messages it is answering within `[server] shutdown_timeout_ms`, and closes.
   Readiness carries the `hl7v2_listener` indicator, down once the listener
   stops accepting.
 

@@ -7,16 +7,16 @@
 //! exported span carries. No specification governs the export: our own
 //! design.
 
-use std::time::Duration;
-
 use axum::Router;
 use axum::body::Body;
 use axum::routing::get;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
+use ferrohealth_server::section::ServerSection;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, Service, Telemetry};
-use ferropix_server::config::section::server::ServerSettings;
-use ferropix_server::http::with_middleware;
+use ferropix_server::http::router;
 use ferropix_testkit::otlp::Collector;
 use ferropix_testkit::synthetic::HOSPITAL_DOMAIN;
 use http::{Request, StatusCode};
@@ -47,14 +47,13 @@ const ALLOWED: [&str; 7] = [
     "request_id",
 ];
 
-fn server() -> ServerSettings {
-    ServerSettings {
+fn server() -> ServerSection {
+    ServerSection {
         listen: "127.0.0.1:0".parse().expect("a socket address"),
-        base_path: String::new(),
-        public_base_url: url::Url::parse("http://localhost:8080").expect("a URL"),
-        body_limit: 1024,
-        request_timeout: Duration::from_secs(5),
-        drain_timeout: Duration::from_millis(300),
+        body_limit_bytes: 1024,
+        request_timeout_ms: 5000,
+        shutdown_timeout_ms: 300,
+        ..ServerSection::default()
     }
 }
 
@@ -86,16 +85,18 @@ fn telemetry(section: &TelemetrySection) -> Telemetry {
 /// An ITI-83 route whose handler logs the identifier and a demographic in
 /// an event, and answers 404 as a Manager does for an unknown identifier.
 fn app() -> Router {
-    with_middleware(
-        Router::new().route(
+    router(
+        &server(),
+        Health::new(Registry::default(), crate::support::serving()),
+        Some(Router::new().route(
             "/fhir/Patient/$ihe-pix",
             get(|| async {
                 tracing::info!(identifier = IDENTIFIER, family = FAMILY, "looked up");
                 StatusCode::NOT_FOUND
             }),
-        ),
-        &server(),
+        )),
         RequestLog::default(),
+        None,
     )
 }
 

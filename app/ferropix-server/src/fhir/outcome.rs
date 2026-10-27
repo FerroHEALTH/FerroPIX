@@ -8,7 +8,11 @@
 //! codes are those of R4 `IssueType`
 //! (<https://hl7.org/fhir/R4/valueset-issue-type.html>).
 
+use std::sync::Arc;
+
 use axum::response::{IntoResponse, Response};
+use ferrohealth_server::panic::PanicBody;
+use ferrohealth_server::refusal::RefusalBody;
 use fhir_types::r4::operation_outcome::{OperationOutcome, OperationOutcomeIssue};
 use http::{HeaderValue, StatusCode, header};
 
@@ -37,6 +41,10 @@ pub enum IssueType {
     Exception,
     /// `conflict`: the request conflicts with what the server holds.
     Conflict,
+    /// `timeout`: the request took longer than the server allows.
+    Timeout,
+    /// `throttled`: the server refused the request over its load.
+    Throttled,
 }
 
 impl IssueType {
@@ -53,6 +61,8 @@ impl IssueType {
             Self::TooLong => "too-long",
             Self::Exception => "exception",
             Self::Conflict => "conflict",
+            Self::Timeout => "timeout",
+            Self::Throttled => "throttled",
         }
     }
 }
@@ -108,11 +118,84 @@ pub fn respond(
     response
 }
 
+/// The body of a request whose handler panicked.
+///
+/// It is an `OperationOutcome` of one `exception` issue naming the server's
+/// request id, and never the panic message, since a handler may have
+/// panicked over an identifier.
+#[must_use]
+pub fn panic_body() -> PanicBody {
+    Arc::new(|_uri, request_id| {
+        let diagnostics =
+            format!("the server could not complete the request (request id {request_id})");
+        let outcome = OperationOutcome {
+            issue: vec![OperationOutcomeIssue {
+                severity: "error".into(),
+                code: IssueType::Exception.code().into(),
+                diagnostics: Some(diagnostics.into()),
+                ..OperationOutcomeIssue::default()
+            }],
+            ..OperationOutcome::default()
+        };
+        body(StatusCode::INTERNAL_SERVER_ERROR, &outcome, FHIR_JSON)
+    })
+}
+
+/// The body of a refusal the stack of `ferrohealth-server` writes itself.
+///
+/// A `408`, `413`, `429` or `503` is an `OperationOutcome` of the issue type
+/// [`refusal_type`] names, with a fixed diagnostics text, so every refusal
+/// of the server has one shape (FHIR R4 `http.html`, §3.1.0.4.2).
+#[must_use]
+pub fn refusal_body() -> RefusalBody {
+    Arc::new(|_uri, _request_id, status, _reason| {
+        let (code, diagnostics) = refusal_type(status);
+        body(status, &document(code, diagnostics), FHIR_JSON)
+    })
+}
+
+/// The issue type and the diagnostics of a stack refusal of `status`
+/// (<https://hl7.org/fhir/R4/valueset-issue-type.html>).
+#[must_use]
+pub const fn refusal_type(status: StatusCode) -> (IssueType, &'static str) {
+    match status {
+        StatusCode::REQUEST_TIMEOUT => (
+            IssueType::Timeout,
+            "the request took longer than this server allows",
+        ),
+        StatusCode::PAYLOAD_TOO_LARGE => (
+            IssueType::TooLong,
+            "the request body is larger than this server accepts",
+        ),
+        StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE => (
+            IssueType::Throttled,
+            "the server is at its limit of requests; send the request again later",
+        ),
+        _ => (
+            IssueType::Exception,
+            "the server could not complete the request",
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use http::StatusCode;
 
-    use super::{IssueType, document, respond};
+    use super::{IssueType, document, refusal_type, respond};
+
+    #[test]
+    fn each_refusal_of_the_stack_has_its_issue_type() {
+        for (status, code) in [
+            (StatusCode::REQUEST_TIMEOUT, IssueType::Timeout),
+            (StatusCode::PAYLOAD_TOO_LARGE, IssueType::TooLong),
+            (StatusCode::TOO_MANY_REQUESTS, IssueType::Throttled),
+            (StatusCode::SERVICE_UNAVAILABLE, IssueType::Throttled),
+            (StatusCode::BAD_GATEWAY, IssueType::Exception),
+        ] {
+            assert_eq!(code, refusal_type(status).0, "{status}");
+        }
+    }
 
     #[test]
     #[expect(

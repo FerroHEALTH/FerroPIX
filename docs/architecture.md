@@ -264,7 +264,7 @@ row reads in order without a sequence.
 | `candidate` | `id`, `record_a`, `record_b`, `a_version`, `b_version`, `score`, `grade`, `evidence` (jsonb), `status` (`open`, `linked`, `not-a-match`, `deferred`), `decided_by`, `decided_at`, `reason`, `deferred_until` | the review queue; a `not-a-match` pair is not queued again until either record changes |
 | `merge` | `id`, `survivor_id`, `merged_id`, `kind` (`steward`, `source`, `deterministic`, `probabilistic`), `made_by`, `made_at`, `reason`, `reverted_at`, `reverted_by`, `revert_reason` | one row per merge |
 | `merge_effect` | `merge_id`, `record_id`, `from_person`, `link_closed`, `link_opened` | what the merge moved, which the revert replays backwards |
-| `pseudonym_domain` | `id`, `namespace` (unique), `name`, `consumer_client_id`, `created_at`, `retired_at` | the consumer is the one client whose ITI-83 query mints in it (D38); seeded from `[[pseudonym_domain]]` |
+| `pseudonym_domain` | `id`, `namespace` (unique), `name`, `consumer_client_id`, `created_at`, `retired_at` | the consumer is the one client whose ITI-83 query reads and mints in it (D38); seeded from `[[pseudonym_domain]]` |
 | `pseudonym` | `person_id`, `domain_id`, `value` (uuid, unique), `minted_at` | immutable; resolved through the merge chain (section 8) |
 | `steward_action` | `id`, `kind`, `actor`, `at`, `person_id`, `record_id`, `candidate_id`, `merge_id`, `reason`, `request_id` | the console's audit trail; every row also goes out as a BALP record (section 9) |
 | `subscription` | `id`, `resource` (jsonb), `status`, `criteria`, `endpoint`, `error`, `created_at` | ITI-94 |
@@ -855,8 +855,11 @@ in ITI-83 (PIXm 3.1.0 §2:3.83.4.1.2.2):
 - the answer carries the person's pseudonym in it, as a `targetIdentifier`;
 - when the person has none and the caller is the domain's consumer, the
   Manager mints it in that request (D38);
-- another caller reads only a minted pseudonym and never causes a mint, and
-  a query naming no `targetSystem` answers the pseudonyms already minted;
+- only the domain's consumer reads its pseudonyms: another Consumer that
+  names the domain as `targetSystem` gets no pseudonym for it and never
+  causes a mint, and a query naming no `targetSystem` mints nothing and
+  carries the pseudonyms already minted in the caller's own domains alone,
+  by `GET` and by `POST` (#339);
 - a mint is an insert that returns the row already there, so concurrent first
   asks yield one pseudonym, and each mint writes its own BALP Create record.
 
@@ -872,7 +875,14 @@ ground is the GDPR: a pseudonym can be attributed to a person only with
 additional information kept separately (Regulation (EU) 2016/679, Art.
 4(5)), so that information stays in FerroPIX, a consumer translates only
 forward through ITI-83, and the way back is the audited steward action, a
-measure of data protection by design (Art. 25(1)).
+measure of data protection by design (Art. 25(1)). A pseudonym read by
+two Consumers would link the clinical domains it is meant to keep apart,
+and by default only the data necessary for each purpose is processed (Art.
+25(2)), so each domain answers its own consumer alone. PIXm 3.1.0
+§2:3.83.4.1.2.2 and §2:3.83.4.1.3 leave the selection of the answered
+identifiers to the Manager, so which caller reads a pseudonym is FerroPIX's
+own choice; a list of further readers per domain waits for a second system
+that legitimately shares a clinical domain.
 
 **The BSN.** Patients are identified by BSN in the Netherlands, the
 authentic source being the BRP (NL Generic Functions, the Identification
@@ -1862,5 +1872,5 @@ The milestones carry the order; every issue cites the section it builds.
 | D35 | A refused ITI-93 entry in the response | the response `MessageHeader.response.code` `fatal-error`, its `details` a contained `OperationOutcome` with one issue per refused entry: the history entry as `expression`, the correlated status (an unmerge's `405`) in `diagnostics` | PMIR 1.6.0 §2:3.93.4.1.3 asks for a "correlated entry.response.code" while §2:3.93.4.2.2 allows the response one `MessageHeader` entry; FHIR R4 `MessageHeader.response.details` references the outcome of a message; the gap is reported upstream (#250) |
 | D36 | Master identities in the cross-reference | an ITI-93 create carries a UUID `Patient.id` that becomes the person's id, a create of a known person applies as an update, a non-UUID id is refused per entry as `invalid` (D35); a master identity survives any other person, between two of one kind the earlier `person.created_at` survives and the smaller id breaks only a tie; matching never merges two master identities and holds them apart as a candidate with the `master_identities` conflict; only the Source's own merge (`replaced-by`) joins them | PMIR 1.6.0 §2:3.93.4.1.1 has the Registry assign `Patient.id` while §2:3.93.4.2.2's one-`MessageHeader` response cannot return it, so the Source owns the master identity and the Registry keeps it (reported upstream, #262); the survival order and the conflict no specification governs: our own design |
 | D37 | The changes of one ITI-93 message | applied in history order, each in its own transaction; a refused change leaves the changes before and after it applied, and the response names it; a store failure ends the message with `503` and the changes before it stay applied, so a resent message applies again (a create of a held identity is an update, a merge already made changes nothing) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry, which presumes each entry is applied or refused on its own; how the entries share transactions no specification governs: our own design |
-| D38 | Minting a pseudonym on the ITI-83 ask | a pseudonymisation domain is a `targetSystem` of ITI-83; the consumer's first ask mints the person's pseudonym and answers it, any other caller reads only a minted one, a query naming no `targetSystem` mints nothing; one pseudonym per `(person, domain)` under concurrency; each mint its own BALP Create record; PIXm resolves no pseudonym back, which stays the steward's audited resolution | PIXm 3.1.0 §2:3.83.4.1.3 has the Manager use the `targetSystem` to determine the identifiers that match, and §2:3.83.4.1.2.2 selects the answer from the domains it names; the clinical record carries only the pseudonym, so it must exist on the clinical domain's first ask (FerroHEALTH/FerroEHR#3380); who may mint no specification governs: our own design |
+| D38 | Minting a pseudonym on the ITI-83 ask | a pseudonymisation domain is a `targetSystem` of ITI-83; the consumer's first ask mints the person's pseudonym and answers it, no other caller reads it (#339), a query naming no `targetSystem` mints nothing and carries the caller's own domains alone; one pseudonym per `(person, domain)` under concurrency; each mint its own BALP Create record; PIXm resolves no pseudonym back, which stays the steward's audited resolution | PIXm 3.1.0 §2:3.83.4.1.3 has the Manager use the `targetSystem` to determine the identifiers that match, and §2:3.83.4.1.2.2 selects the answer from the domains it names; the clinical record carries only the pseudonym, so it must exist on the clinical domain's first ask (FerroHEALTH/FerroEHR#3380); who may mint and read no specification governs: our own design, holding the domains apart (GDPR Art. 4(5), Art. 25(2)) |
 | D39 | What the top bar's search panel answers as the steward types | the console's pages, the identifier domains and the preferences whose names hold the words, the domains read from the operator API's domain list; never a person, so the panel writes no BALP record and no steward action; a patient search runs only on Enter or the panel's last row, posted, and records what D26 records | no specification governs it; BALP 1.1.4 §1:52.4.1.6 wants a Query record per patient search, and a search at every pause in typing would record searches the steward never submitted |

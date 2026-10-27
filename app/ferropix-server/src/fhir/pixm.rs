@@ -197,11 +197,13 @@ impl Manager {
     /// `client`, and returns it with each pseudonym it minted, as the
     /// person's `Patient/{id}` and the domain's namespace.
     ///
-    /// A pseudonymisation domain named as `targetSystem` answers the
-    /// person's pseudonym in it, minted on this ask when the person has none
-    /// and the caller is the domain's consumer; with no `targetSystem`, the
-    /// answer carries the pseudonyms already minted and mints none (PIXm
-    /// 3.1.0 §2:3.83.4.1.3).
+    /// Only a pseudonymisation domain's consumer reads its pseudonyms. A
+    /// domain it names as `targetSystem` answers the person's pseudonym,
+    /// minted on this ask when the person has none; with no `targetSystem`,
+    /// the answer carries the pseudonyms already minted in the caller's own
+    /// domains and mints none. Another Consumer gets no pseudonym (PIXm
+    /// 3.1.0 §2:3.83.4.1.2.2 and §2:3.83.4.1.3 leave the selection to the
+    /// Manager).
     async fn lookup(&self, pix: &PixQuery, client: Option<&str>) -> Result<Looked, Case> {
         let source = pix.source();
         let mut connection = self.store.pool().acquire().await.map_err(unavailable)?;
@@ -259,17 +261,22 @@ impl Manager {
             let pseudonyms = pseudonym::held(&mut connection, person)
                 .await
                 .map_err(|error| store_failure(&error))?;
+            let own = |namespace: &str| {
+                pseudonymised
+                    .iter()
+                    .any(|domain| domain.namespace == namespace && domain.serves(client))
+            };
             held.extend(
                 pseudonyms
                     .into_iter()
+                    .filter(|(namespace, _value)| own(namespace))
                     .map(|(namespace, value)| (namespace, value.to_string())),
             );
         }
-        for domain in &asked {
-            let resolved =
-                pseudonym::resolve(&mut connection, person, domain.id, domain.mints_for(client))
-                    .await
-                    .map_err(|error| store_failure(&error))?;
+        for domain in asked.iter().filter(|domain| domain.serves(client)) {
+            let resolved = pseudonym::resolve(&mut connection, person, domain.id, true)
+                .await
+                .map_err(|error| store_failure(&error))?;
             if let Some(resolved) = resolved {
                 if resolved.minted {
                     minted.push((

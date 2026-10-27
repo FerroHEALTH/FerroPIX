@@ -31,7 +31,8 @@ pub struct PseudonymDomain {
     pub id: Uuid,
     /// The namespace, the pseudonyms' system.
     pub namespace: String,
-    /// The client id a pseudonym is minted for in ITI-83, when one is.
+    /// The client id that reads and mints the domain's pseudonyms through
+    /// ITI-83, when one is.
     pub consumer_client_id: Option<String>,
     /// Whether the domain is retired: it mints nothing and answers as
     /// unknown.
@@ -39,10 +40,11 @@ pub struct PseudonymDomain {
 }
 
 impl PseudonymDomain {
-    /// Returns whether a caller of client id `client` may mint in the domain
-    /// through ITI-83.
+    /// Returns whether a caller of client id `client` reads and mints the
+    /// domain's pseudonyms through ITI-83: only the domain's consumer does,
+    /// so no other Consumer can link two domains.
     #[must_use]
-    pub fn mints_for(&self, client: Option<&str>) -> bool {
+    pub fn serves(&self, client: Option<&str>) -> bool {
         !self.retired && client.is_some() && self.consumer_client_id.as_deref() == client
     }
 }
@@ -215,20 +217,20 @@ mod tests {
     use super::PseudonymDomain;
 
     #[test]
-    fn only_the_named_consumer_mints_and_a_retired_domain_mints_for_no_one() {
+    fn only_the_named_consumer_is_served_and_a_retired_domain_serves_no_one() {
         let mut domain = PseudonymDomain {
             id: Uuid::nil(),
             namespace: String::from("urn:oid:2.999.9.1"),
             consumer_client_id: Some(String::from("ferroehr")),
             retired: false,
         };
-        assert!(domain.mints_for(Some("ferroehr")));
-        assert!(!domain.mints_for(Some("other")));
-        assert!(!domain.mints_for(None));
+        assert!(domain.serves(Some("ferroehr")));
+        assert!(!domain.serves(Some("other")));
+        assert!(!domain.serves(None));
         domain.retired = true;
-        assert!(!domain.mints_for(Some("ferroehr")));
+        assert!(!domain.serves(Some("ferroehr")));
         domain.retired = false;
         domain.consumer_client_id = None;
-        assert!(!domain.mints_for(Some("ferroehr")));
+        assert!(!domain.serves(Some("ferroehr")));
     }
 }

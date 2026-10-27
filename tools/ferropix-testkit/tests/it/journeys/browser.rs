@@ -25,6 +25,7 @@ use thirtyfour::common::keys::TypingData;
 use thirtyfour::prelude::*;
 
 use crate::journeys::chromedriver::{CHROME_ENV, Chromedriver, installed};
+use crate::journeys::stderr::{RESOURCE_OUTSIDE_SUSPENSE, Stderr};
 
 /// The environment variable naming the directory a failure writes its
 /// evidence into, when it is not [`DEFAULT_FAILURES`].
@@ -555,11 +556,14 @@ impl Journey {
 
 /// Runs `journey` in a fresh browser, ends the session whatever the journey
 /// did, and fails on anything severe the browser logged but the not-found
-/// page's own `404`.
+/// page's own `404`, and on a resource the console's server read outside a
+/// `Suspense`, a `Transition` or an effect, which Leptos warns of on the
+/// process's standard error.
 pub(crate) async fn with_journey<F>(journey: F)
 where
     F: AsyncFnOnce(&Journey),
 {
+    let stderr = Stderr::copy().await;
     let session = Journey::start()
         .await
         .unwrap_or_else(|error| panic!("no browser session: {error}"));
@@ -571,6 +575,18 @@ where
         .quit()
         .await
         .unwrap_or_else(|error| panic!("the browser session did not end cleanly: {error}"));
+    let warned: Vec<String> = stderr
+        .end()
+        .lines()
+        .filter(|line| line.contains(RESOURCE_OUTSIDE_SUSPENSE))
+        .map(str::to_owned)
+        .collect();
+    assert!(
+        warned.is_empty(),
+        "the console read a resource outside a Suspense, a Transition or an effect, \
+         which risks a hydration mismatch:\n  {}",
+        warned.join("\n  ")
+    );
 }
 
 #[cfg(test)]

@@ -17,6 +17,27 @@ when the server refused the connection, did not answer in time or refused
 the console, the page says so in place, with the server's issue, and one
 refused part never blanks a page.
 
+The browser draws every page after the first itself, so a link, a search, a
+filter or a reveal keeps the page you are on and loads no new document; with
+no WebAssembly each is a plain link or form post that draws the page again.
+
+## Searching from the top bar
+
+As you type in the top bar's field, its panel offers the console's pages,
+the identifier domains and your preferences whose names hold the words. It
+never offers a person: a patient search runs only when you press Enter or
+choose the panel's last row, Search patients for "…", and every patient
+search is a posted, audited query. The words travel in the request's body,
+never in an address.
+
+## Keyboard shortcuts
+
+`?` opens the list of shortcuts on every screen, and so does Keyboard
+shortcuts in your menu. `/` puts the focus in the search, `j` and `k` (or
+the arrow keys) walk a list and Enter opens the row, and `1` to `4` open the
+patient record's Identifiers, Records, History and Pseudonyms tabs. Shortcuts
+never act while you type in a field, and a phone shows none.
+
 ## The pages
 
 | Page | What it shows |
@@ -31,7 +52,7 @@ refused part never blanks a page.
 
 The review queue, compare and decide, merge and unmerge and the
 pseudonymisation domains follow with the
-[v0.0.5 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/5);
+[v0.0.10 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/10);
 until then those pages say the server serves no operator API for them yet. The console ships as its own container image,
 published by the release lane from the first tagged release
 ([The image](#the-image)).
@@ -57,13 +78,13 @@ The sign-in page after your session expired. [Dark theme](img/console/expired-da
 
 The dashboard. [Dark theme](img/console/dashboard-dark.png).
 
-![The review queue, which follows with v0.0.5](img/console/queue.png)
+![The review queue, which follows with v0.0.10](img/console/queue.png)
 
-The review queue, which follows with v0.0.5. [Dark theme](img/console/queue-dark.png).
+The review queue, which follows with v0.0.10. [Dark theme](img/console/queue-dark.png).
 
-![A pair in the review queue, which follows with v0.0.5](img/console/queue-pair.png)
+![A pair in the review queue, which follows with v0.0.10](img/console/queue-pair.png)
 
-A pair in the review queue, which follows with v0.0.5. [Dark theme](img/console/queue-pair-dark.png).
+A pair in the review queue, which follows with v0.0.10. [Dark theme](img/console/queue-pair-dark.png).
 
 ![Search by identifier](img/console/search.png)
 
@@ -77,13 +98,13 @@ Search by demographics. [Dark theme](img/console/search-demographics-dark.png).
 
 A patient's record on its identifiers tab. [Dark theme](img/console/patient-dark.png).
 
-![Merge, which follows with v0.0.5](img/console/patient-merge.png)
+![Merge, which follows with v0.0.10](img/console/patient-merge.png)
 
-Merge, which follows with v0.0.5. [Dark theme](img/console/patient-merge-dark.png).
+Merge, which follows with v0.0.10. [Dark theme](img/console/patient-merge-dark.png).
 
-![Unmerge, which follows with v0.0.5](img/console/patient-unmerge.png)
+![Unmerge, which follows with v0.0.10](img/console/patient-unmerge.png)
 
-Unmerge, which follows with v0.0.5. [Dark theme](img/console/patient-unmerge-dark.png).
+Unmerge, which follows with v0.0.10. [Dark theme](img/console/patient-unmerge-dark.png).
 
 ![The sources](img/console/sources.png)
 
@@ -101,9 +122,9 @@ The identifier domains. [Dark theme](img/console/domains-dark.png).
 
 One identifier domain with its last feeds. [Dark theme](img/console/domain-dark.png).
 
-![The pseudonymisation domains, which follow with v0.0.5](img/console/pseudonym-domains.png)
+![The pseudonymisation domains, which follow with v0.0.10](img/console/pseudonym-domains.png)
 
-The pseudonymisation domains, which follow with v0.0.5. [Dark theme](img/console/pseudonym-domains-dark.png).
+The pseudonymisation domains, which follow with v0.0.10. [Dark theme](img/console/pseudonym-domains-dark.png).
 
 ![The matching configuration](img/console/configuration.png)
 

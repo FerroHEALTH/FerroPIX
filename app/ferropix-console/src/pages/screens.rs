@@ -18,11 +18,10 @@
 use ferrohealth_ui::view::action::ActionGroup;
 use ferrohealth_ui::view::surface::{Crumb, Header, page_heading};
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
 
-use crate::app::{DOMAINS, QUEUE, SEARCH, SOURCES, framed, page_context};
-use crate::document::{Document, Read};
+use crate::app::{DOMAINS, QUEUE, SEARCH, SOURCES, page_context, param};
 use crate::locale::{Msg, tr, tr_with};
+use crate::model::{Document, Read};
 use crate::pages::not_found::NotFound;
 use crate::pages::{Needs, server_state, title};
 
@@ -54,11 +53,6 @@ fn drawn<T>(read: &Read<T>, screen: &Screen, draw: impl FnOnce(&T) -> AnyView) -
         Ok(document) => draw(document),
         Err(probe) => server_state(Some(probe), screen.needs, &screen.route),
     }
-}
-
-/// The route parameter `name`, when the route names one.
-fn param(name: &str) -> Option<String> {
-    use_params_map().with_untracked(|params| params.get(name))
 }
 
 /// One page that reads the operator API: its header and its state.
@@ -120,14 +114,12 @@ impl Screen {
         let state = self
             .body
             .unwrap_or_else(|| server_state(probe.as_ref(), self.needs, &self.route));
-        framed(
-            view! {
-                {title(self.title)}
-                {heading}
-                {state}
-            }
-            .into_any(),
-        )
+        view! {
+            {title(self.title)}
+            {heading}
+            {state}
+        }
+        .into_any()
     }
 }
 

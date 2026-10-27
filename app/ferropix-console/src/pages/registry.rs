@@ -33,8 +33,8 @@ use ferropix_operator_api::source::{Admission, Message, Source, SourcePage, Sour
 use leptos::prelude::*;
 
 use crate::app::{DOMAINS, SOURCES};
-use crate::document::Read;
 use crate::locale::{Msg, tr, tr_with};
+use crate::model::Read;
 use crate::pages::{Needs, server_state};
 
 /// The book's page that says how FerroPIX is configured.

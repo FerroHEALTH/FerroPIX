@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ferropix-console"
-description = "The FerroPIX Console, the data steward's operator console: a Leptos islands app rendered on the server, with a backend-for-frontend over the FerroPIX server"
+description = "The FerroPIX Console, the data steward's operator console: a Leptos app the server draws and the browser hydrates whole, with a backend-for-frontend over the FerroPIX server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,9 +13,9 @@ authors.workspace = true
 # The application is never published.
 publish = false
 
-# One crate, two halves (the Leptos book, "Guide: Islands"): the rlib feeds
-# the server binary and the cdylib is the WebAssembly bundle the browser
-# hydrates the islands with. The target chooses the half, never a Cargo
+# One crate, two halves (the Leptos book, "Hydration"): the rlib feeds the
+# server binary and the cdylib is the WebAssembly bundle the browser hydrates
+# the whole page with. The target chooses the half, never a Cargo
 # feature, so `--all-features` over the workspace never turns both on.
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -26,26 +26,37 @@ name = "ferropix-console"
 path = "src/main.rs"
 
 [dependencies]
-# Every island the console draws is FerroUI's, so the browser half links the
-# library for its islands and nothing of the console's own. `split` keeps the
-# lazy islands (the date picker) in chunks of their own, which only a site
-# built with `cargo leptos build --split` may turn on (FerroUI
-# `docs/consoles.md`, "How a console builds").
-ferrohealth-ui = { workspace = true, features = ["split"] }
-leptos = { workspace = true, features = ["islands"] }
+# The console hydrates the whole page and draws every page after the first
+# in the browser (FerroUI `docs/consoles.md`, "How a console builds"), so
+# both halves link the page tree: FerroUI, the router, the console's string
+# catalog and the operator API's documents the pages draw.
+ferrohealth-ui.workspace = true
+leptos.workspace = true
+leptos_meta.workspace = true
+leptos_router.workspace = true
+fluent-templates.workspace = true
+http.workspace = true
+serde.workspace = true
+# The capability statement About reads its software and version from.
+serde_json.workspace = true
+# The operator API's documents, as the server writes them.
+ferropix-operator-api = { path = "../ferropix-operator-api" }
+# The readiness document's states the dashboard draws.
+ferrohealth-health.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-leptos = { workspace = true, features = ["islands", "hydrate"] }
+leptos = { workspace = true, features = ["hydrate"] }
+leptos_router.workspace = true
 wasm-bindgen.workspace = true
 console_error_panic_hook.workspace = true
-# The mark on `<html>` once the islands have hydrated, which the browser
-# journeys wait for before they act on a page.
-web-sys = { workspace = true, features = ["Document", "Element", "Window"] }
+web-sys = { workspace = true, features = ["Document", "Element", "Window", "Location", "FormData", "HtmlFormElement", "SubmitEvent", "HtmlElement"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # The per-request script nonce of the Content-Security-Policy rides `nonce`.
-leptos = { workspace = true, features = ["islands", "ssr", "nonce"] }
+leptos = { workspace = true, features = ["ssr", "nonce"] }
 leptos_axum.workspace = true
+# The executor the server render runs its resources on.
+any_spawner.workspace = true
 leptos_meta = { workspace = true, features = ["ssr"] }
 leptos_router = { workspace = true, features = ["ssr"] }
 # The random session ids.
@@ -54,9 +65,6 @@ axum.workspace = true
 base64.workspace = true
 clap.workspace = true
 cookie.workspace = true
-# The console's own string catalog under locales/.
-fluent-templates.workspace = true
-http.workspace = true
 # The time of a call to the server, shown beside its outcome.
 jiff.workspace = true
 # The OpenID Connect relying party the operator signs in with: the
@@ -79,8 +87,6 @@ ferrohealth-health = { workspace = true, features = ["registry"] }
 # The calls to the FerroPIX server and to the OpenID Provider.
 reqwest = { workspace = true, features = ["rustls", "json"] }
 secrecy = { workspace = true, features = ["serde"] }
-serde.workspace = true
-serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 # The site bundle is served brotli- or gzip-compressed, as the request's
@@ -88,8 +94,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sig
 tower-http = { workspace = true, features = ["compression-br", "compression-gzip"] }
 tracing.workspace = true
 url.workspace = true
-# The operator API's documents, as the server writes them.
-ferropix-operator-api = { path = "../ferropix-operator-api" }
 # The request id the console sends with each call to the server.
 uuid.workspace = true
 
@@ -120,5 +124,5 @@ reload-port = 3001
 lib-profile-release = "wasm-release"
 lib-profile-dev = "wasm-dev"
 # A dev build keeps its component types, as the server half does, so the
-# bundle hydrates the islands the server rendered.
+# bundle hydrates the page the server rendered.
 disable-erase-components = true

@@ -142,8 +142,8 @@ The build order is the milestones:
   types (#64), which the server writes and the console reads, `publish =
   false`.
 - `app/ferropix-console`: the operator console (#119), its own binary
-  `ferropix-console`, `publish = false`: a Leptos islands app rendered on the
-  server and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC
+  `ferropix-console`, `publish = false`: a Leptos app rendered on the server,
+  hydrated whole in the browser with its pages in lazy route groups, and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC
   sign-in and the server-side session, the `FERROPIX_CONSOLE__`
   configuration with `_file` secrets, the browser security headers and the
   same-origin check of `ferrohealth-server`'s `console`, the client of

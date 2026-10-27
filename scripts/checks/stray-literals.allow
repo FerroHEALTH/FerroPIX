@@ -20,3 +20,7 @@ allow ^text/csv; charset=utf-8$             # a media type
 allow ^A[AER]$                              # an HL7 v2 acknowledgment code (HL7 table 0008), shown as the server sent it
 allow ^attachment; filename=                # a Content-Disposition header value
 allow ^default-src                          # the Content-Security-Policy
+allow ^the console's state is missing$      # a server function's refusal, which the browser half logs for a developer
+allow ^the request is missing$              # a server function's refusal, which the browser half logs for a developer
+allow ^no form posts to this address$       # a server function's refusal, which the browser half logs for a developer
+allow ^[jk] \| (down|up)$                    # keys as the shortcut legend parses them (FerroUI view::kbd), drawn as key caps

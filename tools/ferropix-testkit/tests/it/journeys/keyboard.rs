@@ -7,11 +7,10 @@
 //! countdown and the trail lists the disclosure, and a modal dialog gives
 //! the focus back to the control that opened it when Escape closes it (WCAG 2.2 SC
 //! 2.1.1 and SC 2.4.3; WAI-ARIA Authoring Practices, the grid and the dialog
-//! (modal) patterns). No specification governs the keys themselves: our own
-//! design, on FerroUI's search box and work-list.
-
-// TODO(#204): prove `?` opens the shortcut legend and `1` to `4` switch the
-// patient tabs, once FerroUI carries both.
+//! (modal) patterns), `?` opens the shortcut legend and `1` to `4` switch
+//! the patient record's tabs, and the search panel offers no person. No
+//! specification governs the keys themselves: our own design, on FerroUI's
+//! search box, work-list, shortcut legend and binder.
 
 use thirtyfour::prelude::*;
 
@@ -40,6 +39,13 @@ const FIRST_ROW: &str = "const row = document.querySelector('.fui-worklist-grid 
 
 /// The `command` and `commandfor` of the active element, or an empty text.
 const ACTIVE_COMMAND: &str = "const el = document.activeElement; return el ? (el.getAttribute('command') || '') + ' ' + (el.getAttribute('commandfor') || '') : '';";
+
+/// Whether the shortcut legend is open.
+const LEGEND_OPEN: &str =
+    "const legend = document.getElementById('shortcuts'); return String(!!legend && legend.open);";
+
+/// The words of every hit the search panel offers.
+const PANEL_HITS: &str = "return Array.from(document.querySelectorAll('#pix-search-results [role=option]')).map((hit) => hit.textContent.trim()).join('|');";
 
 /// Whether the dialog of the preferences' reset is open.
 const RESET_OPEN: &str = "return String(document.getElementById('preferences-reset').open);";
@@ -227,6 +233,130 @@ async fn a_reveal_shows_the_value_with_its_countdown_and_the_trail_shows_the_dis
             .expect("the trail's text");
         assert!(trail.contains("Reveal"), "the trail lists the disclosure");
         assert!(!trail.contains(REVEALED), "the trail never shows the value");
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn question_mark_opens_the_legend_and_the_digits_switch_the_patient_tabs() {
+    if !journeys_enabled() {
+        return;
+    }
+    let stack = Stack::start_with(Server::Filled).await;
+    with_journey(async |journey| {
+        sign_in(journey, &stack).await;
+        journey
+            .open(&stack.url(&format!("/patients/{FILLED_PERSON}")))
+            .await;
+        let body = journey.element(By::Tag("body"), "the page's body").await;
+        body.send_keys("?").await.expect("the page takes ?");
+        assert_eq!(
+            "true",
+            journey
+                .evaluate(LEGEND_OPEN)
+                .await
+                .expect("the legend's state"),
+            "? opens the shortcut legend"
+        );
+        journey
+            .active()
+            .await
+            .send_keys(Key::Escape)
+            .await
+            .expect("the legend takes Escape");
+        assert_eq!(
+            "false",
+            journey
+                .evaluate(LEGEND_OPEN)
+                .await
+                .expect("the legend's state"),
+            "Escape closes the legend"
+        );
+        for (key, tab) in [("2", "records"), ("3", "history"), ("4", "pseudonyms")] {
+            let body = journey.element(By::Tag("body"), "the page's body").await;
+            journey.keys(&body, key, "the digit's tab").await;
+            journey
+                .address_carrying(&format!("tab={tab}"), "the digit's tab")
+                .await;
+        }
+        let body = journey.element(By::Tag("body"), "the page's body").await;
+        journey.keys(&body, "1", "the first tab").await;
+        let address = journey
+            .address_carrying(&format!("/patients/{FILLED_PERSON}"), "the first tab")
+            .await;
+        assert!(
+            !address.contains("tab="),
+            "1 opens the first tab: {address}"
+        );
+        journey.no_console_errors_but(&[]).await;
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_search_panel_offers_pages_and_settings_and_never_a_person() {
+    if !journeys_enabled() {
+        return;
+    }
+    let stack = Stack::start_with(Server::Filled).await;
+    with_journey(async |journey| {
+        sign_in(journey, &stack).await;
+        journey.open(&stack.url("/audit")).await;
+        let field = journey
+            .element(By::Id(SEARCH_FIELD), "the top bar's search")
+            .await;
+        field
+            .send_keys("appear")
+            .await
+            .expect("the field takes words");
+        journey
+            .element(
+                By::Css("#pix-search-results [role='option']"),
+                "the panel's hits",
+            )
+            .await;
+        let hits = journey
+            .evaluate(PANEL_HITS)
+            .await
+            .expect("the panel's hits");
+        assert!(
+            hits.contains("Appearance"),
+            "the panel offers a setting: {hits}"
+        );
+        field.clear().await.expect("the field clears");
+        field
+            .send_keys(TYPED)
+            .await
+            .expect("the field takes the identifier");
+        journey
+            .element(
+                By::Css("#pix-search-panel .fui-search-results-empty"),
+                "the panel's answer with no hit",
+            )
+            .await;
+        let hits = journey
+            .evaluate(PANEL_HITS)
+            .await
+            .expect("the panel's hits");
+        assert!(hits.is_empty(), "the panel offers no person: {hits}");
+        journey
+            .keys(&field, Key::Enter, "the search's results")
+            .await;
+        let address = journey
+            .address_carrying("/search", "the results page")
+            .await;
+        assert!(
+            !address.contains(TYPED),
+            "the words stay out of the address: {address}"
+        );
+        journey
+            .count_becoming(
+                By::Css(".fui-worklist-grid tr[data-key]"),
+                2,
+                "two result rows",
+            )
+            .await;
+        journey.no_console_errors_but(&[]).await;
     })
     .await;
 }

@@ -33,9 +33,6 @@ use crate::session::{COOKIE, SIGN_IN_COOKIE, SessionError, SignedIn};
 pub mod logout;
 pub mod refresh;
 
-/// The path of the sign-in route.
-pub const LOGIN: &str = "/login";
-
 /// The path of the redirection endpoint the provider sends the operator back
 /// to.
 pub const CALLBACK: &str = "/auth/callback";

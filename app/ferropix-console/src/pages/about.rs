@@ -18,14 +18,15 @@ use ferrohealth_ui::view::template::about::{
 use leptos::prelude::*;
 use serde::Deserialize;
 
-use crate::app::{footer, framed, page_context};
+use crate::app::page_context;
+use crate::app::shell::footer;
 use crate::locale::{Msg, tr};
+use crate::model::Capability;
 use crate::pages::title;
-use crate::pix::Capability;
 
 /// The FerroUI release the console is built on, as `Cargo.toml` pins it
 /// exactly (a test holds the two together).
-pub const FERROUI: &str = "0.4.0";
+pub const FERROUI: &str = "0.5.2";
 
 /// The route Download fetches the `CapabilityStatement` from.
 pub const METADATA_DOWNLOAD: &str = "/about/capability-statement.json";
@@ -137,13 +138,11 @@ pub fn AboutPage() -> impl IntoView {
         self_description,
         replica: None,
     });
-    framed(
-        view! {
-            {title(tr(Msg::About))}
-            {page}
-        }
-        .into_any(),
-    )
+    view! {
+        {title(tr(Msg::About))}
+        {page}
+    }
+    .into_any()
 }
 
 #[cfg(test)]

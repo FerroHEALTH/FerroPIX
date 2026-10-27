@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The FerroPIX Console, the data steward's operator console: a Leptos app
-//! the server renders whole in islands mode, with a backend-for-frontend in
-//! front of the FerroPIX server.
+//! the server draws and the browser hydrates whole, with a backend-for-frontend
+//! in front of the FerroPIX server.
 //!
 //! The console is one more client of the FerroPIX server: its server half
 //! reaches the server through [`pix`], server to server, with the signed-in
@@ -20,15 +20,15 @@
 //! §12).
 //!
 //! The server half compiles for the host. The browser half, compiled for
-//! `wasm32-unknown-unknown`, is the entry that hydrates the islands the
-//! server drew, every one of them FerroUI's; the target, never a Cargo
-//! feature, chooses between them.
+//! `wasm32-unknown-unknown`, hydrates the page the server drew and draws
+//! every page after it ([`app`], [`pages`], [`model`], [`locale`],
+//! [`preferences`]); the target, never a Cargo feature, chooses between
+//! them.
 #![doc(test(attr(deny(warnings))))]
 // NOTE: the Rust reference, "The recursion_limit attribute": a page's nested view types
 // pass the default query depth of 128 when a test build lays them out.
 #![recursion_limit = "256"]
 
-#[cfg(not(target_arch = "wasm32"))]
 pub mod app;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cli;
@@ -38,44 +38,31 @@ pub mod command;
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod document;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod locale;
+pub mod model;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod oidc;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod pages;
+pub mod paths;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pix;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod posts;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod preferences;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod server;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod session;
 
-// NOTE: the Leptos book, "Guide: Islands": each island is a WebAssembly export of the
-// crate that defines it, so the browser half links FerroUI for every island it draws.
-#[cfg(target_arch = "wasm32")]
-use ferrohealth_ui as _;
-
-/// Hydrates the islands of the page the server rendered. Each island takes
-/// the words it draws as props, so the browser builds no locale.
+/// Hydrates the page the server drew, whole, and draws every page after it
+/// in the browser (FerroUI `docs/consoles.md`, "How a console builds").
 ///
-/// It then marks the root element `data-hydrated`, which the browser
-/// journeys wait for, so no journey acts on a control whose island has not
-/// run.
+/// In a debug build a panic before the page has hydrated says its likely
+/// cause first; the root element carries `data-ferroui-hydrated` once it has.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {
     console_error_panic_hook::set_once();
-    leptos::mount::hydrate_islands();
-    if let Some(root) = web_sys::window()
-        .and_then(|window| window.document())
-        .and_then(|document| document.document_element())
-        && let Err(error) = root.set_attribute("data-hydrated", "")
-    {
-        leptos::logging::warn!("the browser refused the hydrated mark: {error:?}");
-    }
+    ferrohealth_ui::widget::hydration::explain();
+    ferrohealth_ui::widget::hydration::hydrate(app::App);
 }

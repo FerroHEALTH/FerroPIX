@@ -9,7 +9,7 @@ use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::view::error_page::{ErrorPage, Status, Way, error_page};
 use leptos::prelude::*;
 
-use crate::app::{DASHBOARD, SEARCH, framed};
+use crate::app::{DASHBOARD, SEARCH};
 use crate::locale::{Msg, tr};
 use crate::pages::title;
 
@@ -20,13 +20,14 @@ use crate::pages::title;
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn NotFound() -> impl IntoView {
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(response) = use_context::<leptos_axum::ResponseOptions>() {
         response.set_status(http::StatusCode::NOT_FOUND);
     }
     let page = error_page(ErrorPage {
         status: Status::NotFound,
         title: tr(Msg::NotFoundTitle),
-        body: view! { <p>{tr(Msg::NotFoundBody)}</p> }.into_any(),
+        body: tr(Msg::NotFoundBody).into_any(),
         hint: None,
         ways: vec![
             Way {
@@ -42,11 +43,9 @@ pub fn NotFound() -> impl IntoView {
         ],
         detail: None,
     });
-    framed(
-        view! {
-            {title(tr(Msg::NotFoundTitle))}
-            {page}
-        }
-        .into_any(),
-    )
+    view! {
+        {title(tr(Msg::NotFoundTitle))}
+        {page}
+    }
+    .into_any()
 }

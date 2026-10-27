@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The console's crate boundary, read from the graph Cargo resolves: the
-//! server half links no workspace crate beside `ferropix-operator-api`, the
-//! operator API's contract once #90 adds it, and the browser half links
-//! none (`docs/architecture.md` §12.1), so the console never runs the index
-//! itself.
+//! console links no workspace crate beside `ferropix-operator-api`, the
+//! operator API's contract (`docs/architecture.md` §12.1), in its server
+//! half or in its browser half, which draws the pages after the first from
+//! the same documents, so the console never runs the index itself.
 //!
 //! The walk follows normal and build edges from the console through the
 //! whole resolved graph, so a workspace crate reached through a third-party
@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 /// The console's package name.
 const CONSOLE: &str = "ferropix-console";
 
-/// The workspace crates the server half may link.
+/// The workspace crates either half may link.
 const SERVER_ALLOWED: [&str; 1] = ["ferropix-operator-api"];
 
 /// The target the browser half compiles for.
@@ -171,13 +171,13 @@ fn the_server_half_links_no_workspace_crate_outside_the_boundary() {
 }
 
 #[test]
-fn the_browser_half_links_no_workspace_crate() {
+fn the_browser_half_links_no_workspace_crate_outside_the_boundary() {
     let metadata = metadata(Some(BROWSER));
     let (workspace, other) = closure(&metadata, CONSOLE);
     assert_eq!(
         BTreeSet::new(),
-        workspace,
-        "the browser half links a workspace crate"
+        outside(&workspace, &SERVER_ALLOWED),
+        "the browser half links a workspace crate the boundary does not allow"
     );
     assert!(
         other.contains("ferrohealth-ui") && other.contains("wasm-bindgen"),

@@ -20,11 +20,13 @@
 use std::fmt;
 use std::time::Duration;
 
-use http::{Method, StatusCode};
+use http::Method;
 use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 
 use ferropix_operator_api::overview::Overview;
+
+use crate::model::{Capability, Failure, Probe, Reach, ServerIssue};
 
 use crate::config::settings::PixSettings;
 
@@ -64,17 +66,6 @@ impl fmt::Debug for AccessToken {
     }
 }
 
-/// Why no answer came back from the server.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Failure {
-    /// The connection was refused or could not be made.
-    Connect,
-    /// No answer came within the configured timeout.
-    Timeout,
-    /// The answer could not be read, or the call failed another way.
-    Other,
-}
-
 impl Failure {
     /// The failure `error` names.
     fn of(error: &reqwest::Error) -> Self {
@@ -88,46 +79,6 @@ impl Failure {
     }
 }
 
-/// How the server answered a call.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Reach {
-    /// It answered `2xx`.
-    Up,
-    /// It answered with this other status.
-    Refused(StatusCode),
-    /// No answer came.
-    Unreachable(Failure),
-}
-
-/// One call to the server and how it went: the route, the outcome, the
-/// moment it was made and the request id it carried.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Probe {
-    /// The route the call took, method and path, as a steward may repeat it.
-    pub route: String,
-    /// How the server answered.
-    pub reach: Reach,
-    /// When the call was made, as RFC 3339 text in UTC.
-    pub at: String,
-    /// The request id the call carried.
-    pub request_id: String,
-    /// The issues of the `OperationOutcome` a refusal carried, whose
-    /// diagnostics the server writes without a value from the request.
-    pub issues: Vec<ServerIssue>,
-}
-
-/// One issue of the `OperationOutcome` the server refused a call with.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-pub struct ServerIssue {
-    /// `severity`.
-    pub severity: String,
-    /// `code`.
-    pub code: String,
-    /// `diagnostics`.
-    #[serde(default)]
-    pub diagnostics: Option<String>,
-}
-
 /// The issues of an `OperationOutcome`, the only part a refusal's body is
 /// read for.
 #[derive(Debug, Default, serde::Deserialize)]
@@ -135,24 +86,6 @@ struct Outcome {
     /// `issue`.
     #[serde(default)]
     issue: Vec<ServerIssue>,
-}
-
-impl Probe {
-    /// Whether the server answered `2xx`.
-    #[must_use]
-    pub fn is_up(&self) -> bool {
-        self.reach == Reach::Up
-    }
-}
-
-/// The `CapabilityStatement` the server declares, as it was sent, or the
-/// call that did not bring one back.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Capability {
-    /// The document, as the server sent it.
-    Declared(String),
-    /// The call that did not answer with one.
-    Missing(Probe),
 }
 
 /// A client of the FerroPIX server could not be built.

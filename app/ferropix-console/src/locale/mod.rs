@@ -207,6 +207,46 @@ messages! {
     SearchLabel = "search-label",
     /// The top bar's search field's placeholder.
     SearchPlaceholder = "search-placeholder",
+    /// The legend's group of the shortcuts that work on every screen.
+    ShortcutsEverywhere = "shortcuts-everywhere",
+    /// The legend's group of the shortcuts of a list.
+    ShortcutsLists = "shortcuts-lists",
+    /// The legend's group of the patient record's shortcuts.
+    ShortcutsPatient = "shortcuts-patient",
+    /// What `/` does.
+    ShortcutSearch = "shortcut-search",
+    /// What `?` does.
+    ShortcutLegend = "shortcut-legend",
+    /// What `j` does.
+    ShortcutNext = "shortcut-next",
+    /// What `k` does.
+    ShortcutPrevious = "shortcut-previous",
+    /// What Enter does on a row.
+    ShortcutOpen = "shortcut-open",
+    /// The line under a page the search panel offers.
+    SuggestPage = "suggest-page",
+    /// The line under a setting the search panel offers.
+    SuggestSetting = "suggest-setting",
+    /// The search panel's group of pages.
+    SuggestPages = "suggest-pages",
+    /// The search panel's group of identifier domains.
+    SuggestDomains = "suggest-domains",
+    /// The Appearance tab of Your preferences, as the search panel offers it.
+    SettingAppearance = "setting-appearance",
+    /// The Language and region tab, as the search panel offers it.
+    SettingLanguage = "setting-language",
+    /// The Keyboard tab, as the search panel offers it.
+    SettingKeyboard = "setting-keyboard",
+    /// The search panel's group of settings.
+    SuggestSettings = "suggest-settings",
+    /// The search panel's sentence when no page, domain or setting matches.
+    SuggestNone = "suggest-none",
+    /// The line under it.
+    SuggestNoneLine = "suggest-none-line",
+    /// Why the search panel names no identifier domain.
+    SuggestDomainsUnread = "suggest-domains-unread",
+    /// The search panel's last row, which searches patients for the words.
+    SearchPatientsFor = "search-patients-for",
     /// The top bar's search submit.
     SearchFind = "search-find",
     /// The status pill when the server answers.

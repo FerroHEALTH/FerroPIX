@@ -16,12 +16,11 @@ use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::view::shell::{brand_mark, centred, lockup_plain};
 use ferrohealth_ui::view::sign_in::{Notice, Provider, SignIn, State, sign_in};
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
 
-use crate::app::footer;
+use crate::app::shell::footer;
 use crate::locale::{Msg, tr};
 use crate::pages::title;
-use crate::server::{ConsoleState, MARK_DARK, MARK_LIGHT};
+use crate::paths::{MARK_DARK, MARK_LIGHT};
 
 /// The sign-in page, in the state its route names.
 #[component]
@@ -30,9 +29,8 @@ use crate::server::{ConsoleState, MARK_DARK, MARK_LIGHT};
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn SignInPage() -> impl IntoView {
-    let configured =
-        use_context::<ConsoleState>().is_some_and(|state| state.settings().oidc.is_some());
-    let named = use_params_map().with_untracked(|params| params.get("state"));
+    let configured = crate::app::page_context().sign_in;
+    let named = crate::app::param("state");
     let state = if configured {
         match named.as_deref() {
             Some("signed-out") => State::SignedOut(Notice::new(tr(Msg::SignedOut))),
@@ -52,7 +50,7 @@ pub fn SignInPage() -> impl IntoView {
         title: Some(tr(Msg::SignInTitle)),
         state,
         provider: Some(Provider {
-            href: String::from(crate::oidc::LOGIN),
+            href: String::from(crate::paths::LOGIN),
             label: tr(Msg::SignInWith),
             busy: tr(Msg::SignInTaking),
             glyph: Glyph::LOG_IN,

@@ -12,6 +12,16 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- The console hydrates the whole page on FerroUI 0.5, so a link, a search,
+  a trail filter, a reveal or a domain's form keeps the page and loads no
+  new document (#214). The top bar's search panel offers the pages, the
+  identifier domains and the preferences whose names hold the words, never
+  a person: a patient search runs on Enter or the panel's last row, posted
+  and audited. `?` opens the shortcut legend on every screen, and `1` to `4`
+  open the patient record's tabs (#204).
+
 ## [0.0.8] - 2026-10-27
 
 ### Added

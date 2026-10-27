@@ -23,6 +23,7 @@
 mod accessibility;
 mod browser;
 mod chromedriver;
+mod in_place;
 mod keyboard;
 mod preferences;
 mod pseudo_locale;
@@ -75,14 +76,20 @@ const SCREENS: [&str; 20] = [
 /// The sign-in page in each state its route names.
 const SIGN_IN_SCREENS: [&str; 3] = ["/sign-in", "/sign-in/signed-out", "/sign-in/expired"];
 
-/// The route patterns of the console's router, read from its source.
+/// The route patterns of the console's pages, from its page list.
 fn routes() -> Vec<String> {
-    let source = include_str!("../../../../../app/ferropix-console/src/app.rs");
-    source
-        .split("path!(\"")
-        .skip(1)
-        .filter_map(|rest| rest.split('"').next())
-        .map(str::to_owned)
+    ferropix_console::server::PAGES
+        .iter()
+        .map(|pattern| {
+            pattern
+                .split('/')
+                .map(|segment| match segment.strip_prefix('{') {
+                    Some(name) => format!(":{}", name.trim_end_matches('}')),
+                    None => segment.to_owned(),
+                })
+                .collect::<Vec<_>>()
+                .join("/")
+        })
         .collect()
 }
 

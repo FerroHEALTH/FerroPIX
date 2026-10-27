@@ -26,6 +26,7 @@
 //! (§2:3.104.4.1.3): the rules are our own design.
 
 pub mod announce;
+mod attempt;
 pub mod demographics;
 mod link;
 pub mod master;
@@ -33,8 +34,6 @@ pub mod merging;
 pub mod notify;
 pub mod steward;
 mod write;
-
-use std::collections::BTreeSet;
 
 use fhir_types::r4::patient::Patient;
 use ihe_atna::balp::Outcome;
@@ -49,14 +48,17 @@ use crate::audit::reserve::Pending;
 use crate::audit::{Audit, Unrecorded};
 use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::{BlockingKey, Matching};
+use crate::feed::attempt::{
+    Resolving, Revising, announced, condition, current, identity_keys, local_keys, me,
+};
 use crate::feed::demographics::DemographicsError;
-use crate::feed::link::{Me, MergeKind};
+use crate::feed::link::MergeKind;
 use crate::feed::write::{Blocks, Carried, Subjects};
 use crate::matching::blocking;
 use crate::matching::scorer::Scorer;
-use crate::matching::subject::{IdentifierKey, Subject};
-use crate::store::identifier::{Refused, Rule};
-use crate::store::record::{self, Channel, Domain, PersonId, RecordId};
+use crate::matching::subject::Subject;
+use crate::store::identifier::Refused;
+use crate::store::record::{self, Channel, PersonId, RecordId};
 use crate::store::{Store, StoreError};
 
 /// The times a transaction is tried when a concurrent one moved what it
@@ -469,7 +471,7 @@ impl Feeder {
                 vec![write::person_key(former), write::person_key(held)],
             )
             .await?;
-            link::merge(&mut transaction, former, held, MergeKind::Source, context).await?;
+            link::merge::merge(&mut transaction, former, held, MergeKind::Source, context).await?;
             merged.push(former);
         }
         let me = me(
@@ -521,180 +523,6 @@ impl Feeder {
         write::insert_carried(connection, self.store.sealer(), locked.id, version, carried).await?;
         Ok((version, subject))
     }
-}
-
-/// The changes a feed made to persons: each merged person, then the person
-/// its record is in, created when `created` and updated otherwise.
-fn announced(
-    person: Option<PersonId>,
-    merged: &[PersonId],
-    created: bool,
-) -> Vec<announce::Change> {
-    let mut changes: Vec<announce::Change> = merged
-        .iter()
-        .copied()
-        .map(announce::Change::Merged)
-        .collect();
-    changes.extend(person.map(|person| {
-        if created {
-            announce::Change::Created(person)
-        } else {
-            announce::Change::Updated(person)
-        }
-    }));
-    changes
-}
-
-/// Which record a revision writes.
-#[derive(Debug, Clone, Copy)]
-struct Revising<'a> {
-    /// The domain's system.
-    system: &'a str,
-    /// The identifier's value, as sent.
-    value: &'a str,
-    /// The master identity an ITI-93 change writes, `None` for a feed.
-    master: Option<master::Identity>,
-}
-
-/// Which record a resolved duplicate subsumes, and into which.
-#[derive(Debug, Clone, Copy)]
-struct Resolving<'a> {
-    /// The domain of both records.
-    system: &'a str,
-    /// The subsumed identifier's value.
-    subsumed: &'a str,
-    /// The surviving identifier's value.
-    survivor: &'a str,
-}
-
-/// Returns the domain `system` names and the normalised `value`.
-fn condition<'d>(
-    domains: &'d [Domain],
-    system: &str,
-    value: &str,
-) -> Result<(&'d Domain, crate::store::seal::IdentifierValue), FeedError> {
-    let domain = domains
-        .iter()
-        .find(|d| d.system == system && !d.retired)
-        .ok_or(FeedError::UnknownDomain)?;
-    let value = Rule::of(system)
-        .normalise(value)
-        .map_err(|source| FeedError::Identifier {
-            system: system.to_owned(),
-            source,
-        })?;
-    Ok((domain, value))
-}
-
-/// Returns the advisory keys of the record's own identifier and of every
-/// authoritative identifier it carries.
-fn identity_keys(own: &[u8; 32], carried: &[Carried]) -> Vec<i64> {
-    std::iter::once(write::identity_key(own))
-        .chain(
-            carried
-                .iter()
-                .filter(|c| c.kind == DomainKind::Authoritative)
-                .map(|c| write::identity_key(&c.hmac)),
-        )
-        .collect()
-}
-
-/// Returns the keys of the identifiers `carried` holds in `local` domains.
-fn local_keys(carried: &[Carried]) -> BTreeSet<IdentifierKey> {
-    carried
-        .iter()
-        .filter(|c| c.kind == DomainKind::Local)
-        .map(|c| IdentifierKey::new(c.domain.uuid(), c.hmac))
-        .collect()
-}
-
-/// Returns the version the cross-referencing runs over, of a record in the
-/// master domain when `master`.
-fn me<'s>(
-    record: RecordId,
-    version: i32,
-    subject: &'s Subject,
-    carried: &[Carried],
-    master: bool,
-) -> Me<'s> {
-    let keys = |kind: DomainKind| {
-        carried
-            .iter()
-            .filter(|c| c.kind == kind)
-            .map(|c| IdentifierKey::new(c.domain.uuid(), c.hmac))
-            .collect()
-    };
-    Me {
-        record,
-        version,
-        master,
-        identity: None,
-        subject,
-        authoritative: keys(DomainKind::Authoritative),
-        local: keys(DomainKind::Local),
-        phonetic: blocking::text_key(BlockingKey::BirthYearFamilyPhonetic, subject),
-        postal: blocking::text_key(BlockingKey::PostalCodeBirthDate, subject),
-    }
-}
-
-/// A carried identifier as stored: domain, HMAC, sealed value, plain value.
-type CarriedRow = (Uuid, Vec<u8>, Option<Vec<u8>>, Option<String>);
-
-/// Reads the current version of `record`: its subject, the identifiers it
-/// carries, opened, and its number.
-async fn current(
-    connection: &mut PgConnection,
-    keys: &crate::store::seal::Sealer,
-    record: RecordId,
-    domains: &[Domain],
-) -> Result<(Subject, Vec<Carried>, i32), FeedError> {
-    let (version, text): (i32, String) = sqlx::query_as(
-        "SELECT v.version, v.demographics::text
-         FROM pix.source_record r
-         JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version
-         WHERE r.id = $1",
-    )
-    .bind(record.uuid())
-    .fetch_one(&mut *connection)
-    .await
-    .map_err(store)?;
-    let rows: Vec<CarriedRow> = sqlx::query_as(
-        "SELECT domain_id, identifier_hmac, identifier_sealed, identifier_value
-         FROM pix.carried_identifier WHERE record_id = $1 AND version = $2
-         ORDER BY domain_id, identifier_hmac",
-    )
-    .bind(record.uuid())
-    .bind(version)
-    .fetch_all(&mut *connection)
-    .await
-    .map_err(store)?;
-    let malformed = || FeedError::Store(StoreError::Seal(crate::store::seal::SealError::Malformed));
-    let mut carried = Vec::with_capacity(rows.len());
-    for (domain_id, hmac, sealed, plain) in rows {
-        let Some(domain) = domains.iter().find(|d| d.id.uuid() == domain_id) else {
-            return Err(malformed());
-        };
-        let value = match (sealed, plain) {
-            (Some(sealed), _) => keys.open(domain_id, &sealed).map_err(StoreError::Seal)?,
-            (None, Some(plain)) => {
-                crate::store::seal::IdentifierValue::new(plain).ok_or_else(malformed)?
-            }
-            (None, None) => return Err(malformed()),
-        };
-        carried.push(Carried {
-            domain: domain.id,
-            kind: domain.kind,
-            sensitive: domain.sensitive,
-            value,
-            hmac: hmac.try_into().map_err(|_short| malformed())?,
-        });
-    }
-    let patient = demographics::patient(&text)?;
-    Ok((
-        Subject::from_patient(&patient, local_keys(&carried)),
-        carried,
-        version,
-    ))
 }
 
 /// Writes the BALP record of one ITI-104 message, after the transaction.

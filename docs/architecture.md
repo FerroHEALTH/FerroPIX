@@ -867,7 +867,12 @@ for: after a merge, both persons' pseudonyms resolve to the survivor,
 through `merged_into`; after an unmerge, each resolves to its own person
 again. The reverse resolution, from a pseudonym to a person, is a steward
 action with a reason, audited as a disclosure (section 9). No specification
-governs the pseudonym: our own design, after FerroEHR's linkage domain.
+governs the pseudonym: our own design, after FerroEHR's linkage domain. Its
+ground is the GDPR: a pseudonym can be attributed to a person only with
+additional information kept separately (Regulation (EU) 2016/679, Art.
+4(5)), so that information stays in FerroPIX, a consumer translates only
+forward through ITI-83, and the way back is the audited steward action, a
+measure of data protection by design (Art. 25(1)).
 
 **The BSN.** Patients are identified by BSN in the Netherlands, the
 authentic source being the BRP (NL Generic Functions, the Identification

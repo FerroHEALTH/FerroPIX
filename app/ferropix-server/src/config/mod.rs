@@ -93,7 +93,7 @@ pub struct Config {
     /// The operator API (`[operator]`).
     pub operator: section::operator::Operator,
     /// The installation report to `FerroPULSE` (`[usage_report]`).
-    pub usage_report: section::usage_report::UsageReport,
+    pub usage_report: ferrohealth_usage_report::section::UsageReportSection,
     /// The development table, admitted under `profile = "development"` only
     /// (`[dev]`).
     pub dev: Option<section::dev::Dev>,

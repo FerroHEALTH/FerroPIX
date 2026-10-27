@@ -17,7 +17,6 @@ use crate::config::section::outbox::Retention;
 use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
 use crate::config::section::pseudonym::{self, PseudonymSeed};
 use crate::config::section::server::ServerSettings;
-use crate::config::section::usage_report::UsageReportSettings;
 use crate::config::section::xcpd::XcpdSettings;
 use crate::config::section::{is_loopback_address, operator::Operator};
 use crate::config::{Config, Profile};
@@ -58,7 +57,7 @@ pub struct Settings {
     /// The operator API switch.
     pub operator: Operator,
     /// The installation report.
-    pub usage_report: UsageReportSettings,
+    pub usage_report: ferrohealth_usage_report::section::UsageReportSection,
     /// The development table, under the development profile.
     pub dev: Option<Dev>,
     /// Where each setting came from: the provenance of the load, which the
@@ -97,7 +96,6 @@ impl Config {
         let xcpd = self.xcpd.resolve()?;
         let outbox = self.outbox.resolve()?;
         let audit = self.audit.resolve(self.profile)?;
-        let usage_report = self.usage_report.resolve()?;
         if self.dev.as_ref().is_some_and(|dev| dev.loopback) {
             if !is_loopback_address(server.listen) {
                 return Err(Error::NotLoopback {
@@ -130,7 +128,7 @@ impl Config {
             outbox,
             audit,
             operator: self.operator.clone(),
-            usage_report,
+            usage_report: self.usage_report.clone(),
             dev: self.dev.clone(),
             provenance: ferrohealth_config::provenance::Provenance::default(),
         })

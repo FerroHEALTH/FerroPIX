@@ -455,7 +455,7 @@ pub async fn serve_settings(
         telemetry: telemetry_section,
         ..
     } = settings;
-    let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
+    let facts = usage_report::Facts::new(profile, services, domains.len());
     let smart = Arc::new(
         auth::Smart::discover(auth, &domains)
             .await
@@ -474,18 +474,18 @@ pub async fn serve_settings(
         with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
     channels.pmir = pmir_channel(&pmir)?;
     channels.hl7v2 = mllp_channel(hl7v2.as_ref(), &audit);
-    let window = Arc::new(usage_report::window::Window::new(&server.base_path));
+    let window = Arc::new(usage_report::window(&server.base_path));
     let listener = bind(&server).await?;
-    let reporting = usage_report::reporter::start(
+    let reporting = usage_report::start(
         &report_settings,
-        usage_report::reporter::Sources {
+        usage_report::Pix {
             facts,
             health: health.clone(),
             lifecycle: lifecycle.clone(),
-            window: Arc::clone(&window),
         },
+        Arc::clone(&window),
         started,
-        usage_report::ci_of(|name| std::env::var(name).ok()),
+        ferrohealth_usage_report::section::ci_of(|name| std::env::var(name).ok()),
     )
     .await;
     let (signal, stopped) = stop_signal(lifecycle.clone());
@@ -530,7 +530,7 @@ pub async fn serve_settings(
 fn request_log(
     section: &TelemetrySection,
     telemetry: &Telemetry,
-    window: Arc<usage_report::window::Window>,
+    window: Arc<ferrohealth_usage_report::window::Window>,
 ) -> RequestLog {
     RequestLog::new(&section.logged_query_parameters)
         .with_metrics(&telemetry.meter(METER))
@@ -756,19 +756,13 @@ async fn bind(server: &config::section::server::ServerSettings) -> Result<TcpLis
 
 /// Returns the services `settings` switch on, as the usage report names
 /// them.
-fn services(settings: &Settings) -> Vec<usage_report::payload::Service> {
+fn services(settings: &Settings) -> Vec<usage_report::Service> {
     [
-        (
-            settings.hl7v2.is_some(),
-            usage_report::payload::Service::Hl7v2,
-        ),
-        (
-            settings.operator.enabled,
-            usage_report::payload::Service::Operator,
-        ),
-        (settings.pdqm.enabled, usage_report::payload::Service::Pdqm),
-        (settings.pixm.enabled, usage_report::payload::Service::Pixm),
-        (settings.pmir.enabled, usage_report::payload::Service::Pmir),
+        (settings.hl7v2.is_some(), usage_report::Service::Hl7v2),
+        (settings.operator.enabled, usage_report::Service::Operator),
+        (settings.pdqm.enabled, usage_report::Service::Pdqm),
+        (settings.pixm.enabled, usage_report::Service::Pixm),
+        (settings.pmir.enabled, usage_report::Service::Pmir),
     ]
     .into_iter()
     .filter_map(|(on, service)| on.then_some(service))

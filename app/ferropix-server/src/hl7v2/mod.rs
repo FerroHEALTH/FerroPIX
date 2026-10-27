@@ -51,6 +51,7 @@ use ferrobridge_hl7v2::mllp::{self, Codec, Connection, Handler, Malformed, Timeo
 use ferrobridge_hl7v2::parse::structure::structure_declared;
 use ferrobridge_hl7v2::parse::{Component, Message};
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
+use ferrohealth_usage_report::window::Window;
 use ihe_atna::balp::{NetworkAddress, Peer};
 use ihe_atna::user::OnBehalfOf;
 use tokio::net::TcpListener;
@@ -69,7 +70,6 @@ use crate::hl7v2::stamped::Stamped;
 use crate::hl7v2::write::{Fault, Writer};
 use crate::pdqm::Supplier;
 use crate::store::Store;
-use crate::usage_report::window::Window;
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// The answer to one message: its acknowledgment code and its text, before
@@ -183,7 +183,11 @@ impl Face {
         .instrument(span)
         .await;
         if let Some(usage) = &self.usage {
-            usage.record_message(started.elapsed(), answered.as_ref().map(|(code, _)| *code));
+            crate::usage_report::record_message(
+                usage,
+                started.elapsed(),
+                answered.as_ref().map(|(code, _)| *code),
+            );
         }
         answered.map(|(_, reply)| reply)
     }
@@ -284,7 +288,7 @@ impl Handler for Face {
         if let Some(usage) = &self.usage
             && reply.is_some()
         {
-            usage.record_message(Duration::ZERO, Some(Code::Reject));
+            crate::usage_report::record_message(usage, Duration::ZERO, Some(Code::Reject));
         }
         reply
     }

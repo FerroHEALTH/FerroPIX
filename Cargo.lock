@@ -1478,6 +1478,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferrohealth-usage-report"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "244de83090953a4d780a29304837cc250980e834bf98fcfa98598ce8f7cd2859"
+dependencies = [
+ "ferrohealth-telemetry",
+ "http",
+ "jiff",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "ferroid"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1557,6 +1576,7 @@ dependencies = [
  "ferrohealth-server",
  "ferrohealth-smart",
  "ferrohealth-telemetry",
+ "ferrohealth-usage-report",
  "ferropix-operator-api",
  "ferropix-testkit",
  "fhir-types",

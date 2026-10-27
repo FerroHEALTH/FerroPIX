@@ -1013,8 +1013,9 @@ the server's.
 
 **The usage report.** FerroEHR, FerroTERM and FerroBRIDGE send an
 installation report to FerroPULSE on its envelope v2; FerroPIX does the
-same under `[usage_report]` (`app/ferropix-server/src/usage_report/`): on
-by default with a notice at every start, `enabled = false`, an unset
+same under `[usage_report]` through `ferrohealth-usage-report`, with
+FerroPIX's status and route groups in
+`app/ferropix-server/src/usage_report.rs`: on by default with a notice at every start, `enabled = false`, an unset
 `state_dir` or a CI environment (`GITHUB_ACTIONS`, `CI`) keeps it off, one
 `start` and one `daily` report with the version, the deployment kind the
 artifact states (`compose`, `helm`, `binary`), the instance id under

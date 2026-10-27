@@ -113,6 +113,11 @@ strsim = "0.11.1"
 unicode-normalization = "0.1.26"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
+# The testkit's MLLP exchange reads an answer through ferrobridge-hl7v2's
+# frame codec, at the versions that crate resolves. Verified against
+# crates.io on 2026-10-27.
+bytes = "1.12.1"
+tokio-util = { version = "0.7.20", default-features = false, features = ["codec"] }
 tokio = { version = "1.53.1", default-features = false }
 # Test-only: the OTLP trace service the testkit's in-process collector
 # answers, and the gRPC server it runs on, on the line ferrohealth-telemetry

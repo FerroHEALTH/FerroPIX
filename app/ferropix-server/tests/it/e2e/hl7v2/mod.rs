@@ -18,6 +18,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use ferrobridge_hl7v2::mllp::{CARRIAGE_RETURN, END_BLOCK, START_BLOCK};
 use ferropix_server::audit::Audit;
 use ferropix_server::config::section::hl7v2::{Hl7v2, Sender};
 use ferropix_server::hl7v2::cursor::Cursors;
@@ -337,14 +338,14 @@ async fn the_listener_answers_a_frame_and_refuses_what_it_cannot_read_or_accept(
 
     let header = msh("ADT", "EAST", "ADT^A01^ADT_A01", "F-2");
     let mut unopened = header.clone().into_bytes();
-    unopened.extend_from_slice(&[mllp::END_BLOCK, mllp::CARRIAGE_RETURN]);
+    unopened.extend_from_slice(&[END_BLOCK, CARRIAGE_RETURN]);
     let reply = mllp::exchange(v2.address, &unopened)
         .await
         .expect("the exchange runs")
         .expect("a malformed frame is answered");
     assert_eq!(code(&String::from_utf8(reply).expect("text")), "AR");
 
-    let mut oversize = vec![mllp::START_BLOCK];
+    let mut oversize = vec![START_BLOCK];
     oversize.extend_from_slice(header.as_bytes());
     oversize.extend_from_slice(b"\rNTE|1||");
     oversize.extend(std::iter::repeat_n(b'x', FRAME_LIMIT * 2));
@@ -354,7 +355,7 @@ async fn the_listener_answers_a_frame_and_refuses_what_it_cannot_read_or_accept(
         .expect("an oversize frame is answered");
     assert_eq!(code(&String::from_utf8(reply).expect("text")), "AR");
 
-    let mut stalled = vec![mllp::START_BLOCK];
+    let mut stalled = vec![START_BLOCK];
     stalled.extend_from_slice(header.as_bytes());
     let reply = mllp::exchange(v2.address, &stalled)
         .await

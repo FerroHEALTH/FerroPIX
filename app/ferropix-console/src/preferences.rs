@@ -30,7 +30,9 @@ use http::header::{CACHE_CONTROL, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::locale::{Msg, catalog, negotiated, tr_in};
+use crate::locale::messages::Msg;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::locale::{catalog, negotiated, tr_in};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::server::ConsoleState;
 

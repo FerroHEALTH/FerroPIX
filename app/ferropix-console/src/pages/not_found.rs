@@ -10,7 +10,8 @@ use ferrohealth_ui::view::error_page::{ErrorPage, Status, Way, error_page};
 use leptos::prelude::*;
 
 use crate::app::{DASHBOARD, SEARCH};
-use crate::locale::{Msg, tr};
+use crate::locale::messages::Msg;
+use crate::locale::tr;
 use crate::pages::title;
 
 /// The not-found page, answered `404`.

@@ -15,7 +15,8 @@ use axum::response::{IntoResponse as _, Response};
 use http::header::CACHE_CONTROL;
 use http::{HeaderMap, StatusCode};
 
-use crate::locale::{Msg, catalog, negotiated, tr_in};
+use crate::locale::messages::Msg;
+use crate::locale::{catalog, negotiated, tr_in};
 use crate::server::ConsoleState;
 use crate::session::COOKIE;
 

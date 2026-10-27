@@ -17,7 +17,7 @@ use ferrohealth_secret::secret::Secret;
 use http::header::{CACHE_CONTROL, LOCATION, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 
-use crate::locale::Msg;
+use crate::locale::messages::Msg;
 use crate::server::ConsoleState;
 use crate::session::COOKIE;
 

@@ -20,7 +20,8 @@ use serde::Deserialize;
 
 use crate::app::page_context;
 use crate::app::shell::footer;
-use crate::locale::{Msg, tr};
+use crate::locale::messages::Msg;
+use crate::locale::tr;
 use crate::model::Capability;
 use crate::pages::title;
 

@@ -17,10 +17,11 @@ use std::sync::Arc;
 
 use ferrohealth_smart::resource::{Access, Caller};
 use ferropix_server::audit::records::operator::{StewardAction, steward};
-use ferropix_server::audit::records::{
-    Call, Feed, Identifier, Search, feed, pdq_search, pix_query, raw_request,
-};
+use ferropix_server::audit::records::{Call, raw_request};
 use ihe_atna::balp::{Exchange, NetworkAddress, Observer, Outcome, SOURCE_APPLICATION_SERVER};
+use ihe_iti::pdqm::audit::{SupplierSearch, supplier_records};
+use ihe_iti::pixm::audit::{FeedAction, manager_feed, manager_query};
+use ihe_iti::pixm::identifier::SourceIdentifier;
 use secrecy::{ExposeSecret as _, SecretString};
 use serde_json::Value;
 
@@ -286,10 +287,8 @@ fn entity<'a>(record: &'a Value, kind: &str, role: &str) -> Option<&'a Value> {
 #[test]
 fn every_record_holds_to_its_profile_and_names_the_patient_and_the_query() {
     let bsn = bsn();
-    let source = Identifier {
-        system: String::from(BSN_SYSTEM),
-        value: SecretString::from(bsn.clone()),
-    };
+    let source =
+        SourceIdentifier::new(BSN_SYSTEM, SecretString::from(bsn.clone())).expect("an identifier");
     let get = url::Url::parse(&format!(
         "{BASE}/Patient/$ihe-pix?sourceIdentifier={BSN_SYSTEM}%7C{bsn}"
     ))
@@ -313,7 +312,12 @@ fn every_record_holds_to_its_profile_and_names_the_patient_and_the_query() {
             String::from("POST"),
         ),
     ] {
-        let record = written(&pix_query(&call(None), raw, &source, Outcome::Success));
+        let record = written(&manager_query(
+            &call(None).received(),
+            raw,
+            &source,
+            Outcome::Success,
+        ));
         holds_to(&record, &pixm_query);
         like(&record, &pixm_example);
         let patient = entity(&record, "1", "1").expect("the patient entity");
@@ -327,17 +331,15 @@ fn every_record_holds_to_its_profile_and_names_the_patient_and_the_query() {
         );
         assert!(text.contains(&bsn), "the raw request as sent");
     }
-    let fed = Identifier {
-        system: String::from(DOMAIN),
-        value: SecretString::from("MRN-SYNTHETIC-1"),
-    };
+    let fed = SourceIdentifier::new(DOMAIN, SecretString::from("MRN-SYNTHETIC-1"))
+        .expect("an identifier");
     for (action, profile, example) in [
-        (Feed::Create, "Create", "create"),
-        (Feed::Update, "Update", "update"),
-        (Feed::Delete, "Delete", "delete"),
+        (FeedAction::Create, "Create", "create"),
+        (FeedAction::Update, "Update", "update"),
+        (FeedAction::Delete, "Delete", "delete"),
     ] {
-        let record = written(&feed(
-            &call(None),
+        let record = written(&manager_feed(
+            &call(None).received(),
             action,
             &fed,
             Some("Patient/0192aeb0-0000-7000-8000-000000000001"),
@@ -376,14 +378,20 @@ fn every_supplier_and_steward_record_holds_to_its_profile() {
         "{BASE}/Patient?family=Proefsma&birthdate=1970-01-01"
     ));
     for (kind, profile, example) in [
-        (Search::Query, "Query", "Query"),
-        (Search::Match, "Match", "Match"),
+        (SupplierSearch::Query, "Query", "Query"),
+        (SupplierSearch::Match, "Match", "Match"),
     ] {
         let definition = vendored(
             "ihe-pdqm",
             &format!("package/StructureDefinition-IHE.PDQm.{profile}.Audit.Supplier.json"),
         );
-        let records = pdq_search(&call(None), kind, &search, &persons, Outcome::Success);
+        let records = supplier_records(
+            &call(None).received(),
+            kind,
+            &search,
+            &persons,
+            Outcome::Success,
+        );
         assert_eq!(
             2,
             records.len(),
@@ -401,7 +409,7 @@ fn every_supplier_and_steward_record_holds_to_its_profile() {
             let patient = entity(&record, "1", "1").expect("the patient entity");
             assert_eq!(person.as_str(), patient["what"]["reference"]);
         }
-        let none = pdq_search(&call(None), kind, &search, &[], Outcome::Success);
+        let none = supplier_records(&call(None).received(), kind, &search, &[], Outcome::Success);
         assert_eq!(1, none.len(), "a search that found no one");
         let record = written(&none[0]);
         holds_to(&record, &definition);
@@ -436,13 +444,11 @@ fn every_supplier_and_steward_record_holds_to_its_profile() {
 
 #[test]
 fn a_backend_client_acting_for_itself_is_recorded_with_no_user_agent() {
-    let record = written(&pix_query(
-        &call(None),
+    let record = written(&manager_query(
+        &call(None).received(),
         SecretString::from("GET"),
-        &Identifier {
-            system: String::from(DOMAIN),
-            value: SecretString::from("MRN-SYNTHETIC-2"),
-        },
+        &SourceIdentifier::new(DOMAIN, SecretString::from("MRN-SYNTHETIC-2"))
+            .expect("an identifier"),
         Outcome::MinorFailure,
     ));
     assert!(!agent_codes(&record).contains(&(

@@ -17,7 +17,7 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `pmir` | Patient Master Identity Registry, PMIR | ITI-93, ITI-94 | Patient Identity Subscriber and Consumer |
 | `mcsd` | Mobile Care Services Discovery, mCSD | ITI-90, ITI-91 | Query Client and Update Client |
 | `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway, and the Responding Gateway's messages with no HTTP server |
-| `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side |
+| `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side, and of the PIXm Manager and the PDQm Supplier |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
 | `smart` | The authorizer over the client-credentials token of `ferrohealth-smart` | ITI-72 | the client's access token |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |

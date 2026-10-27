@@ -9,7 +9,7 @@
 //! server's base URL the agent it flows to, as each server-side audit
 //! profile fixes its source and destination agents. A server that names each
 //! request by an id records the id as an entity of type
-//! [`REQUEST_ID`](ihe_atna::balp::REQUEST_ID); no specification governs that
+//! [`ihe_atna::balp::REQUEST_ID`]; no specification governs that
 //! entity: our own design. [`Received`] holds these facts once per request,
 //! and each server-side builder of `pixm::audit` and `pdqm::audit` turns
 //! them into the record its audit profile fixes.

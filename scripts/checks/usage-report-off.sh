@@ -23,6 +23,14 @@
 # inherit the runner's environment. No specification governs this: our own
 # design, after FerroBRIDGE's guard of the same name.
 #
+# A launcher can also start a sibling family server (FerroEHR, FerroPIX,
+# FerroTERM, FerroFED, FerroBRIDGE), which reports under its own key,
+# `<PRODUCT>__USAGE_REPORT__ENABLED`. A Compose service running a family image
+# sets that key to false or to an interpolation of `FERROPIX__USAGE_REPORT__ENABLED`, a
+# `docker run` of a sibling image hands the container its key, and a crate
+# whose Rust source names a sibling image sets `"<PRODUCT>__USAGE_REPORT__ENABLED",
+# "false"` on the container.
+#
 # Exempt: this file, which reads the commands as data.
 #
 #   scripts/checks/usage-report-off.sh [--self-test]
@@ -31,6 +39,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 readonly SELF='scripts/checks/usage-report-off.sh'
+readonly OWN_KEY='FERROPIX__USAGE_REPORT__ENABLED'
 readonly SWITCH='FERROPIX__USAGE_REPORT__ENABLED(=|:[[:space:]]*["'\'']?)["'\'']?false|usageReport\.enabled=false'
 # shellcheck disable=SC2016 # a regular expression, never expanded
 readonly BINARY='(target/(release|debug)/|/usr/local/bin/|\$bin/|\$\{bin\}/)ferropix(["'\''[:space:]]|$)|cargo[[:space:]]+run[[:space:]].*(-p|--package)[[:space:]=]+ferropix-server|cargo[[:space:]]+run[[:space:]].*--bin[[:space:]=]+ferropix([[:space:]]|$)'
@@ -128,6 +137,7 @@ findings() {
     [[ "$covered" -eq 1 ]] || printf '%s\n' "$f"
   done <<< "$list"
   rust_findings "$@"
+  sibling_findings "$@"
 }
 
 # Prints every tracked Rust source that starts the binary with `serve`
@@ -143,6 +153,115 @@ rust_findings() {
     grep -qE "$RUST_SWITCH" <<< "$text" || printf '%s\n' "$f"
   done < <("$@" | grep -E '^(app|tools|crates)/.*\.rs$' | sort)
 }
+
+# --- Sibling servers: the family products a launcher starts besides this one.
+#
+# A Compose file, a `docker run` or a test harness can start another family
+# server (FerroEHR, FerroPIX, FerroTERM, FerroFED, FerroBRIDGE), and each one
+# reports under its own key, `<PRODUCT>__USAGE_REPORT__ENABLED`. This repo's
+# switch stops none of them on its own.
+readonly FAMILY='ferroehr|ferropix|ferroterm|ferrofed|ferrobridge'
+readonly FAMILY_IMAGE="ghcr\\.io/ferrohealth/($FAMILY)[:@]"
+
+# Prints `file: service (KEY)` for each service of a Compose file that runs a
+# family server image without that server's switch in its own `environment`:
+# KEY set to false, or to an interpolation of OWN_KEY, which every Compose
+# launcher exports as false. A service that merges an `x-` anchor
+# (`<<: *name`) runs the anchor's image.
+compose_findings() {
+  awk -v own="$OWN_KEY" -v img="$FAMILY_IMAGE" -v file="$1" -v sq="'" '
+    function close_block() {
+      if (kind == "anchor" && product != "") anchor_image[name] = product
+      if (kind == "service") { svc[++n] = name; svc_image[name] = product; svc_merge[name] = merge }
+      kind = ""; name = ""; product = ""; merge = ""
+    }
+    /^[[:space:]]*#/ { next }
+    /^[^[:space:]]/ {
+      close_block(); in_services = ($0 ~ /^services:/)
+      if (match($0, /&[A-Za-z0-9_-]+/)) { kind = "anchor"; name = substr($0, RSTART + 1, RLENGTH - 1) }
+      next
+    }
+    in_services && /^  [A-Za-z0-9_.-]+:/ {
+      close_block(); kind = "service"; name = $0; sub(/^  /, "", name); sub(/:.*/, "", name); next
+    }
+    kind == "" { next }
+    /^[[:space:]]+image:/ && match($0, img) { product = toupper(substr($0, RSTART + 20, RLENGTH - 21)) }
+    match($0, /<<:[[:space:]]*\*[A-Za-z0-9_-]+/) { merge = substr($0, RSTART, RLENGTH); sub(/.*\*/, "", merge) }
+    match($0, /[A-Z]+__USAGE_REPORT__ENABLED[[:space:]]*[:=]/) {
+      key = substr($0, RSTART, RLENGTH); sub(/[[:space:]]*[:=]$/, "", key)
+      value = substr($0, RSTART + RLENGTH); gsub(sq, "", value); gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", value)
+      if (kind == "service" && (value == "false" || index(value, "${" own) > 0)) ok[name, key] = 1
+    }
+    END {
+      close_block()
+      for (i = 1; i <= n; i++) {
+        s = svc[i]; p = svc_image[s]
+        if (p == "" && svc_merge[s] != "") p = anchor_image[svc_merge[s]]
+        if (p != "" && !((s, p "__USAGE_REPORT__ENABLED") in ok))
+          printf "%s: %s (%s__USAGE_REPORT__ENABLED)\n", file, s, p
+      }
+    }
+  ' "$1"
+}
+
+# Prints `file (KEY)` for each `docker run` in $1 that starts a sibling family
+# server without handing the container that server's switch on its own
+# command line. A one-shot job starts no server.
+sibling_run_findings() {
+  local line product key
+  while IFS= read -r line; do
+    product="$(grep -oE "$FAMILY_IMAGE" <<<"$line" | sed -nE '1{s|.*/||; s|[:@]$||; p;}' | tr '[:lower:]' '[:upper:]')"
+    key="${product}__USAGE_REPORT__ENABLED"
+    [[ -n "$product" && "$key" != "$OWN_KEY" ]] || continue
+    grep -qE '[[:space:]](healthcheck|--version|--help|config[[:space:]]+check)([[:space:]]|$)' <<<"$line" && continue
+    grep -qE "(-e|--env)[[:space:]=]+[\"']?${key}=false" <<<"$line" || printf '%s (%s)\n' "$1" "$key"
+  done < <(logical_lines "$1" | grep -E "docker[[:space:]]+run[[:space:]].*$FAMILY_IMAGE" || true)
+}
+
+# Prints `crate (KEY)` for each crate whose Rust source names a sibling
+# family server image (`"ghcr.io/ferrohealth/<product>"`) while no Rust
+# source of that crate sets `"<PRODUCT>__USAGE_REPORT__ENABLED", "false"` on
+# the container. $@ = the file-listing command.
+rust_sibling_findings() {
+  local files f crate product key
+  files="$("$@" | grep -E '\.rs$' || true)"
+  [[ -n "$files" ]] || return 0
+  # shellcheck disable=SC2086 # one word per tracked path, none with spaces
+  while IFS= read -r f; do
+    crate="$(cut -d/ -f1-2 <<<"$f")"
+    while IFS= read -r product; do
+      key="$(tr '[:lower:]' '[:upper:]' <<<"$product")__USAGE_REPORT__ENABLED"
+      [[ "$key" != "$OWN_KEY" ]] || continue
+      # shellcheck disable=SC2046 # one word per tracked path, none with spaces
+      grep -qE "\"${key}\",[[:space:]]*\"false\"" $(grep -E "^${crate}/" <<<"$files") ||
+        printf '%s (%s)\n' "$crate" "$key"
+    done < <(grep -oE "\"ghcr\\.io/ferrohealth/($FAMILY)\"" "$f" | sed -E 's|.*/||; s|"$||' | sort -u)
+  done < <(grep -lE "\"ghcr\\.io/ferrohealth/($FAMILY)\"" $files 2>/dev/null || true)
+}
+
+# The Compose files among the listed ones: YAML with a top-level `services:`.
+compose_files() {
+  local f
+  while IFS= read -r f; do
+    case "$f" in
+      .github/* | scripts/checks/*) continue ;;
+      *.yml | *.yaml) grep -qE '^services:' "$f" 2>/dev/null && printf '%s\n' "$f" ;;
+      *) ;;
+    esac
+  done < <("$@")
+}
+
+# Prints every sibling finding over the listed files.
+sibling_findings() {
+  local f
+  while IFS= read -r f; do compose_findings "$f"; done < <(compose_files "$@")
+  while IFS= read -r f; do [[ -n "$f" ]] && sibling_run_findings "$f"; done <<<"$(candidates "$@")"
+  rust_sibling_findings "$@"
+}
+
+
+# Lists the self-test's fixture tree the way `git ls-files` lists the repo.
+tracked_fixtures() { find . -type f | sed 's|^\./||'; }
 
 self_test() {
   local tmp found failures=0 name
@@ -187,7 +306,29 @@ self_test() {
   printf 'Command::new(env!("CARGO_BIN_EXE_ferropix-console"))\n    .arg("serve")\n' > "$tmp/app/server/tests/console.rs"
   printf '#!/usr/bin/env bash\ndocker run -d ghcr.io/ferrohealth/ferropix-console:main\n' > "$tmp/docker/console.sh"
 
-  found="$(cd "$tmp" && findings find scripts docker .github app -type f)"
+  # Sibling servers: Compose services, a docker run and a Rust harness.
+  mkdir -p "$tmp/scripts" "$tmp/tools/bare/src" "$tmp/tools/held/src"
+  # shellcheck disable=SC2016 # the fixture is literal Compose text, never expanded here
+  printf 'x-node: &node\n  image: ghcr.io/ferrohealth/ferroehr:1.0.0\nservices:\n  ferropix:\n    image: ghcr.io/ferrohealth/ferropix:1.0.0\n    environment:\n      FERROPIX__USAGE_REPORT__ENABLED: ${FERROPIX__USAGE_REPORT__ENABLED:-true}\n  ferroehr:\n    image: ghcr.io/ferrohealth/ferroehr:1.0.0\n    environment:\n      FERROEHR__USAGE_REPORT__ENABLED: ${FERROPIX__USAGE_REPORT__ENABLED:-true}\n  ferroterm:\n    image: ghcr.io/ferrohealth/ferroterm:1.0.0@sha256:0\n    environment:\n      - X=1\n  ferroterm-off:\n    image: ghcr.io/ferrohealth/ferroterm:1.0.0\n    environment:\n      FERROTERM__USAGE_REPORT__ENABLED: "false"\n  node-a:\n    <<: *node\n    environment:\n      X: "1"\n  ferroehr-postgres:\n    image: ghcr.io/ferrohealth/ferroehr-postgres:1.0.0\n' > "$tmp/compose.sib.yaml"
+  printf '#!/usr/bin/env bash\nexport FERROPIX__USAGE_REPORT__ENABLED=false\ndocker run -d ghcr.io/ferrohealth/ferroehr:1.0.0\n' > "$tmp/scripts/sib-run-on.sh"
+  printf '#!/usr/bin/env bash\ndocker run -d \\\n  -e FERROEHR__USAGE_REPORT__ENABLED=false ghcr.io/ferrohealth/ferroehr:1.0.0\n' > "$tmp/scripts/sib-run-off.sh"
+  printf '#!/usr/bin/env bash\ndocker run --rm ghcr.io/ferrohealth/ferroehr:1.0.0 healthcheck\n' > "$tmp/scripts/sib-run-job.sh"
+  printf 'const IMAGE: &str = "ghcr.io/ferrohealth/ferroterm";\n' > "$tmp/tools/bare/src/images.rs"
+  printf 'const IMAGE: &str = "ghcr.io/ferrohealth/ferroterm";\n' > "$tmp/tools/held/src/images.rs"
+  printf 'fn f(i: I) -> I {\n    i.with_env_var("FERROTERM__USAGE_REPORT__ENABLED", "false")\n}\n' > "$tmp/tools/held/src/start.rs"
+
+  found="$(cd "$tmp" && findings tracked_fixtures)"
+  for name in "compose.sib.yaml: ferroterm (FERROTERM__USAGE_REPORT__ENABLED)" "compose.sib.yaml: node-a (FERROEHR__USAGE_REPORT__ENABLED)" \
+    "scripts/sib-run-on.sh (FERROEHR__USAGE_REPORT__ENABLED)" "tools/bare (FERROTERM__USAGE_REPORT__ENABLED)"; do
+    grep -qxF "$name" <<< "$found" || {
+      echo "self-test: $name was not caught" >&2
+      failures=1
+    }
+  done
+  if grep -E 'compose\.sib\.yaml: (ferropix|ferroehr|ferroterm-off|ferroehr-postgres) |sib-run-off|sib-run-job|tools/held' <<< "$found"; then
+    echo "self-test: a switched sibling, a one-shot job or a non-server image was wrongly caught" >&2
+    failures=1
+  fi
   for name in scripts/on.sh scripts/bin-on.sh scripts/cargo-on.sh scripts/compose-on.sh scripts/long-on.sh \
     scripts/helm-on.sh scripts/fam/orphan.sh .github/workflows/run-on.yml .github/workflows/run-job-env.yml \
     .github/workflows/bin-on.yml app/server/tests/on.rs; do
@@ -206,7 +347,7 @@ self_test() {
     fi
   done
   [[ "$failures" -eq 0 ]] || return 1
-  echo "usage-report-off: self-test OK (eleven unswitched launchers caught, seventeen clean or exempt files allowed)."
+  echo "usage-report-off: self-test OK (eleven unswitched launchers and four unswitched sibling servers caught, seventeen clean or exempt files and six sibling cases allowed)."
 }
 
 report() {
@@ -221,6 +362,9 @@ report() {
   echo "Set FERROPIX__USAGE_REPORT__ENABLED=false in the launcher (or in every script" >&2
   echo "that sources it, or in the workflow env); a docker run of the server passes" >&2
   echo "--env FERROPIX__USAGE_REPORT__ENABLED=false on its own command line." >&2
+  echo "A sibling server named (KEY) takes its own key: false, or \${FERROPIX__USAGE_REPORT__ENABLED...}," >&2
+  echo "in its Compose environment, --env KEY=false on a docker run, and" >&2
+  echo ".with_env_var(\"KEY\", \"false\") in a Rust harness." >&2
   return 1
 }
 

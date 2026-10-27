@@ -68,6 +68,30 @@ recorded as a steward action and a BALP Privacy Disclosure. PIXm does not
 resolve a pseudonym: a `sourceIdentifier` in a pseudonymisation domain
 answers `400`, "sourceIdentifier Assigning Authority not found".
 
+## Why the clinical domain never resolves back
+
+A pseudonym is pseudonymised data in the sense of the GDPR: it can no
+longer be attributed to a person "without the use of additional
+information, provided that such additional information is kept
+separately" (Regulation (EU) 2016/679, Art. 4(5)). FerroPIX is where that
+additional information is kept. A clinical store holds only the pseudonym
+of its own domain: it translates a real identifier forward through ITI-83
+with its namespace as `targetSystem`, and it has no call that translates a
+pseudonym back. The one way back is the steward's reverse resolution above,
+with a reason and a disclosure record, which keeps the separation the
+GDPR asks for when pseudonymisation is used as a measure of data
+protection by design (Art. 25(1)).
+
+## The console
+
+The console's Pseudonymisation domains page lists the domains with their
+counts and is the one place a steward resolves a pseudonym: the domain,
+the pseudonym and a reason, answered with the patient it belongs to. An
+administrator adds, renames or retires a domain there. A patient's
+Pseudonyms tab shows each domain and whether the patient has a pseudonym
+in it, masked, with its audited reveal
+([The operator console](../operate/console.md)).
+
 ## The Dutch identifiers
 
 The pseudonymised BSN of the Dutch Generic Functions is an identifier

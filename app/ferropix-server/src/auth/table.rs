@@ -57,9 +57,9 @@ pub enum Need {
         /// Which domain's Source the caller must be.
         source: SourceRule,
     },
-    /// `[auth] steward_scope`.
+    /// `[auth] product_scope`.
     Steward,
-    /// `[auth] admin_scope`.
+    /// `[operator] admin_scope`.
     Admin,
     /// Either product scope: a read an administrator needs beside a
     /// steward.

@@ -27,6 +27,8 @@ mod matching;
 #[cfg(test)]
 mod operator;
 #[cfg(test)]
+mod resource_server;
+#[cfg(test)]
 mod secrets;
 #[cfg(test)]
 mod serve;

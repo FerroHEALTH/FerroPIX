@@ -40,7 +40,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use crate::support::Secrets;
 
 /// The audience every token is addressed to.
-const AUDIENCE: &str = "http://localhost:8080/fhir";
+pub(crate) const AUDIENCE: &str = "http://localhost:8080/fhir";
 
 /// The domain every Source case writes to, under the OID arc ITU-T X.660
 /// reserves for examples.
@@ -71,13 +71,34 @@ pub(crate) const EVERY_SCOPE: &str =
     "system/Patient.cruds system/Subscription.cruds __ferropix.steward __ferropix.admin";
 
 /// One generated signing key and its public JWK.
-struct SigningKey {
+pub(crate) struct SigningKey {
     encoding: EncodingKey,
-    jwk: serde_json::Value,
+    pub(crate) jwk: serde_json::Value,
+}
+
+impl SigningKey {
+    /// Returns a valid token of `issuer` for `client` granting `scope`.
+    pub(crate) fn token(&self, issuer: &str, client: &str, scope: &str) -> String {
+        let now = jiff::Timestamp::now().as_second();
+        let claims = serde_json::json!({
+            "iss": issuer,
+            "aud": AUDIENCE,
+            "sub": "synthetic-subject-17",
+            "client_id": client,
+            "iat": now,
+            "exp": now + 300,
+            "jti": "synthetic-jti-1",
+            "scope": scope,
+        });
+        let mut header = Header::new(Algorithm::ES256);
+        header.kid = Some(String::from("k1"));
+        header.typ = Some(String::from("at+jwt"));
+        jsonwebtoken::encode(&header, &claims, &self.encoding).expect("the token signs")
+    }
 }
 
 /// Returns a fresh ES256 key published as `k1`.
-fn signing_key() -> SigningKey {
+pub(crate) fn signing_key() -> SigningKey {
     let pkcs8 =
         EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &SystemRandom::new())
             .expect("a key pair");
@@ -127,21 +148,7 @@ impl Issuer {
 
     /// Returns a valid token of `client` granting `scope`.
     pub(crate) fn token(&self, client: &str, scope: &str) -> String {
-        let now = jiff::Timestamp::now().as_second();
-        let claims = serde_json::json!({
-            "iss": self.server.uri(),
-            "aud": AUDIENCE,
-            "sub": "synthetic-subject-17",
-            "client_id": client,
-            "iat": now,
-            "exp": now + 300,
-            "jti": "synthetic-jti-1",
-            "scope": scope,
-        });
-        let mut header = Header::new(Algorithm::ES256);
-        header.kid = Some(String::from("k1"));
-        header.typ = Some(String::from("at+jwt"));
-        jsonwebtoken::encode(&header, &claims, &self.key.encoding).expect("the token signs")
+        self.key.token(&self.server.uri(), client, scope)
     }
 }
 
@@ -158,6 +165,9 @@ listen = "127.0.0.1:0"
 audience = ["{AUDIENCE}"]
 
 [[auth.issuer]]
+issuer = "{issuer}"
+
+[[trust.issuer]]
 issuer = "{issuer}"
 clients = ["east-lab", "west-lab"]
 

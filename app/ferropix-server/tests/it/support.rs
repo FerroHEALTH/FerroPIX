@@ -97,13 +97,14 @@ jwks_max_age_seconds = 300
 jwks_refresh_interval_seconds = 30
 jwks_file = ""
 timeout_ms = 5000
-challenge_realm = "ferropix"
-steward_scope = "__ferropix.steward"
-admin_scope = "__ferropix.admin"
+realm = "ferropix"
+product_scope = "__ferropix.steward"
+role_claims = ["roles"]
+capabilities = ["client-confidential-asymmetric"]
+scopes_supported = ["system/Patient.rs"]
 
 [[auth.issuer]]
 issuer = "https://idp.example.org/realms/pix"
-clients = ["east-lab", "west-lab"]
 audience = ["https://pix.example.org/pix/fhir"]
 algorithms = ["PS256"]
 token_profile = "jwt"
@@ -111,6 +112,10 @@ clock_skew_seconds = 10
 jwks_max_age_seconds = 60
 jwks_refresh_interval_seconds = 10
 jwks_file = ""
+
+[[trust.issuer]]
+issuer = "https://idp.example.org/realms/pix"
+clients = ["east-lab", "west-lab"]
 
 [[domain]]
 system = "urn:oid:2.999.1.1"
@@ -189,6 +194,7 @@ retry_max_ms = 30000
 
 [operator]
 enabled = true
+admin_scope = "__ferropix.admin"
 
 [usage_report]
 enabled = true

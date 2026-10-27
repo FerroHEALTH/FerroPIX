@@ -20,8 +20,8 @@ audience and lifetime under RFC 9068. The scopes each caller needs:
 | PIXm or PDQm Consumer | `system/Patient.rs` | `$ihe-pix` by `GET` and `POST` (ITI-83), the Patient search and read (ITI-78), `$match` (ITI-119) |
 | Patient Identity Source | `system/Patient.cud`, and the token's `client_id` equal to the domain's `source_client_id` | the conditional update and delete of `Patient` (ITI-104) |
 | PMIR subscriber | `system/Subscription.cruds` | `Subscription` (ITI-94) |
-| Data steward | `auth.steward_scope` | the operator API |
-| Administrator | `auth.admin_scope` | the writes of identifier and pseudonymisation domains, and the reads beside them |
+| Data steward | `auth.product_scope` (default `__ferropix.steward`) | the operator API |
+| Administrator | `operator.admin_scope` (default `__ferropix.admin`) | the writes of identifier and pseudonymisation domains, and the reads beside them |
 
 Each IHE transaction also admits the scope its profile defines for an IUA
 grouping, the transaction's name (`ITI-83`, `ITI-104`, `ITI-78`,

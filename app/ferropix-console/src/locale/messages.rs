@@ -761,6 +761,8 @@ messages! {
     DomainRetire = "domain-retire",
     /// The retire switch's help.
     DomainRetireHelp = "domain-retire-help",
+    /// The hint inside a date typed as text.
+    DateHint = "date-hint",
     /// The notice that a record changed since the pair was scored.
     PairChanged = "pair-changed",
     /// The compare's card and caption.

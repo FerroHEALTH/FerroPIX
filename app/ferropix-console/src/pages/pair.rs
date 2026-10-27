@@ -410,7 +410,7 @@ fn bar(candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> AnyView {
                 id: String::from("decide-until"),
                 name: String::from("until"),
                 label: tr(Msg::DeferUntil),
-                placeholder: String::from("YYYY-MM-DD"),
+                placeholder: tr(Msg::DateHint),
                 help: Some(tr(Msg::PairUntilHelp)),
                 ..DockField::default()
             },

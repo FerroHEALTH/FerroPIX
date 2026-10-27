@@ -459,3 +459,4 @@ pair-decision = Decision
 pair-reason-hint = Why you decided this
 pair-reason-missing = Give a reason to decide.
 pair-until-help = For Defer only: the day the pair comes back.
+date-hint = YYYY-MM-DD

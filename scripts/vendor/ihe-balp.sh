@@ -66,6 +66,7 @@ fhir="$(jq -r '.fhirVersions | join(", ")' "$tmp/package/package.json")"
 dropped="$(corpus_drop_manifests "$tmp")"
 [ -n "$dropped" ] || die "the package carries no package.json"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 corpus_take "$tmp" "$dest" package
@@ -143,6 +144,7 @@ either.
 |---|---|
 $dropped
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

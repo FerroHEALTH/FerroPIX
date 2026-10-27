@@ -106,6 +106,7 @@ fhir="$(jq -r '.fhirVersions | join(", ")' "$tmp/package/package.json")"
 [ "$manifest_version" = "$version" ] || die "the package declares version $manifest_version, not $version"
 [ "$licence" = "CC-BY-4.0" ] || die "the package declares licence $licence, not CC-BY-4.0"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 corpus_take "$tmp" "$dest" "${paths[@]}"
@@ -190,6 +191,7 @@ either.
 |---|---|
 $dropped
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

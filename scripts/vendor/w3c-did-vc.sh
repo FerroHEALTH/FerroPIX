@@ -81,6 +81,7 @@ mkdir -p "$tmp/out/did-method-web"
 cp "$tree_root/index.html" "$tmp/out/did-method-web/index.html"
 cp "$tree_root/LICENSE.md" "$tmp/out/did-method-web/LICENSE.md"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 cp -R "$tmp/out/." "$dest/"
@@ -143,6 +144,7 @@ what the track requires is complete.
 | File | sha256 |
 |---|---|$rows
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

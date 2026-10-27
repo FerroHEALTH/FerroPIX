@@ -55,6 +55,7 @@ trap 'rm -rf "$tmp"' EXIT
 say "$repo tag $tag resolves to $commit"
 tree_root="$(corpus_fetch "$repo" "$commit" "$tmp")"
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 corpus_take "$tree_root" "$dest" "${paths[@]}"
@@ -128,6 +129,7 @@ amended before it is incorporated into the Technical Framework.
 | File | sha256 | git blob id |
 |---|---|---|$rows
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

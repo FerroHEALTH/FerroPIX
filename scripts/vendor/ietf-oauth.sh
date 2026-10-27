@@ -63,6 +63,7 @@ for number in "${numbers[@]}"; do
 - RFC $number: <$(corpus_pin_url "$pin")>, sha256 \`$(corpus_pin_sha256 "$pin")\`"
 done
 
+[ ! -f "$dest/PROVENANCE.md" ] || cp "$dest/PROVENANCE.md" "$tmp/PROVENANCE.old"
 rm -rf "$dest"
 mkdir -p "$dest"
 for number in "${numbers[@]}"; do
@@ -121,6 +122,7 @@ the OAuth family references are cited, not taken.
 | File | sha256 |
 |---|---|$rows
 PROV
+corpus_keep_fetched "$tmp/PROVENANCE.old" "$dest/PROVENANCE.md"
 
 say "$files files, tree digest $digest"
 say "done"

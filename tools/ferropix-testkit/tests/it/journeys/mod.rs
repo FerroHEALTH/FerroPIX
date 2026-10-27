@@ -10,7 +10,8 @@
 //! FerroPIX server (`stack`). The waits are FerroTERM's (`browser`): every
 //! step waits for the page to hydrate and a press waits for the page it
 //! loads, never a timer. A journey fails on anything severe the browser
-//! logs.
+//! logs, and on Leptos's warning of a resource read outside a `Suspense`
+//! on the process's standard error (`stderr`).
 //!
 //! Without `FERROPIX_JOURNEYS=1` each journey returns at once, so the
 //! ordinary suite needs no browser; the `journeys` job of
@@ -30,6 +31,7 @@ mod pseudo_locale;
 mod screenshots;
 mod sign_in;
 mod stack;
+mod stderr;
 
 /// The environment variable that opts in to the browser journeys.
 const JOURNEYS_GATE: &str = "FERROPIX_JOURNEYS";

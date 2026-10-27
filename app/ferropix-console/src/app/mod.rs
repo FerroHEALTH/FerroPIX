@@ -499,23 +499,29 @@ fn Root() -> impl IntoView {
         },
         false,
     );
-    let shown = Memo::new(move |_| {
-        let read = read.get().and_then(Result::ok);
+    let posted_here = Memo::new(move |_| {
         let here = location.pathname.get();
-        let posted = posted
+        posted
             .and_then(|Posted(posted)| posted.get())
-            .filter(|page| page.path.split('?').next() == Some(here.as_str()));
-        posted.or(read)
+            .filter(|page| page.path.split('?').next() == Some(here.as_str()))
     });
+    // NOTE: leptos_server 0.8 `Resource::try_read_untracked`: a resource is read inside an
+    // effect or a `Suspense`, never in a memo, so the page is taken from the read here.
     Effect::new(move |_| {
-        if let (Some(page), Some(Latest(latest))) = (shown.get(), latest) {
+        let shown = posted_here
+            .get()
+            .or_else(|| read.get().and_then(Result::ok));
+        if let (Some(page), Some(Latest(latest))) = (shown, latest) {
             follow(&page);
             if latest.get_untracked() != page {
                 latest.set(page);
             }
         }
     });
-    provide_context(Reads { read, shown });
+    provide_context(Reads {
+        read,
+        posted: posted_here,
+    });
     let signed_in = Memo::new(move |_| !crate::paths::is_sign_in(&location.pathname.get()));
     move || {
         // NOTE: leptos_router 0.8 `Routes`: the router writes a navigation's address once a
@@ -633,21 +639,21 @@ fn route(path: &str) -> Option<(Page, Vec<(String, String)>)> {
 struct Reads {
     /// The read of the page at the address.
     read: Resource<Result<PageContext, ServerFnError>>,
-    /// The context shown: a post's answer at its own address, else the read.
-    shown: Memo<Option<PageContext>>,
+    /// A post's answer at its own address, shown in place of the read.
+    posted: Memo<Option<PageContext>>,
 }
 
 /// The page in view, drawn by `draw` once its read has arrived; the page
 /// before stays until then.
 fn content(draw: fn(Page) -> AnyView) -> AnyView {
-    let Some(Reads { read, shown }) = use_context::<Reads>() else {
+    let Some(Reads { read, posted }) = use_context::<Reads>() else {
         return ().into_any();
     };
     view! {
         <Transition fallback=|| ()>
             {move || Suspend::new(async move {
                 let read = read.await;
-                let page = shown.get().or_else(|| read.ok());
+                let page = posted.get().or_else(|| read.ok());
                 page.map(|page| drawn(page, draw))
             })}
         </Transition>

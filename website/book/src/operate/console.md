@@ -252,7 +252,7 @@ redirect_uri = "https://console.example.org/auth/callback"
 |---|---|
 | `[server]` | Where the console listens, where its site bundle is, and the language a page falls back to. |
 | `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[operator] admin_scope` names (default `__ferropix.admin`). |
-| `[session]` | Whether the cookies are `Secure` (only off on loopback), and the sign-in and session timeouts and bounds. |
+| `[session]` | Whether the cookies are `Secure`, and the sign-in and session timeouts and bounds. `secure_cookie = false` is refused unless the console is plain HTTP on loopback: its `oidc.redirect_uri`, or its `server.listen` address when it signs in nowhere. |
 | `[oidc]` | The OpenID Provider stewards sign in at. Without it the console offers no sign-in. |
 | `[telemetry]` | The console log: `format` and `filter`, the section the server reads ([`[telemetry]`](configuration.md#telemetry)). `RUST_LOG` sets `telemetry.filter`. |
 

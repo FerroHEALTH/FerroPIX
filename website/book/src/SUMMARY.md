@@ -31,6 +31,7 @@
 - [Matching](operate/matching.md)
 - [Deployment](operate/deployment.md)
 - [The operator console](operate/console.md)
+- [The steward's guide](operate/steward-guide.md)
 - [The operator API](operate/operator-api.md)
 - [Security and audit](operate/security-and-audit.md)
 - [Operations](operate/operations.md)

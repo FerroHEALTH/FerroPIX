@@ -37,6 +37,7 @@ mod session;
 mod sign_in;
 mod stack;
 mod stderr;
+mod steward;
 
 /// The environment variable that opts in to the browser journeys.
 const JOURNEYS_GATE: &str = "FERROPIX_JOURNEYS";

@@ -45,6 +45,9 @@ and this project adheres to
   or names the merge to revert first. Both ask in a danger dialog with
   your reason, post the versions the preview read, and draw a stale answer
   in place.
+- The book's steward's guide walks the review queue, the three decisions,
+  the merge and the unmerge in the console, with what each records and
+  how a stale decision is answered (#106).
 
 ## [0.0.9] - 2026-10-27
 

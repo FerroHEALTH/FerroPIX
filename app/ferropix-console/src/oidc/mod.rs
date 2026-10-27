@@ -21,14 +21,14 @@ use axum::Extension;
 use axum::extract::Query;
 use axum::response::{IntoResponse, Response};
 use ferrohealth_secret::secret::Secret;
-use ferrohealth_smart::oidc::{Callback, OidcError, PendingSignIn};
+use ferrohealth_smart::oidc::{Callback, OidcError};
 use ferrohealth_ui::i18n::Locale;
 use http::header::{CACHE_CONTROL, LOCATION, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 
 use crate::locale::{Msg, catalog, negotiated, tr_in};
 use crate::server::ConsoleState;
-use crate::session::{COOKIE, SIGN_IN_COOKIE, SessionError, SignedIn};
+use crate::session::{Begun, COOKIE, SIGN_IN_COOKIE, SessionError, SignedIn};
 
 pub mod logout;
 pub mod refresh;
@@ -37,8 +37,46 @@ pub mod refresh;
 /// to.
 pub const CALLBACK: &str = "/auth/callback";
 
-/// Serves `GET /login`: begins a sign-in and redirects to the provider.
-pub async fn login(Extension(state): Extension<ConsoleState>, headers: HeaderMap) -> Response {
+/// The longest return address a sign-in keeps.
+const RETURN_LIMIT: usize = 2048;
+
+/// The query of `GET /login`.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct LoginQuery {
+    /// The console's page to return to once the sign-in completes, as the
+    /// session watch names it (FerroUI `docs/consoles.md`, "The session's
+    /// end").
+    #[serde(rename = "return")]
+    back: Option<String>,
+}
+
+/// `text` when it is the path and query of one of the console's own pages.
+///
+/// A sign-in returns to it; anything else is `None`: another origin, a
+/// scheme-relative or backslashed address, a control character, text past
+/// [`RETURN_LIMIT`], or a sign-in, sign-out or callback route.
+#[must_use]
+pub fn return_path(text: &str) -> Option<&str> {
+    let route = text.split(['?', '#']).next().unwrap_or_default();
+    // NOTE: RFC 3986 §4.2: a reference starting `//` names another authority, and the WHATWG
+    // URL Standard reads `\` as `/`, so only one leading slash stays on this origin.
+    let own = text.starts_with('/')
+        && !text.starts_with("//")
+        && !text.contains('\\')
+        && text.len() <= RETURN_LIMIT
+        && text.bytes().all(|byte| byte.is_ascii_graphic())
+        && !crate::paths::is_sign_in(route)
+        && ![crate::paths::LOGIN, CALLBACK, logout::LOGOUT].contains(&route);
+    own.then_some(text)
+}
+
+/// Serves `GET /login`: begins a sign-in, keeping the page `return` names
+/// to come back to, and redirects to the provider.
+pub async fn login(
+    Extension(state): Extension<ConsoleState>,
+    headers: HeaderMap,
+    Query(query): Query<LoginQuery>,
+) -> Response {
     let locale = locale_of(&state, &headers);
     let Some(relying_party) = state.relying_party() else {
         return plain(
@@ -59,7 +97,15 @@ pub async fn login(Extension(state): Extension<ConsoleState>, headers: HeaderMap
         }
     };
     let location = request.url;
-    let id = match state.sessions().begin(request.pending) {
+    let back = query
+        .back
+        .as_deref()
+        .and_then(return_path)
+        .map(str::to_owned);
+    let id = match state.sessions().begin(Begun {
+        sign_in: request.pending,
+        back,
+    }) {
         Ok(id) => id,
         Err(error) => return refused(&locale, &error),
     };
@@ -95,7 +141,7 @@ pub async fn callback(
         return plain(StatusCode::BAD_REQUEST, &locale, Msg::NoSignInPending);
     };
     let mut response = match state.sessions().take_pending(&id) {
-        Ok(Some(pending)) => redirected(&state, &headers, &pending, &query).await,
+        Ok(Some(begun)) => redirected(&state, &headers, &begun, &query).await,
         Ok(None) => plain(StatusCode::BAD_REQUEST, &locale, Msg::NoSignInPending),
         Err(error) => return refused(&locale, &error),
     };
@@ -109,14 +155,16 @@ pub async fn callback(
     response
 }
 
-/// The answer to a redirect back for the pending sign-in `pending`: the
-/// code exchanged, the ID Token checked, and a signed-in session begun.
+/// The answer to a redirect back for the sign-in `begun`: the code
+/// exchanged, the ID Token checked, and a signed-in session begun, which
+/// leads to the page the sign-in was begun to return to.
 async fn redirected(
     state: &ConsoleState,
     headers: &HeaderMap,
-    pending: &PendingSignIn,
+    begun: &Begun,
     query: &Callback,
 ) -> Response {
+    let pending = &begun.sign_in;
     let locale = &locale_of(state, headers);
     let Some(relying_party) = state.relying_party() else {
         return plain(
@@ -182,7 +230,14 @@ async fn redirected(
     };
     let mut response = StatusCode::SEE_OTHER.into_response();
     let headers = response.headers_mut();
-    headers.insert(LOCATION, HeaderValue::from_static("/"));
+    // NOTE: no specification governs this: our own design; `return_path` keeps visible
+    // ASCII alone, which a header value always takes, so the dashboard is the fallback only.
+    let back = begun
+        .back
+        .as_deref()
+        .and_then(|back| HeaderValue::from_str(back).ok())
+        .unwrap_or_else(|| HeaderValue::from_static("/"));
+    headers.insert(LOCATION, back);
     headers.insert(SET_COOKIE, cookie);
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response

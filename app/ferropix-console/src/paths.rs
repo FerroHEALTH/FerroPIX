@@ -23,6 +23,11 @@ pub const MARK_LIGHT: &str = "/ferropix-icon.svg";
 /// Provider.
 pub const LOGIN: &str = "/login";
 
+/// The session route the page's session watch asks: `GET` reads what the
+/// session has left, `POST` extends it (FerroUI `docs/consoles.md`, "The
+/// session's end").
+pub const SESSION: &str = "/session";
+
 /// The path of the brand mark in the dark theme.
 pub const MARK_DARK: &str = "/ferropix-icon-dark.svg";
 

@@ -8,11 +8,15 @@
 //! patient data is drawn before a session exists.
 //!
 //! `/sign-in/signed-out` is where a sign-out leads, and
-//! `/sign-in/expired` where a request with an ended session is sent. A
-//! console with no identity provider configured draws the card with its
-//! action disabled and says so.
+//! `/sign-in/expired` where a request with an ended session is sent; both
+//! tell every other tab of the console that the session has ended. A
+//! `return` in the query, one of the console's own pages, rides the
+//! provider's action, so the sign-in leads back to it. A console with no
+//! identity provider configured draws the card with its action disabled and
+//! says so.
 
 use ferrohealth_ui::icon::Glyph;
+use ferrohealth_ui::island::SessionEnded;
 use ferrohealth_ui::view::shell::{brand_mark, centred, lockup_plain};
 use ferrohealth_ui::view::sign_in::{Notice, Provider, SignIn, State, sign_in};
 use leptos::prelude::*;
@@ -29,8 +33,17 @@ use crate::paths::{MARK_DARK, MARK_LIGHT};
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn SignInPage() -> impl IntoView {
-    let configured = crate::app::page_context().sign_in;
+    let page = crate::app::page_context();
+    let configured = page.sign_in;
     let named = crate::app::param("state");
+    // NOTE: FerroUI `docs/consoles.md`, "The session's end": the signed-out page tells every
+    // other tab the session has ended, as the page a gone session is sent to does here.
+    let ended = matches!(named.as_deref(), Some("signed-out" | "expired"))
+        .then(|| view! { <SessionEnded /> });
+    let login = page.back.as_deref().map_or_else(
+        || String::from(crate::paths::LOGIN),
+        |back| ferrohealth_ui::widget::session::sign_in_address(crate::paths::LOGIN, back),
+    );
     let state = if configured {
         match named.as_deref() {
             Some("signed-out") => State::SignedOut(Notice::new(tr(Msg::SignedOut))),
@@ -50,7 +63,7 @@ pub fn SignInPage() -> impl IntoView {
         title: Some(tr(Msg::SignInTitle)),
         state,
         provider: Some(Provider {
-            href: String::from(crate::paths::LOGIN),
+            href: login,
             label: tr(Msg::SignInWith),
             busy: tr(Msg::SignInTaking),
             glyph: Glyph::LOG_IN,
@@ -68,5 +81,6 @@ pub fn SignInPage() -> impl IntoView {
     view! {
         {title(tr(Msg::SignIn))}
         {centred(card, footer())}
+        {ended}
     }
 }

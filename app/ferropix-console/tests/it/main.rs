@@ -22,6 +22,7 @@ mod preferences;
 mod refresh;
 mod run;
 mod server;
+mod session;
 mod sign_in;
 mod sign_out;
 mod support;

@@ -49,8 +49,8 @@ use crate::locale::{Msg, catalog, negotiated, tr_in};
 use crate::model::PageContext;
 use crate::paths::{FAVICON, MARK_DARK, MARK_LIGHT, STYLESHEET, THEME, is_sign_in};
 use crate::pix::{ClientError, Pix};
-use crate::session::Sessions;
 use crate::session::request::{Held, held};
+use crate::session::{COOKIE, Sessions};
 
 /// The path of the console's health summary route.
 pub const HEALTH: &str = ferrohealth_server::health::SUMMARY;
@@ -260,6 +260,10 @@ pub fn router(state: ConsoleState) -> axum::Router {
             crate::preferences::SIDEBAR_ROUTE,
             post(crate::preferences::sidebar),
         )
+        .route(
+            crate::paths::SESSION,
+            get(crate::session::route::read).post(crate::session::route::extend),
+        )
         .route(SEARCH, post(crate::posts::post))
         .route(crate::pages::search::SUGGEST, post(crate::posts::suggest))
         .route(crate::app::AUDIT, post(crate::posts::post))
@@ -411,7 +415,12 @@ pub async fn page_for(
         headers,
     );
     if is_sign_in(&route) {
-        return Ok(signed_out);
+        let back = path.split_once('?').and_then(|(_, query)| {
+            url::form_urlencoded::parse(query.as_bytes())
+                .find(|(name, _)| name == ferrohealth_ui::widget::session::RETURN)
+                .and_then(|(_, back)| crate::oidc::return_path(&back).map(str::to_owned))
+        });
+        return Ok(PageContext { back, ..signed_out });
     }
     let (token, operator, admin) = match held(state, headers)? {
         Held::SignedIn {
@@ -424,7 +433,7 @@ pub async fn page_for(
         }
         Held::Ended => {
             return Ok(PageContext {
-                redirect: Some(format!("{SIGN_IN}/expired")),
+                redirect: Some(String::from(crate::app::EXPIRED)),
                 ..signed_out
             });
         }
@@ -434,6 +443,10 @@ pub async fn page_for(
                 ..signed_out
             });
         }
+    };
+    let session = match state.sessions().cookie_in(headers, COOKIE) {
+        Some(id) => state.sessions().left(&id)?,
+        None => None,
     };
     let probe = state.pix().probe(&token).await;
     let capability = if route == ABOUT {
@@ -452,6 +465,7 @@ pub async fn page_for(
         capability,
         document,
         admin,
+        session,
         ..signed_out
     })
 }
@@ -513,7 +527,9 @@ async fn gate(
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_owned();
-    if is_public(&path) || path.starts_with(SERVER_FUNCTIONS) {
+    // NOTE: no specification governs this: our own design; the session route answers for
+    // itself, and a read of it must not count as the steward's activity.
+    if is_public(&path) || path.starts_with(SERVER_FUNCTIONS) || path == crate::paths::SESSION {
         return next.run(request).await;
     }
     let read = request
@@ -567,7 +583,7 @@ fn refused(
     }
     page.redirect = match held(state, headers)? {
         Held::SignedIn { .. } => None,
-        Held::Ended => Some(format!("{SIGN_IN}/expired")),
+        Held::Ended => Some(String::from(crate::app::EXPIRED)),
         Held::Absent => Some(String::from(SIGN_IN)),
     };
     Ok(page)

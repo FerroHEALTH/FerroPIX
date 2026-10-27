@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 
-# cargo-deny configuration. Run: cargo deny check
+# cargo-deny configuration. Run: cargo deny check, and again over the fuzz
+# workspace: cargo deny --manifest-path fuzz/Cargo.toml check, which reads
+# this same file (CI's cargo-deny job runs both).
 # Docs: https://embarkstudios.github.io/cargo-deny/
 #
 # The only advisory gate: it reads the RustSec database cargo audit does and
@@ -77,6 +79,12 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ferropix-operator-api" },
   # The test support, a path-only dev-dependency, never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-testkit" },
+  # The fuzz workspace's own crate under fuzz/, never published.
+  { allow = ["BUSL-1.1"], crate = "ferropix-fuzz" },
+  # libfuzzer-sys, which the fuzz workspace alone takes, carries LLVM's
+  # libFuzzer sources under NCSA beside its own MIT OR Apache-2.0; no product
+  # binary links it.
+  { allow = ["NCSA"], crate = "libfuzzer-sys" },
 ]
 
 [bans]

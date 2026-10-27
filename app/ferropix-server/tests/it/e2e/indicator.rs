@@ -4,8 +4,8 @@
 //! The store's readiness indicator: up while PostgreSQL answers, down once
 //! it no longer does.
 
-use ferropix_operator_api::health::State;
-use ferropix_server::health::HealthIndicator;
+use ferrohealth_health::document::State;
+use ferrohealth_health::registry::HealthIndicator;
 use ferropix_server::store::indicator::{Database, NAME};
 use ferropix_server::store::{Job, Store};
 use ferropix_testkit::containers::{e2e_enabled, postgres};
@@ -24,8 +24,8 @@ async fn the_database_indicator_is_up_while_the_store_answers_and_down_after() {
         .unwrap();
     let indicator = Database::new(store.clone());
     assert_eq!("database", NAME);
-    assert_eq!(State::Up, indicator.check().await.state);
+    assert_eq!(State::Up, indicator.check().await.state());
     store.close().await;
     let down = indicator.check().await;
-    assert_eq!(State::Down, down.state, "a closed pool answers nothing");
+    assert_eq!(State::Down, down.state(), "a closed pool answers nothing");
 }

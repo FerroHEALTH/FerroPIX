@@ -195,3 +195,10 @@ endpoint = "https://report.ferropulse.eu/v1/report"
 state_dir = "/var/lib/ferropix"
 deployment = "compose"
 "#;
+
+/// Returns the lifecycle of a process that has booted and serves.
+pub(crate) fn serving() -> ferrohealth_health::lifecycle::Lifecycle {
+    let lifecycle = ferrohealth_health::lifecycle::Lifecycle::default();
+    lifecycle.booted();
+    lifecycle
+}

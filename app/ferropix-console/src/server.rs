@@ -23,6 +23,9 @@ use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
 use ferrohealth_smart::metadata::{Http, ServerMetadata};
 use ferrohealth_smart::oidc::{OidcError, Provider, RelyingParty};
 use ferrohealth_ui::style::{Brand, STYLESHEET as LIBRARY_STYLESHEET};
@@ -34,7 +37,6 @@ use http::{HeaderValue, Method, StatusCode};
 use leptos::config::LeptosOptions;
 use leptos::nonce::Nonce;
 use leptos_axum::LeptosRoutes as _;
-use serde::Serialize;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{And, Predicate as _, SizeAbove};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -46,8 +48,8 @@ use crate::pix::{ClientError, Pix};
 use crate::session::Sessions;
 use crate::session::request::{Held, held};
 
-/// The path of the console's own liveness route.
-pub const HEALTH: &str = "/health";
+/// The path of the console's health summary route.
+pub const HEALTH: &str = ferrohealth_server::health::SUMMARY;
 
 /// The path of the library's stylesheet.
 pub const STYLESHEET: &str = "/ferrohealth-ui.css";
@@ -83,6 +85,7 @@ pub struct ConsoleState {
     sessions: Sessions,
     pix: Pix,
     relying_party: Option<RelyingParty>,
+    health: Health,
 }
 
 /// Why the console's state could not be built.
@@ -116,12 +119,30 @@ impl ConsoleState {
             .as_ref()
             .map(|oidc| relying_party(oidc, &settings))
             .transpose()?;
+        // The settings are resolved and both clients built, so the console
+        // serves from here.
+        let lifecycle = Lifecycle::default();
+        lifecycle.booted();
         Ok(Self {
             sessions: Sessions::new(settings.session),
             settings: Arc::new(settings),
             pix,
             relying_party,
+            health: Health::new(Registry::default(), lifecycle),
         })
+    }
+
+    /// The indicators and the phase the health routes read; the phase is
+    /// serving from construction and draining once a stop is requested.
+    #[must_use]
+    pub fn health(&self) -> &Health {
+        &self.health
+    }
+
+    /// The phase of the console.
+    #[must_use]
+    pub fn lifecycle(&self) -> &Lifecycle {
+        self.health.lifecycle()
     }
 
     /// The resolved configuration.
@@ -214,8 +235,11 @@ pub fn router(state: ConsoleState) -> axum::Router {
             provide_request_context();
         }
     };
+    let health = ferrohealth_server::health::routes(state.health().clone());
     let pages = axum::Router::new()
-        .route(HEALTH, get(health))
+        .route_service(HEALTH, health.clone())
+        .route_service(ferrohealth_server::health::LIVENESS, health.clone())
+        .route_service(ferrohealth_server::health::READINESS, health)
         .route(STYLESHEET, get(stylesheet))
         .route(THEME, get(theme))
         .route(FAVICON, get(favicon))
@@ -268,13 +292,15 @@ pub fn router(state: ConsoleState) -> axum::Router {
 }
 
 /// Whether a request for `path` reaches a file or a route that needs no
-/// session: the site bundle, the stylesheets and marks, the health route and
-/// the sign-in routes.
+/// session: the site bundle, the stylesheets and marks, the health routes
+/// and the sign-in routes.
 #[must_use]
 pub fn is_public(path: &str) -> bool {
     path.starts_with("/pkg/")
         || [
             HEALTH,
+            ferrohealth_server::health::LIVENESS,
+            ferrohealth_server::health::READINESS,
             STYLESHEET,
             THEME,
             FAVICON,
@@ -512,13 +538,6 @@ pub fn form_action(settings: &Settings) -> String {
     }
 }
 
-/// The body of the liveness route.
-#[derive(Debug, Serialize)]
-struct Health {
-    /// Always `up`: the route answers while the process serves.
-    status: &'static str,
-}
-
 /// An answer of `text` as `media`.
 fn file(media: &'static str, text: &'static str) -> Response {
     ([(CONTENT_TYPE, HeaderValue::from_static(media))], text).into_response()
@@ -547,11 +566,6 @@ async fn mark_light() -> Response {
 /// Serves the brand mark in the dark theme.
 async fn mark_dark() -> Response {
     file("image/svg+xml", MARK_DARK_SVG)
-}
-
-/// Serves `GET /health`: `200` while the process serves.
-async fn health() -> Response {
-    (StatusCode::OK, axum::Json(Health { status: "up" })).into_response()
 }
 
 /// The media types of the site bundle: the WebAssembly, its JavaScript glue

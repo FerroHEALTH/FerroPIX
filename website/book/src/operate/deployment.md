@@ -188,7 +188,8 @@ Every container runs as user 65532 with a read-only root filesystem, no
 privilege escalation, every capability dropped and the `RuntimeDefault`
 seccomp profile, the Restricted Pod Security Standard. The server's startup
 and readiness probes ask `/health/readiness` and its liveness probe
-`/health`. `deploy/helm/validate.sh` lints and renders the chart and holds
+`/health/liveness`; the console's ask `/health/readiness` and
+`/health/liveness`. `deploy/helm/validate.sh` lints and renders the chart and holds
 the manifests to the Kubernetes schemas with `kubeconform`, and
 `deploy/helm/kind-check.sh` installs it on a throwaway kind cluster with
 the published images and waits until its health routes answer.

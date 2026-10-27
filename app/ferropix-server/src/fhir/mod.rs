@@ -29,7 +29,9 @@ use axum::Router;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{MethodFilter, on};
-use ferropix_operator_api::health::{Dependencies, IndicatorState, Upstream, UpstreamKind};
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::Registry;
+use ferropix_operator_api::health::{Dependencies, Outcome, Upstream, UpstreamKind};
 use http::StatusCode;
 
 use crate::audit::Audit;
@@ -40,8 +42,8 @@ use crate::auth::{Discovery, Smart};
 use crate::config::section::matching::Matching;
 use crate::config::section::operator::Operator;
 use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
+use crate::config::section::server::ServerSettings;
 use crate::fhir::outcome::{IssueType, body, respond};
-use crate::health::Registry;
 use crate::store::Store;
 
 /// What the transactions of the FHIR face read and write: the store, the
@@ -121,21 +123,24 @@ impl Mounts {
     }
 }
 
-/// Returns the guarded routes `mounts` switches on, for a server mounted
-/// under `base` and reached at `public_base_url`, its transactions over
-/// `backend`.
+/// Returns the guarded routes `mounts` switches on for `server`.
+///
+/// The server is mounted under its base path and reached at its public base
+/// URL; its transactions run over `backend`, and its dependency report over
+/// `health` in `lifecycle`'s phase.
 ///
 /// The router is meant to be nested under `base` with the health routes;
 /// the guard reads the matched route templates under it.
 pub fn routes(
-    base: &str,
-    public_base_url: &url::Url,
+    server: &ServerSettings,
     mounts: Mounts,
     smart: &Arc<Smart>,
     health: &Registry,
+    lifecycle: &Lifecycle,
     audit: &Audit,
     backend: &Backend,
 ) -> Router {
+    let (base, public_base_url) = (server.base_path.as_str(), &server.public_base_url);
     let statement = Arc::new(capability::statement(public_base_url, smart, mounts));
     let configuration = smart.configuration().map(Arc::new);
     let manager = Arc::new(pixm::Manager::new(
@@ -209,9 +214,15 @@ pub fn routes(
                 })
             }
             "operator-dependencies" => {
-                let (health, audit, store) = (health.clone(), audit.clone(), backend.store.clone());
+                let (health, lifecycle) = (health.clone(), lifecycle.clone());
+                let (audit, store) = (audit.clone(), backend.store.clone());
                 on(filter, move || {
-                    dependencies(health.clone(), audit.clone(), store.clone())
+                    dependencies(
+                        health.clone(),
+                        lifecycle.clone(),
+                        audit.clone(),
+                        store.clone(),
+                    )
                 })
             }
             _ if route.mount == Mount::Operator => on(filter, pending_operator),
@@ -285,7 +296,12 @@ fn discovery(configuration: Option<&Discovery>) -> Response {
 /// governs this: our own design), with every PMIR subscriber and the
 /// outcome of its latest ITI-93 message, and every HL7 v2 consumer and the
 /// outcome of its latest ITI-10 notification.
-async fn dependencies(health: Registry, audit: Audit, store: Store) -> Response {
+async fn dependencies(
+    health: Registry,
+    lifecycle: Lifecycle,
+    audit: Audit,
+    store: Store,
+) -> Response {
     let subscribers = match crate::store::subscription::deliveries(&store).await {
         Ok(deliveries) => deliveries.into_iter().map(subscriber).collect(),
         Err(error) => {
@@ -295,7 +311,7 @@ async fn dependencies(health: Registry, audit: Audit, store: Store) -> Response 
     };
     let consumers = consumers(&store).await;
     let report = Dependencies {
-        readiness: health.evaluate().await,
+        readiness: health.readiness(&lifecycle).await,
         upstreams: audit
             .upstream()
             .into_iter()
@@ -321,9 +337,9 @@ fn subscriber(delivery: crate::store::subscription::LastDelivery) -> Upstream {
         },
     );
     let last = match (delivery.error, delivery.last) {
-        (Some(error), _) => Some(IndicatorState::down(error)),
-        (None, Some(Ok(()))) => Some(IndicatorState::up()),
-        (None, Some(Err(failure))) => Some(IndicatorState::down(failure)),
+        (Some(error), _) => Some(Outcome::down(error)),
+        (None, Some(Ok(()))) => Some(Outcome::up()),
+        (None, Some(Err(failure))) => Some(Outcome::down(failure)),
         (None, None) => None,
     };
     Upstream {
@@ -362,8 +378,8 @@ fn consumer(address: &str, last: Option<crate::store::outbox::LastNotification>)
         None => (None, None),
         Some(notified) => (
             Some(match notified.last {
-                Ok(()) => IndicatorState::up(),
-                Err(failure) => IndicatorState::down(failure),
+                Ok(()) => Outcome::up(),
+                Err(failure) => Outcome::down(failure),
             }),
             notified.at,
         ),
@@ -400,7 +416,7 @@ async fn pending_operator() -> Response {
 
 #[cfg(test)]
 mod tests {
-    use ferropix_operator_api::health::{IndicatorState, UpstreamKind};
+    use ferropix_operator_api::health::{Outcome, UpstreamKind};
 
     use super::{consumer, subscriber};
     use crate::store::outbox::LastNotification;
@@ -434,20 +450,15 @@ mod tests {
         let mut delivered = delivery("https://subscriber.example.org/pmir");
         delivered.last = Some(Ok(()));
         delivered.at = Some(String::from("2026-10-26T12:00:00Z"));
-        assert_eq!(
-            Some(IndicatorState::up()),
-            subscriber(delivered.clone()).last
-        );
+        assert_eq!(Some(Outcome::up()), subscriber(delivered.clone()).last);
         delivered.last = Some(Err(String::from("the endpoint answered 503")));
         assert_eq!(
-            Some(IndicatorState::down("the endpoint answered 503")),
+            Some(Outcome::down("the endpoint answered 503")),
             subscriber(delivered.clone()).last
         );
         delivered.error = Some(String::from("an ITI-93 message could not be delivered"));
         assert_eq!(
-            Some(IndicatorState::down(
-                "an ITI-93 message could not be delivered"
-            )),
+            Some(Outcome::down("an ITI-93 message could not be delivered")),
             subscriber(delivered).last
         );
     }
@@ -466,7 +477,7 @@ mod tests {
             }),
         );
         assert_eq!(
-            Some(IndicatorState::down("the consumer refused the connection")),
+            Some(Outcome::down("the consumer refused the connection")),
             refused.last
         );
     }

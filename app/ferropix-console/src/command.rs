@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use ferrohealth_config::loader::Loaded;
+use ferrohealth_health::lifecycle::Lifecycle;
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, Service, Telemetry};
 
@@ -200,7 +201,9 @@ async fn listen_and_serve(settings: Settings) -> ExitCode {
         }
     };
     tracing::info!(%listen, "the operator console is listening");
-    match crate::server::serve(listener, crate::server::router(state), shutdown_signal()).await {
+    let lifecycle = state.lifecycle().clone();
+    let stop = shutdown_signal(lifecycle);
+    match crate::server::serve(listener, crate::server::router(state), stop).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "the listener failed");
@@ -209,11 +212,12 @@ async fn listen_and_serve(settings: Settings) -> ExitCode {
     }
 }
 
-/// Completes when the process receives `SIGTERM` or `SIGINT`.
+/// Completes when the process receives `SIGTERM` or `SIGINT`, with
+/// `lifecycle` turned to draining so readiness answers `503` from then on.
 ///
 /// A failure to install a handler is logged and that arm never completes, so
 /// the console keeps serving and the runtime's own kill stays the backstop.
-async fn shutdown_signal() {
+async fn shutdown_signal(lifecycle: Lifecycle) {
     let interrupt = async {
         if let Err(error) = tokio::signal::ctrl_c().await {
             tracing::error!(%error, "cannot listen for SIGINT");
@@ -238,6 +242,7 @@ async fn shutdown_signal() {
         () = interrupt => tracing::info!("SIGINT received, stopping"),
         () = terminate => tracing::info!("SIGTERM received, stopping"),
     }
+    lifecycle.drain();
 }
 
 /// Renders `error` with every cause in its chain, colon-separated.

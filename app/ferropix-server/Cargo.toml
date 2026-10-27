@@ -63,6 +63,12 @@ ferrohealth-server.workspace = true
 # The `[telemetry]` section, the console, the request log, the OTLP export,
 # the Prometheus exposition of `/metrics` and the panic hook the family shares.
 ferrohealth-telemetry = { workspace = true, features = ["axum", "otlp", "prometheus"] }
+# The readiness indicators, the registry and the lifecycle the health routes
+# of ferrohealth-server read.
+ferrohealth-health = { workspace = true, features = ["registry"] }
+# The installation report to FerroPULSE; `telemetry` lets the request log
+# fill its window.
+ferrohealth-usage-report = { workspace = true, features = ["telemetry"] }
 # The HL7 v2 face: the MLLP listener, the decoder, the parser over the
 # generated tables and the acknowledgment of FerroBRIDGE (CLAUDE.md, Scope:
 # never a second parser).

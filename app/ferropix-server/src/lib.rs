@@ -17,7 +17,6 @@ pub mod cli;
 pub mod config;
 pub mod feed;
 pub mod fhir;
-pub mod health;
 pub mod healthcheck;
 pub mod hl7v2;
 pub mod http;
@@ -37,6 +36,9 @@ use std::time::Instant;
 
 use clap::Parser;
 use ferrohealth_config::loader::Loaded;
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
@@ -453,7 +455,7 @@ pub async fn serve_settings(
         telemetry: telemetry_section,
         ..
     } = settings;
-    let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
+    let facts = usage_report::Facts::new(profile, services, domains.len());
     let smart = Arc::new(
         auth::Smart::discover(auth, &domains)
             .await
@@ -464,33 +466,29 @@ pub async fn serve_settings(
     let draining = audit.drain();
     let listening = hl7v2::Listening::default();
     let health = registry(&store, &audit, hl7v2.as_ref().map(|_| &listening));
+    let lifecycle = Lifecycle::default();
     let guarded = fhir::routes(
-        &server.base_path,
-        &server.public_base_url,
-        mounts,
-        &smart,
-        &health,
-        &audit,
-        &backend,
+        &server, mounts, &smart, &health, &lifecycle, &audit, &backend,
     );
     let (guarded, mut channels) =
         with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
     channels.pmir = pmir_channel(&pmir)?;
     channels.hl7v2 = mllp_channel(hl7v2.as_ref(), &audit);
-    let window = Arc::new(usage_report::window::Window::new(&server.base_path));
+    let window = Arc::new(usage_report::window(&server.base_path));
     let listener = bind(&server).await?;
-    let reporting = usage_report::reporter::start(
+    let reporting = usage_report::start(
         &report_settings,
-        usage_report::reporter::Sources {
+        usage_report::Pix {
             facts,
             health: health.clone(),
-            window: Arc::clone(&window),
+            lifecycle: lifecycle.clone(),
         },
+        Arc::clone(&window),
         started,
-        usage_report::ci_of(|name| std::env::var(name).ok()),
+        ferrohealth_usage_report::section::ci_of(|name| std::env::var(name).ok()),
     )
     .await;
-    let (signal, stopped) = stop_signal();
+    let (signal, stopped) = stop_signal(lifecycle.clone());
     let sender = outbox::start(store.clone(), channels, retention, wake, stopped.clone());
     let mllp = match &hl7v2 {
         Some(settings) => Some(
@@ -514,7 +512,9 @@ pub async fn serve_settings(
         None => None,
     };
     let log = request_log(&telemetry_section, &telemetry, window);
-    let app = http::router(&server, &health, Some(guarded), log, Some(telemetry));
+    let health = Health::new(health, lifecycle.clone());
+    let app = http::router(&server, health, Some(guarded), log, Some(telemetry));
+    lifecycle.booted();
     let served = http::serve_until(listener, app, server.drain_timeout, stopped_by(stopped))
         .await
         .map_err(ServeError::Io);
@@ -530,7 +530,7 @@ pub async fn serve_settings(
 fn request_log(
     section: &TelemetrySection,
     telemetry: &Telemetry,
-    window: Arc<usage_report::window::Window>,
+    window: Arc<ferrohealth_usage_report::window::Window>,
 ) -> RequestLog {
     RequestLog::new(&section.logged_query_parameters)
         .with_metrics(&telemetry.meter(METER))
@@ -726,8 +726,8 @@ fn registry(
     store: &store::Store,
     audit: &audit::Audit,
     listening: Option<&hl7v2::Listening>,
-) -> health::Registry {
-    let health = health::Registry::default()
+) -> Registry {
+    let health = Registry::default()
         .and(Arc::new(store::indicator::Database::new(store.clone())))
         .and(Arc::new(audit::Headroom(audit.clone())))
         .and(Arc::new(outbox::Backlog::new(store.clone())));
@@ -756,19 +756,13 @@ async fn bind(server: &config::section::server::ServerSettings) -> Result<TcpLis
 
 /// Returns the services `settings` switch on, as the usage report names
 /// them.
-fn services(settings: &Settings) -> Vec<usage_report::payload::Service> {
+fn services(settings: &Settings) -> Vec<usage_report::Service> {
     [
-        (
-            settings.hl7v2.is_some(),
-            usage_report::payload::Service::Hl7v2,
-        ),
-        (
-            settings.operator.enabled,
-            usage_report::payload::Service::Operator,
-        ),
-        (settings.pdqm.enabled, usage_report::payload::Service::Pdqm),
-        (settings.pixm.enabled, usage_report::payload::Service::Pixm),
-        (settings.pmir.enabled, usage_report::payload::Service::Pmir),
+        (settings.hl7v2.is_some(), usage_report::Service::Hl7v2),
+        (settings.operator.enabled, usage_report::Service::Operator),
+        (settings.pdqm.enabled, usage_report::Service::Pdqm),
+        (settings.pixm.enabled, usage_report::Service::Pixm),
+        (settings.pmir.enabled, usage_report::Service::Pmir),
     ]
     .into_iter()
     .filter_map(|(on, service)| on.then_some(service))
@@ -776,14 +770,19 @@ fn services(settings: &Settings) -> Vec<usage_report::payload::Service> {
 }
 
 /// Waits for `SIGTERM` or `SIGINT` in a task of its own and returns the
-/// task and the flag it raises, which every listener drains on.
-fn stop_signal() -> (
+/// task and the flag it raises, which every listener drains on; `lifecycle`
+/// turns to draining first, so readiness answers `503` while the requests in
+/// flight finish.
+fn stop_signal(
+    lifecycle: Lifecycle,
+) -> (
     tokio::task::JoinHandle<()>,
     tokio::sync::watch::Receiver<bool>,
 ) {
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let signal = tokio::spawn(async move {
         http::shutdown_signal().await;
+        lifecycle.drain();
         let _sent = stop.send(true);
     });
     (signal, stopped)

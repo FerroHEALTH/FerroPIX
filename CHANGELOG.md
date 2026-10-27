@@ -16,6 +16,7 @@ and this project adheres to
 
 - Both binaries take `--set key=value`, any number of times, which sets a key over the file and the environment (#295). `RUST_LOG` sets the server's `telemetry.filter`. `config check` prints every key of the running configuration as `key = value  # source`, naming the file, the default, the variable or the `--set` argument that set it, with every secret shown as `***`.
 - The server serves `GET {base}/metrics`, every metric in the Prometheus text format, with no token, and its request log records each request in `http_server_request_duration_seconds` (OpenTelemetry `http.server.request.duration`) by method, route template and status (#296). `[telemetry]` gains `logged_query_parameters`, `environment` and the `[telemetry.otlp]` table (`endpoint`, `traces`, `metrics`, `sample_ratio`, `trust_roots_file`, `client_identity_file`), which pushes the metrics beside the spans. The operator console reads the same `[telemetry]` section, with `RUST_LOG` as the alias of its `telemetry.filter`.
+- The server and the operator console serve `GET {base}/health/liveness`, which answers `200` while the process serves and checks nothing (#297).
 
 ### Changed
 
@@ -33,6 +34,15 @@ and this project adheres to
   - The body of a `500` from a panicking handler names the server's request id, which the log line carries, where it named the client's.
   - The exported `request` span carries the server's request id.
   - The console's log takes `[telemetry]` (`format`, `filter`) where it read only `RUST_LOG`, and it renders as the server's does.
+- **Breaking:** the server and the operator console serve the health routes of `ferrohealth-server` over the readiness registry and lifecycle of `ferrohealth-health` 0.1.1, pinned exactly, and FerroPIX's own registry and readiness documents are deleted (#297). What changes for an operator:
+  - `GET {base}/health` answers the status of readiness with `{"state":"up"}` or `{"state":"down"}`, where it was liveness with no body (the console's answered `{"status":"up"}`). Point a liveness probe at `GET {base}/health/liveness`; the chart does.
+  - The readiness document lists `indicators` as `[{"name", "state"}]` with a `phase`, where it was an object by name, and the open route no longer says why an indicator is down: `GET {base}/operator/dependencies` gives the detail behind the steward scope.
+  - Readiness answers `503` while the server boots and from the moment `SIGTERM` or `SIGINT` arrives, so traffic stops before the drain.
+  - The console probes the server's `GET {base}/health/liveness`.
+- **Breaking:** the server sends its installation report through `ferrohealth-usage-report` 0.2.0, pinned exactly, and FerroPIX's own reporter, envelope types, state directory and window are deleted (#298). The `[usage_report]` keys, the state directory's files and the report's `status` keep their names. What changes for an operator:
+  - The daily report leaves a counter out while it is zero, where it always sent `responses_4xx`.
+  - The boot line ends "no clinical content, identifiers, URLs or request paths", the wording every FerroHEALTH product writes.
+  - A refused `usage_report.endpoint` is named with the crate's rule, at load.
 - The server pins `ferrohealth-smart` 0.8.1 exactly, and `ihe-iti` 0.0.63 and `nl-generic-functions` 0.0.32 require it as a caret, `0.8.1` (#294). A product that takes either crate moves its own `ferrohealth-smart` pin to the 0.8 line with it. Between 0.7.4 and 0.8.1 the crate renders every secret and masked URL through `ferrohealth-secret`.
 - The operator console signs stewards in, refreshes their access tokens and signs them out through `ferrohealth_smart::oidc::RelyingParty`, the family's OpenID Connect relying-party client, and its own copy of the client is deleted (#294). The `[oidc]` keys, the routes, the cookies and the session store are unchanged. When a token answer names no scope, the scopes a session holds now include `offline_access` where `[oidc] offline_access` asked for it.
 

@@ -18,9 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::State;
-use axum::response::Response;
-use axum::routing::get;
+use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::{RequestId, RequestLog};
 use ferrohealth_telemetry::telemetry::{Telemetry, prometheus_route};
 use http::StatusCode;
@@ -31,14 +29,6 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 
 use crate::config::section::server::ServerSettings;
-use crate::fhir::outcome::body;
-use crate::health::{self, Registry};
-
-/// The path of the liveness route under `{base}`.
-pub const LIVENESS: &str = "/health";
-
-/// The path of the readiness route under `{base}`.
-pub const READINESS: &str = "/health/readiness";
 
 /// The path of the Prometheus exposition under `{base}`.
 pub const METRICS: &str = "/metrics";
@@ -46,24 +36,24 @@ pub const METRICS: &str = "/metrics";
 /// Builds the HTTP application under `server`'s base path, with the shared
 /// middleware and `log` as the request log.
 ///
-/// The routes are the health routes over `health`, the Prometheus exposition
-/// of `metrics` when given, and the `guarded` routes of the FHIR face and the
-/// operator API when given.
+/// The routes are the health routes of `ferrohealth-server` over `health`,
+/// the Prometheus exposition of `metrics` when given, and the `guarded`
+/// routes of the FHIR face and the operator API when given.
 ///
-/// `GET {base}/health` answers `200` while the process is up,
-/// `GET {base}/health/readiness` answers `200` while every indicator of
-/// `health` is up and `503` naming each one that is down, and
-/// `GET {base}/metrics` answers every metric in the Prometheus text format.
+/// `GET {base}/health/liveness` answers `200` while the process serves,
+/// `GET {base}/health/readiness` answers the readiness document, `200` while
+/// the process serves and no indicator is down and `503` otherwise, naming
+/// each indicator and never its detail, `GET {base}/health` answers the same
+/// status with the state alone, and `GET {base}/metrics` answers every
+/// metric in the Prometheus text format.
 pub fn router(
     server: &ServerSettings,
-    health: &Registry,
+    health: Health,
     guarded: Option<Router>,
     log: RequestLog,
     metrics: Option<Arc<Telemetry>>,
 ) -> Router {
-    let mut routes = Router::new()
-        .route(LIVENESS, get(liveness))
-        .route(READINESS, get(readiness).with_state(health.clone()));
+    let mut routes = ferrohealth_server::health::routes(health);
     if let Some(telemetry) = metrics {
         routes = routes.route(METRICS, prometheus_route(telemetry));
     }
@@ -112,18 +102,6 @@ pub fn with_middleware(router: Router, server: &ServerSettings, log: RequestLog)
 pub fn exchanged_request_id(parts: &Parts) -> Option<&str> {
     ferrohealth_server::request_id::of_client(&parts.headers)
         .or_else(|| parts.extensions.get::<RequestId>().map(RequestId::id))
-}
-
-/// `GET {base}/health`: `200` while the process is up.
-async fn liveness() -> StatusCode {
-    StatusCode::OK
-}
-
-/// `GET {base}/health/readiness`: the readiness document of `health`, `200`
-/// while every indicator is up and `503` while one is down.
-async fn readiness(State(health): State<Registry>) -> Response {
-    let report = health.evaluate().await;
-    body(health::status(&report), &report, "application/json")
 }
 
 /// Serves `app` on an already-bound listener until `shutdown` completes, then

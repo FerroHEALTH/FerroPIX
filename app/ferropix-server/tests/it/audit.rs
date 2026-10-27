@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
 use ferrohealth_smart::resource::{Access, Caller};
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::records::operator::{StewardAction, steward};
@@ -28,7 +30,6 @@ use ferropix_server::audit::{Audit, Headroom, OpenError};
 use ferropix_server::auth::Smart;
 use ferropix_server::config::section::audit::AuditSettings;
 use ferropix_server::fhir::{self, Mounts};
-use ferropix_server::health::Registry;
 use ferropix_server::http::router;
 use http::{Method, StatusCode};
 use ihe_atna::atna::spool::{QUARANTINE, SpoolError};
@@ -561,15 +562,16 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
             .expect("the authorization server is read"),
     );
     let health = Registry::default().and(Arc::new(Headroom(audit.clone())));
+    let lifecycle = crate::support::serving();
     let app = router(
         &settings.server,
-        &health,
+        Health::new(health.clone(), lifecycle.clone()),
         Some(fhir::routes(
-            &settings.server.base_path,
-            &settings.server.public_base_url,
+            &settings.server,
             Mounts::all(),
             &smart,
             &health,
+            &lifecycle,
             &audit,
             &backend,
         )),
@@ -608,7 +610,11 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
     );
     let ready = send(&app, Method::GET, "/health/readiness", None).await;
     assert_eq!(StatusCode::SERVICE_UNAVAILABLE, ready.status);
-    assert_eq!("down", ready.json()["indicators"]["audit_spool"]["state"]);
+    assert_eq!(
+        serde_json::json!([{ "name": "audit_spool", "state": "down" }]),
+        ready.json()["indicators"],
+        "the open route names the indicator and never its detail"
+    );
 }
 
 /// The stored records of the spool at `directory`, quarantined ones apart.
@@ -688,7 +694,7 @@ async fn a_delivered_record_is_removed_and_a_refused_one_quarantined() {
                 .expect("the repository is named")
                 .last
                 .map(|last| last.state)
-                == Some(ferropix_operator_api::health::State::Up)
+                == Some(ferrohealth_health::document::State::Up)
         })
         .await,
         "the repository reads up once the delivery is counted"

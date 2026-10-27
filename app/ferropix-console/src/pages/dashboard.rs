@@ -13,6 +13,7 @@
 
 use std::borrow::Cow;
 
+use ferrohealth_health::document::State;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::chart::{BAD, INFO, LineChart, OK, Series, WARN};
@@ -24,7 +25,7 @@ use ferrohealth_ui::view::surface::{
 use ferrohealth_ui::view::template::list::list_empty;
 use ferrohealth_ui::view::time::timestamp;
 use ferrohealth_ui::widget::chart::{ChartWords, line_chart};
-use ferropix_operator_api::health::{Dependencies, State};
+use ferropix_operator_api::health::Dependencies;
 use ferropix_operator_api::overview::Overview;
 use ferropix_operator_api::patient::Grade;
 use leptos::prelude::*;
@@ -254,7 +255,13 @@ fn listeners(dependencies: &Read<Dependencies>) -> AnyView {
             "GET /operator/dependencies",
         ),
         Ok(dependencies) => {
-            let indicator = |name: &str| dependencies.readiness.indicators.get(name);
+            let indicator = |name: &str| {
+                dependencies
+                    .readiness
+                    .indicators
+                    .iter()
+                    .find(|indicator| indicator.name == name)
+            };
             let row = |words: Msg, mark: AnyView| {
                 view! {
                     <li class="fui-cluster">

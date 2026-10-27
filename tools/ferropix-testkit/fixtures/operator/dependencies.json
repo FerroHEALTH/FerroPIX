@@ -1,14 +1,17 @@
 {
   "readiness": {
     "state": "up",
-    "indicators": {
-      "database": {
+    "phase": "serving",
+    "indicators": [
+      {
+        "name": "database",
         "state": "up"
       },
-      "hl7v2_listener": {
+      {
+        "name": "hl7v2_listener",
         "state": "up"
       }
-    }
+    ]
   },
   "upstreams": []
 }

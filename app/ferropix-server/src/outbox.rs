@@ -19,7 +19,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use ferropix_operator_api::health::IndicatorState;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 use secrecy::ExposeSecret as _;
 use tokio::sync::{Notify, watch};
 
@@ -198,20 +198,20 @@ impl Backlog {
     }
 }
 
-impl crate::health::HealthIndicator for Backlog {
+impl HealthIndicator for Backlog {
     fn name(&self) -> &'static str {
         Self::NAME
     }
 
-    fn check(&self) -> crate::health::Check<'_> {
+    fn check(&self) -> Check<'_> {
         Box::pin(async move {
             match outbox::overdue(&self.store).await {
-                Ok(Some(late)) if late > STUCK => IndicatorState::down(format!(
+                Ok(Some(late)) if late > STUCK => Outcome::down(format!(
                     "a due outbox message has waited {} s; the sender claims none",
                     late.as_secs()
                 )),
-                Ok(_) => IndicatorState::up(),
-                Err(error) => IndicatorState::down(format!(
+                Ok(_) => Outcome::up(),
+                Err(error) => Outcome::down(format!(
                     "the outbox could not be read: {}",
                     crate::chain(&error)
                 )),

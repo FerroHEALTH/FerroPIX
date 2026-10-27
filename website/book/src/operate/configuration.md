@@ -117,8 +117,9 @@ The server routes, under `server.base_path`:
 
 | Route | Answer |
 |---|---|
-| `GET {base}/health` | `200` while the process is up. |
-| `GET {base}/health/readiness` | `200` while every readiness indicator is up, the `database` indicator of the store among them, and `503` while one is down ([Operations](operations.md)). |
+| `GET {base}/health/liveness` | `200` while the process serves. |
+| `GET {base}/health/readiness` | `200` while the server serves and no readiness indicator is down, the `database` indicator of the store among them, and `503` otherwise ([Operations](operations.md)). |
+| `GET {base}/health` | The status of readiness, with `{"state":…}` alone. |
 | `GET {base}/metrics` | Every metric in the Prometheus text format, among them `http_server_request_duration_seconds` by method, route template and status. It needs no token, so keep it off the public side of your proxy. |
 
 The server mints its own UUID for every request, which the request log and
@@ -418,7 +419,8 @@ says.
 ### `[usage_report]`
 
 `ferropix serve` sends an installation report to FerroPULSE, the
-FerroHEALTH collector: one report at each start (at most one per ten
+FerroHEALTH collector, through `ferrohealth-usage-report`, the reporter
+every FerroHEALTH product uses: one report at each start (at most one per ten
 minutes) and one a day. It is on by default, and the server writes one line
 at every start saying whether it is on, what it carries and how to switch it
 off. It stays off when `enabled = false`
@@ -438,12 +440,13 @@ A report carries:
   were ready;
 - once a day, the request count as a range, latency per route group
   (`metadata`, `pix_query`, `pix_feed`, `pdq_query`, `pdq_match`,
-  `pmir_feed`, `pmir_subscription`, `operator`, `other`) with the server
-  errors of each, and the count of `4xx` answers.
+  `pmir_feed`, `pmir_subscription`, `operator`, `hl7v2`, `other`) with the
+  server errors of each, and the counts of `4xx` answers and of HL7 v2
+  messages answered `AE` or `AR`, each left out while it is zero.
 
 It never carries an identifier, a patient's data, a domain's system or name,
 a host name, a URL or a request path: a request is counted by the route
-template it matched, and the health routes are not counted.
+template it matched, and the health and metrics routes are not counted.
 
 | Key | Default | What it sets |
 |---|---|---|

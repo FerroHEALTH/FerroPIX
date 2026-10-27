@@ -19,6 +19,8 @@ use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
 use axum::Router;
 use axum::body::Body;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
@@ -27,7 +29,6 @@ use ferropix_server::auth::table::{Need, ROUTES, Route, SourceRule};
 use ferropix_server::config::Config;
 use ferropix_server::config::settings::Settings;
 use ferropix_server::fhir::{self, Mounts};
-use ferropix_server::health::Registry;
 use ferropix_server::http::router;
 use http::{Method, Request, StatusCode, header};
 use jsonwebtoken::jwk::Jwk;
@@ -237,17 +238,24 @@ pub(crate) async fn application_logged(
     let audit = Audit::open(&audit_settings, &settings.server.public_base_url)
         .expect("the audit spool opens");
     let health = Registry::default();
+    let lifecycle = crate::support::serving();
     let guarded = fhir::routes(
-        &settings.server.base_path,
-        &settings.server.public_base_url,
+        &settings.server,
         Mounts::all(),
         &smart,
         &health,
+        &lifecycle,
         &audit,
         backend,
     );
     (
-        router(&settings.server, &health, Some(guarded), log, None),
+        router(
+            &settings.server,
+            Health::new(health, lifecycle),
+            Some(guarded),
+            log,
+            None,
+        ),
         smart,
         spool,
     )

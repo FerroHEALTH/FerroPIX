@@ -310,8 +310,11 @@ Discipline is unchanged for subagents: they obey the hard rules below.
   code comment: no `Co-Authored-By`, no "Generated with", no emoji footer,
   ever. A `PreToolUse` hook blocks a commit or PR command carrying one.
 - **Keep the changelog.** `CHANGELOG.md` follows Keep a Changelog 1.1.0:
-  every change with user-visible effect adds an entry under `[Unreleased]`
-  in the same PR (`scripts/checks/changelog-guard.sh`).
+  every change with user-visible effect adds one fragment,
+  `changelog.d/<issue>-<kebab-slug>.<section>.md`, in the same PR and never
+  edits `[Unreleased]`; the release cut assembles the fragments
+  (`changelog.d/README.md`, `.claude/rules/changelog.md`,
+  `scripts/checks/changelog-guard.sh`).
 - **Keep the book current.** A change a user of FerroPIX sees (a published
   crate's behaviour or features, the server, a deployment file) updates the
   matching page under `website/book/src` in the same PR

@@ -36,8 +36,10 @@ scripts/checks/site-links.sh
   PIXm, PDQm and PMIR guides, HL7 FHIR R4 and HL7 v2 decide every
   transaction. A change cites the section, and where none governs a choice it
   says so.
-- **A changelog entry** under `[Unreleased]` in `CHANGELOG.md` for every
-  change a user can see.
+- **A changelog fragment,** `changelog.d/<issue>-<kebab-slug>.<section>.md`,
+  for every change a user can see, never an edit of `[Unreleased]` in
+  `CHANGELOG.md`: the release cut assembles the fragments
+  (`changelog.d/README.md`).
 - **The book page it changes,** in the same pull request, or the `no-book`
   label when it alters nothing the book says
   ([Keeping this book current](keeping-the-book-current.md)).

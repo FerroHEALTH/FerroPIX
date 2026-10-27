@@ -160,6 +160,20 @@ check_version() {
 
 check_changelog_structure() { bash scripts/checks/changelog-structure.sh; }
 
+# Every fragment under changelog.d/ was assembled into the section the tag
+# cuts, so no entry is missing from the release notes.
+check_changelog_fragments() {
+  local left
+  bash scripts/release/changelog.sh --check
+  left="$(find changelog.d -maxdepth 1 -type f ! -name README.md | sort)"
+  if [[ -n "$left" ]]; then
+    echo "::error::changelog.d/ still holds fragments the cut did not assemble; run scripts/release/changelog.sh --assemble $VERSION <date> on the release branch:" >&2
+    echo "$left" >&2
+    return 1
+  fi
+  echo "no fragment is left under changelog.d/"
+}
+
 # Regulation (EU) 2024/2847 Annex I Part II(2), (4) and (8): the section
 # being cut says why a security fix ships with functional changes and names
 # every advisory.
@@ -190,6 +204,7 @@ check_milestone The milestone titled as the tag holds no open item
 check_version The tag matches the workspace version
 check_changelog_structure Changelog structure (no duplicate subsections, Keep a Changelog types only)
 check_changelog_security The Security section of the cut names its advisories and its reason
+check_changelog_fragments No changelog fragment is left unassembled
 check_notes The changelog section for this tag becomes the release notes
 check_notes_content The release notes carry the support period
 EOF

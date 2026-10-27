@@ -9,54 +9,9 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
-
-### Added
-
-- The console's pseudonymisation domains page draws every domain with its
-  namespace, consumer, count of pseudonyms and state, and Resolve a
-  pseudonym (#116): the domain, the pseudonym and a reason, posted and
-  answered with the patient it belongs to, which the server records as a
-  disclosure. The pseudonym never reaches an address and the answer never
-  shows it. An administrator adds, renames, gives another consumer or
-  retires a domain from the same page, and the patient's Pseudonyms tab
-  links to it.
-- The console's review queue draws the open pairs in FerroUI's work-list
-  (#109): both leading names, their birth dates and domains, the score
-  with its bar, the grade and the time queued. `j` and `k` move, Enter
-  opens the pair, and `o` or `d` opens it at a glance in a side panel with
-  Open to decide and Defer. The filters and the paging are posted, so the
-  queue's state stays out of the address.
-- The console's compare-and-decide page (#110): the two records side by
-  side with the differing rows first, the score breakdown on the
-  thresholds' scale, the blocking key, each record's patient with its
-  identifiers masked, and the docked decision bar with Link (`l`), Not a
-  match (`n`), Defer (`d`), the reason (`r`) and the neighbouring pairs
-  (`[`, `]`). A link that merges two patients asks first in a danger
-  dialog that names the effect, a decision posts the versions the page
-  showed, a stale decision comes back in the bar with the ways on, and a
-  decision without a reason is never sent.
-- The console's merge and unmerge pages (#111): Merge into… previews the
-  merge of the patient you name, the older surviving, with the
-  identifiers that move, the pseudonyms that resolve to the survivor, the
-  subscriptions told and the candidates closed; Unmerge… shows the latest
-  merge into the patient with its reason and the preview of its revert,
-  or names the merge to revert first. Both ask in a danger dialog with
-  your reason, post the versions the preview read, and draw a stale answer
-  in place.
-- The book's steward's guide walks the review queue, the three decisions,
-  the merge and the unmerge in the console, with what each records and
-  how a stale decision is answered (#106).
-
-### Changed
-
-- Only a pseudonymisation domain's own consumer reads its pseudonyms
-  through PIXm ITI-83 (#339). Another Consumer that names the domain as
-  `targetSystem` now gets no pseudonym for it, where it read a minted one
-  before, and a query naming no `targetSystem` carries the pseudonyms of
-  the caller's own domains alone, by `GET` and by `POST`. A Consumer that
-  read another domain's pseudonyms must ask as that domain's consumer.
 
 ## [0.0.9] - 2026-10-27
 

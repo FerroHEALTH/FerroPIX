@@ -449,7 +449,7 @@ fn domain_state(domain: &Domain) -> AnyView {
     if domain.retired_at.is_some() {
         badge(Tone::Neutral, tr(Msg::Retired)).into_any()
     } else {
-        badge(Tone::Ok, tr(Msg::Active)).into_any()
+        badge(Tone::Ok, tr(Msg::StateActive)).into_any()
     }
 }
 

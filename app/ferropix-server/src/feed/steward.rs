@@ -14,7 +14,8 @@
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::feed::link::{self, MergeKind, Recording};
+use crate::feed::link::merge::Recording;
+use crate::feed::link::{self, MergeKind};
 use crate::feed::write::{self, Subjects};
 use crate::feed::{Context, FeedError, announce};
 use crate::store::record::{PersonId, RecordId};
@@ -241,7 +242,7 @@ async fn link_pair(
                 candidate: Some(candidate),
                 reason,
             };
-            let made = link::merge_recorded(
+            let made = link::merge::merge_recorded(
                 connection,
                 *merged,
                 *survivor,

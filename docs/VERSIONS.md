@@ -41,7 +41,9 @@ pins, so every book in the family builds with the same tools.
 
 The operator console draws with FerroUI, pinned exactly and moved in
 lockstep with every FerroHEALTH console on each release
-(`.claude/rules/leptos-ui.md`).
+(`.claude/rules/leptos-ui.md`). `scripts/checks/versions.sh` holds the root
+`Cargo.toml` pin to this row and the tag the FerroUI documents are read at
+to `v` plus the pinned version.
 
 | Item | Pin | Repeated in |
 |---|---|---|

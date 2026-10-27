@@ -138,7 +138,9 @@ the workspace resolves, never memory.
   §0, §13), looked up through `crate::locale` in the locale the request chose
   (the language preference, else `Accept-Language`, else `[server] locale`),
   with FerroUI's number formatter and the `number-group` and `number-decimal`
-  marks set. A test holds the catalog to every message and no other, and a
+  marks set. The build script writes one `Msg` variant per English message,
+  documented by the `#` comment right above it, and fails the build on a
+  message without one. A test holds every catalog to `Msg`, and a
   throwaway catalog under `tests/locales/` proves a language joins as one
   file. `scripts/checks/stray-literals.sh` (CI job `stray-literals`, FerroUI
   §13) fails a literal under `src/` that reads as words; one no reader sees

@@ -53,6 +53,12 @@ and this project adheres to
 
 ### Changed
 
+- Only a pseudonymisation domain's own consumer reads its pseudonyms
+  through PIXm ITI-83 (#339). Another Consumer that names the domain as
+  `targetSystem` now gets no pseudonym for it, where it read a minted one
+  before, and a query naming no `targetSystem` carries the pseudonyms of
+  the caller's own domains alone, by `GET` and by `POST`. A Consumer that
+  read another domain's pseudonyms must ask as that domain's consumer.
 - The Helm chart is 0.3.2, the same templates and values as 0.3.1, with
   v0.0.10 as its appVersion.
 

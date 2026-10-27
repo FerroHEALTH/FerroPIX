@@ -5,8 +5,10 @@
 //! - an ITI-83 query from a domain's consumer that names the domain as
 //!   `targetSystem` mints the person's pseudonym on the first ask and answers
 //!   the same value on every later one, by GET and by POST;
-//! - another Consumer never causes a mint and reads only a minted value;
-//! - a query naming no `targetSystem` mints nothing;
+//! - only a domain's consumer reads its pseudonyms (#339): another Consumer
+//!   naming the domain gets none and mints none, and a query naming no
+//!   `targetSystem` mints nothing and carries the caller's own domains
+//!   alone;
 //! - a retired domain answers `targetSystem not found`;
 //! - parallel first asks yield one pseudonym;
 //! - a mint is its own audit record;
@@ -45,6 +47,15 @@ const NAMESPACE: &str = "urn:oid:2.999.7.1";
 
 /// The client the clinical domain's pseudonyms are minted for.
 const EHR: &str = "synthetic-ehr";
+
+/// The research domain's namespace.
+const RESEARCH: &str = "urn:oid:2.999.7.2";
+
+/// The client the research domain's pseudonyms are minted for.
+const REGISTRY: &str = "synthetic-registry";
+
+/// A Consumer that is no pseudonymisation domain's consumer.
+const OTHER: &str = "synthetic-consumer";
 
 /// Starts the harness with the clinical pseudonymisation domain.
 async fn started() -> Harness {
@@ -98,16 +109,35 @@ async fn ask_posted(harness: &Harness, client: &str, value: &str, targets: &[&st
 
 /// The pseudonyms of the clinical domain an ITI-83 answer carries.
 fn pseudonyms(answer: &Answer) -> Vec<String> {
+    pseudonyms_in(answer, NAMESPACE)
+}
+
+/// The pseudonyms of the domain `namespace` an ITI-83 answer carries.
+fn pseudonyms_in(answer: &Answer, namespace: &str) -> Vec<String> {
     assert_eq!(StatusCode::OK, answer.status, "{}", answer.body);
     answer
         .identifiers()
         .into_iter()
         .filter_map(|identifier| {
             identifier
-                .strip_prefix(&format!("{NAMESPACE}|"))
+                .strip_prefix(&format!("{namespace}|"))
                 .map(str::to_owned)
         })
         .collect()
+}
+
+/// Seeds the research domain beside the clinical one.
+async fn research(harness: &Harness) {
+    pseudonym::seed(
+        &harness.store,
+        &[PseudonymSeed {
+            namespace: RESEARCH.to_owned(),
+            name: String::from("Research domain"),
+            consumer_client_id: Some(REGISTRY.to_owned()),
+        }],
+    )
+    .await
+    .expect("the research domain is seeded");
 }
 
 /// ITI-83 by GET from the laboratory's `L-704`, as the clinical domain's
@@ -189,34 +219,99 @@ async fn the_consumer_mints_on_the_first_ask_and_reads_the_same_value_after() {
     assert_eq!(
         first,
         pseudonyms(&ask(&harness, EHR, "H-701", &[]).await),
-        "a minted pseudonym is among every identifier"
+        "the consumer's own minted pseudonym is among every identifier"
+    );
+    assert_eq!(
+        first,
+        pseudonyms(&ask_posted(&harness, EHR, "H-701", &[]).await),
+        "and by POST"
     );
 }
 
 #[tokio::test]
-async fn another_consumer_and_a_query_naming_no_target_never_mint() {
+async fn another_consumer_never_reads_or_mints_a_domains_pseudonym() {
     if !e2e_enabled() {
         return;
     }
     let harness = started().await;
     hospital(&harness, "H-702", "Kroonenberg").await;
-    let other = ask(&harness, "synthetic-consumer", "H-702", &[NAMESPACE]).await;
+    let before = ask(&harness, OTHER, "H-702", &[NAMESPACE]).await;
     assert_eq!(
         Vec::<String>::new(),
-        pseudonyms(&other),
-        "no pseudonym yet, none minted"
+        pseudonyms(&before),
+        "no pseudonym, none minted"
     );
     assert_eq!(
         Vec::<String>::new(),
-        pseudonyms(&ask(&harness, EHR, "H-702", &[]).await)
+        pseudonyms(&ask(&harness, EHR, "H-702", &[]).await),
+        "a query naming no targetSystem mints nothing"
     );
     assert_eq!(0, minted(&harness).await);
     let value = pseudonyms(&ask(&harness, EHR, "H-702", &[NAMESPACE]).await);
-    assert_eq!(
-        value,
-        pseudonyms(&ask(&harness, "synthetic-consumer", "H-702", &[NAMESPACE]).await),
-        "another Consumer reads the minted value"
+    assert_eq!(1, value.len(), "the consumer mints");
+    for answer in [
+        ask(&harness, OTHER, "H-702", &[NAMESPACE]).await,
+        ask_posted(&harness, OTHER, "H-702", &[NAMESPACE]).await,
+        ask(&harness, OTHER, "H-702", &[]).await,
+        ask_posted(&harness, OTHER, "H-702", &[]).await,
+    ] {
+        assert_eq!(
+            Vec::<String>::new(),
+            pseudonyms(&answer),
+            "another Consumer never reads the minted value"
+        );
+        assert!(
+            !answer.body.contains(&value[0]),
+            "the pseudonym is nowhere in the answer"
+        );
+    }
+    assert_eq!(1, minted(&harness).await, "another Consumer mints nothing");
+}
+
+#[tokio::test]
+async fn a_query_naming_no_target_carries_the_callers_own_domain_alone() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = started().await;
+    research(&harness).await;
+    hospital(&harness, "H-708", "Kroonenberg").await;
+    let clinical = pseudonyms(&ask(&harness, EHR, "H-708", &[NAMESPACE]).await);
+    let registry = pseudonyms_in(
+        &ask(&harness, REGISTRY, "H-708", &[RESEARCH]).await,
+        RESEARCH,
     );
+    assert_eq!(
+        (1, 1),
+        (clinical.len(), registry.len()),
+        "one in each domain"
+    );
+    assert_eq!(2, minted(&harness).await);
+    for answer in [
+        ask(&harness, EHR, "H-708", &[]).await,
+        ask_posted(&harness, EHR, "H-708", &[]).await,
+    ] {
+        assert_eq!(clinical, pseudonyms(&answer), "the caller's own domain");
+        assert_eq!(
+            Vec::<String>::new(),
+            pseudonyms_in(&answer, RESEARCH),
+            "never another domain's"
+        );
+    }
+    for answer in [
+        ask(&harness, REGISTRY, "H-708", &[]).await,
+        ask_posted(&harness, REGISTRY, "H-708", &[]).await,
+    ] {
+        assert_eq!(registry, pseudonyms_in(&answer, RESEARCH));
+        assert_eq!(Vec::<String>::new(), pseudonyms(&answer));
+    }
+    let crossed = ask(&harness, EHR, "H-708", &[RESEARCH]).await;
+    assert_eq!(
+        Vec::<String>::new(),
+        pseudonyms_in(&crossed, RESEARCH),
+        "naming another consumer's domain reads nothing"
+    );
+    assert_eq!(2, minted(&harness).await, "nothing more is minted");
 }
 
 #[tokio::test]

@@ -59,8 +59,13 @@
 # server's and the console's ports are published on the issuer service, whose
 # network namespace both share.
 #
-# HEALTH. The image's HEALTHCHECK runs `ferropix healthcheck`, which asks
-# GET /health/readiness: 200 once the store and the audit spool answer.
+# HEALTH. The server's healthcheck runs `ferropix healthcheck`, which asks
+# GET /health/readiness: 200 once the store and the audit spool answer. It is
+# declared on each service as well as in the image: the OCI image
+# configuration only reserves its Healthcheck field "to maintain
+# compatibility" (https://github.com/opencontainers/image-spec/blob/main/config.md),
+# Podman runs the published image with no healthcheck, and a `service_healthy`
+# dependent would then never start.
 #
 # IMAGES. Every image is pinned by tag and by the digest of its image index,
 # and each pin is a row of docs/VERSIONS.md that scripts/checks/versions.sh
@@ -139,14 +144,22 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
+    # The image's HEALTHCHECK, repeated for Podman (HEALTH above).
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/ferropix", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     # Longer than the drain of [server] drain_delay_ms and shutdown_timeout_ms.
     stop_grace_period: 20s
 
   # The operator console, a client of the server's operator API that
   # stewards sign in to with OpenID Connect. It joins the issuer's network
   # namespace as the server does, because it too admits a plain `http`
-  # provider only on loopback, and reaches the server there. The image's own
-  # HEALTHCHECK runs `ferropix-console healthcheck`.
+  # provider only on loopback, and reaches the server there. Its healthcheck
+  # runs `ferropix-console healthcheck`, the image's HEALTHCHECK repeated for
+  # Podman (HEALTH above).
   console:
     image: ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION:-0.0.7}
     profiles: [console]
@@ -174,6 +187,12 @@ services:
       FERROPIX_CONSOLE__SESSION__SECURE_COOKIE: "false"
     secrets:
       - console-oidc-client-secret
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/ferropix-console", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     # The console keeps its sessions in memory and writes no file.
     read_only: true
     tmpfs:

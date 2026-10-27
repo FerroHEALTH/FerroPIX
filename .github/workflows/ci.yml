@@ -781,7 +781,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: compose.yaml resolves, with and without the console
+      - name: compose.yaml resolves, with and without the console, with its healthchecks
         run: |
           set -euo pipefail
           mkdir -p secrets
@@ -790,6 +790,11 @@ jobs:
           done
           docker compose config --quiet
           docker compose --profile console config --quiet
+          # The healthchecks sit on the services, since Podman runs the
+          # published images without theirs (#292).
+          docker compose --profile console config --format json \
+            | jq -e '.services.ferropix.healthcheck.test and .services.console.healthcheck.test' > /dev/null \
+            || { echo "::error::compose.yaml declares no healthcheck on the server or the console" >&2; exit 1; }
       # The console image from placeholder files at the paths
       # release-console.yml stages: a COPY path or a .dockerignore rule that
       # misses the staged tree fails here, and the tree carries the owners and

@@ -64,6 +64,10 @@ and this project adheres to
 - The server pins `ferrohealth-smart` 0.8.1 exactly, and `ihe-iti` 0.0.63 and `nl-generic-functions` 0.0.32 require it as a caret, `0.8.1` (#294). A product that takes either crate moves its own `ferrohealth-smart` pin to the 0.8 line with it. Between 0.7.4 and 0.8.1 the crate renders every secret and masked URL through `ferrohealth-secret`.
 - The operator console signs stewards in, refreshes their access tokens and signs them out through `ferrohealth_smart::oidc::RelyingParty`, the family's OpenID Connect relying-party client, and its own copy of the client is deleted (#294). The `[oidc]` keys, the routes, the cookies and the session store are unchanged. When a token answer names no scope, the scopes a session holds now include `offline_access` where `[oidc] offline_access` asked for it.
 
+### Fixed
+
+- The compose quickstart declares the healthchecks of the server and the console on their services, the same `healthcheck` subcommands the images' HEALTHCHECK runs, so `podman compose up --wait` starts the console and returns as `docker compose` does (#292). Podman runs the published images with no healthcheck, so a `service_healthy` dependent never started.
+
 ## [0.0.7] - 2026-10-26
 
 ### Added

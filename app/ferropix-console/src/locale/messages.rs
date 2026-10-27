@@ -761,6 +761,64 @@ messages! {
     DomainRetire = "domain-retire",
     /// The retire switch's help.
     DomainRetireHelp = "domain-retire-help",
+    /// The patient's Merge into action.
+    PatientMergeInto = "patient-merge-into",
+    /// The patient's Unmerge action.
+    PatientUnmerge = "patient-unmerge",
+    /// Before the time a patient was made.
+    MergeMade = "merge-made",
+    /// The identifiers that move.
+    MergeIdentifiers = "merge-identifiers",
+    /// The pseudonyms that resolve elsewhere.
+    MergePseudonyms = "merge-pseudonyms",
+    /// The subscribers told.
+    MergeSubscriptions = "merge-subscriptions",
+    /// The candidates closed.
+    MergeCandidates = "merge-candidates",
+    /// A merge or revert refused as stale.
+    MergeStale = "merge-stale",
+    /// What a refused merge or revert shows.
+    WhatMergeWrite = "what-merge-write",
+    /// What a refused preview shows.
+    WhatMergePreview = "what-merge-preview",
+    /// The card that names the other patient.
+    MergeOther = "merge-other",
+    /// What naming the other patient does.
+    MergeOtherNote = "merge-other-note",
+    /// The other patient's field.
+    MergeOtherField = "merge-other-field",
+    /// The Preview button.
+    MergePreview = "merge-preview",
+    /// Swap which patient survives.
+    MergeSwap = "merge-swap",
+    /// The merge dialog's question.
+    MergeConfirmTitle = "merge-confirm-title",
+    /// The merge dialog's sentence.
+    MergeConfirmMessage = "merge-confirm-message",
+    /// The surviving patient.
+    MergeSurvivor = "merge-survivor",
+    /// The patient merged into it.
+    MergeMerged = "merge-merged",
+    /// The merge preview's card.
+    MergeEffect = "merge-effect",
+    /// The merge's rule.
+    MergeReversible = "merge-reversible",
+    /// The Merge button that asks first.
+    MergeAsk = "merge-ask",
+    /// No merge to revert.
+    UnmergeNone = "unmerge-none",
+    /// The merge to revert first.
+    UnmergeFirst = "unmerge-first",
+    /// The patient a revert restores.
+    UnmergeRestored = "unmerge-restored",
+    /// The revert dialog's question.
+    UnmergeConfirmTitle = "unmerge-confirm-title",
+    /// The revert dialog's sentence.
+    UnmergeConfirmMessage = "unmerge-confirm-message",
+    /// The Unmerge button that asks first.
+    UnmergeAsk = "unmerge-ask",
+    /// The revert preview's card.
+    UnmergeEffect = "unmerge-effect",
     /// The hint inside a date typed as text.
     DateHint = "date-hint",
     /// The notice that a record changed since the pair was scored.

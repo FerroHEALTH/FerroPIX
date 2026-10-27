@@ -37,6 +37,14 @@ and this project adheres to
   dialog that names the effect, a decision posts the versions the page
   showed, a stale decision comes back in the bar with the ways on, and a
   decision without a reason is never sent.
+- The console's merge and unmerge pages (#111): Merge into… previews the
+  merge of the patient you name, the older surviving, with the
+  identifiers that move, the pseudonyms that resolve to the survivor, the
+  subscriptions told and the candidates closed; Unmerge… shows the latest
+  merge into the patient with its reason and the preview of its revert,
+  or names the merge to revert first. Both ask in a danger dialog with
+  your reason, post the versions the preview read, and draw a stale answer
+  in place.
 
 ## [0.0.9] - 2026-10-27
 

@@ -64,6 +64,18 @@
   ],
   "history": [
     {
+      "at": "2026-10-25T10:00:00Z",
+      "actor": "Synthetic Steward",
+      "reason": "Synthetic ward call",
+      "event": {
+        "merged": {
+          "merge": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4d01",
+          "survivor": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+          "merged": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e"
+        }
+      }
+    },
+    {
       "at": "2026-10-24T09:00:00Z",
       "actor": "east-lab",
       "event": {

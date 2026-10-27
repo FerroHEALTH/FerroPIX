@@ -271,6 +271,8 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .route(crate::app::AUDIT, post(crate::posts::post))
         .route(crate::app::QUEUE, post(crate::posts::post))
         .route("/queue/{candidate}", post(crate::posts::post))
+        .route("/patients/{person}/merge", post(crate::posts::post))
+        .route("/patients/{person}/unmerge", post(crate::posts::post))
         .route(crate::pages::trail::EXPORT, post(crate::posts::export))
         .route("/patients/{person}/reveal", post(crate::posts::post))
         .route(crate::app::DOMAINS, post(crate::posts::post))

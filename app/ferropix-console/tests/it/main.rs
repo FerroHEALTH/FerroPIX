@@ -17,6 +17,7 @@ mod boundary;
 mod captures;
 mod config;
 mod filled;
+mod merge;
 mod pages;
 mod pair;
 mod preferences;

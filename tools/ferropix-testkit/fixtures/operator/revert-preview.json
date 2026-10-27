@@ -1,0 +1,38 @@
+{
+  "survivor": {
+    "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "version": "3",
+    "name": "Ada Proefsma",
+    "created_at": "2026-10-20T08:00:00Z"
+  },
+  "merged": {
+    "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5e",
+    "version": "1",
+    "name": "A. Proefsma",
+    "created_at": "2026-10-22T08:00:00Z"
+  },
+  "identifiers": [
+    {
+      "domain": {
+        "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+        "system": "urn:oid:2.999.1.2",
+        "name": "Synthetic laboratory",
+        "kind": "local"
+      },
+      "masked": "••••0815"
+    }
+  ],
+  "pseudonyms": [
+    {
+      "namespace": "urn:oid:2.999.7.1",
+      "name": "Synthetic clinical domain",
+      "masked": "••••c0de"
+    }
+  ],
+  "subscriptions": 2,
+  "candidates": [
+    "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01"
+  ],
+  "revert": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4d01",
+  "reason": "Synthetic ward call"
+}

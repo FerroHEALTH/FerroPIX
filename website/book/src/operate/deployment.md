@@ -148,6 +148,12 @@ helm install ferropix deploy/helm/ferropix \
   -f my-values.yaml
 ```
 
+Both containers carry a memory and an ephemeral-storage limit. The server's
+ephemeral storage, 256 MiB by default (`resources`), holds the audit spool on
+its default `emptyDir` (`[audit] spool_max_bytes`, 64 MiB), `/tmp` and the
+container log: raise it with the spool, or keep the spool on a
+PersistentVolumeClaim (`state.existingClaim`).
+
 The release lane publishes the chart as an OCI artifact,
 `oci://ghcr.io/ferrohealth/charts/ferropix`, with the release as its app
 version and both images pinned by the digests it scanned, and attests its

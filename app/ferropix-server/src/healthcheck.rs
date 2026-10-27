@@ -77,7 +77,10 @@ pub async fn check(address: SocketAddr, base_path: &str, timeout: Duration) -> O
         Ok(client) => client,
         Err(error) => return Outcome::Failed(error),
     };
-    let url = format!("http://{address}{base_path}{}", crate::http::READINESS);
+    let url = format!(
+        "http://{address}{base_path}{}",
+        ferrohealth_server::health::READINESS
+    );
     match client.get(url).send().await {
         Ok(response) if response.status() == StatusCode::OK => Outcome::Up,
         Ok(response) => Outcome::NotUp(response.status()),

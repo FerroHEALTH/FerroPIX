@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 
-# cargo-deny configuration. Run: cargo deny check
+# cargo-deny configuration. Run: cargo deny check, and again over the fuzz
+# workspace: cargo deny --manifest-path fuzz/Cargo.toml check, which reads
+# this same file (CI's cargo-deny job runs both).
 # Docs: https://embarkstudios.github.io/cargo-deny/
 #
 # The only advisory gate: it reads the RustSec database cargo audit does and
@@ -33,7 +35,6 @@ allow = [
   "MIT",
   "MIT-0",
   "ISC",
-  "OpenSSL",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "BSL-1.0",
@@ -46,7 +47,8 @@ allow = [
 confidence-threshold = 0.9
 # The project's own crates and the family's BUSL-1.1 crates (LICENSE): each
 # joins the day it is a member or a dependency (`ihe-iti` and
-# `nl-generic-functions` with the move, `ferrohealth-smart`, `ihe-atna`).
+# `nl-generic-functions` with the move, `ferrohealth-smart`, `ihe-atna`,
+# `ferrohealth-secret`).
 # The family's own crates are under the Business Source License 1.1, which
 # no permissive allow-list names, so each is admitted by name: this
 # repository's published crates, and the FerroHEALTH crates they depend on.
@@ -55,6 +57,17 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ihe-atna" },
   { allow = ["BUSL-1.1"], crate = "nl-generic-functions" },
   { allow = ["BUSL-1.1"], crate = "ferrohealth-smart" },
+  # FerroSYS's secret wrapper, which ferrohealth-smart, ihe-atna and the
+  # operator console take.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-secret" },
+  # FerroSYS's configuration loader and its server pieces, which bring the
+  # family's telemetry and health crates with them.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-config" },
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-server" },
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-telemetry" },
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-health" },
+  # FerroSYS's installation report to FerroPULSE.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-usage-report" },
   # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },
   # The FerroUI components the operator console draws with, and the console
@@ -66,6 +79,12 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ferropix-operator-api" },
   # The test support, a path-only dev-dependency, never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-testkit" },
+  # The fuzz workspace's own crate under fuzz/, never published.
+  { allow = ["BUSL-1.1"], crate = "ferropix-fuzz" },
+  # libfuzzer-sys, which the fuzz workspace alone takes, carries LLVM's
+  # libFuzzer sources under NCSA beside its own MIT OR Apache-2.0; no product
+  # binary links it.
+  { allow = ["NCSA"], crate = "libfuzzer-sys" },
 ]
 
 [bans]

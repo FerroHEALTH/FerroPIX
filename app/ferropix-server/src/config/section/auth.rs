@@ -1,123 +1,64 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The `[auth]` section: the issuers whose tokens the server accepts, with
-//! the Source clients each may vouch for, the token rules, the two product
-//! scopes and the Basic users of the development profile.
+//! The `[auth]` section, which is `ferrohealth-smart`'s `AuthSection`, and
+//! the `[trust]` section beside it.
 //!
-//! The section is resolved by `ferrohealth-smart`: the issuer URL rule of
-//! RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric algorithms of
-//! RFC 8725 §3.1. The product scopes take an extension form of SMART App
-//! Launch 2.2.0, Scopes and Launch Context, §Extensibility. The `clients` of
-//! an issuer are FerroPIX's own design: the client ids a token of that issuer
-//! may carry to feed a domain (PIXm 3.1.0 §2:3.104.5).
+//! `[auth]` names the issuers whose tokens the server accepts, verified
+//! against each issuer's key set or by its RFC 7662 introspection endpoint,
+//! the token rules, the trust roots and the Basic users of the development
+//! profile; `ferrohealth-smart` resolves it, with the issuer URL rule of
+//! RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric algorithms
+//! of RFC 8725 §3.1. Its `product_scope` is the scope of a data steward,
+//! `__ferropix.steward` unless set; the administrator's is `[operator]
+//! admin_scope`. Both take an extension form of SMART App Launch 2.2.0,
+//! Scopes and Launch Context, §Extensibility.
+//!
+//! `[[trust.issuer]]` lists, for each issuer, the client ids a token of that
+//! issuer may carry to feed a domain (PIXm 3.1.0 §2:3.104.5). The binding of
+//! a client to its issuer is FerroPIX's own design: two authorization
+//! servers may each mint a token for a client of the same name.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ferrohealth_smart::config::{AuthSection, BasicSection, IssuerEntry, IssuerKey, Resolved};
-use ferrohealth_smart::resource::TokenProfile;
+use ferrohealth_smart::config::{AuthSection, Resolved};
 use ferrohealth_smart::scope::{is_extension_scope, is_scope_token};
-use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
 
-/// The `[auth]` section as written.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Auth {
-    /// The trusted issuers (`[[auth.issuer]]`).
-    pub issuer: Vec<Issuer>,
-    /// The audiences, of which a token's `aud` must contain one.
-    pub audience: Vec<String>,
-    /// The signature algorithms admitted.
-    pub algorithms: Vec<Algorithm>,
-    /// The claims a token must carry.
-    pub token_profile: TokenProfile,
-    /// The clock skew, at most 300.
-    pub clock_skew_seconds: u64,
-    /// How long a held key set is used.
-    pub jwks_max_age_seconds: u64,
-    /// The shortest time between two reads of the key set.
-    pub jwks_refresh_interval_seconds: u64,
-    /// A key set file in place of the issuer's `jwks_uri`; empty for none.
-    pub jwks_file: String,
-    /// How long one call to an authorization server may take.
-    pub timeout_ms: u64,
-    /// The protection space the `WWW-Authenticate` challenges name (RFC 9110
-    /// §11.5); empty for the server's own.
-    pub challenge_realm: String,
-    /// The scope of a data steward.
-    pub steward_scope: String,
-    /// The scope of an administrator.
-    pub admin_scope: String,
-    /// The Basic users, admitted under `profile = "development"` only.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub basic: Option<BasicSection>,
-}
+/// The steward scope when `[auth] product_scope` is empty.
+pub const STEWARD_SCOPE: &str = "__ferropix.steward";
 
-impl Default for Auth {
-    fn default() -> Self {
-        let family = AuthSection::default();
-        Self {
-            issuer: Vec::new(),
-            audience: Vec::new(),
-            algorithms: family.algorithms,
-            token_profile: family.token_profile,
-            clock_skew_seconds: family.clock_skew_seconds,
-            jwks_max_age_seconds: family.jwks_max_age_seconds,
-            jwks_refresh_interval_seconds: family.jwks_refresh_interval_seconds,
-            jwks_file: String::new(),
-            timeout_ms: family.timeout_ms,
-            challenge_realm: String::new(),
-            steward_scope: String::from("__ferropix.steward"),
-            admin_scope: String::from("__ferropix.admin"),
-            basic: None,
-        }
-    }
-}
-
-/// One `[[auth.issuer]]` entry; a token field it leaves out is the section's.
-#[expect(
-    clippy::struct_field_names,
-    reason = "the key is `issuer`, as the entry of ferrohealth-smart names it"
-)]
+/// The `[auth]` section as written: `ferrohealth-smart`'s.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct Auth(pub AuthSection);
+
+/// The `[trust]` section as written.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Issuer {
-    /// The issuer identifier every token's `iss` equals.
+pub struct Trust {
+    /// What each issuer's tokens are honoured for (`[[trust.issuer]]`).
+    pub issuer: Vec<TrustedIssuer>,
+}
+
+/// One `[[trust.issuer]]` entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TrustedIssuer {
+    /// The issuer, as `[auth]` names it.
     pub issuer: String,
     /// The client ids this issuer may vouch for as a Patient Identity Source.
     pub clients: Vec<String>,
-    /// The audiences.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub audience: Option<Vec<String>>,
-    /// The signature algorithms admitted.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub algorithms: Option<Vec<Algorithm>>,
-    /// The claims a token must carry.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token_profile: Option<TokenProfile>,
-    /// The clock skew.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub clock_skew_seconds: Option<u64>,
-    /// How long a held key set is used.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jwks_max_age_seconds: Option<u64>,
-    /// The shortest time between two reads of the key set.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jwks_refresh_interval_seconds: Option<u64>,
-    /// A key set file in place of the issuer's `jwks_uri`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jwks_file: Option<String>,
 }
 
-/// The `[auth]` section, resolved.
+/// The `[auth]` and `[trust]` sections, resolved.
 #[derive(Debug)]
 pub struct AuthSettings {
-    /// What `ferrohealth-smart` resolved: the issuers' settings and the Basic
-    /// store.
+    /// What `ferrohealth-smart` resolved: the issuers' settings or the
+    /// introspection check, and the Basic store.
     pub resolved: Resolved,
     /// The scope of a data steward.
     pub steward_scope: String,
@@ -142,26 +83,48 @@ impl AuthSettings {
 }
 
 impl Auth {
-    /// Resolves the section under `profile`.
+    /// Resolves the section under `profile`, with `trust` and the
+    /// administrator scope `admin_scope`.
     ///
     /// # Errors
-    /// Returns [`Error::DevelopmentOnly`] for Basic users under production,
-    /// [`Error::Value`] for a product scope in no extension form, two equal
-    /// product scopes, an issuer named twice or a client id outside RFC 6749
-    /// Appendix A.1, and [`Error::Auth`] for every rule `ferrohealth-smart`
-    /// checks: no issuer and no Basic user, no audience, an issuer outside the
-    /// URL rule, a symmetric algorithm, a skew over the bound and a Basic user
-    /// it refuses.
-    pub fn resolve(&self, profile: Profile) -> Result<AuthSettings, Error> {
-        if self.basic.is_some() && profile == Profile::Production {
+    /// Returns [`Error::Value`] for `enabled = false`, a product scope in no
+    /// extension form, two equal product scopes, a `[[trust.issuer]]` that
+    /// names an issuer `[auth]` does not or one named twice, or a client id
+    /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
+    /// users under production; and [`Error::Auth`] for every rule
+    /// `ferrohealth-smart` checks: no issuer and no Basic user, no audience,
+    /// an issuer outside the URL rule, a symmetric algorithm, a skew over the
+    /// bound, an `[auth.introspection]` that breaks a rule, a `ca_file` that
+    /// is no PEM of certificates, and a Basic user it refuses.
+    pub fn resolve(
+        &self,
+        profile: Profile,
+        trust: &Trust,
+        admin_scope: &str,
+    ) -> Result<AuthSettings, Error> {
+        let section = &self.0;
+        // NOTE: no specification governs this: our own design; every route but
+        // health carries identity data, so the surface is never open.
+        if !section.enabled {
+            return Err(value(
+                "auth.enabled",
+                "FerroPIX always authenticates its callers",
+            ));
+        }
+        if section.basic.is_some() && profile == Profile::Production {
             return Err(Error::DevelopmentOnly {
                 key: String::from("auth.basic"),
                 rule: "a Basic user sends a reusable password on every request",
             });
         }
+        let steward_scope = if section.product_scope.is_empty() {
+            STEWARD_SCOPE.to_owned()
+        } else {
+            section.product_scope.clone()
+        };
         for (key, scope) in [
-            ("auth.steward_scope", &self.steward_scope),
-            ("auth.admin_scope", &self.admin_scope),
+            ("auth.product_scope", steward_scope.as_str()),
+            ("operator.admin_scope", admin_scope),
         ] {
             if !(is_scope_token(scope) && is_extension_scope(scope)) {
                 return Err(value(
@@ -170,86 +133,64 @@ impl Auth {
                 ));
             }
         }
-        if self.steward_scope == self.admin_scope {
+        if steward_scope == admin_scope {
             return Err(value(
-                "auth.admin_scope",
-                "it must differ from auth.steward_scope",
+                "operator.admin_scope",
+                "it must differ from the steward scope, auth.product_scope",
             ));
         }
-        let mut clients = BTreeMap::new();
-        for (index, issuer) in self.issuer.iter().enumerate() {
-            if !issuer.clients.iter().all(|client| is_client_id(client)) {
-                return Err(value(
-                    &format!("auth.issuer[{index}].clients"),
-                    "a client id of the RFC 6749 Appendix A.1 characters, not empty",
-                ));
-            }
-            let listed: BTreeSet<String> = issuer.clients.iter().cloned().collect();
-            if clients.insert(issuer.issuer.clone(), listed).is_some() {
-                return Err(value(
-                    &format!("auth.issuer[{index}].issuer"),
-                    "an earlier entry names this issuer",
-                ));
-            }
-        }
-        let resolved = self
-            .family_section()
-            .resolve()
-            .map_err(|source| Error::Auth { source })?;
-        let basic_users = self
+        let clients = clients(section, trust)?;
+        let resolved = section.resolve().map_err(|source| Error::Auth { source })?;
+        let basic_users = section
             .basic
             .iter()
             .flat_map(|basic| basic.users.iter().map(|user| user.user.clone()))
             .collect();
         Ok(AuthSettings {
             resolved,
-            steward_scope: self.steward_scope.clone(),
-            admin_scope: self.admin_scope.clone(),
+            steward_scope,
+            admin_scope: admin_scope.to_owned(),
             clients,
             basic_users,
         })
     }
+}
 
-    /// Returns the section `ferrohealth-smart` resolves.
-    ///
-    /// The flat empty issuer stands for no issuer, which the crate reads as a
-    /// surface of Basic users alone.
-    fn family_section(&self) -> AuthSection {
-        let issuer = if self.issuer.is_empty() {
-            IssuerKey::Flat(String::new())
-        } else {
-            IssuerKey::List(
-                self.issuer
-                    .iter()
-                    .map(|issuer| IssuerEntry {
-                        issuer: issuer.issuer.clone(),
-                        audience: issuer.audience.clone(),
-                        algorithms: issuer.algorithms.clone(),
-                        token_profile: issuer.token_profile,
-                        clock_skew_seconds: issuer.clock_skew_seconds,
-                        jwks_max_age_seconds: issuer.jwks_max_age_seconds,
-                        jwks_refresh_interval_seconds: issuer.jwks_refresh_interval_seconds,
-                        jwks_file: issuer.jwks_file.clone(),
-                    })
-                    .collect(),
-            )
-        };
-        AuthSection {
-            enabled: true,
-            issuer,
-            audience: self.audience.clone(),
-            algorithms: self.algorithms.clone(),
-            token_profile: self.token_profile,
-            clock_skew_seconds: self.clock_skew_seconds,
-            jwks_max_age_seconds: self.jwks_max_age_seconds,
-            jwks_refresh_interval_seconds: self.jwks_refresh_interval_seconds,
-            jwks_file: self.jwks_file.clone(),
-            timeout_ms: self.timeout_ms,
-            realm: self.challenge_realm.clone(),
-            basic: self.basic.clone(),
-            ..AuthSection::default()
+/// Returns the Source clients of each `[[trust.issuer]]`, by issuer, each
+/// an issuer `section` names.
+fn clients(
+    section: &AuthSection,
+    trust: &Trust,
+) -> Result<BTreeMap<String, BTreeSet<String>>, Error> {
+    let named: BTreeSet<String> = section
+        .issuers()
+        .into_iter()
+        .map(|entry| entry.issuer)
+        .filter(|issuer| !issuer.is_empty())
+        .collect();
+    let mut clients = BTreeMap::new();
+    for (index, entry) in trust.issuer.iter().enumerate() {
+        if !named.contains(&entry.issuer) {
+            return Err(value(
+                &format!("trust.issuer[{index}].issuer"),
+                "an issuer [auth] names",
+            ));
+        }
+        if !entry.clients.iter().all(|client| is_client_id(client)) {
+            return Err(value(
+                &format!("trust.issuer[{index}].clients"),
+                "a client id of the RFC 6749 Appendix A.1 characters, not empty",
+            ));
+        }
+        let listed: BTreeSet<String> = entry.clients.iter().cloned().collect();
+        if clients.insert(entry.issuer.clone(), listed).is_some() {
+            return Err(value(
+                &format!("trust.issuer[{index}].issuer"),
+                "an earlier entry names this issuer",
+            ));
         }
     }
+    Ok(clients)
 }
 
 /// Returns an [`Error::Value`] under `key`.
@@ -268,73 +209,108 @@ fn is_client_id(client: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use ferrohealth_smart::config::{BasicSection, BasicUser};
+    use ferrohealth_smart::config::{AuthSection, BasicSection, BasicUser, IssuerEntry, IssuerKey};
     use secrecy::SecretString;
 
-    use super::{Auth, Issuer, is_client_id};
+    use super::{Auth, STEWARD_SCOPE, Trust, TrustedIssuer, is_client_id};
     use crate::config::Profile;
     use crate::config::error::Error;
 
-    fn issuer(url: &str, clients: &[&str]) -> Issuer {
-        Issuer {
-            issuer: url.to_owned(),
-            clients: clients.iter().map(|client| (*client).to_owned()).collect(),
-            ..Issuer::default()
-        }
+    const ADMIN: &str = "__ferropix.admin";
+
+    fn auth(issuers: &[&str]) -> Auth {
+        Auth(AuthSection {
+            issuer: if issuers.is_empty() {
+                IssuerKey::Flat(String::new())
+            } else {
+                IssuerKey::List(
+                    issuers
+                        .iter()
+                        .map(|issuer| IssuerEntry {
+                            issuer: (*issuer).to_owned(),
+                            ..IssuerEntry::default()
+                        })
+                        .collect(),
+                )
+            },
+            audience: vec![String::from("https://pix.example.org/fhir")],
+            ..AuthSection::default()
+        })
     }
 
-    fn auth(issuers: Vec<Issuer>) -> Auth {
-        Auth {
-            issuer: issuers,
-            audience: vec![String::from("https://pix.example.org/fhir")],
-            ..Auth::default()
+    fn trust(entries: &[(&str, &[&str])]) -> Trust {
+        Trust {
+            issuer: entries
+                .iter()
+                .map(|(issuer, clients)| TrustedIssuer {
+                    issuer: (*issuer).to_owned(),
+                    clients: clients.iter().map(|client| (*client).to_owned()).collect(),
+                })
+                .collect(),
         }
     }
 
     #[test]
-    fn an_issuer_resolves_and_admits_exactly_the_clients_it_lists() {
-        let resolved = auth(vec![issuer(
-            "https://idp.example.org/realms/pix",
-            &["lab-source"],
-        )])
-        .resolve(Profile::Production)
-        .expect("one issuer resolves");
+    fn an_issuer_resolves_and_admits_exactly_the_clients_its_trust_entry_lists() {
+        let url = "https://idp.example.org/realms/pix";
+        let resolved = auth(&[url])
+            .resolve(
+                Profile::Production,
+                &trust(&[(url, &["lab-source"])]),
+                ADMIN,
+            )
+            .expect("one issuer resolves");
         assert_eq!(1, resolved.resolved.issuers.len());
         assert!(resolved.admits("lab-source"));
         assert!(!resolved.admits("other-source"));
-        assert_eq!("__ferropix.steward", resolved.steward_scope);
-        assert_eq!("__ferropix.admin", resolved.admin_scope);
+        assert_eq!(STEWARD_SCOPE, resolved.steward_scope);
+        assert_eq!(ADMIN, resolved.admin_scope);
     }
 
     #[test]
-    fn a_section_with_no_issuer_and_no_basic_user_is_refused() {
-        let error = auth(Vec::new())
-            .resolve(Profile::Production)
+    fn a_section_with_no_issuer_and_no_basic_user_and_a_disabled_one_are_refused() {
+        let error = auth(&[])
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
             .expect_err("a surface that admits no credential fails closed");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
+        let mut off = auth(&["https://idp.example.org"]);
+        off.0.enabled = false;
+        let error = off
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .expect_err("FerroPIX is never open");
+        assert!(
+            matches!(&error, Error::Value { key, .. } if key == "auth.enabled"),
+            "{error:?}"
+        );
     }
 
     #[test]
     fn an_issuer_the_family_crate_refuses_is_refused() {
-        let error = auth(vec![issuer("http://idp.example.org", &[])])
-            .resolve(Profile::Production)
+        let error = auth(&["http://idp.example.org"])
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
             .expect_err("RFC 8414 §2 wants https off loopback");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
     }
 
     #[test]
-    fn an_issuer_named_twice_and_a_client_id_outside_rfc_6749_are_refused() {
-        let error = auth(vec![
-            issuer("https://idp.example.org", &[]),
-            issuer("https://idp.example.org", &[]),
-        ])
-        .resolve(Profile::Production)
-        .expect_err("one entry per issuer");
-        assert!(matches!(error, Error::Value { .. }), "{error:?}");
-        let error = auth(vec![issuer("https://idp.example.org", &["caf\u{e9}"])])
-            .resolve(Profile::Production)
-            .expect_err("a client id is VSCHAR");
-        assert!(matches!(error, Error::Value { .. }), "{error:?}");
+    fn a_trust_entry_of_an_unknown_issuer_named_twice_or_with_a_bad_client_id_is_refused() {
+        let url = "https://idp.example.org";
+        for (bad, key) in [
+            (
+                trust(&[("https://other.example.org", &[])]),
+                "trust.issuer[0].issuer",
+            ),
+            (trust(&[(url, &[]), (url, &[])]), "trust.issuer[1].issuer"),
+            (trust(&[(url, &["caf\u{e9}"])]), "trust.issuer[0].clients"),
+        ] {
+            let error = auth(&[url])
+                .resolve(Profile::Production, &bad, ADMIN)
+                .expect_err("refused");
+            assert!(
+                matches!(&error, Error::Value { key: named, .. } if named == key),
+                "{key}: {error:?}"
+            );
+        }
         assert!(is_client_id("lab source 1"));
         assert!(!is_client_id(""));
         assert!(!is_client_id("tab\there"));
@@ -342,28 +318,36 @@ mod tests {
 
     #[test]
     fn a_product_scope_in_no_extension_form_and_two_equal_scopes_are_refused() {
-        let mut bad = auth(vec![issuer("https://idp.example.org", &[])]);
-        bad.steward_scope = String::from("steward");
+        let url = "https://idp.example.org";
+        let mut bad = auth(&[url]);
+        bad.0.product_scope = String::from("steward");
         assert!(matches!(
-            bad.resolve(Profile::Production),
+            bad.0.resolve(),
+            Err(ferrohealth_smart::config::ConfigError::ProductScope { .. })
+        ));
+        assert!(matches!(
+            auth(&[url]).resolve(Profile::Production, &Trust::default(), "admin"),
             Err(Error::Value { .. })
         ));
-        let mut bad = auth(vec![issuer("https://idp.example.org", &[])]);
-        bad.admin_scope = String::from("__ferropix.steward");
         assert!(matches!(
-            bad.resolve(Profile::Production),
+            auth(&[url]).resolve(Profile::Production, &Trust::default(), STEWARD_SCOPE),
             Err(Error::Value { .. })
         ));
-        let mut uri = auth(vec![issuer("https://idp.example.org", &[])]);
-        uri.admin_scope = String::from("https://pix.example.org/scope/admin");
-        uri.resolve(Profile::Production)
+        let mut uri = auth(&[url]);
+        uri.0.product_scope = String::from("https://pix.example.org/scope/steward");
+        let resolved = uri
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
             .expect("a full URI is an extension scope");
+        assert_eq!(
+            "https://pix.example.org/scope/steward",
+            resolved.steward_scope
+        );
     }
 
     #[test]
     fn a_basic_user_is_refused_under_production_and_admits_its_client_under_development() {
-        let mut basic = auth(Vec::new());
-        basic.basic = Some(BasicSection {
+        let mut basic = auth(&[]);
+        basic.0.basic = Some(BasicSection {
             users: vec![BasicUser {
                 user: String::from("dev-source"),
                 password_hash: Some(SecretString::from(
@@ -374,14 +358,14 @@ mod tests {
             ..BasicSection::default()
         });
         let error = basic
-            .resolve(Profile::Production)
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
             .expect_err("Basic is a development credential");
         assert!(
             matches!(&error, Error::DevelopmentOnly { key, .. } if key == "auth.basic"),
             "{error:?}"
         );
         let resolved = basic
-            .resolve(Profile::Development)
+            .resolve(Profile::Development, &Trust::default(), ADMIN)
             .expect("development admits a Basic user");
         assert!(resolved.admits("dev-source"));
     }

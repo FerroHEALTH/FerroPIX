@@ -55,6 +55,22 @@ ferropix-operator-api = { path = "../ferropix-operator-api" }
 # route of the FHIR face and the operator API, and `fetch` reads each
 # issuer's metadata and key set.
 ferrohealth-smart = { workspace = true, features = ["axum", "fetch"] }
+# The configuration loader, the secret types and the `--config` and `--set`
+# arguments the family shares.
+ferrohealth-config.workspace = true
+ferrohealth-secret.workspace = true
+# The HTTP stack, the bounded drain, the probe and the subcommands the
+# family shares, and `[server]` with `[server.tls]`.
+ferrohealth-server.workspace = true
+# The `[telemetry]` section, the console, the request log, the OTLP export,
+# the Prometheus exposition of `/metrics` and the panic hook the family shares.
+ferrohealth-telemetry = { workspace = true, features = ["axum", "otlp", "prometheus"] }
+# The readiness indicators, the registry and the lifecycle the health routes
+# of ferrohealth-server read.
+ferrohealth-health = { workspace = true, features = ["registry"] }
+# The installation report to FerroPULSE; `telemetry` lets the request log
+# fill its window.
+ferrohealth-usage-report = { workspace = true, features = ["telemetry"] }
 # The HL7 v2 face: the MLLP listener, the decoder, the parser over the
 # generated tables and the acknowledgment of FerroBRIDGE (CLAUDE.md, Scope:
 # never a second parser).
@@ -80,20 +96,11 @@ strsim.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 toml.workspace = true
-# The family's middleware: the request id, the panic catch, the request
-# timeout and the body ceiling.
-tower-http = { workspace = true, features = ["request-id", "catch-panic", "timeout", "limit"] }
 tracing.workspace = true
-tracing-subscriber.workspace = true
-# The span export to `[telemetry] otlp_endpoint` over OTLP/gRPC.
-opentelemetry.workspace = true
-opentelemetry_sdk.workspace = true
-opentelemetry-otlp.workspace = true
-tracing-opentelemetry.workspace = true
 # Names folded to their base letters before the scorer compares them.
 unicode-normalization.workspace = true
 url.workspace = true
-# The request id minted for a request that brings none, and the store's ids.
+# The store's ids.
 uuid.workspace = true
 
 [dev-dependencies]
@@ -105,6 +112,8 @@ ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 jsonschema.workspace = true
 # The spans the in-process OTLP collector of the testkit receives.
 opentelemetry-proto = { workspace = true, features = ["gen-tonic", "trace"] }
+# The log lines the tests capture.
+tracing-subscriber.workspace = true
 # The scorer's properties: symmetry, the unit interval and determinism.
 proptest.workspace = true
 tempfile.workspace = true

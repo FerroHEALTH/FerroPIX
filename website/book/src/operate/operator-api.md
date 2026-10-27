@@ -31,6 +31,11 @@ Every answer carries `Cache-Control: no-store`. A refusal is a FHIR
 | `GET /operator/domains/{id}` | steward or administrator | One domain with its last 20 feeds: time, channel, and whether the feed created or revised a record. |
 | `POST /operator/domains` | administrator | A new identifier domain. |
 | `PATCH /operator/domains/{id}` | administrator | A domain renamed, given another Source, or retired. |
+| `GET /operator/pseudonym-domains` | steward or administrator | Every pseudonymisation domain by namespace, with its consumer and the pseudonyms minted in it. |
+| `POST /operator/pseudonym-domains` | administrator | A new pseudonymisation domain whose namespace no identifier domain holds. |
+| `PATCH /operator/pseudonym-domains/{id}` | administrator | A domain renamed, given another consumer, or retired, with your reason. |
+| `POST /operator/pseudonyms` | steward | Mints the person's pseudonym in a domain when its survivor has none, and says whether it did; the value is shown by a reveal. |
+| `POST /operator/pseudonyms/resolve` | steward | The person a pseudonym resolves to, through the merge chain, with your reason: a privacy disclosure. |
 | `GET /operator/sources` | steward or administrator | Every system allowed to feed: each FHIR client an issuer lists in its `clients`, each Basic user of the development profile and each `[[hl7v2.senders]]` entry, with its channel, how it is admitted, the domains that name it and its last activity. |
 | `GET /operator/sources/{id}` | steward or administrator | One source with its last 20 messages: time, channel, what it asked and its outcome (`applied`, or the HL7 v2 acknowledgment code). An HL7 v2 sender's id is its facility and application joined by `.`. |
 | `GET /operator/matching` | steward or administrator | The thresholds, automatic linking, the blocking keys and every field's weights in effect, the configured ones marked. |
@@ -44,9 +49,8 @@ Every answer carries `Cache-Control: no-store`. A refusal is a FHIR
 | `GET /operator/actions` | steward | A page of the audit trail, the newest first. |
 | `POST /operator/actions/export` | steward | The same filter answered as CSV. |
 
-The review queue, the decisions, the merges and the pseudonymisation domains
-follow with the [v0.0.5 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/5).
-Until then those routes answer `501`.
+Every route in the table is served. A route added to the guard's table
+before its handler answers `501`.
 
 ## Deciding a candidate
 

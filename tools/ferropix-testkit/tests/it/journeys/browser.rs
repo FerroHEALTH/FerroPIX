@@ -267,7 +267,8 @@ impl Journey {
 
     /// Sends `key` to `element` and returns once the page it loads, if any,
     /// has hydrated.
-    pub(crate) async fn keys(&self, element: &WebElement, key: Key, what: &str) {
+    pub(crate) async fn keys(&self, element: &WebElement, key: impl Into<TypingData>, what: &str) {
+        let key = key.into();
         if let Err(error) = self.acting(what, || element.send_keys(key)).await {
             panic!("{}", self.failure(what, &error.to_string()).await);
         }

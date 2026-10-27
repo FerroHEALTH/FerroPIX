@@ -10,6 +10,7 @@ use ferropix_server::config::Config;
 use ferropix_server::config::error::Error;
 use ferropix_server::config::section::domain::DomainKind;
 use ferropix_server::config::section::profiles::Deprecated;
+use nl_generic_functions::identification::{BSN_SYSTEMS, PSEUDO_BSN_SYSTEM};
 
 use crate::support::{FULL, PASSWORD, PHC, Secrets};
 
@@ -25,9 +26,21 @@ fn resolve(
 fn every_section_loads_and_resolves() {
     let secrets = Secrets::new();
     let settings = resolve(FULL, &secrets).expect("the full configuration resolves");
-    assert_eq!("/pix", settings.server.base_path);
+    assert_eq!("/pix", settings.server.base_path.as_str());
+    assert_eq!(
+        "https://pix.example.org/pix",
+        settings.public_base_url.as_str()
+    );
+    assert_eq!(1000, settings.server.drain_delay_ms);
+    assert_eq!(5000, settings.server.shutdown_timeout_ms);
     assert_eq!(8080, settings.server.listen.port());
-    assert!(settings.telemetry.otlp_endpoint.is_some());
+    assert!(
+        settings
+            .telemetry
+            .otlp
+            .as_ref()
+            .is_some_and(|otlp| !otlp.endpoint.is_empty())
+    );
     assert_eq!(20, settings.db.pool_size);
     assert!(!settings.db.migrate);
     assert_eq!(1, settings.auth.resolved.issuers.len());
@@ -76,6 +89,7 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[db]", "[db]\n"),
         ("[auth]", "[auth]\n"),
         ("[[auth.issuer]]", "[[auth.issuer]]\n"),
+        ("[[trust.issuer]]", "[[trust.issuer]]\n"),
         ("[[domain]]", "[[domain]]\n"),
         ("[matching]", "[matching]\n"),
         (
@@ -97,12 +111,13 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         let text = FULL.replacen(anchor, &format!("{anchor}misspelt_key = 1\n"), 1);
         assert_ne!(FULL, text, "{table} is in the full configuration");
         let error = resolve(&text, &secrets).expect_err("an unknown key is refused");
-        let Error::Parse { fault } = &error else {
-            panic!("{table}: a parse refusal, not {error:?}");
-        };
         assert!(
-            fault.message.contains("misspelt_key"),
-            "{table}: the refusal names the key: {fault}"
+            matches!(error, Error::Load(_)),
+            "{table}: a load refusal, not {error:?}"
+        );
+        assert!(
+            error.to_string().contains("misspelt_key"),
+            "{table}: the refusal names the key: {error}"
         );
     }
     for (table, text) in [
@@ -225,10 +240,10 @@ fn the_dev_profile_runs_on_loopback_with_basic_users_and_refuses_another_address
     let development = format!(
         r#"
 profile = "development"
+public_base_url = "http://localhost:8080"
 
 [server]
 listen = "127.0.0.1:8080"
-public_base_url = "http://localhost:8080"
 
 [[auth.basic.users]]
 user = "dev-source"
@@ -273,7 +288,7 @@ fn an_empty_configuration_names_the_first_missing_key() {
         .resolve()
         .expect_err("the public base URL has no default");
     assert!(
-        matches!(&error, Error::Missing { key } if key == "server.public_base_url"),
+        matches!(&error, Error::Missing { key } if key == "public_base_url"),
         "{error:?}"
     );
 }
@@ -286,5 +301,18 @@ fn the_quickstart_configuration_resolves_with_its_two_secret_files() {
     )
     .expect("the quickstart file is read");
     let settings = resolve(&quickstart, &secrets).expect("the quickstart resolves");
-    assert_eq!(1, settings.domains.len());
+    let systems: Vec<(&str, DomainKind, bool)> = settings
+        .domains
+        .iter()
+        .map(|domain| (domain.system.as_str(), domain.kind, domain.sensitive))
+        .collect();
+    assert_eq!(
+        vec![
+            ("urn:oid:2.999.1.1", DomainKind::Local, true),
+            (BSN_SYSTEMS[0], DomainKind::Authoritative, true),
+            (PSEUDO_BSN_SYSTEM, DomainKind::Authoritative, true),
+        ],
+        systems,
+        "the hospital, the BSN and the pseudonymised BSN, both sealed and authoritative"
+    );
 }

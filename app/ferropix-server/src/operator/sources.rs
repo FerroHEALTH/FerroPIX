@@ -39,7 +39,7 @@ pub async fn list(operator: &Operator) -> Response {
     match read_all(operator).await {
         Ok(sources) => wire::answer(&Sources {
             sources,
-            file: operator.configured.origins.file().map(str::to_owned),
+            file: crate::operator::configuration::file_name(&operator.configured.provenance),
         }),
         Err(error) => wire::failed(&error),
     }

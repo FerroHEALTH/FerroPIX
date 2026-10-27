@@ -274,13 +274,13 @@ async fn question_mark_opens_the_legend_and_the_digits_switch_the_patient_tabs()
         );
         for (key, tab) in [("2", "records"), ("3", "history"), ("4", "pseudonyms")] {
             let body = journey.element(By::Tag("body"), "the page's body").await;
-            body.send_keys(key).await.expect("the page takes the digit");
+            journey.keys(&body, key, "the digit's tab").await;
             journey
                 .address_carrying(&format!("tab={tab}"), "the digit's tab")
                 .await;
         }
         let body = journey.element(By::Tag("body"), "the page's body").await;
-        body.send_keys("1").await.expect("the page takes 1");
+        journey.keys(&body, "1", "the first tab").await;
         let address = journey
             .address_carrying(&format!("/patients/{FILLED_PERSON}"), "the first tab")
             .await;

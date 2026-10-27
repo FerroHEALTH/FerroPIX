@@ -100,7 +100,8 @@ impl Feeder {
         id: PersonId,
         context: &Context,
     ) -> Result<Applied, FeedError> {
-        self.removing(system, &id.uuid().to_string(), context).await
+        self.removing(system, &id.uuid().to_string(), true, context)
+            .await
     }
 
     /// Writes the master identity `id`, held already when `known`.

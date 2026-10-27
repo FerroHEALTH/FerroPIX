@@ -54,7 +54,7 @@ facility = "NORTH"
   identifier in an answer carries all three subcomponents; the namespace id
   is empty for a domain the configuration names none for.
 - **The drain:** on `SIGTERM` the listener stops accepting, finishes the
-  messages it is answering within `[server] drain_timeout_ms`, and closes.
+  messages it is answering within `[server] shutdown_timeout_ms`, and closes.
   Readiness carries the `hl7v2_listener` indicator, down once the listener
   stops accepting.
 
@@ -154,5 +154,27 @@ connection's own network address
 ([Security and audit](../operate/security-and-audit.md)). An audit spool
 without room refuses the message with `AR`.
 
-ITI-10, the PIX update notification, is planned
-([#113](https://github.com/FerroHEALTH/FerroPIX/issues/113)).
+## ITI-10, the PIX update notification
+
+After every change to the cross-reference (a feed that creates or links a
+record, a merge, a revert, a removal), FerroPIX notifies each consumer
+`[[hl7v2.consumers]]` names whose domains of interest the changed patient
+holds an identifier in; a consumer with no `domains` is interested in every
+domain. Each notification is an ADT^A31 in HL7 v2.5: MSH-9
+`ADT^A31^ADT_A05`, an EVN, one PID whose PID-3 lists the patient's
+identifiers in the consumer's domains with all three subcomponents of each
+assigning authority and whose PID-5 is a single space, and a PV1 with
+PV1-2 `N` (ITI TF-2 3.10.4.1.2). A merge sends the survivor's identifiers;
+a patient whose last record was removed holds none, so it sends nothing.
+
+The notification is written to the outbox in the transaction that made the
+change, and the outbox sender delivers each consumer's notifications in
+order, one at a time, over MLLP. An acknowledgment `AA` whose MSA-2 names
+the notification is a delivery; another code, a reply to another message,
+a refused connection or a timeout is retried within
+`[hl7v2.notification]`, after which the notification is abandoned and the
+next one goes. Each notification that reaches the consumer writes the
+Manager's audit record of ITI TF-2 3.10.5.1.1: a Patient Record read with
+the consumer as the destination, a patient per identifier of PID-3 and
+MSH-10 as a detail. The dependency report shows each consumer's latest
+outcome ([Operations](../operate/operations.md)).

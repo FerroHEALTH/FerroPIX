@@ -3,8 +3,9 @@
 
 # Configuration
 
-The FerroPIX server, the `ferropix` binary, reads one TOML file and the
-environment. This page lists every key. The second half of the page covers
+The FerroPIX server, the `ferropix` binary, reads one TOML file, the
+environment and its `--set` arguments, through `ferrohealth-config`, the
+FerroHEALTH configuration loader. This page lists every key. The second half of the page covers
 the crates, which you configure in your own code.
 
 ## The server
@@ -13,8 +14,8 @@ The server loads and checks every section below at start, and `serve`
 starts the store (see [The store](#the-store)) and runs the HTTP listener
 with its health routes and the guard in front of the FHIR face and the
 operator API (`[auth]`), the usage report
-([`[usage_report]`](#usage_report)) and, with `telemetry.otlp_endpoint`
-set, the span export. The PIXm Manager, the PDQm Supplier and the operator
+([`[usage_report]`](#usage_report)) and, with a `[telemetry.otlp]` table,
+the span and metric export. The PIXm Manager, the PDQm Supplier and the operator
 API serve today
 ([The PIXm Manager](../integrate/pixm-manager.md),
 [The PDQm Supplier](../integrate/pdqm-supplier.md),
@@ -29,13 +30,14 @@ keeps working when the service lands.
 
 | Command | What it does |
 |---|---|
-| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT` and finishes the requests in flight within `server.drain_timeout_ms`. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
-| `ferropix config check` | Reads and resolves the configuration, secret files included, and exits 0 when the server would start on it. Otherwise it prints the first error on one line and exits 78. |
-| `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down exits 1. Use it as the container health check. |
-| `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` seed, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
+| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT`. On the signal readiness answers `503` at once, the listener keeps accepting for `server.drain_delay_ms`, then closes, and the requests in flight get `server.shutdown_timeout_ms` to finish. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
+| `ferropix config check` | Reads and resolves the configuration, secret files included, prints every key as `key = value  # source` (the file, the default, the environment variable or the `--set` argument that set it, with every secret shown as `***`), and exits 0 when the server would start on it. Otherwise it prints the refusals on one line, each naming its key, and exits 78. |
+| `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, over TLS when `[server.tls]` is set, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down, or from a server that is draining, exits 1. Use it as the container health check. |
+| `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 
-Every command takes `--config <PATH>`. A refused configuration exits 78
+Every command takes `--config <PATH>` and any number of `--set key=value`
+arguments. A refused configuration exits 78
 (`EX_CONFIG`), so an orchestrator can tell a bad configuration from a server
 that failed to serve.
 
@@ -46,10 +48,19 @@ that failed to serve.
   the keys that have none.
 - `FERROPIX__<SECTION>__<KEY>` overrides any key, with two underscores
   between levels: `FERROPIX__SERVER__LISTEN=0.0.0.0:8080` sets
-  `server.listen`, and `FERROPIX__PMIR__FEED__MAX_ATTEMPTS=5` sets
-  `pmir.feed.max_attempts`. The value is read as the type the key wants.
-- Every table refuses a key it does not know, so a misspelt key stops the
-  start and the error names it.
+  `server.listen`, `FERROPIX__PMIR__FEED__MAX_ATTEMPTS=5` sets
+  `pmir.feed.max_attempts`, and `FERROPIX__PROFILE=development` sets the
+  top-level `profile`. The value is read as the type the key wants; a list
+  takes TOML array syntax or comma-separated values.
+- `RUST_LOG` sets `telemetry.filter`, over the file and over
+  `FERROPIX__TELEMETRY__FILTER`.
+- `--set key=value` sets the dotted key last, over the file and the
+  environment: `--set server.listen=0.0.0.0:8080`.
+- Every table refuses a key it does not know, so a misspelt key, in the file,
+  in a `FERROPIX__` variable or in a `--set` argument, stops the start and the
+  error names it with the closest known key. Another variable that starts
+  with `FERROPIX_` and is no override, such as `FERROPIX_CONFIG`, is left
+  alone.
 - An error names the key and never the value, so no secret reaches your
   terminal or your log.
 
@@ -68,8 +79,9 @@ run on your own machine, and only it admits:
 ### Secrets
 
 A secret is set under its key or read from the file its `<key>_file`
-sibling names, never both. The file's text is trimmed, and a file that holds
-only whitespace is refused. Under production, only the `_file` form is
+sibling names, never both. The file's trailing line ending is removed, and
+any other whitespace is part of the secret; a file with nothing left is
+refused. Under production, only the `_file` form is
 accepted. A secret renders as `***` wherever the server prints its
 configuration, and a URL that may carry a password renders with its user
 information and its query replaced by `***`.
@@ -89,36 +101,83 @@ quickstart mounts it beside PostgreSQL
 | Key | Default | What it sets |
 |---|---|---|
 | `profile` | `"production"` | `"production"` or `"development"`; see [Profiles](#profiles). |
+| `public_base_url` | none, required | The URL a client reaches `{base}` at: the base of every resource location the FHIR face names, and the identifier system of FerroPIX's own master domain. `https`; plain `http` on a loopback host, or under development. No user information, query or fragment. |
 
 ### `[server]`
 
+`[server]` is the section every FerroHEALTH server shares, read by
+`ferrohealth-server`.
+
 | Key | Default | What it sets |
 |---|---|---|
-| `server.listen` | `"127.0.0.1:8080"` | The socket address the HTTP listener binds. |
+| `server.listen` | `"127.0.0.1:8080"` | The socket address the HTTP listener binds; a host name is refused. |
 | `server.base_path` | `""` | The path every route is mounted under: empty for the root, or `/` and path segments with no trailing `/`. |
-| `server.public_base_url` | none, required | The URL a client reaches `{base}` at: the base of every resource location the FHIR face names, and the identifier system of FerroPIX's own master domain. `https`; plain `http` on a loopback host, or under development. No user information, query or fragment. |
 | `server.body_limit_bytes` | `1048576` | The largest request body read; a larger one is answered `413`. |
 | `server.request_timeout_ms` | `30000` | How long one request may take; a slower one is answered `408`. |
-| `server.drain_timeout_ms` | `10000` | How long the requests in flight may take to finish after `SIGTERM`; a connection still open after it is dropped. |
+| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head; a client still sending one then is disconnected. |
+| `server.drain_delay_ms` | `0` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
+| `server.shutdown_timeout_ms` | `10000` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
+| `server.max_concurrent_requests` | unset | How many requests the server serves at once; past it a request is answered `503` with `Retry-After`. The health routes are never refused. Unset, there is no bound. |
+| `server.retry_after_s` | `1` | The seconds a request refused for load is told to wait. |
+| `server.trusted_proxies` | `[]` | The reverse proxies whose forwarded client address is believed, each an address or a CIDR block such as `10.0.0.0/8`; empty, every request is named by its peer. |
+| `server.forwarded_header` | `"forwarded"` | The header a trusted proxy names the client in: `"forwarded"` (RFC 7239) or `"x-forwarded-for"`. |
+| `server.compression` | `true` | Whether a response is compressed with gzip or Brotli when the client accepts one. |
+| `server.compression_min_bytes` | `1024` | The smallest response body that is compressed. |
+
+`[server.caller_rate]` is refused: FerroPIX mounts no per-caller rate limit.
+
+`[server.tls]` makes the listener speak TLS; without it the listener speaks
+plain HTTP behind a proxy that terminates TLS. `SIGHUP` reads its files
+again.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `server.tls.certificate_file` | none, required | The certificate chain in PEM, the leaf first. |
+| `server.tls.key_file` | none, required | The private key of the leaf, in PEM. |
+| `server.tls.client_auth` | `"none"` | Whether the listener asks a client certificate: `"none"`, `"optional"` or `"required"`. |
+| `server.tls.client_ca_file` | unset | The CA bundle a client certificate must chain to; required unless `client_auth` is `"none"`. |
+| `server.tls.reload_interval_s` | unset | How often the files are read again; unset, only `SIGHUP` reads them. |
+| `server.tls.healthcheck_identity_file` | unset | The client certificate chain and key, in one PEM, that `ferropix healthcheck` presents to a listener that asks one. |
+| `server.tls.min_version` | `"1.3"` | The oldest TLS version the listener speaks, `"1.3"` or `"1.2"`. |
+
+Every refusal the stack writes itself, a `408`, a `413` and a `503` for
+load, is a FHIR `OperationOutcome` (`timeout`, `too-long`, `throttled`), as
+is the `500` of a handler that failed, which names the server's request id.
 
 The server routes, under `server.base_path`:
 
 | Route | Answer |
 |---|---|
-| `GET {base}/health` | `200` while the process is up. |
-| `GET {base}/health/readiness` | `200` while every readiness indicator is up, the `database` indicator of the store among them, and `503` while one is down ([Operations](operations.md)). |
+| `GET {base}/health/liveness` | `200` while the process serves. |
+| `GET {base}/health/readiness` | `200` while the server serves and no readiness indicator is down, the `database` indicator of the store among them, and `503` otherwise ([Operations](operations.md)). |
+| `GET {base}/health` | The status of readiness, with `{"state":…}` alone. |
+| `GET {base}/metrics` | Every metric in the Prometheus text format, among them `http_server_request_duration_seconds` by method, route template and status. It needs no token, so keep it off the public side of your proxy. |
 
-Every answer carries `x-request-id`: the one the request sent when it is
-printable ASCII of at most 128 characters, or a minted UUID. A handler that
-fails answers `500` with that id and no detail.
+The server mints its own UUID for every request, which the request log and
+the steward trail of `GET {base}/operator/actions` carry. Every answer carries `x-request-id`:
+the one the request sent when it is printable ASCII of at most 128
+characters, which is echoed and never logged, or else the server's id. A
+handler that fails answers `500` naming the server's id and no detail.
 
 ### `[telemetry]`
 
+The section is `ferrohealth-telemetry`'s, the one every FerroHEALTH product
+reads.
+
 | Key | Default | What it sets |
 |---|---|---|
-| `telemetry.filter` | `"info"` | The log filter, in the `tracing-subscriber` `EnvFilter` syntax. |
+| `telemetry.filter` | `"info,hyper=warn,tower=warn,h2=warn"` | The log filter, in the `tracing-subscriber` `EnvFilter` syntax. A filter that does not parse refuses the start. |
 | `telemetry.format` | `"auto"` | `"json"`, `"pretty"`, or `"auto"`: pretty on a terminal, JSON otherwise. |
-| `telemetry.otlp_endpoint` | `""` | The OTLP/gRPC collector `serve` exports its spans to, `http` or `https` (TLS over the WebPKI roots). One `request` span per request, with the method, the matched route template and the status: no raw path, query string, body, header value, identifier or token, and no log event. Empty exports nothing. |
+| `telemetry.logged_query_parameters` | `[]` | The query parameters whose values the request line carries in its `query` field. Name only parameters that hold no identifier or free text; the ITI-83 and ITI-78 parameters carry identifiers and demographics. |
+| `telemetry.environment` | none | The deployment environment the exported spans and metrics name (`deployment.environment.name`), such as `production`. |
+| `telemetry.otlp.endpoint` | none | The collector's OTLP/gRPC endpoint; `https://` speaks TLS. It may carry a credential, so `config check` shows it masked. A `[telemetry.otlp]` table without it refuses the start. |
+| `telemetry.otlp.traces` | `true` | Whether the spans are exported: one `request` span per request, with the method, the matched route template, the status and the server's request id. No raw path, query string, body, header value, identifier or token, and no log event. |
+| `telemetry.otlp.metrics` | `true` | Whether the metrics are pushed. |
+| `telemetry.otlp.sample_ratio` | `1.0` | The share of the traces that are sampled, from `0.0` to `1.0`. |
+| `telemetry.otlp.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. |
+| `telemetry.otlp.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. |
+
+Without a `[telemetry.otlp]` table nothing is exported.
 
 ### `[db]`
 
@@ -149,6 +208,7 @@ these steps in order:
 3. **The seed.** Each `[[domain]]` the store lacks is inserted. A domain the
    store holds already is left as it is, since the store is the record; when
    it differs from the seed, the server logs a warning naming its system.
+   Each `[[pseudonym_domain]]` the store lacks is inserted the same way.
 
 Before these steps, `serve` refuses to start when the role it connects as
 can read anything outside `pix`: a superuser, a member of
@@ -184,13 +244,18 @@ to start. Afterwards the old key opens nothing, and you can destroy it.
 ### `[auth]`
 
 Every request to the FHIR face and the operator API carries a bearer token
-one of these issuers signed. `ferrohealth-smart`, the FerroHEALTH resource
-server, checks the section: each issuer is an `https` URL (plain `http` on a
-loopback host), at least one audience is set, and only asymmetric algorithms
-are admitted. A section with no issuer and no Basic user is refused.
+one of these issuers signed, or, under `mode = "introspection"`, a token the
+issuer's introspection endpoint vouches for. `[auth]` is the section every
+FerroHEALTH server shares, read by `ferrohealth-smart`, the FerroHEALTH
+resource server: each issuer is an `https` URL (plain `http` on a loopback
+host), at least one audience is set, and only asymmetric algorithms are
+admitted. A section with no issuer and no Basic user is refused, and so is
+`enabled = false`: FerroPIX always authenticates its callers.
 
 | Key | Default | What it sets |
 |---|---|---|
+| `auth.enabled` | `true` | Must stay `true`. |
+| `auth.issuer` | `""` | One issuer identifier, every token's `iss`; or the `[[auth.issuer]]` list below. |
 | `auth.audience` | `[]` | The audiences, of which a token's `aud` must contain one. |
 | `auth.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
 | `auth.token_profile` | `"rfc9068"` | `"rfc9068"`, the JWT access token profile, or `"jwt"` for an authorization server that issues plain JWTs. |
@@ -199,20 +264,42 @@ are admitted. A section with no issuer and no Basic user is refused.
 | `auth.jwks_refresh_interval_seconds` | `60` | The shortest time between two fetches of the key set. |
 | `auth.jwks_file` | `""` | A key set file to read in place of the issuer's `jwks_uri`. |
 | `auth.timeout_ms` | `10000` | How long one call to an authorization server may take. |
-| `auth.challenge_realm` | `""` | The protection space the `WWW-Authenticate` challenges name (RFC 9110 §11.5); empty for the server's own. |
-| `auth.steward_scope` | `"__ferropix.steward"` | The scope of a data steward. |
-| `auth.admin_scope` | `"__ferropix.admin"` | The scope of an administrator; it must differ from the steward scope. |
+| `auth.realm` | `""` | The protection space the `WWW-Authenticate` challenges name (RFC 9110 §11.5); empty for none. |
+| `auth.ca_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it. Read once at start; a file that holds no certificate refuses the start. |
+| `auth.mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. Introspection takes the flat `auth.issuer` and no `jwks_file`. |
+| `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
+| `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
+| `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
+| `auth.role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. |
+| `auth.scopeless_subjects` | `[]` | The exact `sub` values granted system-wide access without a scope. |
 
-Both product scopes are a full URI or a string that starts with `__`, the
-extension forms of SMART App Launch.
+`[auth.introspection]` configures the introspection check, under
+`mode = "introspection"` only. FerroPIX authenticates its call with exactly
+one of `[auth.introspection.client]` (the client authentication of a token
+request, RFC 7662 §2.1) and `[auth.introspection.bearer]` (a token from the
+client credentials grant). Each takes the keys of an OAuth 2.0 client:
+`issuer` or `token_endpoint`, `client_id`, `client_auth`
+(`"client_secret_basic"` by default, `"client_secret_post"`,
+`"private_key_jwt"`, `"tls_client_auth"`, `"self_signed_tls_client_auth"`),
+`client_secret` or `client_secret_file`, `private_key_file`, `kid`,
+`assertion_alg`, `scope`, `resource`, `audience`, `refresh_margin_ms`,
+`timeout_ms`, `assertion_audience`, `ca_file`, `client_certificate_file`
+and `client_key_file`. `client` stands in the section's issuer when it
+names neither `issuer` nor `token_endpoint`.
 
-Each `[[auth.issuer]]` entry names one trusted issuer. A token field the
-entry leaves out takes the section's value.
+| Key | Default | What it sets |
+|---|---|---|
+| `auth.introspection.endpoint` | `""` | The introspection endpoint; empty for the one the issuer's metadata names. |
+| `auth.introspection.cache_max_age_seconds` | `60` | How long an active answer is used before the endpoint is asked again; `0` keeps none. |
+| `auth.introspection.cache_capacity` | `10000` | The most answers held at once. |
+
+Each `[[auth.issuer]]` entry names one trusted issuer, when the server
+trusts more than one. A token field the entry leaves out takes the
+section's value.
 
 | Key | Default | What it sets |
 |---|---|---|
 | `auth.issuer[].issuer` | none, required | The issuer identifier every token's `iss` equals. |
-| `auth.issuer[].clients` | `[]` | The client ids this issuer may vouch for as a Patient Identity Source. A `[[domain]]` whose `source_client_id` no issuer lists is refused. |
 | `auth.issuer[].audience` | the section's | The audiences. |
 | `auth.issuer[].algorithms` | the section's | The signature algorithms. |
 | `auth.issuer[].token_profile` | the section's | The token profile. |
@@ -221,6 +308,18 @@ entry leaves out takes the section's value.
 | `auth.issuer[].jwks_refresh_interval_seconds` | the section's | The shortest time between two fetches. |
 | `auth.issuer[].jwks_file` | the section's | A key set file. |
 
+### `[trust]`
+
+`[[trust.issuer]]` says, per issuer, which clients its tokens may vouch for
+as the Patient Identity Source of a domain (PIXm `ITI-104`). A `[[domain]]`
+whose `source_client_id` no entry lists, and no Basic user is named, is
+refused.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `trust.issuer[].issuer` | none, required | An issuer `[auth]` names; each issuer at most once. |
+| `trust.issuer[].clients` | `[]` | The client ids this issuer may vouch for as a Patient Identity Source. |
+
 `[auth.basic]` holds Basic users, for the development profile only, and
 only beside the `[dev]` table. A Basic user's user-id also counts as a
 Source client id. Who needs which scope is on the
@@ -228,7 +327,7 @@ Source client id. Who needs which scope is on the
 
 | Key | Default | What it sets |
 |---|---|---|
-| `auth.basic.cache_ttl_seconds` | `0` | How long a verified credential is remembered. |
+| `auth.basic.cache_ttl_seconds` | `300` | How long a verified credential is remembered; `0` remembers none. |
 | `auth.basic.users[].user` | none | The user-id. |
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |
@@ -247,6 +346,18 @@ stays the record. A system named twice is refused.
 | `domain[].kind` | none, required | `"local"` (a system's own numbers), `"authoritative"` (a national number the deterministic match links on) or `"master"` (FerroPIX's own). |
 | `domain[].source_client_id` | none, required | The client id of the domain's one Patient Identity Source. |
 | `domain[].sensitive` | `true` | Whether the domain's identifier values are sealed at rest. |
+
+### `[[pseudonym_domain]]`
+
+Each entry is a pseudonymisation domain written to the store at start when
+it is absent, never updated ([Pseudonyms](../integrate/pseudonyms.md)). A
+namespace named twice, or one an identifier domain holds, is refused.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `pseudonym_domain[].namespace` | none, required | The system of the pseudonyms: a `urn:oid:` OID in the FHIR `oid` form, or another absolute URI. |
+| `pseudonym_domain[].name` | none, required | The name a steward reads. |
+| `pseudonym_domain[].consumer_client_id` | none | The client id whose ITI-83 query mints a pseudonym in the domain; without one, only a steward mints. |
 
 ### `[matching]`
 
@@ -291,11 +402,26 @@ stays the record. A system named twice is refused.
 | `hl7v2.senders[].facility` | none | The sending facility, MSH-4. |
 | `hl7v2.senders[].domain` | none | The system of the identifier domain the sender feeds; leave it out for a sender that only queries. |
 | `hl7v2.namespaces` | none | A table from a domain's system to its HL7 namespace id, the first subcomponent of an assigning authority. |
+| `hl7v2.application` | `"FERROPIX"` | The Manager's sending application, MSH-3 of an ITI-10 notification. |
+| `hl7v2.facility` | `"FERROPIX"` | The Manager's sending facility, MSH-4 of an ITI-10 notification. |
+| `hl7v2.consumers[].name` | none | The name the outbox, the log and the dependency report know the consumer by. |
+| `hl7v2.consumers[].address` | none | The `host:port` of the consumer's MLLP listener. |
+| `hl7v2.consumers[].application` | none | The receiving application, MSH-5. |
+| `hl7v2.consumers[].facility` | none | The receiving facility, MSH-6. |
+| `hl7v2.consumers[].domains` | `[]` | The systems of the identifier domains of interest to the consumer; empty for every domain. |
+| `hl7v2.consumers[].connect_timeout_ms` | `5000` | How long opening the connection may take. |
+| `hl7v2.consumers[].reply_timeout_ms` | `30000` | How long the acknowledgment may take once connected. |
+| `hl7v2.notification.max_attempts` | `10` | The most attempts one ITI-10 notification is given. |
+| `hl7v2.notification.initial_backoff_ms` | `1000` | The wait before the first retry. |
+| `hl7v2.notification.max_backoff_ms` | `300000` | The longest wait between two attempts. |
 
 A message from a sender not listed is answered `AR`. A sending application
 and facility listed twice, two senders of one domain, and one namespace id
-for two domains are refused at load. The drain on `SIGTERM` is
-`server.drain_timeout_ms`, the HTTP server's.
+for two domains are refused at load. A consumer without its name, address,
+application or facility, two consumers of one name, and an address without
+a port are refused too. The consumers are notified while `hl7v2.enabled`
+is `true`. The listener finishes the messages in flight within
+`server.shutdown_timeout_ms`, the HTTP server's bound.
 
 ### `[xcpd]`
 
@@ -359,11 +485,13 @@ says.
 | Key | Default | What it sets |
 |---|---|---|
 | `operator.enabled` | `false` | Whether the operator API is mounted under `{base}/operator`, behind the steward and administrator scopes. |
+| `operator.admin_scope` | `"__ferropix.admin"` | The scope of an administrator: a full URI or a string that starts with `__`, other than the steward scope. |
 
 ### `[usage_report]`
 
 `ferropix serve` sends an installation report to FerroPULSE, the
-FerroHEALTH collector: one report at each start (at most one per ten
+FerroHEALTH collector, through `ferrohealth-usage-report`, the reporter
+every FerroHEALTH product uses: one report at each start (at most one per ten
 minutes) and one a day. It is on by default, and the server writes one line
 at every start saying whether it is on, what it carries and how to switch it
 off. It stays off when `enabled = false`
@@ -383,12 +511,13 @@ A report carries:
   were ready;
 - once a day, the request count as a range, latency per route group
   (`metadata`, `pix_query`, `pix_feed`, `pdq_query`, `pdq_match`,
-  `pmir_feed`, `pmir_subscription`, `operator`, `other`) with the server
-  errors of each, and the count of `4xx` answers.
+  `pmir_feed`, `pmir_subscription`, `operator`, `hl7v2`, `other`) with the
+  server errors of each, and the counts of `4xx` answers and of HL7 v2
+  messages answered `AE` or `AR`, each left out while it is zero.
 
 It never carries an identifier, a patient's data, a domain's system or name,
 a host name, a URL or a request path: a request is counted by the route
-template it matched, and the health routes are not counted.
+template it matched, and the health and metrics routes are not counted.
 
 | Key | Default | What it sets |
 |---|---|---|

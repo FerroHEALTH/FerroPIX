@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ferrohealth_smart::oidc::OFFLINE_ACCESS;
 use ferrohealth_ui::i18n::Locale;
 use secrecy::SecretString;
 use url::Url;
@@ -98,10 +99,6 @@ impl OidcSettings {
         self.redirect_uri.origin().ascii_serialization()
     }
 }
-
-/// The scope value that asks for a refresh token that outlives the
-/// operator's session at the provider (OpenID Connect Core 1.0 §11).
-pub const OFFLINE_ACCESS: &str = "offline_access";
 
 impl Config {
     /// Checks every value and reads every `_file` secret.
@@ -220,11 +217,12 @@ fn resolve_oidc(oidc: &Oidc) -> Result<OidcSettings, Error> {
             key: String::from("oidc.end_session_endpoint (for post_logout_redirect_uri)"),
         });
     }
-    let client_secret = crate::config::secret::resolve(
+    let client_secret = ferrohealth_secret::file::read_secret(
         "oidc.client_secret",
-        oidc.client_secret.as_ref(),
+        oidc.client_secret.clone(),
         oidc.client_secret_file.as_deref(),
-    )?;
+    )?
+    .map(|secret| secret.to_secret_string());
     Ok(OidcSettings {
         issuer: oidc.issuer.clone(),
         authorization_endpoint,

@@ -10,7 +10,8 @@
 //! [`overview`] the dashboard; [`search`] the two searches; [`person`] the
 //! person with its identifiers, records, history and pseudonyms; [`reveal`]
 //! the reveal of one of them; [`domain`] the identifier domains and their
-//! writes; [`source`] the systems allowed to feed; [`matching`] the matching
+//! writes; [`pseudonym`] the pseudonymisation domains, the mint and the
+//! reverse resolution; [`source`] the systems allowed to feed; [`matching`] the matching
 //! configuration in effect and [`configuration`] its settings with their
 //! origins; [`actions`]
 //! the audit trail; and [`patient`] the values several of them share. No
@@ -27,6 +28,7 @@ pub mod merge;
 pub mod overview;
 pub mod patient;
 pub mod person;
+pub mod pseudonym;
 pub mod reveal;
 pub mod search;
 pub mod source;

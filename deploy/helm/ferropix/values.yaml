@@ -22,9 +22,9 @@ replicaCount: 1
 # `dataKey` below; do not set a secret inline here.
 config:
   profile: production
+  public_base_url: "https://pix.example.org"
   server:
     listen: "0.0.0.0:8080"
-    public_base_url: "https://pix.example.org"
   auth:
     audience:
       - "https://pix.example.org/fhir"
@@ -86,6 +86,23 @@ networkPolicy:
   enabled: true
   # The sources admitted to the server's ports; empty admits every source.
   ingressFrom: []
+
+# The pod isolation of the server and the console, one setting for both.
+# `false` runs each pod in its own user namespace, so a container's users
+# are unprivileged on the node; `true`, the API default, shares the node's.
+# It needs a node whose container runtime and kernel support user namespaces,
+# and a pod on a node without them does not start. Before Kubernetes 1.33 the
+# UserNamespacesSupport feature gate is off by default and the API server
+# drops the field
+# (https://kubernetes.io/docs/concepts/workloads/pods/user-namespaces/).
+hostUsers: false
+
+# `Strict` gives a container only the groups the pod spec names, never the
+# groups the image's /etc/group adds; `Merge` is the API default, and empty
+# renders no field. Before Kubernetes 1.33 the SupplementalGroupsPolicy
+# feature gate is off by default and the API server drops the field
+# (https://kubernetes.io/docs/tasks/configure-pod-container/security-context/).
+supplementalGroupsPolicy: Strict
 
 nodeSelector: {}
 tolerations: []

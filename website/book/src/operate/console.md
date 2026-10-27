@@ -52,7 +52,7 @@ never act while you type in a field, and a phone shows none.
 
 The review queue, compare and decide, merge and unmerge and the
 pseudonymisation domains follow with the
-[v0.0.5 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/5);
+[v0.0.10 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/10);
 until then those pages say the server serves no operator API for them yet. The console ships as its own container image,
 published by the release lane from the first tagged release
 ([The image](#the-image)).
@@ -78,13 +78,13 @@ The sign-in page after your session expired. [Dark theme](img/console/expired-da
 
 The dashboard. [Dark theme](img/console/dashboard-dark.png).
 
-![The review queue, which follows with v0.0.5](img/console/queue.png)
+![The review queue, which follows with v0.0.10](img/console/queue.png)
 
-The review queue, which follows with v0.0.5. [Dark theme](img/console/queue-dark.png).
+The review queue, which follows with v0.0.10. [Dark theme](img/console/queue-dark.png).
 
-![A pair in the review queue, which follows with v0.0.5](img/console/queue-pair.png)
+![A pair in the review queue, which follows with v0.0.10](img/console/queue-pair.png)
 
-A pair in the review queue, which follows with v0.0.5. [Dark theme](img/console/queue-pair-dark.png).
+A pair in the review queue, which follows with v0.0.10. [Dark theme](img/console/queue-pair-dark.png).
 
 ![Search by identifier](img/console/search.png)
 
@@ -98,13 +98,13 @@ Search by demographics. [Dark theme](img/console/search-demographics-dark.png).
 
 A patient's record on its identifiers tab. [Dark theme](img/console/patient-dark.png).
 
-![Merge, which follows with v0.0.5](img/console/patient-merge.png)
+![Merge, which follows with v0.0.10](img/console/patient-merge.png)
 
-Merge, which follows with v0.0.5. [Dark theme](img/console/patient-merge-dark.png).
+Merge, which follows with v0.0.10. [Dark theme](img/console/patient-merge-dark.png).
 
-![Unmerge, which follows with v0.0.5](img/console/patient-unmerge.png)
+![Unmerge, which follows with v0.0.10](img/console/patient-unmerge.png)
 
-Unmerge, which follows with v0.0.5. [Dark theme](img/console/patient-unmerge-dark.png).
+Unmerge, which follows with v0.0.10. [Dark theme](img/console/patient-unmerge-dark.png).
 
 ![The sources](img/console/sources.png)
 
@@ -122,9 +122,9 @@ The identifier domains. [Dark theme](img/console/domains-dark.png).
 
 One identifier domain with its last feeds. [Dark theme](img/console/domain-dark.png).
 
-![The pseudonymisation domains, which follow with v0.0.5](img/console/pseudonym-domains.png)
+![The pseudonymisation domains, which follow with v0.0.10](img/console/pseudonym-domains.png)
 
-The pseudonymisation domains, which follow with v0.0.5. [Dark theme](img/console/pseudonym-domains-dark.png).
+The pseudonymisation domains, which follow with v0.0.10. [Dark theme](img/console/pseudonym-domains-dark.png).
 
 ![The matching configuration](img/console/configuration.png)
 
@@ -170,8 +170,8 @@ ferropix-console serve --config console.toml
 | Command | What it does |
 |---|---|
 | `ferropix-console serve` | Serves the console until the process is asked to stop. |
-| `ferropix-console config check` | Reads and resolves the configuration, secrets included, and exits. |
-| `ferropix-console healthcheck` | Asks the console on this host whether it answers, for a container runtime. |
+| `ferropix-console config check` | Reads and resolves the configuration, secrets included, prints every key as `key = value  # source` with every secret shown as `***`, and exits. |
+| `ferropix-console healthcheck` | Asks `GET /health/readiness` of the console on this host, for a container runtime, and exits 0 only on `200`; a console that is draining exits 1. |
 
 ## The image
 
@@ -186,7 +186,7 @@ compiled inside it.
 | User | `65532:65532` |
 | Port | `3000/tcp` (`FERROPIX_CONSOLE__SERVER__LISTEN=0.0.0.0:3000`) |
 | Site bundle | `/site` (`FERROPIX_CONSOLE__SERVER__SITE_ROOT`), root-owned |
-| Health | `HEALTHCHECK` runs `ferropix-console healthcheck`, which asks `GET /health` over loopback |
+| Health | `HEALTHCHECK` runs `ferropix-console healthcheck`, which asks `GET /health/readiness` over loopback |
 
 The console keeps its sessions in memory and writes no file, so run it with
 a read-only root filesystem. Its tags follow the server's: `<version>`, and
@@ -211,12 +211,17 @@ docker compose --profile console up --wait
 
 ## Configuration
 
-The configuration is a TOML file named by `--config` or
-`FERROPIX_CONSOLE_CONFIG`. Every key can be set from the environment as
-`FERROPIX_CONSOLE__<SECTION>__<KEY>`, so `FERROPIX_CONSOLE__PIX__BASE_URL`
-sets `[pix] base_url`. A secret can be read from a file with the `_file`
-form of its key, the shape a container runtime mounts a secret in. An unknown
-key is refused, and a refusal names the key, never its value.
+The console reads its configuration through `ferrohealth-config`, the
+FerroHEALTH configuration loader. The file is a TOML file named by
+`--config` or `FERROPIX_CONSOLE_CONFIG`. Every key can be set from the
+environment as `FERROPIX_CONSOLE__<SECTION>__<KEY>`, so
+`FERROPIX_CONSOLE__PIX__BASE_URL` sets `[pix] base_url`, and with
+`--set key=value` on the command line, which wins over both. A secret can be
+read from a file with the `_file` form of its key, the shape a container
+runtime mounts a secret in; the file's trailing line ending is removed. An
+unknown key, in the file, a variable or a `--set` argument, is refused, and a
+refusal names the key, never its value. A server variable such as
+`FERROPIX__SERVER__LISTEN` is left alone.
 
 ```toml
 [server]
@@ -241,14 +246,16 @@ redirect_uri = "https://console.example.org/auth/callback"
 | Section | What it sets |
 |---|---|
 | `[server]` | Where the console listens, where its site bundle is, and the language a page falls back to. |
-| `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[auth] admin_scope` names (default `__ferropix.admin`). |
+| `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[operator] admin_scope` names (default `__ferropix.admin`). |
 | `[session]` | Whether the cookies are `Secure` (only off on loopback), and the sign-in and session timeouts and bounds. |
 | `[oidc]` | The OpenID Provider stewards sign in at. Without it the console offers no sign-in. |
+| `[telemetry]` | The console log: `format` and `filter`, the section the server reads ([`[telemetry]`](configuration.md#telemetry)). `RUST_LOG` sets `telemetry.filter`. |
 
 ## Sign-in and the session
 
 Stewards sign in at an OpenID Provider with the authorization code grant and
-PKCE. The console checks the ID Token against the provider's keys, its
+PKCE, through the OpenID Connect client of `ferrohealth-smart`, the
+FerroHEALTH authorization crate. The console checks the ID Token against the provider's keys, its
 issuer, its audience and the sign-in's nonce before a session begins. The
 session lives on the console's server; the browser holds one opaque
 `HttpOnly`, `SameSite=Lax` cookie and never a token. The console calls the

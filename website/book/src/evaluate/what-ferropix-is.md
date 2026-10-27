@@ -34,13 +34,13 @@ the server side, where FerroPIX answers the transaction itself, is the
 | PIXm, the identifier cross-reference query | ITI-83 by `GET`, or by `POST` of a `Parameters` body | Client, in `ihe-iti` (`pixm`), and the server's PIXm Manager ([The PIXm Manager](../integrate/pixm-manager.md)). |
 | PIXm, the FHIR identity feed | ITI-104 | The server's PIXm Manager, over the store's feed transaction. |
 | PDQm, the demographics query and match | ITI-78 search and read, ITI-119 `$match` | Client, in `ihe-iti` (`pdqm`), and the server's PDQm Supplier with the Match Operation Option ([The PDQm Supplier](../integrate/pdqm-supplier.md)). |
-| PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`); the Registry side in `ihe-iti` (`pmir-server`); the server's PMIR Registry receives ITI-93 and answers ITI-94 ([The PMIR Registry](../integrate/pmir-registry.md)). Sending ITI-93 to subscribers is planned ([#104](https://github.com/FerroHEALTH/FerroPIX/issues/104)). |
+| PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`); the Registry side in `ihe-iti` (`pmir-server`); the server's PMIR Registry receives ITI-93, answers ITI-94 and sends ITI-93 to each subscriber ([The PMIR Registry](../integrate/pmir-registry.md)). |
 | mCSD, the care services directory | ITI-90, ITI-91 | Client and replica, in `ihe-iti` (`mcsd`). |
 | XCPD, cross-community patient discovery | ITI-55 | Initiating Gateway and the Responding Gateway's messages, in `ihe-iti` (`xcpd`), and the server's Responding Gateway behind `[xcpd]`, synchronous and asynchronous ([The XCPD Responding Gateway](../integrate/xcpd-gateway.md)). The Deferred Response Option is not offered. |
 | IUA, access tokens on each request | ITI-72 | The authorizer seam of the `ihe-iti` clients. |
 | The persisted cross-reference | identifier domains, one source per domain, linking and merge | Planned. |
-| Pseudonym minting | a UUID per patient and pseudonymisation domain | Planned. |
-| HL7 v2 PIX and PDQ | ITI-8 (A01, A04, A05, A08, A40), ITI-9 and ITI-21 with the continuation protocol | The server's MLLP listener, on FerroBRIDGE's HL7 v2 parser and MLLP codec ([The HL7 v2 face](../integrate/hl7v2-face.md)). ITI-10 and ITI-22 are planned. |
+| Pseudonym minting | a UUID per patient and pseudonymisation domain | The server mints on the consumer's first ITI-83 ask, resolves through merges, and audits the steward's reverse resolution ([Pseudonyms](../integrate/pseudonyms.md)). |
+| HL7 v2 PIX and PDQ | ITI-8 (A01, A04, A05, A08, A40), ITI-9, ITI-10 and ITI-21 with the continuation protocol | The server's MLLP listener, on FerroBRIDGE's HL7 v2 parser and MLLP codec ([The HL7 v2 face](../integrate/hl7v2-face.md)). ITI-10 goes to the consumers `[[hl7v2.consumers]]` names after every cross-reference change; ITI-22 is refused, as FerroPIX keeps no visit. |
 | Audit of the Manager side | BALP `AuditEvent` through `ihe-atna` | The PIXm Manager records every ITI-83 and ITI-104, and the PDQm Supplier every ITI-78 and ITI-119. The clients' audit records are built (`balp`, `atna`). |
 | Dutch Generic Functions: localization (NVI) | the NVI Localization Service search | Client, in `nl-generic-functions` (`nvi`). |
 | Dutch Generic Functions: consent (Mitz) | the closed authorization question | Client, in `nl-generic-functions` (`mitz`). |
@@ -61,14 +61,9 @@ names what the server will do. The PIXm Manager
 ([The PDQm Supplier](../integrate/pdqm-supplier.md)) run today; the rest of
 this list is planned:
 
-- **The PMIR Registry:** ITI-93 sent to each subscriber; ITI-93 is received and ITI-94 answered today.
 - **The cross-reference:** identifier domains, one Patient Identity Source
   per domain, linking and merge with their full history, persisted in
   PostgreSQL.
-- **Pseudonyms:** a UUID per patient and pseudonymisation domain, for
-  FerroEHR's subject namespaces.
-- **HL7 v2:** ITI-10, the PIX update notification, beside the ITI-8, ITI-9
-  and ITI-21 the server answers today.
 - **Audit:** the Manager side's BALP records through `ihe-atna`, the audit
   crate of FerroAUDIT.
 - **The server's and the console's container images**, published by the

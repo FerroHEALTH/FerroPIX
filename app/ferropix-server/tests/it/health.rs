@@ -12,12 +12,14 @@
 
 use std::process::Command;
 use std::sync::Arc;
-use std::time::Duration;
 
-use ferropix_operator_api::health::{IndicatorState, State};
-use ferropix_server::config::section::server::ServerSettings;
-use ferropix_server::health::{Check, HealthIndicator, Registry};
-use ferropix_server::http::{router, serve_until};
+use ferrohealth_health::document::State;
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome, Registry};
+use ferrohealth_server::health::Health;
+use ferrohealth_server::section::ServerSection;
+use ferrohealth_telemetry::request_log::RequestLog;
+use ferropix_server::http::router;
 use http::{Method, StatusCode};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -40,36 +42,40 @@ impl HealthIndicator for Fixed {
         let state = self.1;
         Box::pin(async move {
             match state {
-                State::Up => IndicatorState::up(),
-                State::Down => IndicatorState::down("the stub is down"),
+                State::Up => Outcome::up(),
+                State::Degraded => Outcome::degraded("the stub is slow"),
+                State::Down => Outcome::down("the stub is down"),
             }
         })
     }
 }
 
 /// The settings of a server on a free loopback port at the root.
-fn server() -> ServerSettings {
-    ServerSettings {
+fn server() -> ServerSection {
+    ServerSection {
         listen: "127.0.0.1:0".parse().expect("a socket address"),
-        base_path: String::new(),
-        public_base_url: url::Url::parse("http://localhost:8080").expect("a URL"),
-        body_limit: 1024,
-        request_timeout: Duration::from_secs(5),
-        drain_timeout: Duration::from_millis(300),
+        body_limit_bytes: 1024,
+        request_timeout_ms: 5000,
+        shutdown_timeout_ms: 300,
+        ..ServerSection::default()
     }
 }
 
-/// Returns a registry of the indicators named, each `Up` or `Down`.
-fn registry(indicators: &[(&'static str, State)]) -> Registry {
-    indicators
+/// Returns the health of a serving process over the indicators named, each
+/// in its state.
+fn registry(indicators: &[(&'static str, State)]) -> Health {
+    let registry = indicators
         .iter()
         .fold(Registry::default(), |registry, (name, state)| {
             registry.and(Arc::new(Fixed(name, *state)))
-        })
+        });
+    let lifecycle = Lifecycle::default();
+    lifecycle.booted();
+    Health::new(registry, lifecycle)
 }
 
 #[tokio::test]
-async fn readiness_answers_503_naming_each_down_indicator_and_200_otherwise() {
+async fn readiness_answers_503_naming_each_down_indicator_and_never_its_detail() {
     let server = server();
     for (indicators, expected, down) in [
         (vec![], StatusCode::OK, vec![]),
@@ -89,23 +95,77 @@ async fn readiness_answers_503_naming_each_down_indicator_and_200_otherwise() {
             vec!["audit_spool", "database"],
         ),
     ] {
-        let app = router(&server, &registry(&indicators), None);
+        let app = router(
+            &server,
+            registry(&indicators),
+            None,
+            RequestLog::default(),
+            None,
+        );
         let answer = send(&app, Method::GET, "/health/readiness", None).await;
         assert_eq!(expected, answer.status, "{indicators:?}");
         let document = answer.json();
-        let named: Vec<&str> = document["indicators"]
-            .as_object()
-            .expect("the indicators are an object")
+        let listed = document["indicators"]
+            .as_array()
+            .expect("the indicators are a list");
+        let named: Vec<&str> = listed
             .iter()
-            .filter(|(_, state)| state["state"] == "down")
-            .map(|(name, _)| name.as_str())
+            .filter(|state| state["state"] == "down")
+            .filter_map(|state| state["name"].as_str())
             .collect();
         assert_eq!(down, named, "{indicators:?}");
+        assert!(
+            listed.iter().all(|state| state.get("detail").is_none()),
+            "the open route names no detail: {document}"
+        );
         let aggregate = if down.is_empty() { "up" } else { "down" };
         assert_eq!(aggregate, document["state"], "{indicators:?}");
-        let live = send(&app, Method::GET, "/health", None).await;
+        assert_eq!("serving", document["phase"], "{indicators:?}");
+        let summary = send(&app, Method::GET, "/health", None).await;
+        assert_eq!(
+            expected, summary.status,
+            "the summary answers readiness's status"
+        );
+        assert_eq!(
+            serde_json::json!({ "state": aggregate }),
+            summary.json(),
+            "the summary is the state alone"
+        );
+        let live = send(&app, Method::GET, "/health/liveness", None).await;
         assert_eq!(StatusCode::OK, live.status, "liveness asks no indicator");
     }
+}
+
+#[tokio::test]
+async fn readiness_answers_503_while_booting_and_from_the_moment_the_drain_starts() {
+    let lifecycle = Lifecycle::default();
+    let health = Health::new(registry_of_up(), lifecycle.clone());
+    let app = router(&server(), health, None, RequestLog::default(), None);
+    for (phase, expected) in [
+        ("booting", StatusCode::SERVICE_UNAVAILABLE),
+        ("serving", StatusCode::OK),
+        ("draining", StatusCode::SERVICE_UNAVAILABLE),
+    ] {
+        match phase {
+            "serving" => lifecycle.booted(),
+            "draining" => lifecycle.drain(),
+            _ => {}
+        }
+        let answer = send(&app, Method::GET, "/health/readiness", None).await;
+        assert_eq!(expected, answer.status, "{phase}");
+        assert_eq!(phase, answer.json()["phase"], "{phase}");
+        let live = send(&app, Method::GET, "/health/liveness", None).await;
+        assert_eq!(
+            StatusCode::OK,
+            live.status,
+            "{phase}: liveness asks nothing"
+        );
+    }
+}
+
+/// A registry whose one indicator is up.
+fn registry_of_up() -> Registry {
+    Registry::default().and(Arc::new(Fixed("database", State::Up)))
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -113,16 +173,20 @@ async fn healthcheck_exits_one_on_a_server_whose_readiness_answers_503() {
     let secrets = Secrets::new();
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("a free port");
     let port = listener.local_addr().expect("an address").port();
-    let app = router(&server(), &registry(&[("database", State::Down)]), None);
+    let app = router(
+        &server(),
+        registry(&[("database", State::Down)]),
+        None,
+        RequestLog::default(),
+        None,
+    );
     let (stop, stopped) = oneshot::channel::<()>();
-    let task = tokio::spawn(serve_until(
-        listener,
-        app,
-        Duration::from_millis(300),
-        async move {
+    let task = tokio::spawn(async move {
+        ferrohealth_server::serve::run(listener, app, &server(), Lifecycle::default(), async move {
             stopped.await.unwrap_or(());
-        },
-    ));
+        })
+        .await
+    });
     let quickstart = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("quickstart.toml");
     let output = tokio::task::spawn_blocking(move || {
         Command::new(env!("CARGO_BIN_EXE_ferropix"))
@@ -203,7 +267,7 @@ async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
     let requests: Vec<serde_json::Value> = log
         .lines()
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|line| line["target"] == "ferropix_server::request")
+        .filter(|line| line["target"] == ferrohealth_telemetry::request_log::TARGET)
         .collect();
     assert_eq!(3, requests.len(), "one line per request: {log}");
     let first = &requests[0]["fields"];
@@ -211,14 +275,19 @@ async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
     assert_eq!("GET", first["method"]);
     assert_eq!(503, first["status"]);
     assert_eq!("east-lab", first["caller"]);
-    assert_eq!("-", first["domain"]);
+    assert!(first["domain"].is_null(), "a query writes to no domain");
     assert!(
         first["request_id"]
             .as_str()
-            .is_some_and(|id| !id.is_empty())
+            .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()),
+        "the server's id"
     );
+    assert_eq!(false, first["client_named"]);
     assert!(first["latency_ms"].is_number());
-    assert_eq!("-", requests[1]["fields"]["caller"], "a refused caller");
+    assert!(
+        requests[1]["fields"]["caller"].is_null(),
+        "a refused request names no caller"
+    );
     assert_eq!(401, requests[1]["fields"]["status"]);
     assert_eq!("<unmatched>", requests[2]["fields"]["route"]);
 }

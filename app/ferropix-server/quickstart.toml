@@ -8,10 +8,10 @@
 # https://ferropix.eu/docs/operate/configuration.html.
 
 profile = "production"
+public_base_url = "http://localhost:8080"
 
 [server]
 listen = "0.0.0.0:8080"
-public_base_url = "http://localhost:8080"
 
 [db]
 url_file = "/run/secrets/ferropix-db-url"
@@ -28,8 +28,13 @@ audience = ["http://localhost:8080/fhir"]
 # RFC 9068 tokens leaves `token_profile` out.
 [[auth.issuer]]
 issuer = "http://localhost:8180/ferropix"
-clients = ["quickstart-source"]
 token_profile = "jwt"
+
+# The clients the development issuer may vouch for as the Source of a
+# domain (PIXm 3.1.0 §2:3.104.5).
+[[trust.issuer]]
+issuer = "http://localhost:8180/ferropix"
+clients = ["quickstart-source"]
 
 # An identifier domain under the OID arc 2.999, which ITU-T X.660 reserves
 # for examples, so the quickstart names no real assigning authority.
@@ -38,6 +43,26 @@ system = "urn:oid:2.999.1.1"
 name = "Quickstart hospital"
 kind = "local"
 source_client_id = "quickstart-source"
+
+# The BSN, the national number of the Netherlands (NL Generic Functions,
+# the Identification page): authoritative, so a BSN two records carry links
+# them, and sealed at rest. Its values must pass the eleven-proof.
+[[domain]]
+system = "http://fhir.nl/fhir/NamingSystem/bsn"
+name = "BSN"
+kind = "authoritative"
+source_client_id = "quickstart-source"
+sensitive = true
+
+# The pseudonymised BSN of the Generic Functions, held as an identifier of
+# its own, fed by the system that obtained it. FerroPIX calls no BSNk
+# service.
+[[domain]]
+system = "http://fhir.nl/fhir/NamingSystem/pseudo-bsn"
+name = "Pseudonymised BSN"
+kind = "authoritative"
+source_client_id = "quickstart-source"
+sensitive = true
 
 [usage_report]
 deployment = "compose"

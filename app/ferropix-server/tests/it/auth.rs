@@ -19,6 +19,9 @@ use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
 use axum::Router;
 use axum::body::Body;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
+use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::auth::guard::{NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
@@ -26,7 +29,6 @@ use ferropix_server::auth::table::{Need, ROUTES, Route, SourceRule};
 use ferropix_server::config::Config;
 use ferropix_server::config::settings::Settings;
 use ferropix_server::fhir::{self, Mounts};
-use ferropix_server::health::Registry;
 use ferropix_server::http::router;
 use http::{Method, Request, StatusCode, header};
 use jsonwebtoken::jwk::Jwk;
@@ -38,7 +40,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use crate::support::Secrets;
 
 /// The audience every token is addressed to.
-const AUDIENCE: &str = "http://localhost:8080/fhir";
+pub(crate) const AUDIENCE: &str = "http://localhost:8080/fhir";
 
 /// The domain every Source case writes to, under the OID arc ITU-T X.660
 /// reserves for examples.
@@ -69,13 +71,34 @@ pub(crate) const EVERY_SCOPE: &str =
     "system/Patient.cruds system/Subscription.cruds __ferropix.steward __ferropix.admin";
 
 /// One generated signing key and its public JWK.
-struct SigningKey {
+pub(crate) struct SigningKey {
     encoding: EncodingKey,
-    jwk: serde_json::Value,
+    pub(crate) jwk: serde_json::Value,
+}
+
+impl SigningKey {
+    /// Returns a valid token of `issuer` for `client` granting `scope`.
+    pub(crate) fn token(&self, issuer: &str, client: &str, scope: &str) -> String {
+        let now = jiff::Timestamp::now().as_second();
+        let claims = serde_json::json!({
+            "iss": issuer,
+            "aud": AUDIENCE,
+            "sub": "synthetic-subject-17",
+            "client_id": client,
+            "iat": now,
+            "exp": now + 300,
+            "jti": "synthetic-jti-1",
+            "scope": scope,
+        });
+        let mut header = Header::new(Algorithm::ES256);
+        header.kid = Some(String::from("k1"));
+        header.typ = Some(String::from("at+jwt"));
+        jsonwebtoken::encode(&header, &claims, &self.encoding).expect("the token signs")
+    }
 }
 
 /// Returns a fresh ES256 key published as `k1`.
-fn signing_key() -> SigningKey {
+pub(crate) fn signing_key() -> SigningKey {
     let pkcs8 =
         EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &SystemRandom::new())
             .expect("a key pair");
@@ -125,21 +148,7 @@ impl Issuer {
 
     /// Returns a valid token of `client` granting `scope`.
     pub(crate) fn token(&self, client: &str, scope: &str) -> String {
-        let now = jiff::Timestamp::now().as_second();
-        let claims = serde_json::json!({
-            "iss": self.server.uri(),
-            "aud": AUDIENCE,
-            "sub": "synthetic-subject-17",
-            "client_id": client,
-            "iat": now,
-            "exp": now + 300,
-            "jti": "synthetic-jti-1",
-            "scope": scope,
-        });
-        let mut header = Header::new(Algorithm::ES256);
-        header.kid = Some(String::from("k1"));
-        header.typ = Some(String::from("at+jwt"));
-        jsonwebtoken::encode(&header, &claims, &self.key.encoding).expect("the token signs")
+        self.key.token(&self.server.uri(), client, scope)
     }
 }
 
@@ -147,14 +156,18 @@ impl Issuer {
 pub(crate) fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
     let text = format!(
         r#"
+public_base_url = "http://localhost:8080"
+
 [server]
 listen = "127.0.0.1:0"
-public_base_url = "http://localhost:8080"
 
 [auth]
 audience = ["{AUDIENCE}"]
 
 [[auth.issuer]]
+issuer = "{issuer}"
+
+[[trust.issuer]]
 issuer = "{issuer}"
 clients = ["east-lab", "west-lab"]
 
@@ -205,7 +218,7 @@ pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
 /// audit spool in the temporary directory returned beside it.
 pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let backend = backend(&settings);
-    application_with(settings, &backend).await
+    Box::pin(application_with(settings, &backend)).await
 }
 
 /// Returns the application of `settings` with every route mounted, its
@@ -215,6 +228,16 @@ pub(crate) async fn application_with(
     settings: Settings,
     backend: &fhir::Backend,
 ) -> (Router, Arc<Smart>, tempfile::TempDir) {
+    Box::pin(application_logged(settings, backend, RequestLog::default())).await
+}
+
+/// Returns the application of [`application_with`], with `log` as its
+/// request log.
+pub(crate) async fn application_logged(
+    settings: Settings,
+    backend: &fhir::Backend,
+    log: RequestLog,
+) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let smart = Arc::new(
         Box::pin(Smart::discover(settings.auth, &settings.domains))
             .await
@@ -223,20 +246,30 @@ pub(crate) async fn application_with(
     let spool = tempfile::tempdir().expect("a temporary directory");
     let mut audit_settings = settings.audit.clone();
     audit_settings.spool_dir = spool.path().join("spool");
-    let audit = Audit::open(&audit_settings, &settings.server.public_base_url)
-        .expect("the audit spool opens");
+    let audit =
+        Audit::open(&audit_settings, &settings.public_base_url).expect("the audit spool opens");
     let health = Registry::default();
+    let lifecycle = crate::support::serving();
     let guarded = fhir::routes(
-        &settings.server.base_path,
-        &settings.server.public_base_url,
+        fhir::Address {
+            base: settings.server.base_path.as_str(),
+            public_base_url: &settings.public_base_url,
+        },
         Mounts::all(),
         &smart,
         &health,
+        &lifecycle,
         &audit,
         backend,
     );
     (
-        router(&settings.server, &health, Some(guarded)),
+        router(
+            &settings.server,
+            Health::new(health, lifecycle),
+            Some(guarded),
+            log,
+            None,
+        ),
         smart,
         spool,
     )
@@ -617,10 +650,10 @@ async fn a_development_surface_of_basic_users_names_the_basic_service_and_no_dis
     let text = format!(
         r#"
 profile = "development"
+public_base_url = "http://localhost:8080"
 
 [server]
 listen = "127.0.0.1:0"
-public_base_url = "http://localhost:8080"
 
 [[auth.basic.users]]
 user = "dev-source"

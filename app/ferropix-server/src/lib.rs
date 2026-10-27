@@ -5,10 +5,11 @@
 //! integration tests share.
 //!
 //! [`cli`] parses the command line, [`config`] reads the file and the
-//! environment into one [`config::settings::Settings`], [`telemetry`]
-//! installs the subscriber, and [`http`] builds the routes under `{base}` and
-//! serves them until the process is asked to stop. `main.rs` only hands in
-//! the arguments and returns the exit code.
+//! environment into one [`config::settings::Settings`],
+//! `ferrohealth-telemetry` installs the console, the export and the panic
+//! hook, and [`http`] builds the routes under `{base}` and serves them until
+//! the process is asked to stop. `main.rs` only hands in the arguments and
+//! returns the exit code.
 
 pub mod audit;
 pub mod auth;
@@ -16,8 +17,6 @@ pub mod cli;
 pub mod config;
 pub mod feed;
 pub mod fhir;
-pub mod health;
-pub mod healthcheck;
 pub mod hl7v2;
 pub mod http;
 pub mod matching;
@@ -25,23 +24,35 @@ pub mod operator;
 pub mod outbox;
 pub mod pdqm;
 pub mod store;
-pub mod telemetry;
 pub mod usage_report;
 pub mod xcpd;
 
 use std::error::Error;
 use std::fmt::Write as _;
-use std::io::IsTerminal as _;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
 
 use clap::Parser;
+use ferrohealth_config::loader::Loaded;
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::cli::{Common, ConfigCommand};
+use ferrohealth_server::health::Health;
+use ferrohealth_server::healthcheck::Outcome;
+use ferrohealth_server::section::ServerSection;
+use ferrohealth_telemetry::request_log::RequestLog;
+use ferrohealth_telemetry::section::TelemetrySection;
+use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
 use tokio::net::TcpListener;
 
-use crate::cli::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
+use crate::cli::{Cli, Command, DbCommand, MatchingCommand};
 use crate::config::Config;
 use crate::config::settings::Settings;
+
+/// The scope of the meter the request log records
+/// `http.server.request.duration` in.
+pub const METER: &str = "ferropix_server";
 
 /// The exit code of a job that parses and does not run yet: the conventional
 /// usage exit.
@@ -84,9 +95,14 @@ where
         );
         return ExitCode::from(EXIT_PENDING_JOB);
     }
-    let settings = match Config::load(cli.config.as_deref()).and_then(|config| config.resolve()) {
-        Ok(settings) => settings,
-        Err(error) if cli.command == Command::Healthcheck => {
+    let loaded = Config::load(&cli.config).and_then(|loaded| {
+        let mut settings = loaded.settings().resolve()?;
+        settings.provenance = loaded.provenance().clone();
+        Ok((loaded, settings))
+    });
+    let (loaded, settings) = match loaded {
+        Ok(loaded) => loaded,
+        Err(error) if cli.command == Command::Common(Common::Healthcheck) => {
             eprintln!("ferropix: not up: {}", chain(&error));
             return ExitCode::FAILURE;
         }
@@ -96,11 +112,11 @@ where
         }
     };
     match cli.command {
-        Command::Config {
+        Command::Common(Common::Config {
             command: ConfigCommand::Check,
-        } => config_check(&settings),
-        Command::Healthcheck => runtime_then(|| healthcheck(settings)),
-        Command::Serve => serve(settings),
+        }) => config_check(&loaded, &settings),
+        Command::Common(Common::Healthcheck) => runtime_then(|| healthcheck(settings)),
+        Command::Common(Common::Serve) => serve(settings),
         Command::Db { command } => db(settings, &command),
         Command::Matching {
             command: MatchingCommand::Estimate,
@@ -117,12 +133,14 @@ where
     reason = "the job prints its tables on standard output and a failure on stderr"
 )]
 fn estimate(settings: Settings) -> ExitCode {
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal(), None)
-    {
-        eprintln!("ferropix: cannot start: {}", chain(&error));
-        return ExitCode::from(EXIT_CONFIG);
-    }
     runtime_then(|| async move {
+        let telemetry = match telemetry(&settings.telemetry) {
+            Ok(telemetry) => telemetry,
+            Err(error) => {
+                eprintln!("ferropix: cannot start: {}", chain(&error));
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
         let outcome = async {
             let store = store::Store::connect(&settings.db).await?;
             store::key::verify(&store).await?;
@@ -131,7 +149,7 @@ fn estimate(settings: Settings) -> ExitCode {
             estimates
         }
         .await;
-        match outcome {
+        let code = match outcome {
             Ok(estimates) => {
                 println!("{}", estimate_tables(&settings.matching, &estimates));
                 ExitCode::SUCCESS
@@ -140,8 +158,33 @@ fn estimate(settings: Settings) -> ExitCode {
                 eprintln!("ferropix: the estimate failed: {}", chain(&error));
                 ExitCode::FAILURE
             }
-        }
+        };
+        shut_down(&telemetry);
+        code
     })
+}
+
+/// Builds the telemetry `section` asks for, described as the `ferropix`
+/// service, and installs its console, its span export and the panic hook.
+///
+/// With `[telemetry.otlp]` the exporters speak gRPC, so this runs inside the
+/// Tokio runtime that carries the export.
+///
+/// # Errors
+/// Returns the [`InitError`] of `ferrohealth-telemetry` when the providers
+/// cannot be built or a subscriber is installed already.
+pub fn telemetry(section: &TelemetrySection) -> Result<Arc<Telemetry>, InitError> {
+    let telemetry = Telemetry::new(section, Service::new("ferropix", env!("CARGO_PKG_VERSION")))?;
+    let _filter = telemetry.install(section, &Console::detect())?;
+    ferrohealth_telemetry::panic::install_hook();
+    Ok(Arc::new(telemetry))
+}
+
+/// Flushes and stops the span and metric export of `telemetry`.
+fn shut_down(telemetry: &Telemetry) {
+    if let Err(error) = telemetry.shutdown() {
+        tracing::warn!(error = %chain(&error), "the telemetry did not flush");
+    }
 }
 
 /// Writes `estimates` as `[matching.fields]` tables, each with the `m` of
@@ -177,12 +220,24 @@ pub fn estimate_tables(
     text
 }
 
-/// Runs `config check`: the settings resolved, and nothing bound.
+/// Runs `config check`: the settings resolved, every key printed with where
+/// it came from and every secret masked, and nothing bound.
 #[expect(
     clippy::print_stdout,
-    reason = "the job's one answer goes to standard output"
+    clippy::print_stderr,
+    reason = "the job's report goes to standard output and a refusal to stderr"
 )]
-fn config_check(settings: &Settings) -> ExitCode {
+fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> ExitCode {
+    match ferrohealth_config::report::check_report(loaded) {
+        Ok(report) => println!("{report}"),
+        Err(error) => {
+            eprintln!(
+                "ferropix: the configuration cannot be shown: {}",
+                chain(&error)
+            );
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    }
     println!(
         "ferropix: the configuration is accepted ({} profile, {} seeded domain(s))",
         match settings.profile {
@@ -200,14 +255,33 @@ fn config_check(settings: &Settings) -> ExitCode {
     reason = "the job's one answer goes to standard output"
 )]
 async fn healthcheck(settings: Settings) -> ExitCode {
-    let target = healthcheck::target(settings.server.listen);
-    let outcome =
-        healthcheck::check(target, &settings.server.base_path, healthcheck::TIMEOUT).await;
+    let outcome = probe(&settings.server).await;
     println!("ferropix: {outcome}");
-    if outcome.is_up() {
+    if outcome.exit_code() == 0 {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// How long `healthcheck` waits for the readiness answer, shorter than the
+/// five seconds a container `HEALTHCHECK` commonly allows.
+pub const HEALTHCHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Asks the server `section` configures for `{base}/health/readiness`, over
+/// the TLS `[server.tls]` configures, on the loopback when it listens on
+/// every interface: the container's `HEALTHCHECK`.
+pub async fn probe(section: &ServerSection) -> Outcome {
+    use ferrohealth_server::healthcheck::{check, check_tls, target};
+
+    let address = target(section.listen);
+    let base = section.base_path.as_str();
+    match &section.tls {
+        None => check(address, base, HEALTHCHECK_TIMEOUT).await,
+        Some(tls) => match ferrohealth_server::tls::HealthcheckTls::read(tls) {
+            Ok(pinned) => check_tls(address, base, HEALTHCHECK_TIMEOUT, &pinned).await,
+            Err(error) => Outcome::Failed(format!("the TLS files do not read: {error}")),
+        },
     }
 }
 
@@ -219,29 +293,14 @@ async fn healthcheck(settings: Settings) -> ExitCode {
 )]
 fn serve(settings: Settings) -> ExitCode {
     runtime_then(|| async move {
-        let traces = match settings
-            .telemetry
-            .otlp_endpoint
-            .as_ref()
-            .map(telemetry::Traces::new)
-        {
-            None => None,
-            Some(Ok(traces)) => Some(traces),
-            Some(Err(error)) => {
+        let telemetry = match telemetry(&settings.telemetry) {
+            Ok(telemetry) => telemetry,
+            Err(error) => {
                 eprintln!("ferropix: cannot start: {}", chain(&error));
                 return ExitCode::from(EXIT_CONFIG);
             }
         };
-        let exporting = traces.as_ref().map(telemetry::Traces::tracer);
-        if let Err(error) = telemetry::init(
-            &settings.telemetry,
-            std::io::stdout().is_terminal(),
-            exporting,
-        ) {
-            eprintln!("ferropix: cannot start: {}", chain(&error));
-            return ExitCode::from(EXIT_CONFIG);
-        }
-        let code = match serve_settings(settings).await {
+        let code = match serve_settings(settings, Arc::clone(&telemetry)).await {
             Ok(()) => {
                 tracing::info!("ferropix stopped");
                 ExitCode::SUCCESS
@@ -251,11 +310,7 @@ fn serve(settings: Settings) -> ExitCode {
                 ExitCode::FAILURE
             }
         };
-        if let Some(traces) = traces
-            && let Err(error) = traces.shutdown()
-        {
-            tracing::warn!(error = %chain(&error), "the span export did not flush");
-        }
+        shut_down(&telemetry);
         code
     })
 }
@@ -282,24 +337,32 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
             }
         },
     };
-    if let Err(error) = telemetry::init(&settings.telemetry, std::io::stdout().is_terminal(), None)
-    {
-        eprintln!("ferropix: cannot start: {}", chain(&error));
-        return ExitCode::from(EXIT_CONFIG);
-    }
     runtime_then(|| async move {
+        let telemetry = match telemetry(&settings.telemetry) {
+            Ok(telemetry) => telemetry,
+            Err(error) => {
+                eprintln!("ferropix: cannot start: {}", chain(&error));
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
         let outcome = match old_key {
-            None => store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
+            None => match store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
                 .await
-                .map(|store| {
-                    (
-                        store,
-                        String::from("the migrations and the domain seed are applied"),
-                    )
-                }),
+            {
+                Ok(store) => store::pseudonym::seed(&store, &settings.pseudonym_domains)
+                    .await
+                    .map(|_inserted| store),
+                Err(error) => Err(error),
+            }
+            .map(|store| {
+                (
+                    store,
+                    String::from("the migrations and the domain seed are applied"),
+                )
+            }),
             Some(old) => reseal(&settings, &old).await,
         };
-        match outcome {
+        let code = match outcome {
             Ok((store, line)) => {
                 store.close().await;
                 println!("ferropix: {line}");
@@ -309,19 +372,21 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
                 eprintln!("ferropix: the db job failed: {}", chain(&error));
                 ExitCode::FAILURE
             }
-        }
+        };
+        shut_down(&telemetry);
+        code
     })
 }
 
 /// Reads the old sealing key of `db reseal` from `path`.
 fn read_old_key(path: &std::path::Path) -> Result<store::seal::SealingKey, config::error::Error> {
-    let text = config::secret::read_file("old_key_file", path)?;
-    store::seal::SealingKey::from_base64(text.expose()).map_err(|store::seal::KeyFormatError| {
-        config::error::Error::Value {
+    let text = ferrohealth_secret::file::read_secret_file("old_key", path)?;
+    store::seal::SealingKey::from_base64(secrecy::ExposeSecret::expose_secret(&text)).map_err(
+        |store::seal::KeyFormatError| config::error::Error::Value {
             key: String::from("old_key_file"),
             rule: "the file holds the base64 of exactly 32 bytes",
-        }
-    })
+        },
+    )
 }
 
 /// Connects to the store and rewrites every identifier column from `old` to
@@ -356,9 +421,15 @@ pub enum ServeError {
     /// The XCPD Responding Gateway's HTTP client could not be built.
     #[error("the XCPD Responding Gateway could not start")]
     Xcpd(#[source] reqwest::Error),
-    /// The listener could not be bound, or serving failed.
-    #[error("the listener could not serve")]
+    /// The client that delivers ITI-93 to subscribers could not be built.
+    #[error("the ITI-93 sender's HTTP client could not be built")]
+    Pmir(#[source] reqwest::Error),
+    /// The listener could not be bound.
+    #[error("the listener could not be bound")]
     Io(#[source] std::io::Error),
+    /// The listener's TLS could not be set up, or serving failed.
+    #[error("the listener could not serve")]
+    Serve(#[source] ferrohealth_server::serve::ServeError),
 }
 
 /// Starts the store, reads the authorization servers, binds the listener
@@ -376,13 +447,16 @@ pub enum ServeError {
 /// [`ServeError::Auth`] when an authorization server cannot be read,
 /// [`ServeError::Audit`] when the audit spool or its repository cannot
 /// start, [`ServeError::Xcpd`] when the XCPD gateway's client cannot be
-/// built, and [`ServeError::Io`] for the I/O error from binding, accepting or
-/// serving.
-pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
+/// built, [`ServeError::Pmir`] when the ITI-93 sender's cannot,
+/// [`ServeError::Io`] when the listener cannot be bound, and
+/// [`ServeError::Serve`] when its TLS cannot be set up or serving fails.
+pub async fn serve_settings(
+    settings: Settings,
+    telemetry: Arc<Telemetry>,
+) -> Result<(), ServeError> {
     let started = Instant::now();
-    let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
-        .await
-        .map_err(ServeError::Store)?;
+    let wake = outbox::Wake::default();
+    let store = start_store(&settings, &wake).await?;
     let domains = store::seed::stored(&store)
         .await
         .map_err(ServeError::Store)?;
@@ -391,6 +465,7 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
     let Settings {
         profile,
         server,
+        public_base_url,
         auth,
         pixm,
         pdqm,
@@ -402,44 +477,44 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         audit,
         matching,
         usage_report: report_settings,
+        telemetry: telemetry_section,
         ..
     } = settings;
-    let facts = usage_report::reporter::Facts::new(profile, services, domains.len());
+    let facts = usage_report::Facts::new(profile, services, domains.len());
     let smart = Arc::new(
         auth::Smart::discover(auth, &domains)
             .await
             .map_err(ServeError::Auth)?,
     );
     let mounts = fhir::Mounts::of(&pixm, &pdqm, &pmir, &operator);
-    let audit = audit::Audit::open(&audit, &server.public_base_url).map_err(ServeError::Audit)?;
+    let audit = audit::Audit::open(&audit, &public_base_url).map_err(ServeError::Audit)?;
     let draining = audit.drain();
     let listening = hl7v2::Listening::default();
     let health = registry(&store, &audit, hl7v2.as_ref().map(|_| &listening));
-    let guarded = fhir::routes(
-        &server.base_path,
-        &server.public_base_url,
-        mounts,
-        &smart,
-        &health,
-        &audit,
-        &backend,
-    );
-    let wake = outbox::Wake::default();
-    let (guarded, channels) = with_xcpd(guarded, xcpd, &store, &matching, &server, &audit, &wake)?;
-    let window = Arc::new(usage_report::window::Window::new(&server.base_path));
+    let lifecycle = Lifecycle::default();
+    let at = fhir::Address {
+        base: server.base_path.as_str(),
+        public_base_url: &public_base_url,
+    };
+    let guarded = fhir::routes(at, mounts, &smart, &health, &lifecycle, &audit, &backend);
+    let (guarded, mut channels) = with_xcpd(guarded, xcpd, &store, &matching, at, &audit, &wake)?;
+    channels.pmir = pmir_channel(&pmir)?;
+    channels.hl7v2 = mllp_channel(hl7v2.as_ref(), &audit);
+    let window = Arc::new(usage_report::window(server.base_path.as_str()));
     let listener = bind(&server).await?;
-    let reporting = usage_report::reporter::start(
+    let reporting = usage_report::start(
         &report_settings,
-        usage_report::reporter::Sources {
+        usage_report::Pix {
             facts,
             health: health.clone(),
-            window: Arc::clone(&window),
+            lifecycle: lifecycle.clone(),
         },
+        Arc::clone(&window),
         started,
-        usage_report::ci_of(|name| std::env::var(name).ok()),
+        ferrohealth_usage_report::section::ci_of(|name| std::env::var(name).ok()),
     )
     .await;
-    let (signal, stopped) = stop_signal();
+    let (signal, stopped) = stop_signal(lifecycle.clone());
     let sender = outbox::start(store.clone(), channels, retention, wake, stopped.clone());
     let mllp = match &hl7v2 {
         Some(settings) => Some(
@@ -449,12 +524,12 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
                     &store,
                     &matching,
                     pdqm.deprecated,
-                    &server.public_base_url,
+                    &public_base_url,
                     &audit,
                     settings,
                 )
                 .with_usage(Arc::clone(&window)),
-                server.drain_timeout,
+                server.shutdown_timeout(),
                 listening,
                 stopped_by(stopped.clone()),
             )
@@ -462,18 +537,53 @@ pub async fn serve_settings(settings: Settings) -> Result<(), ServeError> {
         ),
         None => None,
     };
-    let served = http::serve_until(
-        listener,
-        http::router(&server, &health, Some(guarded)).layer(axum::Extension(window)),
-        server.drain_timeout,
-        stopped_by(stopped),
-    )
-    .await
-    .map_err(ServeError::Io);
+    let log = request_log(&telemetry_section, &telemetry, window);
+    let health = Health::new(health, lifecycle.clone());
+    let app = http::router(&server, health, Some(guarded), log, Some(telemetry));
+    let served = serve_http(listener, app, &server, lifecycle, stopped).await;
     signal.abort();
-    wound_down(mllp, sender, server.drain_timeout, [draining, reporting]).await;
+    wound_down(
+        mllp,
+        sender,
+        server.shutdown_timeout(),
+        [draining, reporting],
+    )
+    .await;
     store.close().await;
     served
+}
+
+/// Serves `app` on `listener` as `server` configures it, over TLS when
+/// `[server.tls]` is set, until `stopped` is raised, then drains within
+/// `server.drain_delay_ms` and `server.shutdown_timeout_ms`.
+///
+/// # Errors
+/// Returns [`ServeError::Serve`] when the TLS files cannot be read or the
+/// listener fails.
+async fn serve_http(
+    listener: TcpListener,
+    app: axum::Router,
+    server: &ServerSection,
+    lifecycle: Lifecycle,
+    stopped: tokio::sync::watch::Receiver<bool>,
+) -> Result<(), ServeError> {
+    ferrohealth_server::serve::run(listener, app, server, lifecycle, stopped_by(stopped))
+        .await
+        .map(|_drained| ())
+        .map_err(ServeError::Serve)
+}
+
+/// Returns the request log of the HTTP listener: the query values `section`
+/// allows, the duration histogram of `telemetry`, and the usage report's
+/// `window` fed with every finished request.
+fn request_log(
+    section: &TelemetrySection,
+    telemetry: &Telemetry,
+    window: Arc<ferrohealth_usage_report::window::Window>,
+) -> RequestLog {
+    RequestLog::new(&section.logged_query_parameters)
+        .with_metrics(&telemetry.meter(METER))
+        .with_recorder(window)
 }
 
 /// Waits for the MLLP listener's drain and the outbox sender's message in
@@ -500,7 +610,7 @@ fn with_xcpd(
     settings: Option<config::section::xcpd::XcpdSettings>,
     store: &store::Store,
     matching: &config::section::matching::Matching,
-    server: &config::section::server::ServerSettings,
+    at: fhir::Address<'_>,
     audit: &audit::Audit,
     wake: &outbox::Wake,
 ) -> Result<(axum::Router, outbox::Channels), ServeError> {
@@ -511,15 +621,117 @@ fn with_xcpd(
         store,
         matching,
         settings,
-        &server.public_base_url,
+        at.public_base_url,
         audit,
         wake.clone(),
     )
     .map_err(ServeError::Xcpd)?;
     let channels = outbox::Channels {
         xcpd: Some(gateway.channel()),
+        pmir: None,
+        hl7v2: None,
     };
     Ok((guarded.merge(xcpd::routes(gateway)), channels))
+}
+
+/// Starts the store `settings` name for `serve`, seeds its pseudonymisation
+/// domains and has it announce changes when `[pmir]` is on, waking `wake`.
+///
+/// # Errors
+/// Returns [`ServeError::Store`] when the store refuses to start or seed.
+async fn start_store(settings: &Settings, wake: &outbox::Wake) -> Result<store::Store, ServeError> {
+    let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
+        .await
+        .map_err(ServeError::Store)?;
+    store::pseudonym::seed(&store, &settings.pseudonym_domains)
+        .await
+        .map_err(ServeError::Store)?;
+    Ok(with_consumers(
+        with_feed(store, settings, wake),
+        settings,
+        wake,
+    ))
+}
+
+/// Returns `store` notifying every cross-reference change as an ITI-10
+/// message to each consumer it concerns, when `[[hl7v2.consumers]]` names
+/// one (ITI TF-2 §3.10.4.1.1).
+fn with_consumers(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> store::Store {
+    let Some(hl7v2) = settings.hl7v2.as_ref().filter(|h| !h.consumers.is_empty()) else {
+        return store;
+    };
+    store.with_consumers(feed::notify::Notifying {
+        manager: hl7v2.manager.clone(),
+        consumers: hl7v2.consumers.clone().into(),
+        authorities: hl7v2::authority::Authorities::new(&hl7v2.namespaces),
+        notification: hl7v2.notification,
+        wake: wake.clone(),
+    })
+}
+
+/// The outbox channel of the ITI-10 notifications when `[[hl7v2.consumers]]`
+/// names one: the consumers, the `[hl7v2.notification]` retry waits, the
+/// listener's frame limit for an acknowledgment, and the audit trail.
+fn mllp_channel(
+    hl7v2: Option<&config::section::hl7v2::Hl7v2Settings>,
+    audit: &audit::Audit,
+) -> Option<outbox::MllpChannel> {
+    let hl7v2 = hl7v2.filter(|h| !h.consumers.is_empty())?;
+    Some(outbox::MllpChannel {
+        consumers: hl7v2.consumers.clone().into(),
+        authorities: hl7v2::authority::Authorities::new(&hl7v2.namespaces),
+        frame_limit: hl7v2.frame_limit,
+        backoff: outbox::Backoff {
+            initial: std::time::Duration::from_millis(hl7v2.notification.initial_backoff_ms),
+            max: std::time::Duration::from_millis(hl7v2.notification.max_backoff_ms),
+        },
+        audit: audit.clone(),
+    })
+}
+
+/// Returns `store` announcing every change to a person as an ITI-93 message
+/// when `[pmir]` is on (PMIR 1.6.0 §2:3.93.4.1.1).
+fn with_feed(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> store::Store {
+    if !settings.pmir.enabled {
+        return store;
+    }
+    let public = &settings.public_base_url;
+    let master = public.as_str().trim_end_matches('/').to_owned();
+    let registry = url::Url::parse(&format!("{master}/fhir")).unwrap_or_else(|_| public.clone());
+    store.with_feed(store::subscription::FeedSettings {
+        registry,
+        master,
+        max_attempts: settings.pmir.feed.max_attempts,
+        wake: wake.clone(),
+    })
+}
+
+/// The outbox channel of the ITI-93 messages to subscribers when `[pmir]`
+/// is on: a client that follows no redirect, with the `[pmir.feed]` retry
+/// waits.
+///
+/// # Errors
+/// Returns [`ServeError::Pmir`] when the client cannot be built.
+fn pmir_channel(
+    pmir: &config::section::profiles::Pmir,
+) -> Result<Option<outbox::HttpChannel>, ServeError> {
+    if !pmir.enabled {
+        return Ok(None);
+    }
+    let feed = &pmir.feed;
+    // NOTE: no specification governs this: our own design; a subscriber's redirect would steer the server's posts, as D33 refuses for XCPD.
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(ServeError::Pmir)?;
+    Ok(Some(outbox::HttpChannel {
+        client,
+        backoff: outbox::Backoff {
+            initial: std::time::Duration::from_millis(feed.initial_backoff_ms),
+            max: std::time::Duration::from_millis(feed.max_backoff_ms),
+        },
+    }))
 }
 
 /// Waits for the outbox sender to finish the message in flight, at most
@@ -545,7 +757,7 @@ fn backend(store: &store::Store, settings: &Settings) -> fhir::Backend {
         matching: settings.matching.clone(),
         deprecated: settings.pdqm.deprecated,
         configured: operator::Configured {
-            origins: settings.origins.clone(),
+            provenance: settings.provenance.clone(),
             senders: settings
                 .hl7v2
                 .as_ref()
@@ -557,15 +769,17 @@ fn backend(store: &store::Store, settings: &Settings) -> fhir::Backend {
 }
 
 /// Returns the readiness registry: the database, the audit spool's
-/// headroom and, when the HL7 v2 face runs, its listener.
+/// headroom, the outbox sender's backlog and, when the HL7 v2 face runs, its
+/// listener.
 fn registry(
     store: &store::Store,
     audit: &audit::Audit,
     listening: Option<&hl7v2::Listening>,
-) -> health::Registry {
-    let health = health::Registry::default()
+) -> Registry {
+    let health = Registry::default()
         .and(Arc::new(store::indicator::Database::new(store.clone())))
-        .and(Arc::new(audit::Headroom(audit.clone())));
+        .and(Arc::new(audit::Headroom(audit.clone())))
+        .and(Arc::new(outbox::Backlog::new(store.clone())));
     match listening {
         Some(listening) => health.and(Arc::new(listening.clone())),
         None => health,
@@ -576,7 +790,7 @@ fn registry(
 ///
 /// # Errors
 /// Returns [`ServeError::Io`] when the listener cannot be bound.
-async fn bind(server: &config::section::server::ServerSettings) -> Result<TcpListener, ServeError> {
+async fn bind(server: &ServerSection) -> Result<TcpListener, ServeError> {
     let listener = TcpListener::bind(server.listen)
         .await
         .map_err(ServeError::Io)?;
@@ -591,19 +805,13 @@ async fn bind(server: &config::section::server::ServerSettings) -> Result<TcpLis
 
 /// Returns the services `settings` switch on, as the usage report names
 /// them.
-fn services(settings: &Settings) -> Vec<usage_report::payload::Service> {
+fn services(settings: &Settings) -> Vec<usage_report::Service> {
     [
-        (
-            settings.hl7v2.is_some(),
-            usage_report::payload::Service::Hl7v2,
-        ),
-        (
-            settings.operator.enabled,
-            usage_report::payload::Service::Operator,
-        ),
-        (settings.pdqm.enabled, usage_report::payload::Service::Pdqm),
-        (settings.pixm.enabled, usage_report::payload::Service::Pixm),
-        (settings.pmir.enabled, usage_report::payload::Service::Pmir),
+        (settings.hl7v2.is_some(), usage_report::Service::Hl7v2),
+        (settings.operator.enabled, usage_report::Service::Operator),
+        (settings.pdqm.enabled, usage_report::Service::Pdqm),
+        (settings.pixm.enabled, usage_report::Service::Pixm),
+        (settings.pmir.enabled, usage_report::Service::Pmir),
     ]
     .into_iter()
     .filter_map(|(on, service)| on.then_some(service))
@@ -611,14 +819,19 @@ fn services(settings: &Settings) -> Vec<usage_report::payload::Service> {
 }
 
 /// Waits for `SIGTERM` or `SIGINT` in a task of its own and returns the
-/// task and the flag it raises, which every listener drains on.
-fn stop_signal() -> (
+/// task and the flag it raises, which every listener drains on; `lifecycle`
+/// turns to draining first, so readiness answers `503` while the requests in
+/// flight finish.
+fn stop_signal(
+    lifecycle: Lifecycle,
+) -> (
     tokio::task::JoinHandle<()>,
     tokio::sync::watch::Receiver<bool>,
 ) {
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let signal = tokio::spawn(async move {
-        http::shutdown_signal().await;
+        ferrohealth_server::serve::shutdown_signal().await;
+        lifecycle.drain();
         let _sent = stop.send(true);
     });
     (signal, stopped)

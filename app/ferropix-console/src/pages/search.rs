@@ -50,7 +50,7 @@ use ferropix_operator_api::search::Results;
 ///
 /// It answers the pages, identifier domains and settings the words name,
 /// and never a person, since every person search is an audited query
-/// (FerroPIX #214, design D26).
+/// (design D39).
 pub const SUGGEST: &str = "/search/answer";
 
 /// The submit of a search form.
@@ -401,7 +401,7 @@ pub fn results_table(segment: Segment, results: &Results) -> AnyView {
 ///
 /// That is the console's pages, the identifier domains in `domains` (`None` when the server did not
 /// answer, which the panel says) and the settings whose names hold them,
-/// never a person (FerroPIX #214, design D26). A patient search runs
+/// never a person (design D39). A patient search runs
 /// only on Enter or the panel's last row, as an audited post.
 #[must_use]
 pub fn suggestions(

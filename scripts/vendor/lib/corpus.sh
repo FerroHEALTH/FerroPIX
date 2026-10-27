@@ -9,7 +9,7 @@
 # names the top directory `<repo>-<commit>`), and extracts the paths it names
 # verbatim under docs/specs/<name>/ at their upstream layout. Re-running with an
 # unchanged pin reproduces the tree byte for byte; only the fetch date in
-# PROVENANCE.md moves.
+# PROVENANCE.md moves, unless the script keeps it with corpus_keep_fetched.
 #
 # Requires: curl, tar, shasum, jq.
 #
@@ -167,6 +167,20 @@ corpus_tree_digest() {
 corpus_file_count() { find "$1" -type f ! -name PROVENANCE.md | wc -l | tr -d '[:space:]'; }
 
 corpus_fetched() { date -u +%Y-%m-%d; }
+
+# corpus_keep_fetched OLD NEW
+#
+# Puts the earlier provenance OLD back over the freshly written NEW when the
+# two differ in the date of their `- Fetched:` line alone, so a re-run against
+# unchanged pins and unchanged bytes leaves the tree byte-identical. A missing
+# OLD, or any other difference, keeps NEW.
+corpus_keep_fetched() {
+  local old="$1" new="$2" mask='s/^- Fetched: [0-9]{4}-[0-9]{2}-[0-9]{2}/- Fetched: DATE/'
+  [ -f "$old" ] || return 0
+  if cmp -s <(sed -E "$mask" "$old") <(sed -E "$mask" "$new"); then
+    cp "$old" "$new"
+  fi
+}
 
 # The token after the word $1 in the pin cell $2.
 corpus_pin_field() {

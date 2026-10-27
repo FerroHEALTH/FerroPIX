@@ -8,7 +8,7 @@ resolver = "3"
 members = ["crates/*", "app/*", "tools/*"]
 
 [workspace.package]
-version = "0.0.5"
+version = "0.0.8"
 edition = "2024"
 rust-version = "1.98"
 license = "BUSL-1.1"
@@ -46,7 +46,7 @@ leptos_axum = "0.8.10"
 any_spawner = { version = "0.3.0", features = ["tokio"] }
 leptos_meta = { version = "0.8.7", default-features = false }
 leptos_router = { version = "0.8.17", default-features = false }
-ferrohealth-ui = "=0.5.1"
+ferrohealth-ui = "=0.5.2"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 wasm-bindgen = "0.2.129"
 console_error_panic_hook = "0.1.7"
@@ -58,18 +58,45 @@ base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 fhir-types = { version = "0.1.128", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroAUTH: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
-# fetchers; pinned exactly, as every family crate.
-ferrohealth-smart = { version = "=0.7.1", default-features = false }
+# fetchers. The server pins it exactly, as a product pins every family crate;
+# the published crates take their own caret requirement on it.
+ferrohealth-smart = { version = "=0.8.2", default-features = false }
+# The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
+# defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
+# provenance and the key-or-file rule for secrets, and the `--config` and
+# `--set` arguments of ferrohealth-server. Each pinned exactly, as a product
+# pins every family crate; ferrohealth-secret at the version ferrohealth-smart
+# requires. Verified against crates.io on 2026-10-27.
+ferrohealth-config = "=0.2.5"
+ferrohealth-secret = "=0.2.0"
+ferrohealth-server = { version = "=0.3.4", default-features = false }
+# The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
+# console, the request log with `http.server.request.duration`, the OTLP
+# export, the Prometheus exposition and the panic hook. Pinned exactly, as a
+# product pins every family crate. Verified against crates.io on 2026-10-27.
+ferrohealth-telemetry = { version = "=0.2.2", default-features = false }
+# The health family of FerroHEALTH/FerroSYS: the readiness document, which
+# the operator console's browser half reads too, and with `registry` the
+# indicators and the lifecycle the server runs. Pinned exactly at the version
+# ferrohealth-server requires. Verified against crates.io on 2026-10-27.
+ferrohealth-health = { version = "=0.1.1", default-features = false }
+# The installation report of FerroHEALTH/FerroSYS to FerroPULSE: the
+# `[usage_report]` section, envelope v2, the instance id, the window and the
+# reporter. Pinned exactly. Verified against crates.io on 2026-10-27.
+ferrohealth-usage-report = { version = "=0.2.0", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
-# Release 1 codec and listener, the MSH-18 decoder, the positional parser and
-# the original-mode acknowledgment, over the generated v2 tables, pinned
-# exactly as every family crate. Verified against crates.io on 2026-10-25.
-ferrobridge-hl7v2 = { version = "=0.1.143", default-features = false }
+# Release 1 codec, listener and sender, the MSH-18 decoder, the positional
+# parser and the original-mode acknowledgment, over the generated v2 tables,
+# pinned exactly as a product pins every family crate. Verified against
+# crates.io on 2026-10-26 (0.1.158, the first with `mllp::send`).
+ferrobridge-hl7v2 = { version = "=0.1.158", default-features = false }
 hl7v2-types = "=0.1.127"
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
-# model the identity profiles share; pinned exactly, as every family crate.
-ihe-atna = { version = "=0.2.11", default-features = false }
+# model the identity profiles share. The server pins it exactly, as a product
+# pins every family crate; `ihe-iti` takes its own caret requirement on it.
+# Verified against crates.io on 2026-10-27 (0.3.0, `User::with_policies`).
+ihe-atna = { version = "=0.3.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.59.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
@@ -89,19 +116,17 @@ strsim = "0.11.1"
 unicode-normalization = "0.1.26"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
+# The testkit's MLLP exchange reads an answer through ferrobridge-hl7v2's
+# frame codec, at the versions that crate resolves. Verified against
+# crates.io on 2026-10-27.
+bytes = "1.12.1"
+tokio-util = { version = "0.7.20", default-features = false, features = ["codec"] }
 tokio = { version = "1.53.1", default-features = false }
-# The OTLP span export of `[telemetry] otlp_endpoint` (#143): the tracer
-# provider, its gRPC exporter and the bridge from the server's tracing spans,
-# the opentelemetry crates in lockstep and tracing-opentelemetry on the line
-# paired with them, as FerroFED pins them. Test-only: the OTLP trace service
-# the testkit's in-process collector answers, and the gRPC server it runs on.
-# Verified against crates.io on 2026-10-24.
-opentelemetry = { version = "0.33.1", default-features = false, features = ["trace"] }
-opentelemetry_sdk = { version = "0.33.1", default-features = false, features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["trace", "grpc-tonic", "tls-aws-lc", "tls-webpki-roots"] }
+# Test-only: the OTLP trace service the testkit's in-process collector
+# answers, and the gRPC server it runs on, on the line ferrohealth-telemetry
+# exports with. Verified against crates.io on 2026-10-24.
 opentelemetry-proto = { version = "0.33.1", default-features = false }
 tonic = { version = "0.14.6", default-features = false }
-tracing-opentelemetry = { version = "0.34.0", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "env-filter", "json", "ansi"] }
 url = "2.5.8"
 uuid = { version = "1.26.1", default-features = false, features = ["v4", "std"] }

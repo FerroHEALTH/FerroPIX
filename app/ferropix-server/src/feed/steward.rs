@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::feed::link::{self, MergeKind, Recording};
 use crate::feed::write::{self, Subjects};
-use crate::feed::{Context, FeedError};
+use crate::feed::{Context, FeedError, announce};
 use crate::store::record::{PersonId, RecordId};
 use crate::store::{Store, StoreError};
 
@@ -111,6 +111,17 @@ pub async fn decide(
 ) -> Result<(Transaction<'static, Postgres>, Decided), DecideError> {
     let mut transaction = store.pool().begin().await?;
     let decided = settle(&mut transaction, decision, context).await?;
+    if let (Some(_), Some(person)) = (decided.merge, decided.person) {
+        let mut changes: Vec<announce::Change> = decided
+            .persons
+            .iter()
+            .copied()
+            .filter(|other| *other != person)
+            .map(announce::Change::Merged)
+            .collect();
+        changes.push(announce::Change::Updated(person));
+        announce::announce(&mut transaction, store, &changes).await?;
+    }
     Ok((transaction, decided))
 }
 

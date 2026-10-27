@@ -143,8 +143,10 @@ the workspace resolves, never memory.
   WCAG 2.2 AA battery over every screen's refused state in both themes
   (text contrast, control edges, the keyboard walk with its focus rings,
   the markup, the reflow at 320 px), with a self-test that a wrong theme
-  fails. Every wait waits for the `data-hydrated` mark the browser half sets
-  on `<html>`, and a press for the page it loads. `journeys::SCREENS` names
+  fails, and a link and a patient search that keep the document. Every
+  wait waits for the `data-ferroui-hydrated` mark FerroUI's
+  `widget::hydration::hydrate` sets on `<html>` once the page and its lazy
+  route have hydrated, and a press for the page it loads or draws in place. `journeys::SCREENS` names
   one address per route, held by a guard in the ordinary suite; a screen's
   filled state joins the battery when the screen lands. Locally:
   `scripts/release/journey-tools.sh target/journey-tools`, the site bundle,
@@ -160,7 +162,10 @@ the workspace resolves, never memory.
   Measured 2026-10-26 at 477374 bytes on the move to FerroUI 0.5 (#214,
   cargo-leptos 0.3.11, wasm-bindgen 0.2.129, Rust 1.99.1), with the pages
   in four lazy route groups (work, patients, registry, aside) whose chunks
-  hold 511934 more; the budget is a quarter over it. Whole-page hydration
+  hold 511934 more; the budget is a quarter over it, rounded up to whole
+  KiB. Measured again 2026-10-27 at 474930 bytes on FerroUI 0.5.2, whose
+  `widget::hydration::hydrate` entry replaced `hydrate_lazy`, with chunks
+  of 507357, so the budget stands, 26 per cent over that build. Whole-page hydration
   puts the renderer, the reactive graph, the router, the shell, the page
   context's serde and every data segment in the entry, since `--split`
   moves code alone. Under islands it measured 295172 (2026-10-23). The `console-wasm` job of `ci.yml`

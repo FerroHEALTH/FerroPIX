@@ -1,166 +1,83 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The HTTP surface: the routes under `{base}`, the family's middleware and
-//! the bounded drain on `SIGTERM`.
+//! The HTTP surface: the routes under `{base}` inside the family stack of
+//! `ferrohealth-server`.
 //!
-//! No specification governs the process model: our own design, after
-//! FerroBRIDGE's and FerroFED's servers.
+//! The stack carries the request id, the panic catch, the request timeout,
+//! the body limit, the overload bound, the compression and the request log
+//! of `ferrohealth-telemetry`, so every request's line names the server's id
+//! and never the client's. Every body the stack writes itself, a panic and a
+//! refusal, is a FHIR `OperationOutcome` ([`policy`]). The bounded drain is
+//! `ferrohealth_server::serve::run`'s.
+//!
+//! No specification governs the process model: our own design, in the
+//! family's shape.
 
-pub mod panic;
-pub mod request_id;
-pub mod request_log;
-
-use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::Router;
-use axum::extract::State;
-use axum::response::Response;
-use axum::routing::get;
-use http::StatusCode;
-use tokio::net::TcpListener;
-use tower_http::catch_panic::CatchPanicLayer;
-use tower_http::limit::RequestBodyLimitLayer;
-use tower_http::request_id::{PropagateRequestIdLayer, SetRequestIdLayer};
-use tower_http::timeout::TimeoutLayer;
+use ferrohealth_server::health::Health;
+use ferrohealth_server::section::ServerSection;
+use ferrohealth_server::stack::{self, StackPolicy};
+use ferrohealth_telemetry::request_log::{RequestId, RequestLog};
+use ferrohealth_telemetry::telemetry::{Telemetry, prometheus_route};
+use http::request::Parts;
 
-use crate::config::section::server::ServerSettings;
-use crate::fhir::outcome::body;
-use crate::health::{self, Registry};
+use crate::fhir::outcome;
 
-/// The path of the liveness route under `{base}`.
-pub const LIVENESS: &str = "/health";
+/// The path of the Prometheus exposition under `{base}`.
+pub const METRICS: &str = "/metrics";
 
-/// The path of the readiness route under `{base}`.
-pub const READINESS: &str = "/health/readiness";
-
-/// Builds the HTTP application under `server`'s base path, with the shared
-/// middleware: the health routes over `health`, and the `guarded` routes of
-/// the FHIR face and the operator API when given.
+/// Builds the HTTP application under `server`'s base path, inside the stack
+/// of `ferrohealth-server` with `log` as the request log.
 ///
-/// `GET {base}/health` answers `200` while the process is up, and
-/// `GET {base}/health/readiness` answers `200` while every indicator of
-/// `health` is up and `503` naming each one that is down.
-pub fn router(server: &ServerSettings, health: &Registry, guarded: Option<Router>) -> Router {
-    let mut routes = Router::new()
-        .route(LIVENESS, get(liveness))
-        .route(READINESS, get(readiness).with_state(health.clone()));
+/// The routes are the health routes of `ferrohealth-server` over `health`,
+/// the Prometheus exposition of `metrics` when given, and the `guarded`
+/// routes of the FHIR face and the operator API when given.
+///
+/// `GET {base}/health/liveness` answers `200` while the process serves,
+/// `GET {base}/health/readiness` answers the readiness document, `200` while
+/// the process serves and no indicator is down and `503` otherwise, naming
+/// each indicator and never its detail, `GET {base}/health` answers the same
+/// status with the state alone, and `GET {base}/metrics` answers every
+/// metric in the Prometheus text format.
+pub fn router(
+    server: &ServerSection,
+    health: Health,
+    guarded: Option<Router>,
+    log: RequestLog,
+    metrics: Option<Arc<Telemetry>>,
+) -> Router {
+    let mut routes = Router::new();
+    if let Some(telemetry) = metrics {
+        routes = routes.route(METRICS, prometheus_route(telemetry));
+    }
     if let Some(guarded) = guarded {
         routes = routes.merge(guarded);
     }
-    let mounted = if server.base_path.is_empty() {
-        routes
-    } else {
-        Router::new().nest(&server.base_path, routes)
-    };
-    with_middleware(mounted, server)
+    stack::app(routes, health, server, policy(log))
 }
 
-/// Applies the middleware every FerroPIX route carries to `router`.
-///
-/// Outermost first: the request-id normalizer, the layer that mints one, the
-/// panic renderer, the layer that propagates the id onto the response, the
-/// panic catcher, the request timeout, the body ceiling and the request log.
-/// The renderer sits outside the propagate layer because it reads the id
-/// from the response that layer has just stamped; the request log runs after
-/// routing, so it reads the matched route template.
-pub fn with_middleware(router: Router, server: &ServerSettings) -> Router {
-    router
-        .layer(axum::middleware::from_fn(request_log::log))
-        .layer(RequestBodyLimitLayer::new(server.body_limit))
-        .layer(TimeoutLayer::with_status_code(
-            StatusCode::REQUEST_TIMEOUT,
-            server.request_timeout,
-        ))
-        .layer(CatchPanicLayer::custom(panic::caught))
-        .layer(PropagateRequestIdLayer::new(request_id::HEADER))
-        .layer(axum::middleware::from_fn(panic::render))
-        .layer(SetRequestIdLayer::new(request_id::HEADER, request_id::Mint))
-        .layer(axum::middleware::map_request(request_id::strip_illegal))
-}
-
-/// `GET {base}/health`: `200` while the process is up.
-async fn liveness() -> StatusCode {
-    StatusCode::OK
-}
-
-/// `GET {base}/health/readiness`: the readiness document of `health`, `200`
-/// while every indicator is up and `503` while one is down.
-async fn readiness(State(health): State<Registry>) -> Response {
-    let report = health.evaluate().await;
-    body(health::status(&report), &report, "application/json")
-}
-
-/// Serves `app` on an already-bound listener until `shutdown` completes, then
-/// finishes the requests in flight within `drain`.
-///
-/// A container runtime stops a container with `SIGTERM` to PID 1 and kills it
-/// after a grace period, so the drain is bounded: a connection still open when
-/// `drain` elapses is dropped and the function returns.
-///
-/// # Errors
-/// Returns the I/O error from accepting or serving connections.
-pub async fn serve_until<F>(
-    listener: TcpListener,
-    app: Router,
-    drain: Duration,
-    shutdown: F,
-) -> std::io::Result<()>
-where
-    F: Future<Output = ()> + Send + 'static,
-{
-    let signalled = Arc::new(tokio::sync::Notify::new());
-    let inner = Arc::clone(&signalled);
-    let server = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        shutdown.await;
-        inner.notify_one();
-    })
-    .into_future();
-    let mut server = std::pin::pin!(server);
-    tokio::select! {
-        result = &mut server => return result,
-        () = signalled.notified() => {}
+/// The policy of the stack: a panic and every refusal the stack writes
+/// answer an `OperationOutcome`, and `log` is the request log.
+#[must_use]
+pub fn policy(log: RequestLog) -> StackPolicy {
+    StackPolicy {
+        panic_body: outcome::panic_body(),
+        refusal_body: outcome::refusal_body(),
+        request_log: log,
     }
-    if let Ok(result) = tokio::time::timeout(drain, server).await {
-        return result;
-    }
-    tracing::warn!(
-        drain_ms = drain.as_millis(),
-        "the drain did not finish in time; the remaining connections are dropped"
-    );
-    Ok(())
 }
 
-/// Completes when the process receives `SIGTERM` or `SIGINT`.
+/// Returns the `X-Request-Id` of the exchange `parts` belongs to, as the
+/// response carries it: the client's when it sent a legal one, else the
+/// server's own.
 ///
-/// A failure to install a handler is logged and that arm never completes, so
-/// the server keeps serving and the runtime's own kill stays the backstop.
-pub async fn shutdown_signal() {
-    let interrupt = async {
-        if let Err(error) = tokio::signal::ctrl_c().await {
-            tracing::error!(%error, "cannot listen for SIGINT");
-            std::future::pending::<()>().await;
-        }
-    };
-    let terminate = async {
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(mut signal) => {
-                signal.recv().await;
-            }
-            Err(error) => {
-                tracing::error!(%error, "cannot listen for SIGTERM");
-                std::future::pending::<()>().await;
-            }
-        }
-    };
-    tokio::select! {
-        () = interrupt => tracing::info!("SIGINT received, draining"),
-        () = terminate => tracing::info!("SIGTERM received, draining"),
-    }
+/// The audit trail records this value (IHE BALP 1.1.4, `BasicAuditEntityType`
+/// `XrequestId`: "the value of X-Request-Id").
+#[must_use]
+pub fn exchanged_request_id(parts: &Parts) -> Option<&str> {
+    ferrohealth_server::request_id::of_client(&parts.headers)
+        .or_else(|| parts.extensions.get::<RequestId>().map(RequestId::id))
 }

@@ -17,7 +17,7 @@ use ferrohealth_ui::view::shell::{brand_mark, centred, lockup_plain};
 use ferrohealth_ui::view::sign_in::{Notice, Provider, SignIn, State, sign_in};
 use leptos::prelude::*;
 
-use crate::app::footer;
+use crate::app::shell::footer;
 use crate::locale::{Msg, tr};
 use crate::pages::title;
 use crate::paths::{MARK_DARK, MARK_LIGHT};

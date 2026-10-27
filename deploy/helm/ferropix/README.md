@@ -63,16 +63,19 @@ With `config.hl7v2.enabled`, the MLLP listener has its own Service,
 ## Declaring a domain and its Source
 
 An identifier domain and the one client that feeds it are values under
-`config`. The issuer that signs the client's tokens lists the client in its
-`clients`, and the domain names it as its `source_client_id`:
+`config`. The issuer that signs the client's tokens lists the client in the
+`clients` of its `trust.issuer` entry, and the domain names it as its
+`source_client_id`:
 
 ```yaml
 config:
-  server:
-    public_base_url: "https://pix.example.org"
+  public_base_url: "https://pix.example.org"
   auth:
     audience:
       - "https://pix.example.org/fhir"
+    issuer:
+      - issuer: "https://idp.example.org/realms/care"
+  trust:
     issuer:
       - issuer: "https://idp.example.org/realms/care"
         clients: ["ferroehr"]
@@ -88,14 +91,19 @@ that issuer: `system/Patient.rs` to read, and `system/Patient.cud` to feed
 its own domain. A domain's `kind` is `local`, `authoritative` (a national
 number such as the BSN, which links records across domains) or `master`, the
 PMIR Master Patient Identification Domain, whose system is
-`config.server.public_base_url`. The seed adds a domain the store lacks and
+`config.public_base_url`. The seed adds a domain the store lacks and
 leaves one it holds as it is; the operator console changes a domain after
 that.
 
 ## Values
 
 `values.yaml` documents every value. The ones you set for every install are
-`config.server.public_base_url`, `config.auth`, `config.domain`,
+`config.public_base_url`, `config.auth`, `config.domain`,
 `database.existingSecret` and `dataKey.existingSecret`. The installation
 report to FerroPULSE is on by default; set `usageReport.enabled=false` to
 stop it.
+
+Both pods set `enableServiceLinks: false` and, by default, run in their own
+user namespace (`hostUsers: false`) with the `Strict` supplemental groups
+policy. Set `hostUsers: true` when your nodes do not support user
+namespaces, or the pods do not start.

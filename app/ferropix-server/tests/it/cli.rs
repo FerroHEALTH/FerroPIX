@@ -51,6 +51,84 @@ fn config_check_accepts_the_quickstart_configuration() {
 }
 
 #[test]
+fn config_check_prints_every_key_with_its_source_and_masks_every_secret() {
+    let secrets = Secrets::new();
+    let quickstart = quickstart();
+    let mut environment = secrets.environment();
+    environment.insert(String::from("RUST_LOG"), String::from("debug"));
+    let output = Command::new(env!("CARGO_BIN_EXE_ferropix"))
+        .args([
+            "config",
+            "check",
+            "--config",
+            quickstart.to_str().expect("a UTF-8 path"),
+            "--set",
+            "db.pool_size=7",
+        ])
+        .env_clear()
+        .envs(environment)
+        .output()
+        .expect("the binary runs");
+    assert_eq!(
+        Some(0),
+        output.status.code(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("# file: "), "{stdout}");
+    assert!(
+        stdout.contains("profile = \"production\"  # file"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("db.pool_size = 7  # set: --set db.pool_size"),
+        "the --set pair wins and is named: {stdout}"
+    );
+    assert!(
+        stdout.contains("telemetry.filter = \"debug\"  # environment: RUST_LOG"),
+        "RUST_LOG sets telemetry.filter: {stdout}"
+    );
+    assert!(
+        stdout.contains("db.url_file = ")
+            && stdout.contains("# environment: FERROPIX__DB__URL_FILE"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains(PASSWORD), "{stdout}");
+    assert!(!stdout.contains(DATA_KEY), "{stdout}");
+}
+
+#[test]
+fn an_unknown_override_variable_refuses_the_start_and_names_the_key() {
+    let secrets = Secrets::new();
+    let quickstart = quickstart();
+    let mut environment = secrets.environment();
+    environment.insert(
+        String::from("FERROPIX__DB__PASWORD"),
+        String::from(PASSWORD),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_ferropix"))
+        .args([
+            "config",
+            "check",
+            "--config",
+            quickstart.to_str().expect("a UTF-8 path"),
+        ])
+        .env_clear()
+        .envs(environment)
+        .output()
+        .expect("the binary runs");
+    assert_eq!(Some(i32::from(EXIT_CONFIG)), output.status.code());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("db.pasword"), "{stderr}");
+    assert!(stderr.contains("FERROPIX__DB__PASWORD"), "{stderr}");
+    assert!(
+        !stderr.contains(PASSWORD),
+        "the value is never quoted: {stderr}"
+    );
+}
+
+#[test]
 fn config_check_names_the_first_error_and_exits_with_ex_config() {
     let secrets = Secrets::new();
     let directory = tempfile::tempdir().expect("a temporary directory");
@@ -180,5 +258,6 @@ fn healthcheck_exits_one_when_nothing_listens() {
         .output()
         .expect("the binary runs");
     assert_eq!(Some(1), output.status.code());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("not up"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("unhealthy: cannot connect"), "{stdout}");
 }

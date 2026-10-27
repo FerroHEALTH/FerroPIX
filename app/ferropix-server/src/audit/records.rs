@@ -17,6 +17,10 @@
 //!   §3.9.5.1.2 and §3.21.5.1.2, written as `AuditEvent`s: the DICOM event
 //!   id as `type`, the transaction as `subtype`, the sender as the source
 //!   agent and the message as the query entity of a query.
+//! - ITI-10 as the Manager sends it: the audit message of ITI TF-2
+//!   §3.10.5.1.1, a Patient Record read, with the consumer as the
+//!   destination, one patient per identifier of PID-3 and MSH-10 as a
+//!   detail.
 //! - ITI-55 as the XCPD Responding Gateway: the audit message of ITI TF-2
 //!   §3.55.5.1.2 written as an `AuditEvent` the same way, with the
 //!   `QueryByParameter` as the query entity, the initiating community as its
@@ -24,6 +28,8 @@
 //! - ITI-93 as the PMIR Registry: the PMIR Feed audit profile (PMIR 1.6.0
 //!   §2:3.93.5.1), one record per message, with each Patient the message
 //!   names and its `MessageHeader`.
+//! - A pseudonym minted on an ITI-83 ask, on BALP Create, naming the
+//!   person and the pseudonymisation domain, never the value.
 //! - A steward action, in [`operator`]: a `RESTful` activity on the person (BALP 1.1.4
 //!   §3:5.7.3), a read for a view and an update for a decision; a steward's
 //!   search, a BALP Patient Query record per person found or a Query record
@@ -74,6 +80,14 @@ pub const ITI_8: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-8", "Patient Identi
 
 /// The `ITI-9` subtype (ITI TF-2 §3.9.5.1.2).
 pub const ITI_9: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-9", "PIX Query");
+
+/// The `ITI-10` subtype (ITI TF-2 §3.10.5.1.1: `EV("ITI-10", "IHE
+/// Transactions", "PIX Update Notification")`).
+pub const ITI_10: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-10", "PIX Update Notification");
+
+/// The detail type of a notification's MSH-10 (ITI TF-2 §3.10.5.1.1:
+/// `Type=MSH-10`, the literal string).
+pub const MSH_10_DETAIL: &str = "MSH-10";
 
 /// The `ITI-21` subtype (ITI TF-2 §3.21.5.1.2).
 pub const ITI_21: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-21", "Patient Demographics Query");
@@ -566,6 +580,38 @@ pub fn pmir_feed(
     )
 }
 
+/// Returns the record of a pseudonym minted for the person `person`
+/// (`Patient/{id}`) in the pseudonymisation domain `namespace`.
+///
+/// The record is BALP Create (BALP 1.1.4 §3:5.7.3): the person as the
+/// patient, the domain as the data, and no pseudonym value.
+#[must_use]
+pub fn pseudonym_minted(call: &Call, person: &str, namespace: &str, outcome: Outcome) -> Exchange {
+    call.exchange(
+        EventKind {
+            profile: "https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Create",
+            event_type: REST,
+            subtypes: vec![CREATE],
+            action: "C",
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        vec![
+            Entity::PatientReference(SecretString::from(person.to_owned())),
+            Entity::Described(Described {
+                what: None,
+                kind: SYSTEM_OBJECT,
+                role: Some(DOMAIN_RESOURCE),
+                name: Some(String::from("pseudonym")),
+                description: None,
+                details: vec![Detail::new("namespace", namespace)],
+                security_labels: Vec::new(),
+            }),
+        ],
+    )
+}
+
 /// The search transaction a PDQm Supplier record is of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Search {
@@ -634,5 +680,55 @@ pub(super) fn person_data(person: Option<&str>) -> Entity {
         role: Some(DOMAIN_RESOURCE),
         name: None,
         query: None,
+    }
+}
+
+/// Returns the record of one ITI-10 notification the Manager sent to
+/// `consumer`, its MSH-10 `control_id`, carrying `identifiers`, ended in
+/// `outcome` (ITI TF-2 §3.10.5.1.1).
+///
+/// The event is `EV(110110, DCM, "Patient Record")` read (`R`), the
+/// Manager the source and the consumer, by its facility and receiving
+/// application joined by `|`, the destination. Each identifier of PID-3 is a
+/// patient, and MSH-10, base64-encoded, is the `MSH-10` detail of a system
+/// object beside them, since a patient entity carries no detail; no
+/// specification governs that place: our own design.
+#[must_use]
+pub fn pix_update_notification(
+    consumer: Peer,
+    control_id: &str,
+    identifiers: &[Identifier],
+    outcome: Outcome,
+) -> Exchange {
+    use base64::Engine as _;
+    let mut entities: Vec<Entity> = identifiers.iter().map(Identifier::patient).collect();
+    entities.push(Entity::Described(Described {
+        what: None,
+        kind: SYSTEM_OBJECT,
+        role: None,
+        name: Some(String::from("message")),
+        description: None,
+        details: vec![Detail::new(
+            MSH_10_DETAIL,
+            base64::engine::general_purpose::STANDARD.encode(control_id),
+        )],
+        security_labels: Vec::new(),
+    }));
+    Exchange {
+        kind: EventKind {
+            profile: "",
+            event_type: PATIENT_RECORD,
+            subtypes: vec![ITI_10],
+            action: "R",
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        recorded: jiff::Timestamp::now(),
+        outcome,
+        outcome_description: None,
+        direction: Direction::Sent { server: consumer },
+        on_behalf: OnBehalfOf::System,
+        entities,
+        security: Vec::new(),
     }
 }

@@ -218,6 +218,43 @@ pub fn disclosure(
     )
 }
 
+/// Returns the record of an administrator's write of the pseudonymisation
+/// domain `namespace`, a creation when `created`, ended in `outcome`; a
+/// system object, as an identifier domain's write is.
+#[must_use]
+pub fn pseudonym_domain_write(
+    call: &Call,
+    created: bool,
+    namespace: &str,
+    outcome: Outcome,
+) -> Exchange {
+    let (subtype, code) = if created {
+        (CREATE, "C")
+    } else {
+        (UPDATE, "U")
+    };
+    call.exchange(
+        EventKind {
+            profile: "",
+            event_type: REST,
+            subtypes: vec![subtype],
+            action: code,
+            client: SOURCE_ROLE,
+            server: DESTINATION_ROLE,
+        },
+        outcome,
+        vec![Entity::Described(Described {
+            what: None,
+            kind: SYSTEM_OBJECT,
+            role: None,
+            name: Some(String::from("pseudonym_domain")),
+            description: None,
+            details: vec![Detail::new("namespace", namespace)],
+            security_labels: Vec::new(),
+        })],
+    )
+}
+
 /// Returns the record of an administrator's write of the identifier domain
 /// `system`, a creation when `created`, ended in `outcome`.
 ///

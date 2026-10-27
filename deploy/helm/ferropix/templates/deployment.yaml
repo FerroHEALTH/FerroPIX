@@ -24,12 +24,10 @@ spec:
     spec:
       serviceAccountName: {{ include "ferropix.serviceAccount" . }}
       automountServiceAccountToken: false
+      {{- include "ferropix.podIsolation" . | nindent 6 }}
       securityContext:
-        runAsNonRoot: true
-        fsGroup: 65532
-        seccompProfile:
-          type: RuntimeDefault
-      # Longer than the server's drain window, [server] drain_timeout_ms.
+        {{- include "ferropix.podSecurity" . | nindent 8 }}
+      # Longer than the server's drain, [server] drain_delay_ms and shutdown_timeout_ms.
       terminationGracePeriodSeconds: 30
       containers:
         - name: ferropix
@@ -59,7 +57,7 @@ spec:
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/liveness
               port: http
             periodSeconds: 15
           securityContext:

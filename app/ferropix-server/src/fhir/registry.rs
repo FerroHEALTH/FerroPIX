@@ -54,6 +54,7 @@ use crate::fhir::pmir::{answer_format, call, record, unaudited, written};
 use crate::fhir::status::Case;
 use crate::store::Store;
 use crate::store::record::{Channel, PersonId};
+use ferrohealth_telemetry::request_log::RequestId;
 
 /// The refusal of a change that would undo a merge (§2:3.93.4.1.3).
 const UNMERGE: Applied = Applied::Refused {
@@ -182,7 +183,11 @@ async fn receive(registry: Arc<Registry>, request: Request) -> Response {
     let context = Context {
         actor: actor.to_owned(),
         channel: Channel::Pmir,
-        request_id: crate::http::request_id::of(&parts.headers).map(str::to_owned),
+        request_id: parts
+            .extensions
+            .get::<RequestId>()
+            .map(RequestId::id)
+            .map(str::to_owned),
     };
     let mut applied = Vec::with_capacity(message.changes().len());
     for change in message.changes() {
@@ -301,7 +306,7 @@ fn settled<T>(result: Result<T, FeedError>) -> Result<Applied, Case> {
             tracing::error!(error = %crate::chain(&error), "an ITI-93 change could not be stored");
             Err(Case::StoreUnavailable)
         }
-        Err(error @ (FeedError::Demographics(_) | FeedError::Evidence)) => {
+        Err(error @ (FeedError::Demographics(_) | FeedError::Evidence | FeedError::Notice)) => {
             tracing::error!(error = %crate::chain(&error), "an ITI-93 change could not be written");
             Err(Case::Internal)
         }

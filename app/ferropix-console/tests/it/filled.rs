@@ -8,13 +8,13 @@
 //! Every value is synthetic, and a feed or message row is held to show no
 //! identifier value.
 
-use std::collections::BTreeMap;
 use std::error::Error;
 
+use ferrohealth_health::document::{IndicatorState, Phase, Readiness, State};
 use ferropix_operator_api::actions::{Action, Actions};
 use ferropix_operator_api::configuration::{Configuration, Mode, Origin, Section, Setting};
 use ferropix_operator_api::domain::{Domain, DomainPage, Domains, Feed, FeedOutcome};
-use ferropix_operator_api::health::{Dependencies, IndicatorState, Readiness, State};
+use ferropix_operator_api::health::Dependencies;
 use ferropix_operator_api::overview::{DayCount, HourFeeds, Overview, Queue, QueueEntry};
 use ferropix_operator_api::patient::{
     Channel, Demographics, DomainKind, DomainRef, Grade, Masked, Name, PersonStatus,
@@ -39,12 +39,12 @@ const DOMAIN: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c";
 /// A synthetic identifier value that never appears whole on a page.
 const HELD_VALUE: &str = "SYNTH-4711";
 
-/// A stand-in server that answers `/health` and each of `documents` by its
+/// A stand-in server that answers `/health/liveness` and each of `documents` by its
 /// route with its JSON.
 async fn server(documents: &[(&str, &str, String)]) -> MockServer {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/health"))
+        .and(path("/health/liveness"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
@@ -138,27 +138,15 @@ fn overview() -> Overview {
 
 /// The dependencies with the MLLP listener in `mllp`.
 fn dependencies(mllp: State) -> Dependencies {
-    let mut indicators = BTreeMap::new();
-    indicators.insert(
-        String::from("database"),
-        IndicatorState {
-            state: State::Up,
-            detail: None,
-        },
-    );
-    indicators.insert(
-        String::from("hl7v2_listener"),
-        IndicatorState {
-            state: mllp,
-            detail: (mllp == State::Down)
-                .then(|| String::from("the MLLP listener is not accepting")),
-        },
-    );
+    let listener = match mllp {
+        State::Down => IndicatorState::down("hl7v2_listener", "the MLLP listener is not accepting"),
+        _ => IndicatorState::up("hl7v2_listener"),
+    };
     Dependencies {
-        readiness: Readiness {
-            state: mllp,
-            indicators,
-        },
+        readiness: Readiness::new(
+            Phase::Serving,
+            vec![IndicatorState::up("database"), listener],
+        ),
         upstreams: Vec::new(),
     }
 }

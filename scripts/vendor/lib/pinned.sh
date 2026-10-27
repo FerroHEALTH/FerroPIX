@@ -24,7 +24,8 @@
 # A `cache` artefact is material whose licence does not allow redistribution,
 # or whose licence is unclear: it is read locally and never committed.
 # Re-running with unchanged pins and unchanged upstream bytes reproduces the
-# tree byte for byte; only the fetch date in PROVENANCE.md moves.
+# tree byte for byte, PROVENANCE.md included: its fetch date moves only when
+# something else in it does (corpus_keep_fetched).
 #
 # With PINNED_DIGESTS_ONLY=1 a script prints each corpus and its pin-set
 # digest and fetches nothing, which is how a re-pin reads the digest it
@@ -147,6 +148,9 @@ pinned_corpus() {
   done <<< "$pins"
   [ "$bad" -eq 0 ] || die "$dir: an upstream hash moved; the tree is unchanged"
 
+  if [ -f "$dest/PROVENANCE.md" ]; then
+    cp "$dest/PROVENANCE.md" "$tmp.PROVENANCE.md"
+  fi
   rm -rf "$dest" "$cache"
   mkdir -p "$dest"
   while IFS=$'\t' read -r mode file version url sha licence note; do
@@ -161,6 +165,7 @@ pinned_corpus() {
   done <<< "$pins"
 
   pinned_provenance "$dir" "$title" "$about" "$pins" "$digest" "$ua" "$read_by"
+  corpus_keep_fetched "$tmp.PROVENANCE.md" "$dest/PROVENANCE.md"
 }
 
 # Writes the PROVENANCE.md of one corpus.

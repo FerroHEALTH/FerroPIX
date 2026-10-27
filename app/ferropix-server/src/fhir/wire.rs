@@ -70,19 +70,23 @@ pub fn send<T: Resource>(answer: &Answer<T>, format: Format) -> Response {
 /// Returns `resource`, a resource `ihe-iti` does not answer with, as a
 /// `200` body in `format`.
 pub fn send_resource<T: Json + serde::Serialize>(resource: &T, format: Format) -> Response {
-    let encoded = match format {
+    if let Some(bytes) = encoded(resource, format) {
+        return respond(StatusCode::OK, bytes, format);
+    }
+    tracing::error!("a resource of the FHIR face could not be written");
+    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+}
+
+/// Returns `resource` written in `format`, `None` when it has no form there.
+pub fn encoded<T: Json + serde::Serialize>(resource: &T, format: Format) -> Option<Vec<u8>> {
+    match format {
         Format::Xml => resource.to_json().ok().and_then(|object| {
             fhir_types::xml::to_xml(&fhir_types::r4::schema::SCHEMAS, &object)
                 .ok()
                 .map(String::into_bytes)
         }),
         _ => serde_json::to_vec(resource).ok(),
-    };
-    if let Some(bytes) = encoded {
-        return respond(StatusCode::OK, bytes, format);
     }
-    tracing::error!("a resource of the FHIR face could not be written");
-    StatusCode::INTERNAL_SERVER_ERROR.into_response()
 }
 
 /// The response of `status` carrying `bytes` of `format`.

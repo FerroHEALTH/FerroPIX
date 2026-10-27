@@ -9,7 +9,7 @@
 //! actor of every call (`docs/architecture.md` §12.1). Each call carries an
 //! `X-Request-Id` the console mints, which a page shows beside a failure so
 //! a steward can quote it. It reads the server's liveness route,
-//! `GET {base}/health` (`docs/architecture.md` §9), its FHIR
+//! `GET {base}/health/liveness` (`docs/architecture.md` §9), its FHIR
 //! `CapabilityStatement`, `GET {base}/fhir/metadata` (HL7 FHIR R4, the REST
 //! interaction `capabilities`), and the operator API's documents, typed as
 //! `ferropix-operator-api` defines them, so a field renamed on the server
@@ -34,7 +34,7 @@ use crate::config::settings::PixSettings;
 pub const REQUEST_ID: &str = "x-request-id";
 
 /// The liveness route of the server, under its base.
-pub const HEALTH: &str = "health";
+pub const HEALTH: &str = "health/liveness";
 
 /// The FHIR capability route of the server, under its base.
 pub const METADATA: &str = "fhir/metadata";

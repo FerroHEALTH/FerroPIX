@@ -18,14 +18,15 @@ use ferrohealth_ui::view::template::about::{
 use leptos::prelude::*;
 use serde::Deserialize;
 
-use crate::app::{footer, page_context};
+use crate::app::page_context;
+use crate::app::shell::footer;
 use crate::locale::{Msg, tr};
 use crate::model::Capability;
 use crate::pages::title;
 
 /// The FerroUI release the console is built on, as `Cargo.toml` pins it
 /// exactly (a test holds the two together).
-pub const FERROUI: &str = "0.5.1";
+pub const FERROUI: &str = "0.5.2";
 
 /// The route Download fetches the `CapabilityStatement` from.
 pub const METADATA_DOWNLOAD: &str = "/about/capability-statement.json";

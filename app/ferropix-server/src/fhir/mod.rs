@@ -8,9 +8,9 @@
 //! The capability statement, the SMART discovery document, the PIXm
 //! Manager ([`pixm`]), the PDQm Supplier ([`pdqm`]), the PMIR Registry
 //! ([`registry`] for ITI-93, [`pmir`] for ITI-94) and the operator API
-//! ([`crate::operator`]) answer; an operator route not served yet answers
-//! `501` with a `not-supported` issue until the issue that serves it lands,
-//! so the guard in front of it is in place and tested first. [`status`] is
+//! ([`crate::operator`]) answer; a row no handler serves answers `501` with
+//! a `not-supported` issue, so the guard in front of a new route is in place
+//! and tested first. [`status`] is
 //! the one table of every outcome a transaction answers, and [`wire`] puts
 //! each in JSON or XML.
 
@@ -29,7 +29,9 @@ use axum::Router;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{MethodFilter, on};
-use ferropix_operator_api::health::Dependencies;
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::Registry;
+use ferropix_operator_api::health::{Dependencies, Outcome, Upstream, UpstreamKind};
 use http::StatusCode;
 
 use crate::audit::Audit;
@@ -41,7 +43,6 @@ use crate::config::section::matching::Matching;
 use crate::config::section::operator::Operator;
 use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
 use crate::fhir::outcome::{IssueType, body, respond};
-use crate::health::Registry;
 use crate::store::Store;
 
 /// What the transactions of the FHIR face read and write: the store, the
@@ -121,21 +122,33 @@ impl Mounts {
     }
 }
 
-/// Returns the guarded routes `mounts` switches on, for a server mounted
-/// under `base` and reached at `public_base_url`, its transactions over
-/// `backend`.
+/// Where the server is mounted and where a client reaches it.
+#[derive(Debug, Clone, Copy)]
+pub struct Address<'a> {
+    /// The base path every route is mounted under, empty for the root.
+    pub base: &'a str,
+    /// The URL a client reaches `{base}` at.
+    pub public_base_url: &'a url::Url,
+}
+
+/// Returns the guarded routes `mounts` switches on for a server at
+/// `address`.
+///
+/// Its transactions run over `backend`, and its dependency report over
+/// `health` in `lifecycle`'s phase.
 ///
 /// The router is meant to be nested under `base` with the health routes;
 /// the guard reads the matched route templates under it.
 pub fn routes(
-    base: &str,
-    public_base_url: &url::Url,
+    address: Address<'_>,
     mounts: Mounts,
     smart: &Arc<Smart>,
     health: &Registry,
+    lifecycle: &Lifecycle,
     audit: &Audit,
     backend: &Backend,
 ) -> Router {
+    let (base, public_base_url) = (address.base, address.public_base_url);
     let statement = Arc::new(capability::statement(public_base_url, smart, mounts));
     let configuration = smart.configuration().map(Arc::new);
     let manager = Arc::new(pixm::Manager::new(
@@ -209,8 +222,16 @@ pub fn routes(
                 })
             }
             "operator-dependencies" => {
-                let (health, audit) = (health.clone(), audit.clone());
-                on(filter, move || dependencies(health.clone(), audit.clone()))
+                let (health, lifecycle) = (health.clone(), lifecycle.clone());
+                let (audit, store) = (audit.clone(), backend.store.clone());
+                on(filter, move || {
+                    dependencies(
+                        health.clone(),
+                        lifecycle.clone(),
+                        audit.clone(),
+                        store.clone(),
+                    )
+                })
             }
             _ if route.mount == Mount::Operator => on(filter, pending_operator),
             _ => on(filter, pending_fhir),
@@ -280,14 +301,103 @@ fn discovery(configuration: Option<&Discovery>) -> Response {
 /// `GET {base}/operator/dependencies`: the readiness report with the last
 /// outcome of every upstream, behind the steward scope so an anonymous
 /// reader learns no endpoint (FerroFED's decision A83; no specification
-/// governs this: our own design).
-// TODO(#104): name every PMIR subscriber with its last outcome.
-async fn dependencies(health: Registry, audit: Audit) -> Response {
+/// governs this: our own design), with every PMIR subscriber and the
+/// outcome of its latest ITI-93 message, and every HL7 v2 consumer and the
+/// outcome of its latest ITI-10 notification.
+async fn dependencies(
+    health: Registry,
+    lifecycle: Lifecycle,
+    audit: Audit,
+    store: Store,
+) -> Response {
+    let subscribers = match crate::store::subscription::deliveries(&store).await {
+        Ok(deliveries) => deliveries.into_iter().map(subscriber).collect(),
+        Err(error) => {
+            tracing::error!(error = %crate::chain(&error), "the PMIR subscribers could not be read");
+            Vec::new()
+        }
+    };
+    let consumers = consumers(&store).await;
     let report = Dependencies {
-        readiness: health.evaluate().await,
-        upstreams: audit.upstream().into_iter().collect(),
+        readiness: health.readiness(&lifecycle).await,
+        upstreams: audit
+            .upstream()
+            .into_iter()
+            .chain(subscribers)
+            .chain(consumers)
+            .collect(),
     };
     body(StatusCode::OK, &report, "application/json")
+}
+
+/// The upstream entry of one PMIR subscriber: its endpoint without userinfo,
+/// query or fragment, and the state of its latest message or its error.
+fn subscriber(delivery: crate::store::subscription::LastDelivery) -> Upstream {
+    let endpoint = url::Url::parse(&delivery.endpoint).map_or_else(
+        |_| String::from("(an endpoint that is no URL)"),
+        |mut url| {
+            // NOTE: no specification governs this: our own design; userinfo and query may carry a credential, which the report never shows.
+            let _no_user = url.set_username("");
+            let _no_password = url.set_password(None);
+            url.set_query(None);
+            url.set_fragment(None);
+            url.to_string()
+        },
+    );
+    let last = match (delivery.error, delivery.last) {
+        (Some(error), _) => Some(Outcome::down(error)),
+        (None, Some(Ok(()))) => Some(Outcome::up()),
+        (None, Some(Err(failure))) => Some(Outcome::down(failure)),
+        (None, None) => None,
+    };
+    Upstream {
+        kind: UpstreamKind::Subscriber,
+        endpoint,
+        last,
+        at: delivery.at,
+    }
+}
+
+/// The upstream entries of the configured HL7 v2 consumers, in
+/// configuration order.
+async fn consumers(store: &Store) -> Vec<Upstream> {
+    let Some(settings) = store.consumers() else {
+        return Vec::new();
+    };
+    let mut entries = Vec::with_capacity(settings.consumers.len());
+    for configured in settings.consumers.iter() {
+        let last = match crate::store::outbox::last_notification(store, &configured.name).await {
+            Ok(last) => last,
+            Err(error) => {
+                tracing::error!(consumer = %configured.name, error = %crate::chain(&error), "the last ITI-10 notification could not be read");
+                None
+            }
+        };
+        entries.push(consumer(&configured.address, last));
+    }
+    entries
+}
+
+/// The upstream entry of one HL7 v2 consumer at `address`: `mllp://` and its
+/// `host:port`, and the state of its latest notification. No specification
+/// governs the `mllp` scheme: our own design names the transport.
+fn consumer(address: &str, last: Option<crate::store::outbox::LastNotification>) -> Upstream {
+    let (last, at) = match last {
+        None => (None, None),
+        Some(notified) => (
+            Some(match notified.last {
+                Ok(()) => Outcome::up(),
+                Err(failure) => Outcome::down(failure),
+            }),
+            notified.at,
+        ),
+    };
+    Upstream {
+        kind: UpstreamKind::Consumer,
+        endpoint: format!("mllp://{address}"),
+        last,
+        at,
+    }
 }
 
 /// A row of the FHIR face that no handler serves: none today, so a row
@@ -301,8 +411,8 @@ async fn pending_fhir() -> Response {
     )
 }
 
-/// A route of the operator API that is not served yet.
-// TODO(#115): serve the pseudonymisation domains and the resolution.
+/// A row of the operator API that no handler serves: none today, so a row
+/// added without its handler answers `501` rather than `404`.
 async fn pending_operator() -> Response {
     respond(
         StatusCode::NOT_IMPLEMENTED,
@@ -310,4 +420,73 @@ async fn pending_operator() -> Response {
         "FerroPIX does not serve this route yet",
         None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use ferropix_operator_api::health::{Outcome, UpstreamKind};
+
+    use super::{consumer, subscriber};
+    use crate::store::outbox::LastNotification;
+    use crate::store::subscription::LastDelivery;
+
+    fn delivery(endpoint: &str) -> LastDelivery {
+        LastDelivery {
+            endpoint: endpoint.to_owned(),
+            error: None,
+            last: None,
+            at: None,
+        }
+    }
+
+    #[test]
+    fn a_subscriber_entry_shows_no_credential_of_its_endpoint() {
+        let entry = subscriber(delivery(
+            "https://user:secret@subscriber.example.org/pmir?token=abc#part",
+        ));
+        assert_eq!(UpstreamKind::Subscriber, entry.kind);
+        assert_eq!("https://subscriber.example.org/pmir", entry.endpoint);
+        assert_eq!(None, entry.last, "before the first message");
+        assert_eq!(
+            "(an endpoint that is no URL)",
+            subscriber(delivery("not a url")).endpoint
+        );
+    }
+
+    #[test]
+    fn a_subscriber_entry_states_its_error_before_its_last_outcome() {
+        let mut delivered = delivery("https://subscriber.example.org/pmir");
+        delivered.last = Some(Ok(()));
+        delivered.at = Some(String::from("2026-10-26T12:00:00Z"));
+        assert_eq!(Some(Outcome::up()), subscriber(delivered.clone()).last);
+        delivered.last = Some(Err(String::from("the endpoint answered 503")));
+        assert_eq!(
+            Some(Outcome::down("the endpoint answered 503")),
+            subscriber(delivered.clone()).last
+        );
+        delivered.error = Some(String::from("an ITI-93 message could not be delivered"));
+        assert_eq!(
+            Some(Outcome::down("an ITI-93 message could not be delivered")),
+            subscriber(delivered).last
+        );
+    }
+
+    #[test]
+    fn a_consumer_entry_names_its_mllp_address_and_its_latest_outcome() {
+        let before = consumer("consumer.example.org:2575", None);
+        assert_eq!(UpstreamKind::Consumer, before.kind);
+        assert_eq!("mllp://consumer.example.org:2575", before.endpoint);
+        assert_eq!(None, before.last, "before the first notification");
+        let refused = consumer(
+            "consumer.example.org:2575",
+            Some(LastNotification {
+                last: Err(String::from("the consumer refused the connection")),
+                at: None,
+            }),
+        );
+        assert_eq!(
+            Some(Outcome::down("the consumer refused the connection")),
+            refused.last
+        );
+    }
 }

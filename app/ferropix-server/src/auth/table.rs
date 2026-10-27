@@ -57,9 +57,9 @@ pub enum Need {
         /// Which domain's Source the caller must be.
         source: SourceRule,
     },
-    /// `[auth] steward_scope`.
+    /// `[auth] product_scope`.
     Steward,
-    /// `[auth] admin_scope`.
+    /// `[operator] admin_scope`.
     Admin,
     /// Either product scope: a read an administrator needs beside a
     /// steward.
@@ -152,7 +152,7 @@ const fn row(
 /// operator API (§12.4), with what it requires.
 // NOTE: SMART App Launch 2.2.0, Scopes and Launch Context: "u" admits an
 // update that creates, so ITI-104's conditional update needs `u` alone.
-pub static ROUTES: [Route; 40] = [
+pub static ROUTES: [Route; 42] = [
     row(
         Method::GET,
         "/fhir/metadata",
@@ -388,6 +388,20 @@ pub static ROUTES: [Route; 40] = [
         "operator-pseudonym-domain-create",
         Mount::Operator,
         Need::Admin,
+    ),
+    row(
+        Method::PATCH,
+        "/operator/pseudonym-domains/{id}",
+        "operator-pseudonym-domain-update",
+        Mount::Operator,
+        Need::Admin,
+    ),
+    row(
+        Method::POST,
+        "/operator/pseudonyms",
+        "operator-pseudonym-mint",
+        Mount::Operator,
+        Need::Steward,
     ),
     row(
         Method::POST,

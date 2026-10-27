@@ -67,19 +67,22 @@ impl Secrets {
 /// A production configuration with every section of the tree set.
 pub(crate) const FULL: &str = r#"
 profile = "production"
+public_base_url = "https://pix.example.org/pix"
 
 [server]
 listen = "0.0.0.0:8080"
 base_path = "/pix"
-public_base_url = "https://pix.example.org/pix"
 body_limit_bytes = 2097152
 request_timeout_ms = 20000
-drain_timeout_ms = 5000
+drain_delay_ms = 1000
+shutdown_timeout_ms = 5000
 
 [telemetry]
 filter = "info,ferropix_server=debug"
 format = "json"
-otlp_endpoint = "https://collector.example.org:4318"
+
+[telemetry.otlp]
+endpoint = "https://collector.example.org:4318"
 
 [db]
 pool_size = 20
@@ -94,13 +97,14 @@ jwks_max_age_seconds = 300
 jwks_refresh_interval_seconds = 30
 jwks_file = ""
 timeout_ms = 5000
-challenge_realm = "ferropix"
-steward_scope = "__ferropix.steward"
-admin_scope = "__ferropix.admin"
+realm = "ferropix"
+product_scope = "__ferropix.steward"
+role_claims = ["roles"]
+capabilities = ["client-confidential-asymmetric"]
+scopes_supported = ["system/Patient.rs"]
 
 [[auth.issuer]]
 issuer = "https://idp.example.org/realms/pix"
-clients = ["east-lab", "west-lab"]
 audience = ["https://pix.example.org/pix/fhir"]
 algorithms = ["PS256"]
 token_profile = "jwt"
@@ -108,6 +112,10 @@ clock_skew_seconds = 10
 jwks_max_age_seconds = 60
 jwks_refresh_interval_seconds = 10
 jwks_file = ""
+
+[[trust.issuer]]
+issuer = "https://idp.example.org/realms/pix"
+clients = ["east-lab", "west-lab"]
 
 [[domain]]
 system = "urn:oid:2.999.1.1"
@@ -186,6 +194,7 @@ retry_max_ms = 30000
 
 [operator]
 enabled = true
+admin_scope = "__ferropix.admin"
 
 [usage_report]
 enabled = true
@@ -193,3 +202,10 @@ endpoint = "https://report.ferropulse.eu/v1/report"
 state_dir = "/var/lib/ferropix"
 deployment = "compose"
 "#;
+
+/// Returns the lifecycle of a process that has booted and serves.
+pub(crate) fn serving() -> ferrohealth_health::lifecycle::Lifecycle {
+    let lifecycle = ferrohealth_health::lifecycle::Lifecycle::default();
+    lifecycle.booted();
+    lifecycle
+}

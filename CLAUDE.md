@@ -122,17 +122,21 @@ The build order is the milestones:
 - `app/ferropix-server`: the server (#58), its own binary `ferropix`,
   `publish = false`: the subcommands `serve`, `config check`, `healthcheck`
   and `db migrate`, the configuration tree of `docs/architecture.md` §3
-  (`src/config/`, one module per section, the redacting `Secret` and
-  `SecretUrl`, `FERROPIX__` overrides, the production and development
-  profiles), the `tracing` console and the family's `tower-http` stack with
-  the bounded drain (`src/http/`), the authorization over
+  (`src/config/`, one module per section read by `ferrohealth-config`, with
+  the `ferrohealth-secret` types, `FERROPIX__` overrides, `--set` and the
+  production and development profiles), the console, the request log, the
+  span export and `/metrics` of `ferrohealth-telemetry` with the request id
+  of `ferrohealth-server`, the routes inside `ferrohealth-server`'s stack
+  with its bounded drain, probe and shared subcommands, `[server]` being its
+  `ServerSection` (`src/http/`, every stack refusal an `OperationOutcome`),
+  the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it
   (`src/fhir/`), the BALP audit trail over `ihe-atna` with its spool,
   its reservation layer and the record of each transaction
-  (`src/audit/`), the readiness registry (`src/health.rs`), the request log
-  (`src/http/request_log.rs`), the usage report to FerroPULSE with the
-  window the request log fills (`src/usage_report/`, the schema under
+  (`src/audit/`), the readiness indicators over `ferrohealth-health`, the usage report to FerroPULSE over
+  `ferrohealth-usage-report` with FerroPIX's status and route groups
+  (`src/usage_report.rs`, the schema under
   `tests/fixtures/ferropulse/`), and `quickstart.toml`.
 - `app/ferropix-operator-api`: the health and operator documents as serde
   types (#64), which the server writes and the console reads, `publish =
@@ -141,7 +145,8 @@ The build order is the milestones:
   `ferropix-console`, `publish = false`: a Leptos app rendered on the server,
   hydrated whole in the browser with its pages in lazy route groups, and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC
   sign-in and the server-side session, the `FERROPIX_CONSOLE__`
-  configuration with `_file` secrets, the security headers, the client of
+  configuration with `_file` secrets, the browser security headers and the
+  same-origin check of `ferrohealth-server`'s `console`, the client of
   the FerroPIX server (`src/pix.rs`), every page of the design with its
   refused state, and the boundary test (`tests/it/boundary.rs`).
 - `tools/ferropix-testkit`: the test support, `publish = false`, taken as a

@@ -181,7 +181,7 @@ pub async fn answer(
 /// Answers the top bar's search panel with what the posted words name.
 ///
 /// It offers pages, identifier domains and settings, never a person
-/// (FerroPIX #214, design D26), and answers `401` without a live session, which the panel answers by
+/// (design D39), and answers `401` without a live session, which the panel answers by
 /// loading the sign-in page. The words ride in the body, never an address.
 pub async fn suggest(Extension(state): Extension<ConsoleState>, request: Request) -> Response {
     let (parts, pairs) = match form(request).await {

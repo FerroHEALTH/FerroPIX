@@ -25,6 +25,7 @@ use crate::audit::records::Call;
 use crate::audit::reserve::{Pending, UNAUDITED};
 use crate::fhir::outcome::{IssueType, body, respond};
 use crate::operator::{Operator, OperatorError};
+use ferrohealth_telemetry::request_log::RequestId;
 
 /// The media type of every document the operator API reads and writes.
 pub const JSON: &str = "application/json";
@@ -158,7 +159,7 @@ pub fn call(operator: &Operator, parts: &Parts) -> Call {
         &access(parts),
         remote,
         &operator.endpoint,
-        crate::http::request_id::of(&parts.headers),
+        crate::http::exchanged_request_id(parts),
     )
 }
 
@@ -175,7 +176,11 @@ pub fn actor(parts: &Parts) -> String {
 /// Returns the request id the request carries.
 #[must_use]
 pub fn request_id(parts: &Parts) -> Option<String> {
-    crate::http::request_id::of(&parts.headers).map(str::to_owned)
+    parts
+        .extensions
+        .get::<RequestId>()
+        .map(RequestId::id)
+        .map(str::to_owned)
 }
 
 /// Returns the access the guard left on the request.

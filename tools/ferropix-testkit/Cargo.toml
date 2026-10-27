@@ -42,8 +42,14 @@ serde.workspace = true
 serde_json.workspace = true
 testcontainers.workspace = true
 thiserror.workspace = true
-# The MLLP sender (`mllp`) writes and reads a TCP stream.
+# The stub ITI-10 consumer (`consumer`): FerroBRIDGE's MLLP listener and
+# acknowledgment, never a second codec.
+ferrobridge-hl7v2.workspace = true
+# The MLLP sender (`mllp`): ferrobridge-hl7v2's sender, and its frame codec
+# over a TCP stream for the bytes a malformed frame is written as.
+bytes.workspace = true
 tokio = { workspace = true, features = ["time", "rt", "net", "sync", "io-util"] }
+tokio-util.workspace = true
 
 [dev-dependencies]
 # The browser journeys run the console in process, against its release site

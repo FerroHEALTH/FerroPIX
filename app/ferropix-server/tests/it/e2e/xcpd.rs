@@ -107,6 +107,8 @@ pub(super) fn gateway_with(harness: &Harness, matching: &Matching, xcpd: XcpdSet
         harness.store.clone(),
         Channels {
             xcpd: Some(gateway.channel()),
+            pmir: None,
+            hl7v2: None,
         },
         ferropix_server::config::section::outbox::Outbox::default()
             .resolve()

@@ -1,26 +1,29 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The span export to `[telemetry] otlp_endpoint`: requests through the
-//! family's middleware under a subscriber that exports to the testkit's
-//! in-process OTLP/gRPC collector, what reaches it, and what no exported span
-//! carries. No specification governs the export: our own design.
-
-use std::time::Duration;
+//! The span export to `[telemetry.otlp]`: requests through the family's
+//! middleware under the layers of `ferrohealth-telemetry`, exporting to the
+//! testkit's in-process OTLP/gRPC collector, what reaches it, and what no
+//! exported span carries. No specification governs the export: our own
+//! design.
 
 use axum::Router;
 use axum::body::Body;
 use axum::routing::get;
-use ferropix_server::config::section::server::ServerSettings;
-use ferropix_server::config::section::telemetry::{Format, TelemetrySettings};
-use ferropix_server::http::with_middleware;
-use ferropix_server::telemetry::{Rendering, Traces, subscriber};
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
+use ferrohealth_server::section::ServerSection;
+use ferrohealth_telemetry::request_log::RequestLog;
+use ferrohealth_telemetry::section::TelemetrySection;
+use ferrohealth_telemetry::telemetry::{Console, Service, Telemetry};
+use ferropix_server::http::router;
 use ferropix_testkit::otlp::Collector;
 use ferropix_testkit::synthetic::HOSPITAL_DOMAIN;
 use http::{Request, StatusCode};
 use opentelemetry_proto::tonic::common::v1::any_value::Value;
 use opentelemetry_proto::tonic::trace::v1::Span;
 use tower::ServiceExt as _;
+use tracing_subscriber::layer::SubscriberExt as _;
 
 /// The synthetic identifier value the ITI-83 query carries.
 const IDENTIFIER: &str = "Qz7pt";
@@ -32,47 +35,68 @@ const FAMILY: &str = "Vxqrbn";
 const TOKEN: &str = "tok-Wq9zKv";
 
 /// Every attribute key an exported span may carry: the request span's
-/// fields, and the three the export layer adds.
-const ALLOWED: [&str; 6] = [
+/// fields, the server's request id among them, and the three the export
+/// layer adds.
+const ALLOWED: [&str; 7] = [
     "target",
     "busy_ns",
     "idle_ns",
     "http.request.method",
     "http.route",
     "http.response.status_code",
+    "request_id",
 ];
 
-fn server() -> ServerSettings {
-    ServerSettings {
+fn server() -> ServerSection {
+    ServerSection {
         listen: "127.0.0.1:0".parse().expect("a socket address"),
-        base_path: String::new(),
-        public_base_url: url::Url::parse("http://localhost:8080").expect("a URL"),
-        body_limit: 1024,
-        request_timeout: Duration::from_secs(5),
-        drain_timeout: Duration::from_millis(300),
+        body_limit_bytes: 1024,
+        request_timeout_ms: 5000,
+        shutdown_timeout_ms: 300,
+        ..ServerSection::default()
     }
 }
 
-fn telemetry() -> TelemetrySettings {
-    TelemetrySettings {
-        filter: String::from("info"),
-        format: Format::Json,
-        otlp_endpoint: None,
-    }
+/// The `[telemetry]` section: JSON lines and, when `endpoint` is given, the
+/// span export to it with no metric push.
+fn section(endpoint: Option<&str>) -> TelemetrySection {
+    let otlp = endpoint.map_or_else(String::new, |endpoint| {
+        format!("\n[otlp]\nendpoint = \"{endpoint}\"\nmetrics = false\n")
+    });
+    toml::from_str(&format!("format = \"json\"\n{otlp}")).expect("a [telemetry] section")
+}
+
+/// The subscriber of `telemetry` under `section`, writing its lines nowhere.
+fn subscriber(
+    telemetry: &Telemetry,
+    section: &TelemetrySection,
+) -> impl tracing::Subscriber + Send + Sync + use<> {
+    let layers = telemetry
+        .layers(section, &Console::new(false, None), std::io::sink)
+        .expect("the layers");
+    tracing_subscriber::registry().with(layers.layers)
+}
+
+/// The telemetry of the `ferropix` service under `section`.
+fn telemetry(section: &TelemetrySection) -> Telemetry {
+    Telemetry::new(section, Service::new("ferropix", "0.0.0")).expect("the telemetry")
 }
 
 /// An ITI-83 route whose handler logs the identifier and a demographic in
 /// an event, and answers 404 as a Manager does for an unknown identifier.
 fn app() -> Router {
-    with_middleware(
-        Router::new().route(
+    router(
+        &server(),
+        Health::new(Registry::default(), crate::support::serving()),
+        Some(Router::new().route(
             "/fhir/Patient/$ihe-pix",
             get(|| async {
                 tracing::info!(identifier = IDENTIFIER, family = FAMILY, "looked up");
                 StatusCode::NOT_FOUND
             }),
-        ),
-        &server(),
+        )),
+        RequestLog::default(),
+        None,
     )
 }
 
@@ -130,21 +154,13 @@ fn carried(span: &Span) -> String {
 async fn the_request_spans_reach_the_collector_and_carry_no_identifier_demographic_token_or_query()
 {
     let collector = Collector::start().expect("a collector");
-    let endpoint = url::Url::parse(collector.endpoint()).expect("a URL");
-    let traces = Traces::new(&endpoint).expect("an exporter");
-    let exporting = subscriber(
-        &telemetry(),
-        Rendering::Json,
-        false,
-        std::io::sink,
-        Some(traces.tracer()),
-    )
-    .expect("a subscriber");
+    let section = section(Some(collector.endpoint()));
+    let telemetry = telemetry(&section);
     {
-        let _default = tracing::subscriber::set_default(exporting);
+        let _default = tracing::subscriber::set_default(subscriber(&telemetry, &section));
         requests().await;
     }
-    tokio::task::spawn_blocking(move || traces.shutdown())
+    tokio::task::spawn_blocking(move || telemetry.shutdown())
         .await
         .expect("the flush ran")
         .expect("the export flushed");
@@ -196,17 +212,16 @@ async fn the_request_spans_reach_the_collector_and_carry_no_identifier_demograph
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn without_an_endpoint_no_span_is_exported() {
-    assert_eq!(None, telemetry().otlp_endpoint, "no endpoint is configured");
+    let section = section(None);
+    assert!(section.otlp.is_none(), "no endpoint is configured");
     let collector = Collector::start().expect("a collector");
-    let endpoint = url::Url::parse(collector.endpoint()).expect("a URL");
-    let traces = Traces::new(&endpoint).expect("an exporter");
-    let console = subscriber(&telemetry(), Rendering::Json, false, std::io::sink, None)
-        .expect("a subscriber");
+    let telemetry = telemetry(&section);
+    assert!(telemetry.tracer().is_none(), "no span export is built");
     {
-        let _default = tracing::subscriber::set_default(console);
+        let _default = tracing::subscriber::set_default(subscriber(&telemetry, &section));
         requests().await;
     }
-    tokio::task::spawn_blocking(move || traces.shutdown())
+    tokio::task::spawn_blocking(move || telemetry.shutdown())
         .await
         .expect("the flush ran")
         .expect("the export flushed");

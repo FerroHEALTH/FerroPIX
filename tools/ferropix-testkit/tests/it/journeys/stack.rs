@@ -119,8 +119,8 @@ impl Stack {
         provider.approve(CLIENT_ID, ACCESS_TOKEN).await;
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/health"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("{\"status\":\"pass\"}"))
+            .and(path("/health/liveness"))
+            .respond_with(ResponseTemplate::new(200))
             .mount(&server)
             .await;
         if answers == Server::Filled {
@@ -164,9 +164,11 @@ impl Stack {
                 .expect("the journey configuration resolves");
         let state = ferropix_console::server::ConsoleState::new(settings)
             .expect("the console's state builds");
+        let lifecycle = state.lifecycle().clone();
         tokio::spawn(ferropix_console::server::serve(
             listener,
             ferropix_console::server::router(state),
+            lifecycle,
             std::future::pending(),
         ));
         Self {

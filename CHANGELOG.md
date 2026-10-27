@@ -21,6 +21,90 @@ and this project adheres to
   a person: a patient search runs on Enter or the panel's last row, posted
   and audited. `?` opens the shortcut legend on every screen, and `1` to `4`
   open the patient record's tabs (#204).
+
+## [0.0.8] - 2026-10-27
+
+### Added
+
+- Both binaries take `--set key=value`, any number of times, which sets a key over the file and the environment (#295). `RUST_LOG` sets the server's `telemetry.filter`. `config check` prints every key of the running configuration as `key = value  # source`, naming the file, the default, the variable or the `--set` argument that set it, with every secret shown as `***`.
+- The server serves `GET {base}/metrics`, every metric in the Prometheus text format, with no token, and its request log records each request in `http_server_request_duration_seconds` (OpenTelemetry `http.server.request.duration`) by method, route template and status (#296). `[telemetry]` gains `logged_query_parameters`, `environment` and the `[telemetry.otlp]` table (`endpoint`, `traces`, `metrics`, `sample_ratio`, `trust_roots_file`, `client_identity_file`), which pushes the metrics beside the spans. The operator console reads the same `[telemetry]` section, with `RUST_LOG` as the alias of its `telemetry.filter`.
+- The server takes the `[server]` keys every FerroHEALTH server shares (#299): `header_read_timeout_ms`, `max_concurrent_requests` with `retry_after_s` (past the bound a request is answered `503` with `Retry-After`, and the health routes never are), `trusted_proxies` with `forwarded_header`, `compression` with `compression_min_bytes`, and `[server.tls]`, which makes the listener speak TLS with an optional client certificate, reads its files again on `SIGHUP`, and has `healthcheck` probe over it.
+- The server's `[auth]` takes every key of `ferrohealth-smart` (#303): `ca_file`, trust roots an issuer behind a private certificate authority is read with; `mode = "introspection"` with `[auth.introspection]`, which checks an opaque token at the issuer's RFC 7662 endpoint; a flat `issuer`; `scopes_supported` and `capabilities` for the discovery document; `role_claims` and `scopeless_subjects`.
+- The server and the operator console serve `GET {base}/health/liveness`, which answers `200` while the process serves and checks nothing (#297).
+- The Helm chart 0.3.0 sets `enableServiceLinks: false` on the server's and the console's pods, and takes `hostUsers` (default `false`, each pod in its own user namespace) and `supplementalGroupsPolicy` (default `Strict`) from its values (#291). A cluster whose nodes do not support user namespaces sets `hostUsers: true`, or the pods do not start.
+
+### Changed
+
+- **Breaking:** the server and the operator console read their configuration through `ferrohealth-config` 0.2.5 and hold their secrets in `ferrohealth-secret` 0.2.0, both pinned exactly, and FerroPIX's own loaders, provenance and secret types are deleted (#295). The file, `FERROPIX_CONFIG`, `FERROPIX_CONSOLE_CONFIG` and every `FERROPIX__…` and `FERROPIX_CONSOLE__…` key keep their names. What changes for an operator:
+  - A secret file loses only its trailing line ending. Leading and other whitespace is now part of the secret, where it was trimmed, so a file holding only spaces is a secret of spaces and no longer refused as empty.
+  - A refused configuration names every refusal (up to 16) on one line, each with its key, the variable or `--set` argument that set it, and the closest known key, where it named the first fault with its line and column.
+  - A top-level key can be set from the environment, `FERROPIX__PROFILE=development`, where a variable needed a section and a key. A list key also takes comma-separated values.
+  - The console reads a `FERROPIX_CONSOLE__` value as the type its key wants, where it read any value that parsed as TOML as that TOML value.
+- **Breaking:** the server and the operator console run their console log, request log, span export and panic hook on `ferrohealth-telemetry` 0.2.2, pinned exactly, and the request id on `ferrohealth-server`, and FerroPIX's own `telemetry.rs`, `request_log.rs` and `request_id.rs` are deleted (#296). What changes for an operator:
+  - `telemetry.otlp_endpoint` is removed: set `[telemetry.otlp] endpoint`. An `https` collector is trusted through the platform's roots and `trust_roots_file`, where it was the WebPKI roots compiled in.
+  - `telemetry.filter` defaults to `info,hyper=warn,tower=warn,h2=warn`, where it was `info`.
+  - The request log is written under the target `ferrohealth_telemetry::request`, where it was `ferropix_server::request`. Its `request_id` is the id the server minted, and the new `client_named` says whether the client sent one; the client's `X-Request-Id` is echoed on the response and no longer logged. The line gains `query`, empty unless `telemetry.logged_query_parameters` names a parameter.
+  - The request line's `caller` and `domain` are left off a line they do not apply to, where they were `-`, and `domain` separates several domains with a comma, where it used a space.
+  - The steward trail of `GET /operator/actions` records the server's request id. A BALP record keeps the `X-Request-Id` of the exchange, the client's when it sent a legal one.
+  - The body of a `500` from a panicking handler names the server's request id, which the log line carries, where it named the client's.
+  - The exported `request` span carries the server's request id.
+  - The console's log takes `[telemetry]` (`format`, `filter`) where it read only `RUST_LOG`, and it renders as the server's does.
+- **Breaking:** the server and the operator console serve the health routes of `ferrohealth-server` over the readiness registry and lifecycle of `ferrohealth-health` 0.1.1, pinned exactly, and FerroPIX's own registry and readiness documents are deleted (#297). What changes for an operator:
+  - `GET {base}/health` answers the status of readiness with `{"state":"up"}` or `{"state":"down"}`, where it was liveness with no body (the console's answered `{"status":"up"}`). Point a liveness probe at `GET {base}/health/liveness`; the chart does.
+  - The readiness document lists `indicators` as `[{"name", "state"}]` with a `phase`, where it was an object by name, and the open route no longer says why an indicator is down: `GET {base}/operator/dependencies` gives the detail behind the steward scope.
+  - Readiness answers `503` while the server boots and from the moment `SIGTERM` or `SIGINT` arrives, so traffic stops before the drain.
+  - The console probes the server's `GET {base}/health/liveness`.
+- **Breaking:** the server sends its installation report through `ferrohealth-usage-report` 0.2.0, pinned exactly, and FerroPIX's own reporter, envelope types, state directory and window are deleted (#298). The `[usage_report]` keys, the state directory's files and the report's `status` keep their names. What changes for an operator:
+  - The daily report leaves a counter out while it is zero, where it always sent `responses_4xx`.
+  - The boot line ends "no clinical content, identifiers, URLs or request paths", the wording every FerroHEALTH product writes.
+  - A refused `usage_report.endpoint` is named with the crate's rule, at load.
+- **Breaking:** the server and the operator console run their HTTP stack, drain, health probe and shared subcommands on `ferrohealth-server` 0.3.4, pinned exactly, and FerroPIX's own middleware, panic catch, drain, signal handling, `healthcheck.rs` (both binaries) and the console's security headers and same-origin check are deleted (#299). `[server]` is the crate's `ServerSection`. What changes for an operator:
+  - `server.public_base_url` is the top-level key `public_base_url` (`FERROPIX__PUBLIC_BASE_URL`); the Helm chart's `config.server.public_base_url` is `config.public_base_url`.
+  - `server.drain_timeout_ms` is removed: set `server.shutdown_timeout_ms` (default `10000`), the time the requests in flight get once the listener closed, and `server.drain_delay_ms` (default `0`), the time the listener keeps accepting with readiness already `503`.
+  - `[server.caller_rate]` is refused at load, since FerroPIX mounts no per-caller limit.
+  - A `408`, a `413` and a load `503` written by the stack, and the `500` of a panicking handler, are FHIR `OperationOutcome`s (`timeout`, `too-long`, `throttled`, `exception`), where they were an empty body or `{"error":"internal","request_id":…}`.
+  - Responses are compressed with gzip or Brotli when the client accepts one and the body is at least 1 KiB; `server.compression = false` turns it off.
+  - `ferropix-console healthcheck` asks `GET /health/readiness`, where it asked `GET /health`, and both probes report `healthy` or `unhealthy: …` on one line. The console's drain on `SIGTERM` is bounded at ten seconds, where it waited for every connection.
+  - The console's responses carry `Cross-Origin-Opener-Policy: same-origin`.
+- **Breaking:** the server's `[auth]` is `ferrohealth-smart`'s `AuthSection`, and FerroPIX's own copy of the section is deleted (#303). What changes for an operator:
+  - `[[auth.issuer]] clients` moves to the new `[[trust.issuer]]` table (`issuer`, `clients`), whose `issuer` must be one `[auth]` names.
+  - `auth.steward_scope` is `auth.product_scope` (empty for `__ferropix.steward`), and `auth.admin_scope` is `operator.admin_scope`.
+  - `auth.challenge_realm` is `auth.realm`, and an empty value names none.
+  - `auth.enabled = false` is refused.
+  - The server pins `ferrohealth-smart` 0.8.2 exactly, which refuses a misspelt key inside an `[[auth.issuer]]` entry by its name, and `ihe-iti` 0.0.65 and `nl-generic-functions` 0.0.33 require it as a caret, `0.8.2`. The Helm chart's README declares a Source's client under `config.trust.issuer`.
+- **Breaking:** the server pins `ihe-atna` 0.3.0 exactly, and `ihe-iti` 0.0.64 requires it as a caret, `0.3.0` (#300). A product that takes `ihe-iti` moves its own `ihe-atna` pin to the 0.3 line with it. The BALP records FerroPIX writes do not change: 0.3.0 adds `User::with_policies`, which FerroPIX does not call. FerroPIX does not write the EHDS access record of `ehds-logging`: Regulation (EU) 2025/327 puts that log on an EHR system (Annex II 3.2), one that holds a priority category of Article 14(1), and the cross-reference holds none.
+- The server pins `ferrohealth-smart` 0.8.1 exactly, and `ihe-iti` 0.0.63 and `nl-generic-functions` 0.0.32 require it as a caret, `0.8.1` (#294). A product that takes either crate moves its own `ferrohealth-smart` pin to the 0.8 line with it. Between 0.7.4 and 0.8.1 the crate renders every secret and masked URL through `ferrohealth-secret`.
+- The operator console signs stewards in, refreshes their access tokens and signs them out through `ferrohealth_smart::oidc::RelyingParty`, the family's OpenID Connect relying-party client, and its own copy of the client is deleted (#294). The `[oidc]` keys, the routes, the cookies and the session store are unchanged. When a token answer names no scope, the scopes a session holds now include `offline_access` where `[oidc] offline_access` asked for it.
+
+### Fixed
+
+- The compose quickstart declares the healthchecks of the server and the console on their services, the same `healthcheck` subcommands the images' HEALTHCHECK runs, so `podman compose up --wait` starts the console and returns as `docker compose` does (#292). Podman runs the published images with no healthcheck, so a `service_healthy` dependent never started.
+
+## [0.0.7] - 2026-10-26
+
+### Added
+
+- The server sends ITI-10, the PIX Update Notification, to the HL7 v2 consumers `[[hl7v2.consumers]]` names (#113). Every cross-reference change, whether a feed that creates or links a record, a merge, a revert or a removal, writes one ADT^A31 per consumer whose domains of interest the patient holds an identifier in to the outbox in the same transaction, listing the patient's identifiers in those domains (ITI TF-2 3.10.4.1.2). The sender delivers each consumer's notifications in order over MLLP through `ferrobridge-hl7v2` 0.1.158, checks the acknowledgment, retries within `[hl7v2.notification]`, and writes the Manager's audit record of ITI TF-2 3.10.5.1.1 for each notification the consumer answered. The dependency report names each consumer with its latest outcome (`consumer`, a new upstream kind), and the testkit has a stub MLLP consumer.
+- The server sends ITI-93 to its PMIR subscribers (#104). Every committed change to a patient, whether from a feed, a Source's merge, an ITI-93 change, or a steward's link, merge or revert, writes one message per matching active subscription to the outbox in the same transaction, in the subscription's payload format. The sender delivers each subscription's messages in order with its channel headers, retries within `[pmir.feed]`, then sets the subscription to `error` with the reason, and an enable resumes from the next message. The dependency report names each subscriber with its latest outcome, and the new `outbox` readiness indicator reports a stuck sender. The unused `feed_outbox` table is dropped.
+
+### Changed
+
+- `ihe-iti` 0.0.62 and `nl-generic-functions` 0.0.31 take caret requirements on the family's shared crates, `ferrohealth-smart` 0.7.4 and, for `ihe-iti`, `ihe-atna` 0.2.13, so a FerroAUTH or FerroAUDIT patch reaches a product's lockfile without a release of these crates first (#281). The server pins both exactly, `ferrohealth-smart` 0.7.4 and `ihe-atna` 0.2.13.
+
+### Fixed
+
+- The release lane installs kubeconform beside helm, so the chart job validates and publishes the chart (#278). The v0.0.6 release published its images and binaries but no chart, and the chart for v0.0.6 is published through the chart fix lane.
+- The chart job logs in to the registry before it attests the chart, so the provenance attestation is pushed beside the chart (#278). Chart 0.2.0 was pushed without its attestation; chart 0.2.1, the same templates and values for v0.0.6, is published with it. Chart 0.2.2 carries v0.0.7.
+
+## [0.0.6] - 2026-10-26
+
+### Added
+
+- Pseudonyms (#114, #115):
+  - An ITI-83 query that names a pseudonymisation domain as `targetSystem` answers the person's pseudonym in it. The domain's consumer mints it on the first ask, as one value however many first asks arrive at once. Any other caller reads only a minted pseudonym, a query that names no `targetSystem` mints nothing, and each mint writes its own BALP Create record.
+  - The domains are seeded from `[[pseudonym_domain]]` with their `consumer_client_id`. The operator API lists, adds, changes and retires them, a steward mints through `POST /operator/pseudonyms`, and the reverse resolution `POST /operator/pseudonyms/resolve` is a steward action and a BALP disclosure.
+  - A pseudonym resolves to the survivor while its person is merged, and to its own person again after the revert.
+- The quickstart seeds the BSN and the pseudonymised BSN as `authoritative`, sealed identifier domains (#117). A pseudonymised BSN links two records deterministically, as a BSN does, and never reaches a log. A BSN that fails the eleven-proof is refused at the feed. The book's Dutch identifiers page states what is held, and that no BSNk service is called.
 - `ihe-iti` 0.0.61 has the feature `smart` (#268):
   `authorizer::smart::TokenAuthorizer` is the IUA authorizer over
   `ferrohealth-smart`'s client-credentials `TokenSource`. Each PIXm, PDQm,

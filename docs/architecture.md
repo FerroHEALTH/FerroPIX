@@ -79,7 +79,7 @@ console are that open part, and they are FerroPIX's own design.
 | HL7 v2 | the version each transaction names in ITI TF-2 | the segments and fields of the v2 messages |
 | `hl7v2-types`, `ferrobridge-hl7v2` | FerroBRIDGE's published line, pinned exactly | the v2 tables, the MLLP codec, the parser and the acknowledgment; FerroPIX writes no second parser (`CLAUDE.md` §Scope) |
 | `ihe-atna` | the FerroAUDIT line, pinned exactly | the BALP `AuditEvent` builder and the audit spool |
-| `ferrohealth-smart` | the FerroAUTH line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users |
+| `ferrohealth-smart` | the FerroAUTH line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users; and the console's OpenID Connect relying-party client |
 | `ferrohealth-ui` | the FerroUI line, pinned exactly | every component the console draws (`.claude/memory/ferroui-lockstep.md`) |
 | PostgreSQL | 18 | the one store (section 4); `uuidv7()` for every database-minted id, `UNIQUE … WITHOUT OVERLAPS` for the temporal link table |
 | Netherlands Generic Functions | `fhir.nl.gf` 0.3.0 | the BSN, the pseudonymised BSN and the NVI (section 8) |
@@ -150,13 +150,17 @@ checks the sealing key and applies the `[[domain]]` seed, and exits (`serve`
 does the same at start, the migrations unless `[db] migrate = false`); `db
 reseal --old-key-file <path>` rotates the sealing key (section 4.2).
 
-**Configuration.** One TOML file named by `FERROPIX_CONFIG` or `--config`,
-overridden by environment variables `FERROPIX__<SECTION>__<KEY>` (two
-underscores between levels), every table `deny_unknown_fields`, so a
-misspelled key refuses the start. Every secret is a `Secret` type that
-renders as `***` through `Debug`, `Display` and `Serialize`, read from the
-value or from a `<key>_file` sibling (the file's text trimmed, then zeroed),
-so no consumer ever holds a bare string. A URL that may carry a password
+**Configuration.** `ferrohealth-config`, the family loader, reads the
+defaults, one TOML file named by `FERROPIX_CONFIG` or `--config`, the
+environment variables `FERROPIX__<SECTION>__<KEY>` (two underscores between
+levels) and the `--set key=value` arguments, each over the one before, with
+`RUST_LOG` as the alias of `telemetry.filter`; every table is
+`deny_unknown_fields`, so a misspelled key refuses the start, and `config
+check` prints each key with the layer that set it. Every secret is a
+`ferrohealth-secret` `Secret` that renders as `***` through `Debug`,
+`Display` and `Serialize`, read from the value or from a `<key>_file`
+sibling (the file's trailing line ending removed, the text read zeroed), so
+no consumer ever holds a bare string. A URL that may carry a password
 (`[db] url`) is a `SecretUrl`, rendered with its userinfo and query replaced.
 `profile = "production"` is the default and refuses every development
 setting: the `[dev]` table, Basic users, a secret set inline instead of
@@ -169,10 +173,12 @@ message and position without quoting the line.
 
 | Section | Holds |
 |---|---|
-| `[server]` | `listen`, `base_path`, `public_base_url` (the `[base]` the `CapabilityStatement` and every `targetId` name), `body_limit_bytes`, `request_timeout_ms`, `drain_timeout_ms` (the drain window on `SIGTERM`) |
-| `[telemetry]` | the `tracing` filter and format, the OTLP endpoint |
+| `public_base_url` | the top-level key: the `[base]` the `CapabilityStatement` and every `targetId` name |
+| `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
+| `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
-| `[auth]` | the `ferrohealth-smart` resource-server settings: `[[auth.issuer]]` entries with their RFC 8414 metadata, each listing the `clients` it may vouch for as a Source, the audience, `[[auth.basic.users]]` under the development profile only, and the two product scopes, `steward_scope` and `admin_scope` |
+| `[auth]` | `ferrohealth-smart`'s `AuthSection`: the issuer or `[[auth.issuer]]` entries with their RFC 8414 metadata, key sets or RFC 7662 introspection, `ca_file`, the audience, `[[auth.basic.users]]` under the development profile only, and `product_scope`, the steward scope |
+| `[trust]` | `[[trust.issuer]]`: the `clients` each issuer may vouch for as a Source |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |
 | `[pixm]`, `[pdqm]`, `[pmir]` | each profile's switch and options: `[pixm] remove_patient` (PIXm 3.1.0 §1:41.2.1), `[pdqm] deprecated` (which of the policy choices of PDQm 3.2.0 §2:3.78.4.1.3 case 6 the supplier takes), `[pmir] feed` (the outbound ITI-93 sender's retry bounds) |
@@ -258,12 +264,11 @@ row reads in order without a sequence.
 | `candidate` | `id`, `record_a`, `record_b`, `a_version`, `b_version`, `score`, `grade`, `evidence` (jsonb), `status` (`open`, `linked`, `not-a-match`, `deferred`), `decided_by`, `decided_at`, `reason`, `deferred_until` | the review queue; a `not-a-match` pair is not queued again until either record changes |
 | `merge` | `id`, `survivor_id`, `merged_id`, `kind` (`steward`, `source`, `deterministic`, `probabilistic`), `made_by`, `made_at`, `reason`, `reverted_at`, `reverted_by`, `revert_reason` | one row per merge |
 | `merge_effect` | `merge_id`, `record_id`, `from_person`, `link_closed`, `link_opened` | what the merge moved, which the revert replays backwards |
-| `pseudonym_domain` | `id`, `namespace` (unique), `name`, `created_at`, `retired_at` | |
+| `pseudonym_domain` | `id`, `namespace` (unique), `name`, `consumer_client_id`, `created_at`, `retired_at` | the consumer is the one client whose ITI-83 query mints in it (D38); seeded from `[[pseudonym_domain]]` |
 | `pseudonym` | `person_id`, `domain_id`, `value` (uuid, unique), `minted_at` | immutable; resolved through the merge chain (section 8) |
 | `steward_action` | `id`, `kind`, `actor`, `at`, `person_id`, `record_id`, `candidate_id`, `merge_id`, `reason`, `request_id` | the console's audit trail; every row also goes out as a BALP record (section 9) |
 | `subscription` | `id`, `resource` (jsonb), `status`, `criteria`, `endpoint`, `error`, `created_at` | ITI-94 |
-| `feed_outbox` | `id`, `subscription_id`, `bundle` (jsonb), `attempts`, `next_at`, `delivered_at` | ITI-93 messages to subscribers, delivered with bounded retry |
-| `outbox` | `id`, `channel`, `destination`, `media_type`, `payload_sealed`, `key_id`, `attempts`, `max_attempts`, `next_at`, `delivered_at`, `abandoned_at`, `last_failure` | outbound messages written before their request is acknowledged: XCPD asynchronous answers, and ITI-10's notifications next; the payload sealed under the store's key for its row id, claimed under a lease, retried, abandoned when spent, resealed by `db reseal` (D34) |
+| `outbox` | `id`, `channel`, `destination`, `media_type`, `payload_sealed`, `key_id`, `attempts`, `max_attempts`, `next_at`, `delivered_at`, `abandoned_at`, `last_failure`, `subscription_id` | outbound messages written before their request is acknowledged: XCPD asynchronous answers, the ITI-93 messages to PMIR subscribers (each naming its subscription, delivered in order per subscription while it is active), and ITI-10's notifications next; the payload sealed under the store's key for its row id, claimed under a lease, retried, abandoned when spent, resealed by `db reseal` (D34) |
 | `v2_receipt` | `control_id`, `sending_facility`, `received_at`, `ack_code` | the MSH-10 of each v2 message, so a resent message is acknowledged again and not applied twice (section 7) |
 | `seal_key` | `key_id`, `pending_key_id`, `set_at` | one row: the id of the key the identifier columns are written under, and the key an unfinished `db reseal` moves them to |
 
@@ -337,8 +342,8 @@ boundaries: our own design.
   and insert the open ones; insert the `steward_action` row the system
   action produces; commit. The BALP record is written to the audit spool
   after the commit, by the request handler, and the ITI-93 message to each
-  matching subscription is inserted into `feed_outbox` inside the
-  transaction, so a committed change is never unannounced (#104).
+  matching subscription is inserted into the `outbox` inside the
+  transaction, so a committed change is never unannounced (section 6.3).
 - **A Source's duplicate resolution** (ITI-104 with `replaced-by`,
   §2:3.104.4.2.3, or an ITI-93 merge, PMIR 1.6.0 §2:3.93.4.1.2.4): both
   records of the domain locked, the subsumed one inserted when the store
@@ -373,7 +378,7 @@ boundaries: our own design.
   gets `status = merged` and `merged_into`; every open link of the merged
   person is closed and reopened on the survivor, each move a `merge_effect`
   row; the candidates between the two persons' records are closed as
-  `linked`; a PMIR merge message goes to `feed_outbox` (section 6.3); the
+  `linked`; a PMIR merge message goes to the `outbox` (section 6.3); the
   action is recorded; commit.
 - **An unmerge**: only the latest merge whose survivor is this person can
   be reverted, so reverts unwind in order; a revert replays
@@ -527,7 +532,7 @@ an `OperationOutcome` with the issue the profile prescribes.
 
 **The Patient resource FerroPIX serves is the person.** `Patient/{id}` is
 the person's `uuid`; its `identifier[]` is the person's id in the Master
-Patient Identification Domain (`[server] public_base_url`, PMIR 1.6.0
+Patient Identification Domain (`public_base_url`, PMIR 1.6.0
 §2:3.93.4.1.3), then every identifier a PIX query answers for the person
 (section 6.1), each with its domain's `system`; its demographics are the
 current version of one open link's record, an `authoritative` domain's
@@ -677,7 +682,7 @@ sends it: the guard admits the client the master domain's
 `source_client_id` names and answers any other `403` with a `forbidden`
 issue, every client when no master domain is seeded. The Registry creates,
 updates and deletes persons in the Master Patient Identification Domain,
-which is `[server] public_base_url` (§2:3.93.4.1.3), and merges when an
+which is `public_base_url` (§2:3.93.4.1.3), and merges when an
 entry carries `replaced-by` (§2:3.93.4.1.2.4): the deprecated person gets
 `active = false` and the `replaced-by` link, as section 4.3's merge path
 does. Each change applies in history order in its own transaction (D37):
@@ -700,11 +705,21 @@ response is a message Bundle with one `MessageHeader` carrying the outcome
 profile (§2:3.93.5.1).
 
 **ITI-93, sent.** Every committed change to a person is an ITI-93 message to
-each active subscription whose criteria match (section 4.3 inserts it into
-`feed_outbox`). A sender delivers in order per subscription, with the retry
-bounds of `[pmir] feed`, and sets the subscription's `status` to `error`
-with the error text when the bounds are spent (PMIR 1.6.0 §2:3.94.4.1.3).
-The subscriber side is `ihe_iti::pmir`, already built.
+each active subscription whose criteria match, in the subscription's payload
+format: the transaction that made the change writes it to the `outbox`
+(section 4.3, D34). A feed, a Source's merge, an ITI-93 change, a steward's
+merge, link or revert each announce the persons they changed, a merged
+person as the deprecated `Patient` (PMIR 1.6.0 §2:3.93.4.1.2.4). The
+sender delivers a subscription's messages one at a time and in order, with
+the headers the subscription's `channel.header` asks for (FHIR R4
+`Subscription.channel.header`), within the retry bounds of `[pmir] feed`.
+When the bounds are spent it sets the subscription's `status` to `error`
+with the error text (PMIR 1.6.0 §2:3.94.4.1.3), and its later messages wait
+until an enable makes it `active` again. The dependency report names each
+subscriber with the outcome of its latest message, and the `outbox`
+readiness indicator is down only while a due message waits past the
+sender's lease, a stuck sender rather than a refusing subscriber. The
+subscriber side is `ihe_iti::pmir`, already built.
 
 **ITI-94.** `POST {base}/fhir/Subscription` creates one (`201`,
 `Location`), with the criteria the Registry must accept: `Patient`,
@@ -833,10 +848,21 @@ web services text, is committed beside ITI-38.
 
 **Pseudonyms.** FerroEHR names a patient by a value that identifies no one
 on its own: a UUID per patient and `subject_namespace`. FerroPIX mints it.
-A pseudonymisation domain is a namespace; `POST {base}/operator/pseudonyms`
-(and the console) resolves a person, through the merge chain to the active
-survivor, to its pseudonym in a domain, minting one when the survivor has
-none. A pseudonym row is immutable and attached to the person it was minted
+A pseudonymisation domain is a namespace, an absolute URI that no identifier
+domain holds, and names its one consumer (`consumer_client_id`). The
+namespace is a Patient Identifier Domain a Consumer names as `targetSystem`
+in ITI-83 (PIXm 3.1.0 §2:3.83.4.1.2.2):
+- the answer carries the person's pseudonym in it, as a `targetIdentifier`;
+- when the person has none and the caller is the domain's consumer, the
+  Manager mints it in that request (D38);
+- another caller reads only a minted pseudonym and never causes a mint, and
+  a query naming no `targetSystem` answers the pseudonyms already minted;
+- a mint is an insert that returns the row already there, so concurrent first
+  asks yield one pseudonym, and each mint writes its own BALP Create record.
+
+`POST {base}/operator/pseudonyms` (and the console) resolves a person,
+through the merge chain to the active survivor, to its pseudonym in a domain,
+minting one when the survivor has none. A pseudonym row is immutable and attached to the person it was minted
 for: after a merge, both persons' pseudonyms resolve to the survivor,
 through `merged_into`; after an unmerge, each resolves to its own person
 again. The reverse resolution, from a pseudonym to a person, is a steward
@@ -878,8 +904,8 @@ scopes:
 | a PIXm or PDQm Consumer | `system/Patient.rs` (SMART App Launch 2.2.0 scopes) | ITI-83, ITI-78, ITI-119, ITI-9, ITI-21 |
 | a Patient Identity Source | `system/Patient.cud`, and the token's client id equal to the domain's `source_client_id` | ITI-104 and ITI-93 for that domain |
 | a PMIR subscriber | `system/Subscription.cruds` | ITI-94 |
-| a data steward | `[auth] steward_scope` (`__ferropix.steward`) | the operator API: search, the record, the queue and its decisions, merge and unmerge, pseudonym resolution, the audit trail |
-| an administrator | `[auth] admin_scope` (`__ferropix.admin`) | the domains and the pseudonymisation domains, the matching thresholds in effect |
+| a data steward | `[auth] product_scope` (`__ferropix.steward`) | the operator API: search, the record, the queue and its decisions, merge and unmerge, pseudonym resolution, the audit trail |
+| an administrator | `[operator] admin_scope` (`__ferropix.admin`) | the domains and the pseudonymisation domains, the matching thresholds in effect |
 
 The product scopes take the extension form SMART App Launch 2.2.0 gives
 (a string starting with `__`), as FerroBRIDGE's operator scope does. A
@@ -948,13 +974,16 @@ is recorded as the system acting for itself, any other with its user. With
 no `[audit] url` the records stay in the spool until one is named. The
 readiness indicator `audit_spool` is down under a tenth of either bound.
 
-**Health.** `GET {base}/health` is liveness; `GET {base}/health/readiness`
-runs the indicators (the database, the audit spool's headroom, the MLLP
-listener's socket, the feed sender's backlog) and answers `503` with the
-`ferropix_operator_api::health::Readiness` document naming each one that is
-down. `GET {base}/operator/dependencies` is the same report with the
-ATNA repository's and each subscriber's last outcome, behind the steward
-scope, so an anonymous reader learns no endpoint, the ruling FerroFED made
+**Health.** The health routes are `ferrohealth-server`'s over the registry
+and lifecycle of `ferrohealth-health`: `GET {base}/health/liveness` checks
+nothing; `GET {base}/health/readiness` runs the indicators (the database,
+the audit spool's headroom, the MLLP listener's socket, the feed sender's
+backlog) and answers `503` with the family's readiness document while one
+is down, while the server boots and from the moment it drains, naming each
+indicator and never its detail; `GET {base}/health` answers the state
+alone. `GET {base}/operator/dependencies` is the readiness document with
+every detail and the ATNA repository's and each subscriber's last outcome,
+behind the steward scope, so an anonymous reader learns no endpoint, the ruling FerroFED made
 as its decision A83. The container `HEALTHCHECK` is `ferropix healthcheck`.
 
 The registry holds the indicators of the subsystems that exist, each added
@@ -963,24 +992,32 @@ the bound is down, so a wedged subsystem cannot hang the probe, and the
 probe runs the checks on the request instead of reading a cache a
 background loop fills (our own design, after FerroBRIDGE's registry).
 
-**The request log** records, per request, the request id, the matched route
-template, the method, the status, the latency, the caller's client id or
-subject, and the domain a feed wrote to. It never records a query string,
+**The request log** is `ferrohealth-telemetry`'s, behind the request id of
+`ferrohealth-server`. It records, per request, the server's request id,
+whether the client named one, the matched route template, the method, the
+status and the latency, and FerroPIX adds the caller's client id or subject
+and the domains a feed wrote to as line fields. It never records a query string,
 a body, a header value or an identifier: the ITI-83 `GET` form carries the
 identifier in the query, and the log records `/fhir/Patient/$ihe-pix` and
 nothing after it, which the test of #52 proves over a BSN sent by `GET`.
-`tracing` spans carry the same fields and no more. The line is written
-under the target `ferropix_server::request` after routing, so it reads the
-matched template; a request no route matched is logged as `<unmatched>`
+The `request` span carries the method, the route template, the status and
+the server's request id. The line is written under the target
+`ferrohealth_telemetry::request` after routing, so it reads the matched
+template; a request no route matched is logged as `<unmatched>`
 with no part of its path. The guard leaves the caller (the token's
 `client_id`, or its subject when it names none) and the domains a
 successful feed wrote to on the response, where the log reads them; a
-request the gate refused names no caller (our own design).
+request the gate refused names no caller (our own design). The client's
+`X-Request-Id`, echoed on the response, is never logged; the audit trail
+records the `X-Request-Id` the exchange carried, the client's or else the
+server's (IHE BALP 1.1.4, entity type `XrequestId`), and the steward trail
+the server's.
 
 **The usage report.** FerroEHR, FerroTERM and FerroBRIDGE send an
 installation report to FerroPULSE on its envelope v2; FerroPIX does the
-same under `[usage_report]` (`app/ferropix-server/src/usage_report/`): on
-by default with a notice at every start, `enabled = false`, an unset
+same under `[usage_report]` through `ferrohealth-usage-report`, with
+FerroPIX's status and route groups in
+`app/ferropix-server/src/usage_report.rs`: on by default with a notice at every start, `enabled = false`, an unset
 `state_dir` or a CI environment (`GITHUB_ACTIONS`, `CI`) keeps it off, one
 `start` and one `daily` report with the version, the deployment kind the
 artifact states (`compose`, `helm`, `binary`), the instance id under
@@ -1090,7 +1127,7 @@ element with `ferrohealth-ui` in the library's FerroPIX brand, Plum & Iron
 (`Brand::Pix`, section 12.7 gap 7); a component the library lacks is
 filed and built there (section 12.7). It holds no token in the browser: the steward
 signs in at the console's server (OpenID Connect Core 1.0 §3.1,
-authorization code with PKCE), the session lives on the console's server
+authorization code with PKCE, through `ferrohealth_smart::oidc`), the session lives on the console's server
 behind one `HttpOnly` cookie, and the console calls the operator API with
 the steward's own token, so the server records the steward as the actor of
 every action. Every server function is a `POST` and checks the session
@@ -1820,3 +1857,5 @@ The milestones carry the order; every issue cites the section it builds.
 | D35 | A refused ITI-93 entry in the response | the response `MessageHeader.response.code` `fatal-error`, its `details` a contained `OperationOutcome` with one issue per refused entry: the history entry as `expression`, the correlated status (an unmerge's `405`) in `diagnostics` | PMIR 1.6.0 §2:3.93.4.1.3 asks for a "correlated entry.response.code" while §2:3.93.4.2.2 allows the response one `MessageHeader` entry; FHIR R4 `MessageHeader.response.details` references the outcome of a message; the gap is reported upstream (#250) |
 | D36 | Master identities in the cross-reference | an ITI-93 create carries a UUID `Patient.id` that becomes the person's id, a create of a known person applies as an update, a non-UUID id is refused per entry as `invalid` (D35); a master identity survives any other person, between two of one kind the earlier `person.created_at` survives and the smaller id breaks only a tie; matching never merges two master identities and holds them apart as a candidate with the `master_identities` conflict; only the Source's own merge (`replaced-by`) joins them | PMIR 1.6.0 §2:3.93.4.1.1 has the Registry assign `Patient.id` while §2:3.93.4.2.2's one-`MessageHeader` response cannot return it, so the Source owns the master identity and the Registry keeps it (reported upstream, #262); the survival order and the conflict no specification governs: our own design |
 | D37 | The changes of one ITI-93 message | applied in history order, each in its own transaction; a refused change leaves the changes before and after it applied, and the response names it; a store failure ends the message with `503` and the changes before it stay applied, so a resent message applies again (a create of a held identity is an update, a merge already made changes nothing) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry, which presumes each entry is applied or refused on its own; how the entries share transactions no specification governs: our own design |
+| D38 | Minting a pseudonym on the ITI-83 ask | a pseudonymisation domain is a `targetSystem` of ITI-83; the consumer's first ask mints the person's pseudonym and answers it, any other caller reads only a minted one, a query naming no `targetSystem` mints nothing; one pseudonym per `(person, domain)` under concurrency; each mint its own BALP Create record; PIXm resolves no pseudonym back, which stays the steward's audited resolution | PIXm 3.1.0 §2:3.83.4.1.3 has the Manager use the `targetSystem` to determine the identifiers that match, and §2:3.83.4.1.2.2 selects the answer from the domains it names; the clinical record carries only the pseudonym, so it must exist on the clinical domain's first ask (FerroHEALTH/FerroEHR#3380); who may mint no specification governs: our own design |
+| D39 | What the top bar's search panel answers as the steward types | the console's pages, the identifier domains and the preferences whose names hold the words, the domains read from the operator API's domain list; never a person, so the panel writes no BALP record and no steward action; a patient search runs only on Enter or the panel's last row, posted, and records what D26 records | no specification governs it; BALP 1.1.4 §1:52.4.1.6 wants a Query record per patient search, and a search at every pause in typing would record searches the steward never submitted |

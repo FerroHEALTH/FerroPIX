@@ -18,21 +18,22 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use ferropix_operator_api::health::{IndicatorState, State};
+use ferrohealth_health::document::State;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome, Registry};
+use ferrohealth_telemetry::request_log::RequestLog;
+use ferrohealth_usage_report::reporter::{ReportError, Reporter, StartOutcome, prepare};
+use ferrohealth_usage_report::section::{Deployment, Endpoint, UsageReportSection};
+use ferrohealth_usage_report::window::Window;
 use ferropix_server::config::Profile;
-use ferropix_server::config::section::usage_report::{Deployment, UsageReportSettings};
-use ferropix_server::health::{Check, HealthIndicator, Registry};
-use ferropix_server::usage_report::payload::Service;
-use ferropix_server::usage_report::reporter::{
-    self, Facts, Prepared, ReportError, Reporter, Sources, StartOutcome,
-};
-use ferropix_server::usage_report::window::Window;
+use ferropix_server::usage_report::{self, Facts, Pix, Service};
 use http::{Method, StatusCode};
 use serde_json::{Value, json};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::auth::{Captured, EVERY_SCOPE, Issuer, application, bearer, send, settings};
+use crate::auth::{
+    Captured, EVERY_SCOPE, Issuer, application_logged, backend, bearer, send, settings,
+};
 use crate::support::Secrets;
 
 /// The vendored schema tree, `scripts/vendor/ferropulse-schemas.sh`.
@@ -155,8 +156,9 @@ impl HealthIndicator for Fixed {
         let state = self.1;
         Box::pin(async move {
             match state {
-                State::Up => IndicatorState::up(),
-                State::Down => IndicatorState::down("the synthetic indicator is down"),
+                State::Up => Outcome::up(),
+                State::Degraded => Outcome::degraded("the synthetic indicator is slow"),
+                State::Down => Outcome::down("the synthetic indicator is down"),
             }
         })
     }
@@ -169,10 +171,10 @@ fn health() -> Registry {
         .and(Arc::new(Fixed("audit_spool", State::Down)))
 }
 
-/// The sources of a production server with PIXm, PDQm and the operator API
-/// on, three domains in the store, and `window`.
-fn sources(window: Arc<Window>) -> Sources {
-    Sources {
+/// A production server with PIXm, PDQm and the operator API on and three
+/// domains in the store.
+fn product() -> Pix {
+    Pix {
         facts: Facts::new(
             Profile::Production,
             vec![
@@ -184,26 +186,37 @@ fn sources(window: Arc<Window>) -> Sources {
             3,
         ),
         health: health(),
-        window,
+        lifecycle: crate::support::serving(),
     }
 }
 
+/// An empty window at the root.
+fn window() -> Arc<Window> {
+    Arc::new(usage_report::window(""))
+}
+
 /// A report configuration over `state_dir` posting to `endpoint`.
-fn config(state_dir: &Path, endpoint: &str) -> UsageReportSettings {
-    UsageReportSettings {
+fn config(state_dir: &Path, endpoint: &str) -> UsageReportSection {
+    UsageReportSection {
         enabled: true,
-        endpoint: url::Url::parse(endpoint).expect("a URL"),
+        endpoint: Endpoint::new(endpoint).expect("an admitted collector"),
         state_dir: Some(state_dir.to_path_buf()),
         deployment: Deployment::Compose,
     }
 }
 
-fn prepared(config: &UsageReportSettings) -> Prepared {
-    reporter::prepare(config, None).expect("the report runs")
-}
-
-fn reporter_over(config: &UsageReportSettings, sources: Sources) -> Reporter {
-    Reporter::new(config, prepared(config), sources, Instant::now()).expect("the client builds")
+/// The reporter of `product` to `config`'s collector, over `window`.
+fn reporter_over(config: &UsageReportSection, product: Pix, window: Arc<Window>) -> Reporter<Pix> {
+    let prepared = prepare(config, None).expect("the report runs");
+    Reporter::new(
+        config,
+        usage_report::identity(),
+        prepared,
+        Arc::new(product),
+        window,
+        Instant::now(),
+    )
+    .expect("the client builds")
 }
 
 const COLLECTOR: &str = "https://report.ferropulse.eu/v1/report";
@@ -230,7 +243,7 @@ fn the_validator_admits_every_valid_example_and_refuses_every_invalid_one() {
 async fn the_start_report_is_exactly_the_v2_envelope() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config(dir.path(), COLLECTOR);
-    let reporter = reporter_over(&config, sources(Arc::new(Window::new(""))));
+    let reporter = reporter_over(&config, product(), window());
     let report = serde_json::to_value(reporter.start_report().await).expect("serializes");
     assert_eq!(
         stable(report),
@@ -262,16 +275,13 @@ async fn the_start_report_is_exactly_the_v2_envelope() {
 async fn an_idle_daily_report_carries_an_empty_window() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config(dir.path(), COLLECTOR);
-    let bare = Sources {
+    let bare = Pix {
         facts: Facts::new(Profile::Development, Vec::new(), 0),
         health: Registry::default(),
-        window: Arc::new(Window::new("")),
+        lifecycle: crate::support::serving(),
     };
-    let window = Arc::clone(&bare.window);
-    let reporter = reporter_over(&config, bare);
-    let report = stable(
-        serde_json::to_value(reporter.daily_report(&window.take()).await).expect("serializes"),
-    );
+    let reporter = reporter_over(&config, bare, window());
+    let report = stable(serde_json::to_value(reporter.daily_report().await).expect("serializes"));
     assert_eq!(
         report["status"],
         json!({ "profile": "development", "services": [], "domains": "0" })
@@ -282,7 +292,7 @@ async fn an_idle_daily_report_carries_an_empty_window() {
             "window_24h": {
                 "requests_bucket": "0",
                 "groups": {},
-                "counters": { "responses_4xx": 0 }
+                "counters": {}
             }
         })
     );
@@ -300,9 +310,10 @@ async fn every_report_counts_by_route_group_and_names_no_patient_domain_host_or_
         .flat_map(|domain| [domain.system.clone(), domain.name.clone()])
         .collect();
     assert!(!domains.is_empty(), "the server seeds a domain");
-    let (app, _, _spool) = application(settings).await;
-    let window = Arc::new(Window::new(""));
-    let app = app.layer(axum::Extension(Arc::clone(&window)));
+    let window = window();
+    let backend = backend(&settings);
+    let log = RequestLog::default().with_recorder(window.clone());
+    let (app, _, _spool) = application_logged(settings, &backend, log).await;
     let bsn = ferropix_testkit::synthetic::bsn(1)
         .expect("the synthetic range holds a BSN")
         .digits();
@@ -321,10 +332,9 @@ async fn every_report_counts_by_route_group_and_names_no_patient_domain_host_or_
 
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config(dir.path(), COLLECTOR);
-    let reporter = reporter_over(&config, sources(Arc::clone(&window)));
-    let counts = window.take();
+    let reporter = reporter_over(&config, product(), Arc::clone(&window));
     let start = serde_json::to_value(reporter.start_report().await).expect("serializes");
-    let daily = serde_json::to_value(reporter.daily_report(&counts).await).expect("serializes");
+    let daily = serde_json::to_value(reporter.daily_report().await).expect("serializes");
     let host = std::fs::read_to_string("/etc/hostname")
         .ok()
         .map(|name| name.trim().to_owned())
@@ -387,7 +397,7 @@ async fn the_start_report_reaches_the_collector_once_per_ten_minutes() {
         .await;
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config(dir.path(), &format!("{}/v1/report", collector.uri()));
-    let reporter = reporter_over(&config, sources(Arc::new(Window::new(""))));
+    let reporter = reporter_over(&config, product(), window());
     let first = reporter.send_start().await.expect("sent");
     assert_eq!(first, StartOutcome::Sent(StatusCode::NO_CONTENT));
     let again = reporter.send_start().await.expect("decided");
@@ -419,14 +429,14 @@ async fn a_daily_report_the_collector_answers_ends_its_window_even_when_refused(
         .await;
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config(dir.path(), &format!("{}/v1/report", collector.uri()));
-    let window = Arc::new(Window::new(""));
+    let window = window();
     window.record(
         &Method::GET,
         Some("/fhir/metadata"),
         StatusCode::OK,
         Duration::from_millis(2),
     );
-    let reporter = reporter_over(&config, sources(Arc::clone(&window)));
+    let reporter = reporter_over(&config, product(), Arc::clone(&window));
     let status = reporter.send_daily().await.expect("answered");
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(window.take().requests(), 0);
@@ -445,14 +455,14 @@ async fn a_daily_report_that_reaches_no_collector_keeps_its_window() {
     drop(closed);
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config(dir.path(), &format!("http://127.0.0.1:{port}/v1/report"));
-    let window = Arc::new(Window::new(""));
+    let window = window();
     window.record(
         &Method::GET,
         Some("/fhir/metadata"),
         StatusCode::OK,
         Duration::from_millis(2),
     );
-    let reporter = reporter_over(&config, sources(Arc::clone(&window)));
+    let reporter = reporter_over(&config, product(), Arc::clone(&window));
     let error = reporter.send_daily().await.expect_err("nothing listens");
     assert!(matches!(error, ReportError::Request(_)), "{error:?}");
     assert_eq!(window.take().requests(), 1, "the retry carries the window");
@@ -489,14 +499,9 @@ fn start_logs_the_boot_line_and_sends_the_start_report() {
             .await;
         let dir = tempfile::tempdir().expect("tempdir");
         let config = config(dir.path(), &format!("{}/v1/report", collector.uri()));
-        let handle = reporter::start(
-            &config,
-            sources(Arc::new(Window::new(""))),
-            Instant::now(),
-            None,
-        )
-        .await
-        .expect("the report runs");
+        let handle = usage_report::start(&config, product(), window(), Instant::now(), None)
+            .await
+            .expect("the report runs");
         let deadline = Instant::now() + Duration::from_secs(10);
         while collector
             .received_requests()
@@ -523,9 +528,10 @@ fn a_ci_environment_keeps_the_report_off_and_writes_nothing() {
     let state_dir = dir.path().join("state");
     with_logs(&logs, || async {
         let config = config(&state_dir, COLLECTOR);
-        let handle = reporter::start(
+        let handle = usage_report::start(
             &config,
-            sources(Arc::new(Window::new(""))),
+            product(),
+            window(),
             Instant::now(),
             Some("GITHUB_ACTIONS"),
         )
@@ -548,19 +554,14 @@ fn a_switched_off_report_says_so_and_sends_nothing() {
     let logs = Captured::default();
     let dir = tempfile::tempdir().expect("tempdir");
     with_logs(&logs, || async {
-        let config = UsageReportSettings {
+        let config = UsageReportSection {
             enabled: false,
             ..config(dir.path(), COLLECTOR)
         };
         assert!(
-            reporter::start(
-                &config,
-                sources(Arc::new(Window::new(""))),
-                Instant::now(),
-                None
-            )
-            .await
-            .is_none()
+            usage_report::start(&config, product(), window(), Instant::now(), None)
+                .await
+                .is_none()
         );
     });
     let text = text(&logs);
@@ -574,19 +575,14 @@ fn a_switched_off_report_says_so_and_sends_nothing() {
 fn a_server_without_a_state_directory_reports_nothing() {
     let logs = Captured::default();
     with_logs(&logs, || async {
-        let config = UsageReportSettings {
+        let config = UsageReportSection {
             state_dir: None,
             ..config(Path::new("/nonexistent"), COLLECTOR)
         };
         assert!(
-            reporter::start(
-                &config,
-                sources(Arc::new(Window::new(""))),
-                Instant::now(),
-                None
-            )
-            .await
-            .is_none()
+            usage_report::start(&config, product(), window(), Instant::now(), None)
+                .await
+                .is_none()
         );
     });
     let text = text(&logs);

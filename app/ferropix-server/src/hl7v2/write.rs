@@ -86,6 +86,19 @@ impl<'m> Writer<'m> {
         }
     }
 
+    /// Returns the writer of a message the Manager starts, in `delimiters`,
+    /// which its MSH-1 and MSH-2 then declare.
+    #[must_use]
+    pub const fn with(delimiters: &'m Delimiters) -> Self {
+        Self { delimiters }
+    }
+
+    /// Returns MSH-2, the encoding characters of the delimiters.
+    #[must_use]
+    pub fn encoding_characters(&self) -> String {
+        self.delimiters.encoding_characters()
+    }
+
     /// Returns `text` escaped to travel as one value.
     #[must_use]
     pub fn escape(&self, text: &str) -> String {

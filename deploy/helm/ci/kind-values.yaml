@@ -11,18 +11,25 @@ dataKey:
   existingSecret: ferropix-data-key
 usageReport:
   enabled: false
+# A kind node is itself a container, and runc cannot mount sysfs inside a
+# pod's own user namespace there, so the sandbox never starts; the check
+# shares the node's user namespace.
+hostUsers: true
 config:
   profile: production
+  public_base_url: "http://localhost:8080"
   server:
     listen: "0.0.0.0:8080"
-    public_base_url: "http://localhost:8080"
   auth:
     audience:
       - "http://localhost:8080/fhir"
     issuer:
       - issuer: "http://localhost:8180/ferropix"
-        clients: ["quickstart-source"]
         token_profile: jwt
+  trust:
+    issuer:
+      - issuer: "http://localhost:8180/ferropix"
+        clients: ["quickstart-source"]
   domain:
     - system: "urn:oid:2.999.1.1"
       name: "Chart check hospital"

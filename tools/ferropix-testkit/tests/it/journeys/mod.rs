@@ -23,6 +23,7 @@
 mod accessibility;
 mod browser;
 mod chromedriver;
+mod in_place;
 mod keyboard;
 mod preferences;
 mod pseudo_locale;

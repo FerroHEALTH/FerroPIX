@@ -13,6 +13,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use ferrohealth_server::cli::{Common, ConfigArgs, ConfigCommand};
 
 /// The `ferropix` command line.
 #[derive(Debug, Parser, PartialEq, Eq)]
@@ -22,9 +23,10 @@ use clap::{Parser, Subcommand};
     about = "The FerroPIX Master Patient Index over IHE PIXm and PDQm"
 )]
 pub struct Cli {
-    /// The configuration file to read, overriding `FERROPIX_CONFIG`.
-    #[arg(long, value_name = "PATH", global = true)]
-    pub config: Option<PathBuf>,
+    /// `--config`, the file to read in place of the one `FERROPIX_CONFIG`
+    /// names, and the `--set key=value` pairs applied last.
+    #[command(flatten)]
+    pub config: ConfigArgs,
     /// The job to run.
     #[command(subcommand)]
     pub command: Command,
@@ -33,17 +35,10 @@ pub struct Cli {
 /// What the binary does.
 #[derive(Debug, Subcommand, PartialEq, Eq)]
 pub enum Command {
-    /// Serves the server until the process is asked to stop.
-    Serve,
-    /// Works on the configuration.
-    Config {
-        /// The job to run.
-        #[command(subcommand)]
-        command: ConfigCommand,
-    },
-    /// Asks the server on this host for its readiness, and exits 0 only when
-    /// it answers 200.
-    Healthcheck,
+    /// `serve`, `config check` and `healthcheck`, the jobs every FerroHEALTH
+    /// binary shares.
+    #[command(flatten)]
+    Common(Common),
     /// Works on the database.
     Db {
         /// The job to run.
@@ -66,14 +61,6 @@ pub enum MatchingCommand {
     Estimate,
 }
 
-/// The `config` jobs.
-#[derive(Debug, Subcommand, PartialEq, Eq)]
-pub enum ConfigCommand {
-    /// Reads and resolves the configuration, secrets included, and reports
-    /// whether the server would start on it.
-    Check,
-}
-
 /// The `db` jobs.
 #[derive(Debug, Subcommand, PartialEq, Eq)]
 pub enum DbCommand {
@@ -93,11 +80,7 @@ impl Command {
     #[must_use]
     pub const fn pending_issue(&self) -> Option<u32> {
         match self {
-            Self::Serve
-            | Self::Config { .. }
-            | Self::Healthcheck
-            | Self::Db { .. }
-            | Self::Matching { .. } => None,
+            Self::Common(_) | Self::Db { .. } | Self::Matching { .. } => None,
         }
     }
 
@@ -105,11 +88,11 @@ impl Command {
     #[must_use]
     pub const fn spelling(&self) -> &'static str {
         match self {
-            Self::Serve => "serve",
-            Self::Config {
+            Self::Common(Common::Serve) => "serve",
+            Self::Common(Common::Config {
                 command: ConfigCommand::Check,
-            } => "config check",
-            Self::Healthcheck => "healthcheck",
+            }) => "config check",
+            Self::Common(Common::Healthcheck) => "healthcheck",
             Self::Db {
                 command: DbCommand::Migrate,
             } => "db migrate",
@@ -129,7 +112,9 @@ mod tests {
 
     use clap::{CommandFactory, Parser};
 
-    use super::{Cli, Command, ConfigCommand, DbCommand, MatchingCommand};
+    use ferrohealth_server::cli::{Common, ConfigCommand};
+
+    use super::{Cli, Command, DbCommand, MatchingCommand};
 
     #[test]
     fn the_command_line_is_well_formed() {
@@ -139,14 +124,17 @@ mod tests {
     #[test]
     fn every_job_parses_with_and_without_a_configuration_file() {
         for (args, command) in [
-            (vec!["ferropix", "serve"], Command::Serve),
+            (vec!["ferropix", "serve"], Command::Common(Common::Serve)),
             (
                 vec!["ferropix", "config", "check"],
-                Command::Config {
+                Command::Common(Common::Config {
                     command: ConfigCommand::Check,
-                },
+                }),
             ),
-            (vec!["ferropix", "healthcheck"], Command::Healthcheck),
+            (
+                vec!["ferropix", "healthcheck"],
+                Command::Common(Common::Healthcheck),
+            ),
             (
                 vec!["ferropix", "db", "migrate"],
                 Command::Db {
@@ -162,11 +150,14 @@ mod tests {
         ] {
             let parsed = Cli::try_parse_from(&args).expect("the job parses");
             assert_eq!(command, parsed.command, "{args:?}");
-            assert_eq!(None, parsed.config, "{args:?}");
+            assert_eq!(None, parsed.config.config, "{args:?}");
         }
         let parsed = Cli::try_parse_from(["ferropix", "serve", "--config", "/etc/ferropix.toml"])
             .expect("--config parses after the job");
-        assert_eq!(Some(PathBuf::from("/etc/ferropix.toml")), parsed.config);
+        assert_eq!(
+            Some(PathBuf::from("/etc/ferropix.toml")),
+            parsed.config.config
+        );
     }
 
     #[test]
@@ -205,8 +196,8 @@ mod tests {
     #[test]
     fn no_job_is_pending() {
         for command in [
-            Command::Serve,
-            Command::Healthcheck,
+            Command::Common(Common::Serve),
+            Command::Common(Common::Healthcheck),
             Command::Db {
                 command: DbCommand::Migrate,
             },

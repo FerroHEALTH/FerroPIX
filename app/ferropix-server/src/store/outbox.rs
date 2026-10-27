@@ -29,6 +29,12 @@ pub const LEASE: Duration = Duration::from_secs(300);
 pub enum Channel {
     /// An XCPD asynchronous answer, posted to its reply endpoint.
     Xcpd,
+    /// An ITI-93 message to a PMIR subscriber, posted to its channel
+    /// endpoint in the order the subscription's messages were written.
+    Pmir,
+    /// An ITI-10 notification to an HL7 v2 consumer, sent over MLLP in the
+    /// order the consumer's notifications were written.
+    Hl7v2,
 }
 
 impl Channel {
@@ -37,6 +43,8 @@ impl Channel {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Xcpd => "xcpd",
+            Self::Pmir => "pmir",
+            Self::Hl7v2 => "hl7v2",
         }
     }
 
@@ -44,6 +52,8 @@ impl Channel {
     fn of(text: &str) -> Option<Self> {
         match text {
             "xcpd" => Some(Self::Xcpd),
+            "pmir" => Some(Self::Pmir),
+            "hl7v2" => Some(Self::Hl7v2),
             _ => None,
         }
     }
@@ -53,7 +63,8 @@ impl Channel {
 pub struct Message {
     /// Who delivers it.
     pub channel: Channel,
-    /// Where it goes: a URL for an HTTP channel.
+    /// Where it goes: a URL for an HTTP channel, the consumer's name for
+    /// the HL7 v2 channel.
     pub destination: String,
     /// The media type of the payload.
     pub media_type: &'static str,
@@ -61,6 +72,11 @@ pub struct Message {
     pub payload: SecretString,
     /// The most attempts to deliver it.
     pub max_attempts: u32,
+    /// The subscription an ITI-93 message is for, `None` on another channel.
+    pub subscription: Option<Uuid>,
+    /// The consumer an ITI-10 notification is for, `None` on another
+    /// channel.
+    pub consumer: Option<String>,
 }
 
 impl fmt::Debug for Message {
@@ -89,6 +105,10 @@ pub struct Claimed {
     pub attempts: u32,
     /// The most attempts.
     pub max_attempts: u32,
+    /// The subscription an ITI-93 message is for.
+    pub subscription: Option<Uuid>,
+    /// The consumer an ITI-10 notification is for.
+    pub consumer: Option<String>,
 }
 
 impl fmt::Debug for Claimed {
@@ -102,8 +122,37 @@ impl fmt::Debug for Claimed {
     }
 }
 
+/// The rows a sender may claim once due, over the alias `o`: unsettled; for
+/// an ITI-93 row, its subscription active and no earlier row of it waiting,
+/// so a subscriber receives its messages one at a time and in order; and
+/// for an ITI-10 row, no earlier row of its consumer waiting.
+const PENDING: &str = "o.delivered_at IS NULL AND o.abandoned_at IS NULL
+               AND (o.subscription_id IS NULL OR (
+                   EXISTS (SELECT 1 FROM pix.subscription s
+                           WHERE s.id = o.subscription_id AND s.status = 'active'
+                             AND s.deleted_at IS NULL)
+                   AND NOT EXISTS (SELECT 1 FROM pix.outbox e
+                           WHERE e.subscription_id = o.subscription_id
+                             AND e.delivered_at IS NULL AND e.abandoned_at IS NULL
+                             AND (e.created_at, e.id) < (o.created_at, o.id))))
+               AND (o.consumer IS NULL OR NOT EXISTS (
+                   SELECT 1 FROM pix.outbox c
+                   WHERE c.consumer = o.consumer
+                     AND c.delivered_at IS NULL AND c.abandoned_at IS NULL
+                     AND (c.created_at, c.id) < (o.created_at, o.id)))";
+
 /// A claimed row as it is read.
-type Row = (Uuid, String, String, String, Vec<u8>, i32, i32);
+type Row = (
+    Uuid,
+    String,
+    String,
+    String,
+    Vec<u8>,
+    i32,
+    i32,
+    Option<Uuid>,
+    Option<String>,
+);
 
 /// Writes `message` to the outbox through `executor`, sealed under `sealer`,
 /// and returns its id.
@@ -126,8 +175,9 @@ where
     let attempts = i32::try_from(message.max_attempts).unwrap_or(i32::MAX);
     sqlx::query(
         "INSERT INTO pix.outbox
-             (id, channel, destination, media_type, payload_sealed, key_id, max_attempts)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+             (id, channel, destination, media_type, payload_sealed, key_id, max_attempts,
+              subscription_id, consumer)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(id)
     .bind(message.channel.as_str())
@@ -136,6 +186,8 @@ where
     .bind(ciphertext)
     .bind(sealer.key_id().as_bytes().as_slice())
     .bind(attempts)
+    .bind(message.subscription)
+    .bind(message.consumer.as_deref())
     .execute(executor)
     .await?;
     Ok(id)
@@ -143,6 +195,12 @@ where
 
 /// Claims up to `limit` due rows for `lease`, oldest first, and opens their
 /// payloads.
+///
+/// An ITI-93 row is claimed only while its subscription is active and no
+/// earlier row of that subscription waits, so a subscriber receives its
+/// messages one at a time and in order, and a subscription in error keeps
+/// its later messages until it is enabled again. An ITI-10 row is claimed
+/// only while no earlier row of its consumer waits.
 ///
 /// A row whose payload does not open under the store's key, or whose channel
 /// no sender delivers, is abandoned with that reason and left out, so it
@@ -152,20 +210,32 @@ where
 /// Returns [`StoreError::Query`] when a statement fails.
 pub async fn claim(store: &Store, limit: i64, lease: Duration) -> Result<Vec<Claimed>, StoreError> {
     let lease_ms = i64::try_from(lease.as_millis()).unwrap_or(i64::MAX);
-    let rows: Vec<Row> = sqlx::query_as(
+    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "UPDATE pix.outbox SET next_at = now() + make_interval(secs => $2::double precision / 1000)
          WHERE id IN (
-             SELECT id FROM pix.outbox
-             WHERE delivered_at IS NULL AND abandoned_at IS NULL AND next_at <= now()
-             ORDER BY next_at, id LIMIT $1 FOR UPDATE SKIP LOCKED)
-         RETURNING id, channel, destination, media_type, payload_sealed, attempts, max_attempts",
-    )
+             SELECT o.id FROM pix.outbox o
+             WHERE {PENDING} AND o.next_at <= now()
+             ORDER BY o.next_at, o.id LIMIT $1 FOR UPDATE OF o SKIP LOCKED)
+         RETURNING id, channel, destination, media_type, payload_sealed, attempts, max_attempts,
+                   subscription_id, consumer"
+    )))
     .bind(limit)
     .bind(lease_ms)
     .fetch_all(store.pool())
     .await?;
     let mut claimed = Vec::with_capacity(rows.len());
-    for (id, channel, destination, media_type, sealed, attempts, max_attempts) in rows {
+    for (
+        id,
+        channel,
+        destination,
+        media_type,
+        sealed,
+        attempts,
+        max_attempts,
+        subscription,
+        consumer,
+    ) in rows
+    {
         let opened =
             Channel::of(&channel).map(|channel| (channel, store.sealer().open(id, &sealed)));
         let (channel, payload) = match opened {
@@ -195,6 +265,8 @@ pub async fn claim(store: &Store, limit: i64, lease: Duration) -> Result<Vec<Cla
             payload: SecretString::from(payload.expose().to_owned()),
             attempts: u32::try_from(attempts).unwrap_or(0),
             max_attempts: u32::try_from(max_attempts).unwrap_or(1),
+            subscription,
+            consumer,
         });
     }
     claimed.sort_by_key(|row| row.id);
@@ -206,13 +278,28 @@ pub async fn claim(store: &Store, limit: i64, lease: Duration) -> Result<Vec<Cla
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails.
 pub async fn next_due(store: &Store) -> Result<Option<Duration>, StoreError> {
-    let wait: Option<f64> = sqlx::query_scalar(
-        "SELECT greatest(extract(epoch FROM min(next_at) - now()), 0)::double precision
-         FROM pix.outbox WHERE delivered_at IS NULL AND abandoned_at IS NULL",
-    )
+    let wait: Option<f64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT greatest(extract(epoch FROM min(o.next_at) - now()), 0)::double precision
+         FROM pix.outbox o WHERE {PENDING}"
+    )))
     .fetch_one(store.pool())
     .await?;
     Ok(wait.map(|seconds| Duration::from_secs_f64(seconds.clamp(0.0, 86_400.0))))
+}
+
+/// Returns how long the most overdue claimable row has waited past its due
+/// time, `None` when none is due.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn overdue(store: &Store) -> Result<Option<Duration>, StoreError> {
+    let late: Option<f64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT extract(epoch FROM now() - min(o.next_at))::double precision
+         FROM pix.outbox o WHERE {PENDING} AND o.next_at <= now()"
+    )))
+    .fetch_one(store.pool())
+    .await?;
+    Ok(late.map(|seconds| Duration::from_secs_f64(seconds.clamp(0.0, 31_536_000.0))))
 }
 
 /// Deletes up to `batch` rows settled longer ago than `keep`.
@@ -288,4 +375,42 @@ pub async fn failed(
         }
     }
     Ok(())
+}
+
+/// The latest attempted ITI-10 notification to one consumer, as the
+/// dependency report names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastNotification {
+    /// Whether it was delivered, with its last failure when it was not.
+    pub last: Result<(), String>,
+    /// When it was delivered, RFC 3339 UTC.
+    pub at: Option<String>,
+}
+
+/// Returns the latest attempted notification to the consumer `consumer`,
+/// `None` before the first attempt.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails.
+pub async fn last_notification(
+    store: &Store,
+    consumer: &str,
+) -> Result<Option<LastNotification>, StoreError> {
+    let row: Option<(bool, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT delivered_at IS NOT NULL, last_failure,
+                to_char(delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')
+         FROM pix.outbox WHERE consumer = $1 AND attempts > 0
+         ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(consumer)
+    .fetch_optional(store.pool())
+    .await?;
+    Ok(row.map(|(delivered, failure, at)| LastNotification {
+        last: if delivered {
+            Ok(())
+        } else {
+            Err(failure.unwrap_or_default())
+        },
+        at,
+    }))
 }

@@ -14,13 +14,13 @@ use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pixm::identifier::{CrossReference, PatientReference, TargetIdentifier, TargetSystem};
 use ihe_iti::pixm::server::Refusal;
 use ihe_iti::pixm::server::answer::cross_references;
-use ihe_iti::pixm::server::feed::Feed;
+use ihe_iti::pixm::server::feed::{Feed, FeedError};
 use ihe_iti::pixm::server::query::PixQuery;
 use ihe_iti::server::format::Format;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
-use super::{encoded, example, examples, is_audit, record, verdict};
+use super::{encoded, example, examples, is_audit, record, verdict_noted};
 use crate::pixm::{BLUE, FHIR_JSON, PROMPT, RED, RED_VALUE, client, manager, red_source, target};
 
 /// The vendored package under `docs/specs/`.
@@ -30,7 +30,7 @@ const PACKAGE: &str = "ihe-pixm";
 async fn conformance_the_pixm_examples_hold_their_pass_list() {
     let mut cases = Vec::new();
     for id in examples(PACKAGE).into_iter().filter(|id| !is_audit(id)) {
-        cases.push(verdict(id.clone(), check(id)).await);
+        cases.push(verdict_noted(id.clone(), check(id)).await);
     }
     record(
         "pixm",
@@ -39,8 +39,9 @@ async fn conformance_the_pixm_examples_hold_their_pass_list() {
     );
 }
 
-/// Checks the example `id` by the resource it holds.
-async fn check(id: String) {
+/// Checks the example `id` by the resource it holds, returning how it was
+/// handled when that is an asserted refusal.
+async fn check(id: String) -> Option<String> {
     let name = id.trim_start_matches("example/");
     if name.starts_with("Parameters-pixm-request-") {
         request(&id);
@@ -49,10 +50,11 @@ async fn check(id: String) {
     } else if name.starts_with("OperationOutcome-") {
         not_found(&id).await;
     } else if name.starts_with("Patient-") {
-        feed(&id);
+        return feed(&id);
     } else {
         panic!("no ihe-iti reader or writer takes this example");
     }
+    None
 }
 
 fn json(id: &str) -> Value {
@@ -235,15 +237,14 @@ async fn not_found(id: &str) {
 }
 
 /// A Patient of the Patient Identity Feed, read by the Manager as the
-/// conditional update its first identifier names, in JSON and XML.
-fn feed(id: &str) {
+/// conditional update its first identifier names, in JSON and XML; a
+/// Patient with no identifier is the refusal [`unnamed`] asserts.
+fn feed(id: &str) -> Option<String> {
     let example = json(id);
     let identifier = &example["identifier"][0];
     let (Some(system), Some(value)) = (identifier["system"].as_str(), identifier["value"].as_str())
     else {
-        panic!(
-            "the Patient carries no identifier, so no ITI-104 conditional update names it (§2:3.104.4.1.2)"
-        );
+        return Some(unnamed(id));
     };
     let condition = format!("identifier={system}%7C{value}");
     let merged = example["link"]
@@ -260,4 +261,57 @@ fn feed(id: &str) {
             other => panic!("the Manager reads the {format:?} form as {other:?}"),
         }
     }
+    None
+}
+
+/// The Feed Manager audit examples, which name the `ex-patient` example as
+/// the Patient they record.
+const FEED_AUDITS: [&str; 3] = [
+    "example/AuditEvent-ex-auditPixmFeed-create-manager.json",
+    "example/AuditEvent-ex-auditPixmFeed-update-manager.json",
+    "example/AuditEvent-ex-auditPixmFeed-delete-manager.json",
+];
+
+/// A Patient with no identifier, which the package gives only as the target
+/// of the Feed Manager audit examples: it reads as an R4 Patient and is what
+/// they name, and the Manager refuses it as a feed under any condition with
+/// the `400` of the PDQm Patient profile, since the Source "shall provide
+/// the identifier of the Patient Identification Domain" (§2:3.104.4.1.2) and
+/// the profile needs one (§2:3.104.4.1.2.1).
+fn unnamed(id: &str) -> String {
+    let patient: fhir_types::r4::patient::Patient =
+        serde_json::from_str(&example_text(id)).expect("the example reads as an R4 Patient");
+    assert!(
+        patient.identifier.is_empty(),
+        "the Patient carries no identifier"
+    );
+    let reference = format!("Patient/{}", patient.id.as_deref().expect("an id"));
+    for audit in FEED_AUDITS {
+        let record = json(audit);
+        assert!(
+            record["entity"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|entity| entity["what"]["reference"] == reference.as_str()),
+            "{audit} names {reference}"
+        );
+    }
+    let condition = format!("identifier={RED}%7C{RED_VALUE}");
+    for format in [Format::Json, Format::Xml] {
+        let refused = Feed::from_update(&condition, format, &body(id, format));
+        let Err(error) = refused else {
+            panic!("the Manager reads the {format:?} form of a Patient with no identifier");
+        };
+        assert_eq!(error, FeedError::Profile, "{format:?}: the refusal");
+        assert_eq!(
+            error.refusal().status(),
+            StatusCode::BAD_REQUEST,
+            "{format:?}: the status"
+        );
+    }
+    String::from(
+        "refused as PIXm 3.1.0 §2:3.104.4.1.2 and §2:3.104.4.1.2.1 require (400, no identifier), \
+         read as the R4 Patient the Feed Manager audit examples name",
+    )
 }

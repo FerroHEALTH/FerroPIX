@@ -16,11 +16,12 @@
 #   scripts/checks/conformance.sh --self-test prove the comparison, the badges
 #                                             and the block on fixtures
 #
-# A pass list holds one example per line: a passing example is its path, a
-# failing one is `fail <path>: <reason>`, and the last line is the total. The
-# corpus tests write target/conformance/<corpus>.txt in that form, and the
-# pass lists themselves when FERROPIX_CONFORMANCE_UPDATE is 1, so a list
-# comes from the same test the suite runs. An example the list records as
+# A pass list holds one example per line: a passing example is its path,
+# followed by `: <how>` when the pass is a refusal the specification
+# requires, a failing one is `fail <path>: <reason>`, and the last line is
+# the total. The corpus tests write target/conformance/<corpus>.txt in that
+# form, and the pass lists themselves when FERROPIX_CONFORMANCE_UPDATE is 1,
+# so a list comes from the same test the suite runs. An example the list records as
 # passing that no longer passes fails every mode. Under --check, a passing
 # example the list does not record, a moved total, a changed reason, a badge
 # that disagrees with its list and a README block that disagrees with the

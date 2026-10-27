@@ -45,12 +45,15 @@ pub(crate) const PREFERENCE_PREFIX: &str = "ferropix_console_";
 /// The directory of the synthetic operator API documents.
 const DOCUMENTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/operator");
 
+/// The candidate the filled stand-in serves first in its queue, synthetic.
+pub(crate) const FILLED_CANDIDATE: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01";
+
 /// A person the filled stand-in serves, synthetic.
 pub(crate) const FILLED_PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 
 /// The routes the filled stand-in answers: the method, the path and the
 /// document under [`DOCUMENTS`] it answers with.
-pub(crate) const FILLED: [(&str, &str, &str); 12] = [
+pub(crate) const FILLED: [(&str, &str, &str); 15] = [
     ("GET", "/operator/overview", "overview"),
     ("GET", "/operator/dependencies", "dependencies"),
     (
@@ -65,6 +68,17 @@ pub(crate) const FILLED: [(&str, &str, &str); 12] = [
         "GET",
         "/operator/domains/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
         "domain-page",
+    ),
+    ("GET", "/operator/candidates", "candidates"),
+    (
+        "GET",
+        "/operator/candidates/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01",
+        "candidate",
+    ),
+    (
+        "POST",
+        "/operator/candidates/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01/decide",
+        "decided",
     ),
     ("GET", "/operator/configuration", "configuration"),
     ("GET", "/operator/actions", "actions"),
@@ -219,6 +233,7 @@ fn site_root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use ferropix_operator_api::actions::Actions;
+    use ferropix_operator_api::candidate::{Candidate, Candidates, Decided};
     use ferropix_operator_api::configuration::Configuration;
     use ferropix_operator_api::domain::{DomainPage, Domains};
     use ferropix_operator_api::health::Dependencies;
@@ -251,6 +266,9 @@ mod tests {
                 "actions" => reads::<Actions>(name),
                 "results" => reads::<Results>(name),
                 "revealed" => reads::<Revealed>(name),
+                "candidates" => reads::<Candidates>(name),
+                "candidate" => reads::<Candidate>(name),
+                "decided" => reads::<Decided>(name),
                 other => panic!("{other} names no operator API type"),
             };
             assert!(read, "{name}.json does not read as the answer of {route}");

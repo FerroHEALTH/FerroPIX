@@ -49,11 +49,13 @@ use crate::locale::{tr, tr_with};
 use crate::model::PageContext;
 use follow::follow;
 use in_page::{Posted, listen_posts};
+use keys::listen_keys;
 use routes::{Aside, Patients, Reads, Registry, Work, content, missing};
 use shell::{brand_lockup, footer, navigation, pill};
 
 mod follow;
 pub mod in_page;
+pub mod keys;
 mod routes;
 pub mod shell;
 
@@ -327,6 +329,7 @@ fn shortcut_groups() -> Vec<ShortcutGroup> {
                 shortcut("j | down", Msg::ShortcutNext),
                 shortcut("k | up", Msg::ShortcutPrevious),
                 shortcut("enter", Msg::ShortcutOpen),
+                shortcut("o | d", Msg::ShortcutGlance),
             ],
         },
         ShortcutGroup {
@@ -368,6 +371,7 @@ pub fn App() -> impl IntoView {
 fn Root() -> impl IntoView {
     ferrohealth_ui::widget::nav::follow_path();
     listen_posts();
+    listen_keys();
     let location = use_location();
     let latest = use_context::<Latest>();
     let posted = use_context::<Posted>();

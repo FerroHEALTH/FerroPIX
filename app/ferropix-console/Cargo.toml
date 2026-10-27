@@ -49,7 +49,7 @@ leptos = { workspace = true, features = ["hydrate"] }
 leptos_router.workspace = true
 wasm-bindgen.workspace = true
 console_error_panic_hook.workspace = true
-web-sys = { workspace = true, features = ["Document", "Element", "Window", "Location", "FormData", "HtmlFormElement", "SubmitEvent", "HtmlElement"] }
+web-sys = { workspace = true, features = ["Document", "Element", "Window", "Location", "FormData", "HtmlFormElement", "SubmitEvent", "HtmlElement", "HtmlDialogElement"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # The per-request script nonce of the Content-Security-Policy rides `nonce`.

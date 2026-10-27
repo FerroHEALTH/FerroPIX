@@ -761,4 +761,52 @@ messages! {
     DomainRetire = "domain-retire",
     /// The retire switch's help.
     DomainRetireHelp = "domain-retire-help",
+    /// The side panel's Open to decide.
+    QueueDecide = "queue-decide",
+    /// The legend's words for the queue row's side panel.
+    ShortcutGlance = "shortcut-glance",
+    /// A deferral from the queue saved.
+    QueueDeferred = "queue-deferred",
+    /// What a refused decision shows.
+    WhatDecision = "what-decision",
+    /// The grade filter's choice of every grade.
+    QueueAnyGrade = "queue-any-grade",
+    /// The domain filter.
+    QueueDomain = "queue-domain",
+    /// The age filter.
+    QueueOlder = "queue-older",
+    /// The deferred filter.
+    QueueShowDeferred = "queue-show-deferred",
+    /// The deferred filter's help.
+    QueueShowDeferredHelp = "queue-show-deferred-help",
+    /// The Clear filters button.
+    QueueClear = "queue-clear",
+    /// The queue with nothing matching its filters.
+    QueueNoMatch = "queue-no-match",
+    /// Before the time of the last decision.
+    QueueLastDecision = "queue-last-decision",
+    /// The pair column.
+    ColPair = "col-pair",
+    /// The score column.
+    ColScore = "col-score",
+    /// The waiting column.
+    ColWaiting = "col-waiting",
+    /// A row's side panel opener and its column.
+    QueueGlance = "queue-glance",
+    /// The range of the queue's page.
+    QueueRange = "queue-range",
+    /// The queue's key hint.
+    QueueKeys = "queue-keys",
+    /// The two names of a pair.
+    PairNames = "pair-names",
+    /// Before the date a deferred pair comes back.
+    QueueBackOn = "queue-back-on",
+    /// The deferral's date field.
+    DeferUntil = "defer-until",
+    /// The Defer action.
+    Defer = "defer",
+    /// The queue's previous page.
+    QueuePrevious = "queue-previous",
+    /// The queue's next page.
+    QueueNext = "queue-next",
 }

@@ -41,7 +41,7 @@ const HELD_VALUE: &str = "SYNTH-4711";
 
 /// A stand-in server that answers `/health/liveness` and each of `documents` by its
 /// route with its JSON.
-async fn server(documents: &[(&str, &str, String)]) -> MockServer {
+pub(crate) async fn server(documents: &[(&str, &str, String)]) -> MockServer {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/health/liveness"))
@@ -59,7 +59,7 @@ async fn server(documents: &[(&str, &str, String)]) -> MockServer {
 }
 
 /// The page at `route` drawn against `server`.
-async fn page(server: &MockServer, route: &str) -> Result<String, Box<dyn Error>> {
+pub(crate) async fn page(server: &MockServer, route: &str) -> Result<String, Box<dyn Error>> {
     let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
     let cookie = steward_session(&state);
     let (response, page) = send(&service, get_with(route, &cookie)?).await?;

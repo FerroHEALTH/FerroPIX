@@ -43,6 +43,7 @@ never act while you type in a field, and a phone shows none.
 | Page | What it shows |
 |---|---|
 | Dashboard, `/` | The open queue with the pairs waiting more than seven days, the share of records linked automatically over 24 hours, the versions fed today and the subscriptions in error; the queue's depth and the feeds per hour by channel as charts, each with its figures table; the HTTP and MLLP listeners and the feed sender; the oldest pairs in the queue. |
+| Review queue, `/queue` | The pairs the scorer found worth a look, the grade first, then the score, then the longest wait: both leading names, their birth dates and domains, the score with its bar, the grade and the time queued. `j` and `k` move the focused row and Enter opens the pair; `o` or `d` opens it at a glance in a side panel, with Open to decide and Defer (a date and your reason). The filters (grade, domain system, days waiting, the deferred pairs) and the paging are posted, so none of them reaches an address. |
 | Search, `/search` | By identifier (the domain chosen from the server's domains, the value masked as you type) and by demographics, each posted, so nothing you type reaches an address. The results open each patient; a demographics search adds the grade and score. The top bar's field reads what you typed: a date or a name searches by demographics with the field filled, anything else is an identifier searched in every domain. |
 | Patient, `/patients/{person}` | The leading demographics, then four tabs: the identifiers per domain, masked, each with its reveal; the source records side by side, each field marked against the leading demographics; the history on a timeline; the pseudonyms, masked. A reveal asks your reason, is recorded by the server as a privacy disclosure, and shows the value for the seconds Your preferences set. |
 | Sources, `/sources` | Every system allowed to feed, its channel, how it is admitted, the domains that name it and its last activity, and one source's last messages. Sources are set in the server's configuration file. |
@@ -78,9 +79,9 @@ The sign-in page after your session expired. [Dark theme](img/console/expired-da
 
 The dashboard. [Dark theme](img/console/dashboard-dark.png).
 
-![The review queue, which follows with v0.0.10](img/console/queue.png)
+![The review queue](img/console/queue.png)
 
-The review queue, which follows with v0.0.10. [Dark theme](img/console/queue-dark.png).
+The review queue. [Dark theme](img/console/queue-dark.png).
 
 ![A pair in the review queue, which follows with v0.0.10](img/console/queue-pair.png)
 

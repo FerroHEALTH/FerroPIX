@@ -28,6 +28,7 @@ mod in_place;
 mod keyboard;
 mod preferences;
 mod pseudo_locale;
+mod queue;
 mod screenshots;
 mod session;
 mod sign_in;

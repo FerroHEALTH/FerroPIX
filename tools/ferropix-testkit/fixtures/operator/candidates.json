@@ -1,0 +1,88 @@
+{
+  "total": 3,
+  "offset": 0,
+  "rows": [
+    {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01",
+      "a": {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+          "system": "urn:oid:2.999.1.1",
+          "name": "Synthetic hospital",
+          "kind": "local"
+        },
+        "name": "Proefsma, Ada",
+        "birth_date": "1980-02-29"
+      },
+      "b": {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+          "system": "urn:oid:2.999.1.2",
+          "name": "Synthetic laboratory",
+          "kind": "local"
+        },
+        "name": "Proefsma, A.",
+        "birth_date": "1980-02-29"
+      },
+      "score": 0.91,
+      "grade": "probable",
+      "status": "open",
+      "created_at": "2026-10-18T08:00:00Z"
+    },
+    {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b02",
+      "a": {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+          "system": "urn:oid:2.999.1.1",
+          "name": "Synthetic hospital",
+          "kind": "local"
+        },
+        "name": "Testerink, Bram",
+        "birth_date": "1975-06-01"
+      },
+      "b": {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+          "system": "urn:oid:2.999.1.2",
+          "name": "Synthetic laboratory",
+          "kind": "local"
+        },
+        "name": "Testerink, Abraham",
+        "birth_date": "1975-06-01"
+      },
+      "score": 0.83,
+      "grade": "probable",
+      "status": "open",
+      "created_at": "2026-10-20T08:00:00Z"
+    },
+    {
+      "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b03",
+      "a": {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+          "system": "urn:oid:2.999.1.1",
+          "name": "Synthetic hospital",
+          "kind": "local"
+        },
+        "name": "Voorbeeld, Carla",
+        "birth_date": "1990-11-12"
+      },
+      "b": {
+        "domain": {
+          "id": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+          "system": "urn:oid:2.999.1.2",
+          "name": "Synthetic laboratory",
+          "kind": "local"
+        },
+        "name": "Voorbeeld, C.",
+        "birth_date": "1990-12-11"
+      },
+      "score": 0.64,
+      "grade": "possible",
+      "status": "open",
+      "created_at": "2026-10-24T08:00:00Z"
+    }
+  ],
+  "last_decision_at": "2026-10-25T09:00:00Z"
+}

@@ -470,7 +470,8 @@ fn history(person: &Person) -> AnyView {
 }
 
 /// The Pseudonyms tab: each pseudonymisation domain and whether the person
-/// has a pseudonym in it, masked, with its reveal.
+/// has a pseudonym in it, masked, with its reveal, and the link to the one
+/// place a pseudonym is resolved.
 fn pseudonyms(person: &Person) -> AnyView {
     if person.pseudonyms.is_empty() {
         return list_empty(tr(Msg::PseudonymsEmpty), None);
@@ -506,11 +507,17 @@ fn pseudonyms(person: &Person) -> AnyView {
         })
         .collect_view()
         .into_any();
-    data_table(DataTable {
+    let table = data_table(DataTable {
         caption: &tr(Msg::TabPseudonyms),
         columns: &columns,
         sorting: Sorting::default(),
         body: Body::Rows(rows),
-    })
+    });
+    view! {
+        {table}
+        <p class="fui-small">
+            <a href=crate::app::PSEUDONYM_DOMAINS>{tr(Msg::ResolveTitle)}</a>
+        </p>
+    }
     .into_any()
 }

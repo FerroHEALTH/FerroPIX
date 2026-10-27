@@ -10,6 +10,9 @@
 #      named in a row of the corpus table of docs/VERSIONS.md.
 #   3. Tool pins: each row REPEATED_ROWS names is carried word for word by
 #      every file its "Repeated in" cell names.
+#   3b. FerroUI: the root Cargo.toml pins ferrohealth-ui at the pin of the
+#      FerroUI row word for word, and the tag that row reads the FerroUI
+#      documents at is `v` plus the pinned version.
 #   4. The quickstart: the image tags compose.yaml defaults to are the
 #      [workspace.package] version of the root Cargo.toml, and so is the
 #      appVersion of the Helm chart, the default tag of its images.
@@ -153,6 +156,17 @@ self_test() {
   sed -i.bak '/^appVersion:/d' "$d/deploy/helm/ferropix/Chart.yaml" && rm "$d/deploy/helm/ferropix/Chart.yaml.bak"
   expect 1 "a chart without an appVersion"
   case_dir
+  # shellcheck disable=SC2016 # the backticks are Markdown in the fixture
+  printf '| FerroUI (`ferrohealth-ui`) | `=0.5.2` | `Cargo.toml`; the FerroUI documents read at the tag `v0.5.2` |\n' >> "$d/docs/VERSIONS.md"
+  printf '[workspace.dependencies]\nferrohealth-ui = "=0.5.2"\n' >> "$d/Cargo.toml"
+  expect 0 "a FerroUI row on the workspace pin"
+  sed -i.bak 's/"=0.5.2"/"=0.5.3"/' "$d/Cargo.toml" && rm "$d/Cargo.toml.bak"
+  expect 1 "a FerroUI row behind the workspace pin"
+  sed -i.bak 's/"=0.5.3"/"=0.5.2"/' "$d/Cargo.toml" && rm "$d/Cargo.toml.bak"
+  # shellcheck disable=SC2016 # the backticks are Markdown in the fixture
+  sed -i.bak 's/tag `v0.5.2`/tag `v0.4.0`/' "$d/docs/VERSIONS.md" && rm "$d/docs/VERSIONS.md.bak"
+  expect 1 "a FerroUI tag off the pinned version"
+  case_dir
   mkdir -p "$d/fuzz/seeds/pix_query"
   printf 'sourceIdentifier=urn%%3Aoid%%3A2.999.1%%7C1' > "$d/fuzz/seeds/pix_query/gen-a.txt"
   expect 0 "a fuzz seed without the header"
@@ -231,6 +245,17 @@ for item in "${REPEATED_ROWS[@]}"; do
     grep -qF -- "$want" "$file" || drift "$file does not carry the $item pin $want of docs/VERSIONS.md"
   done < <(repeats "$item")
 done
+
+# 3b. FerroUI: the workspace pin and the tag of its documents. The row's
+#     pin carries the `=` of an exact requirement, the tag does not.
+ferroui_row="FerroUI (\`ferrohealth-ui\`)"
+want="$(pin "$ferroui_row")"
+if [[ -n "$want" && -f Cargo.toml ]]; then
+  got="$(toml_value Cargo.toml ferrohealth-ui)"
+  [[ "$got" == "$want" ]] || drift "Cargo.toml pins ferrohealth-ui at ${got:-nothing}, docs/VERSIONS.md $want"
+  tag="$(repeats "$ferroui_row" | grep -E '^v[0-9]' | head -n 1 || true)"
+  [[ "$tag" == "v${want#=}" ]] || drift "docs/VERSIONS.md reads the FerroUI documents at the tag ${tag:-none}, wanted v${want#=}"
+fi
 
 # 4. The server image tag compose.yaml defaults to is the product version,
 #    so the quickstart of a release pulls the image that release published.

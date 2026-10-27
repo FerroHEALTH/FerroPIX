@@ -102,3 +102,8 @@ that.
 `database.existingSecret` and `dataKey.existingSecret`. The installation
 report to FerroPULSE is on by default; set `usageReport.enabled=false` to
 stop it.
+
+Both pods set `enableServiceLinks: false` and, by default, run in their own
+user namespace (`hostUsers: false`) with the `Strict` supplemental groups
+policy. Set `hostUsers: true` when your nodes do not support user
+namespaces, or the pods do not start.

@@ -11,6 +11,10 @@ dataKey:
   existingSecret: ferropix-data-key
 usageReport:
   enabled: false
+# A kind node is itself a container, and runc cannot mount sysfs inside a
+# pod's own user namespace there, so the sandbox never starts; the check
+# shares the node's user namespace.
+hostUsers: true
 config:
   profile: production
   public_base_url: "http://localhost:8080"

@@ -19,6 +19,7 @@ and this project adheres to
 - The server takes the `[server]` keys every FerroHEALTH server shares (#299): `header_read_timeout_ms`, `max_concurrent_requests` with `retry_after_s` (past the bound a request is answered `503` with `Retry-After`, and the health routes never are), `trusted_proxies` with `forwarded_header`, `compression` with `compression_min_bytes`, and `[server.tls]`, which makes the listener speak TLS with an optional client certificate, reads its files again on `SIGHUP`, and has `healthcheck` probe over it.
 - The server's `[auth]` takes every key of `ferrohealth-smart` (#303): `ca_file`, trust roots an issuer behind a private certificate authority is read with; `mode = "introspection"` with `[auth.introspection]`, which checks an opaque token at the issuer's RFC 7662 endpoint; a flat `issuer`; `scopes_supported` and `capabilities` for the discovery document; `role_claims` and `scopeless_subjects`.
 - The server and the operator console serve `GET {base}/health/liveness`, which answers `200` while the process serves and checks nothing (#297).
+- The Helm chart 0.3.0 sets `enableServiceLinks: false` on the server's and the console's pods, and takes `hostUsers` (default `false`, each pod in its own user namespace) and `supplementalGroupsPolicy` (default `Strict`) from its values (#291). A cluster whose nodes do not support user namespaces sets `hostUsers: true`, or the pods do not start.
 
 ### Changed
 

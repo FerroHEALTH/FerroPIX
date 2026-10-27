@@ -123,6 +123,8 @@ jobs:
         run: bash scripts/release/milestone.sh --self-test
       - name: The release plan orders tags by version and counts the support period
         run: bash scripts/release/plan.sh --self-test
+      - name: The changelog assembler checks fragments and cuts them into a release
+        run: bash scripts/release/changelog.sh --self-test
       - name: The release staging checks each tarball and stages the 0700 spool
         run: bash scripts/release/stage-dist.sh --self-test
       - name: The destructive-command hook
@@ -296,13 +298,21 @@ jobs:
           fetch-depth: 0
       - run: bash scripts/checks/changelog-released.sh
       - run: bash scripts/checks/changelog-structure.sh
+      # Every fragment under changelog.d/ is well formed (changelog.d/README.md).
+      - run: bash scripts/release/changelog.sh --check
       # Regulation (EU) 2024/2847 Annex I Part II(2), (4) and (8): every
       # Security entry names its GHSA advisory or VEX statement, and a
-      # Security section beside other changes opens with its reason.
-      - run: bash scripts/checks/changelog-security.sh --section Unreleased
+      # Security section beside other changes opens with its reason. Checked
+      # over [Unreleased] with every fragment folded in, as the next cut
+      # writes it; the release plan runs the same check over the section it
+      # cuts.
+      - run: bash scripts/release/changelog.sh --check-preview
 
-  # A pull request records its user-visible effect under [Unreleased], or
-  # carries the `no-changelog` label.
+  # A pull request with a user-visible effect adds a fragment under
+  # changelog.d/ (changelog.d/README.md), and no pull request writes under
+  # CHANGELOG.md's [Unreleased], the lines open pull requests used to conflict
+  # on. The `no-changelog` label waives the entry, never the [Unreleased]
+  # refusal.
   changelog-guard:
     name: changelog-guard
     if: github.event_name == 'pull_request'
@@ -327,7 +337,8 @@ jobs:
           set -euo pipefail
           # Read when the step runs: a re-run replays the event payload (#133).
           if [ "$(gh api "repos/${GH_REPO}/pulls/${PR}" --jq 'any(.labels[].name; . == "no-changelog")')" = true ]; then
-            echo "the no-changelog label is set: the guard does not apply"
+            echo "the no-changelog label is set: the entry is waived, an [Unreleased] edit is still refused"
+            bash scripts/checks/changelog-guard.sh --waived "$BASE" "$HEAD"
             exit 0
           fi
           bash scripts/checks/changelog-guard.sh "$BASE" "$HEAD"

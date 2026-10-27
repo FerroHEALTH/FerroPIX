@@ -53,8 +53,10 @@ records, and it does not decide the work is done on your behalf.
    helper the change touched, and the full Rust set in
    `.claude/rules/ci-cd.md` for every crate the change touched. Report the
    results you saw, never a green you assumed.
-7. **Changelog check:** a change with user-visible effect has an entry under
-   `[Unreleased]` in `CHANGELOG.md`. Add it if it is missing.
+7. **Changelog check:** a change with user-visible effect adds a fragment,
+   `changelog.d/<issue>-<kebab-slug>.<section>.md` (`changelog.d/README.md`),
+   and leaves `[Unreleased]` in `CHANGELOG.md` untouched. Add the fragment if
+   it is missing.
    **Book check:** the same change updates the matching page under
    `website/book/src` (`.claude/rules/docs-website.md` §The same-PR rule): a
    crate's behaviour or features, the server, a deployment file. A planned

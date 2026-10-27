@@ -31,11 +31,13 @@ On the branch `release/vX.Y.Z`:
    `FERROPIX_SCREENSHOTS=1 cargo nextest run -p ferropix-testkit -E
    'test(the_book_shows_every_console_page)'`. Look at the images before you
    commit them.
-4. **Cut the changelog.** Rename `## [Unreleased]` to
-   `## [X.Y.Z] - YYYY-MM-DD` and open a fresh, empty `## [Unreleased]` above
-   it. The date is the day of the cut: the release notes count the support
-   period from it. Read the section as the release notes, and reread the
-   reason of a Security section (§ Security entries).
+4. **Cut the changelog.** Run `scripts/release/changelog.sh --assemble X.Y.Z
+   YYYY-MM-DD`: it writes `## [X.Y.Z] - YYYY-MM-DD` under a fresh, empty
+   `## [Unreleased]` from the fragments under `changelog.d/`, section by
+   section, ends each entry with its issue, and `git rm`s the fragments
+   (`changelog.d/README.md`). The date is the day of the cut: the release
+   notes count the support period from it. Read the section as the release
+   notes, and reread the reason of a Security section (§ Security entries).
 5. **The gates pass.** The crate-version guard checks that the product
    line, the crate lines, the lock and the changelog section agree.
 
@@ -43,8 +45,9 @@ On the branch `release/vX.Y.Z`:
 
 Two rules of Regulation (EU) 2024/2847 hold every Security section, and
 `scripts/checks/changelog-security.sh` checks both: CI runs it on every pull
-request over `[Unreleased]`, and the release `plan` job over the section it
-cuts (`scripts/release/plan.sh`). A section released before the rules is
+request over `[Unreleased]` with every fragment folded in
+(`scripts/release/changelog.sh --check-preview`), and the release `plan` job
+over the section it cuts (`scripts/release/plan.sh`). A section released before the rules is
 never checked again.
 
 - **Every entry names its advisory** (Annex I Part II(4), (8)). A Security
@@ -90,6 +93,7 @@ tracker.
 | The milestone titled as the tag holds no open item | `scripts/release/milestone.sh check` |
 | The `[workspace.package]` version of `Cargo.toml` names the tag's version | `plan.sh` |
 | Every section of the changelog holds Keep a Changelog types, each once | `scripts/checks/changelog-structure.sh` |
+| No fragment is left under `changelog.d/`: every entry reached the section being cut | `plan.sh` (`scripts/release/changelog.sh --check`) |
 | The section being cut opens its `### Security` with the reason when it sits beside other changes, and every Security entry names a GHSA id or an existing `security/vex/` path | `scripts/checks/changelog-security.sh --section X.Y.Z` |
 | The changelog section becomes the notes, with the support period appended: the month five years after the heading's date (Regulation (EU) 2024/2847 Art 13(19)) | `plan.sh notes` |
 
@@ -118,10 +122,11 @@ reviewer. Its last job closes the milestone. A pushed tag is never moved or
 deleted; a bad cut ships forward as a new patch version.
 
 A fix that merges after the release pull request and before the tag records
-itself in the cut `## [X.Y.Z]` section, so the tag's notes carry it.
-`scripts/checks/changelog-guard.sh` passes a bullet added to the newest
-version section while `vX.Y.Z` is untagged, and refuses it once the tag
-exists.
+itself in the cut `## [X.Y.Z]` section, so the tag's notes carry it, since
+the `plan` job refuses a tag while a fragment is left.
+`scripts/checks/changelog-guard.sh` counts an edit of `CHANGELOG.md` outside
+`[Unreleased]` as the change's record, and `scripts/checks/changelog-released.sh`
+refuses one to a section once its tag exists.
 
 ## The build legs
 

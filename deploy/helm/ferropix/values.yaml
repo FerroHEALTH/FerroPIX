@@ -58,12 +58,17 @@ usageReport:
 state:
   existingClaim: ""
 
+# The server's resources. The ephemeral storage covers the audit spool on its
+# default emptyDir (`[audit] spool_max_bytes`, 64 MiB by default), /tmp and the
+# container log; raise it with the spool.
 resources:
   requests:
     cpu: 100m
     memory: 128Mi
+    ephemeral-storage: 64Mi
   limits:
     memory: 512Mi
+    ephemeral-storage: 256Mi
 
 service:
   type: ClusterIP
@@ -138,5 +143,7 @@ console:
     requests:
       cpu: 50m
       memory: 64Mi
+      ephemeral-storage: 16Mi
     limits:
       memory: 256Mi
+      ephemeral-storage: 128Mi

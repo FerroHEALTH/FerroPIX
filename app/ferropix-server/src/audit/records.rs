@@ -4,14 +4,12 @@
 //! The `AuditEvent` each transaction writes as the Manager or the Supplier,
 //! and each steward action, as BALP 1.1.4 and the profiles fix them.
 //!
-//! - ITI-83: the PIXm Query Manager audit profile, on BALP Patient Query
-//!   (PIXm 3.1.0 §2:3.83.5.1.2), with the source identifier as the patient.
-//! - ITI-104: the PIXm Feed Create, Update and Delete Manager audit
-//!   profiles, on BALP Patient Create, Update and Delete (§2:3.104.5.1.2),
-//!   with the fed identifier as the patient and the person as the data.
-//! - ITI-78 and ITI-119: the PDQm Query and Match Supplier audit profiles,
-//!   on BALP Query (PDQm 3.2.0 §2:3.78.5.1.2, §2:3.119.5.1.2), one record
-//!   per person found and one with no patient when none was.
+//! - ITI-83, ITI-104, ITI-78 and ITI-119: written by `ihe-iti`
+//!   (`ihe_iti::pixm::audit::manager_query` and `manager_feed`,
+//!   `ihe_iti::pdqm::audit::supplier_records`) from [`Call::received`], as
+//!   the PIXm Manager and PDQm Supplier audit profiles fix them (PIXm 3.1.0
+//!   §2:3.83.5.1.2, §2:3.104.5.1.2; PDQm 3.2.0 §2:3.78.5.1.2,
+//!   §2:3.119.5.1.2).
 //! - ITI-8, ITI-9 and ITI-21 over the HL7 v2 face: the Manager's and the
 //!   Supplier's audit messages of ITI TF-2 §3.8.5.1.2, §3.8.5.2.2,
 //!   §3.9.5.1.2 and §3.21.5.1.2, written as `AuditEvent`s: the DICOM event
@@ -46,33 +44,14 @@ use ferrohealth_smart::resource::{Access, Via};
 use ihe_atna::balp::{
     APPLICATION, CREATE, CUSTODIAN, Coded, DCM, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE,
     Described, Detail, Direction, Entity, EventKind, Exchange, IHE_TRANSACTIONS, NetworkAddress,
-    Outcome, Peer, READ, REQUEST_ID, REST, SEARCH, SOURCE_ROLE, SYSTEM_OBJECT, UPDATE, What,
-    request_text,
+    Outcome, Peer, READ, REST, SOURCE_ROLE, SYSTEM_OBJECT, UPDATE, request_text,
 };
 use ihe_atna::user::{OnBehalfOf, User};
+use ihe_iti::pixm::audit::FeedAction;
+use ihe_iti::received::Received;
 use secrecy::{ExposeSecret, SecretString};
 
 pub mod operator;
-
-/// The `ITI-83` subtype.
-pub const ITI_83: Coded = Coded::fixed(
-    IHE_TRANSACTIONS,
-    "ITI-83",
-    "Mobile Patient Identifier Cross-reference Query",
-);
-
-/// The `ITI-104` subtype.
-pub const ITI_104: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-104", "Patient Identity Feed FHIR");
-
-/// The `ITI-78` subtype.
-pub const ITI_78: Coded = Coded::fixed(
-    IHE_TRANSACTIONS,
-    "ITI-78",
-    "Mobile Patient Demographics Query",
-);
-
-/// The `ITI-119` subtype.
-pub const ITI_119: Coded = Coded::fixed(IHE_TRANSACTIONS, "ITI-119", "Patient Demographics Match");
 
 /// The `ITI-8` subtype (ITI TF-2 §3.8.5.1.2: `EV("ITI-8", "IHE
 /// Transactions", "Patient Identity Feed")`).
@@ -172,34 +151,20 @@ impl Call {
 
     /// Returns the exchange of `kind` this call made, ended in `outcome`,
     /// concerning `entities`.
-    fn exchange(&self, kind: EventKind, outcome: Outcome, mut entities: Vec<Entity>) -> Exchange {
-        if let Some(id) = &self.request_id {
-            entities.push(Entity::Described(Described {
-                what: Some(What::Identifier {
-                    system: None,
-                    value: id.clone(),
-                }),
-                kind: REQUEST_ID,
-                role: None,
-                name: None,
-                description: None,
-                details: Vec::new(),
-                security_labels: Vec::new(),
-            }));
-        }
-        Exchange {
-            kind,
-            recorded: jiff::Timestamp::now(),
-            outcome,
-            outcome_description: None,
-            direction: Direction::Received {
-                client: self.client.clone(),
-                endpoint: self.endpoint.clone(),
-            },
-            on_behalf: self.on_behalf.clone(),
-            entities,
-            security: Vec::new(),
-        }
+    fn exchange(&self, kind: EventKind, outcome: Outcome, entities: Vec<Entity>) -> Exchange {
+        self.received().exchange(kind, outcome, entities)
+    }
+
+    /// Returns the request this call made, as the server-side builders of
+    /// `ihe-iti` record it.
+    #[must_use]
+    pub fn received(&self) -> Received {
+        Received::new(
+            self.client.clone(),
+            self.endpoint.clone(),
+            self.on_behalf.clone(),
+        )
+        .with_request_id(self.request_id.clone())
     }
 }
 
@@ -245,99 +210,22 @@ pub fn raw_request(url: &url::Url, post: Option<(&str, &SecretString)>) -> Secre
     }
 }
 
-/// Returns the record of an ITI-83 query for `source`, its raw request
-/// `query`, ended in `outcome` (PIXm 3.1.0 §2:3.83.5.1.2).
-#[must_use]
-pub fn pix_query(
-    call: &Call,
-    query: SecretString,
-    source: &Identifier,
-    outcome: Outcome,
-) -> Exchange {
-    call.exchange(
-        EventKind {
-            profile: "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Audit.Manager",
-            event_type: REST,
-            subtypes: vec![ITI_83, SEARCH],
-            action: "E",
-            client: SOURCE_ROLE,
-            server: DESTINATION_ROLE,
-        },
-        outcome,
-        vec![Entity::Query(query), source.patient()],
-    )
-}
-
-/// What an ITI-104 feed did to the cross-reference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Feed {
-    /// The identifier was new: a record was created.
-    Create,
-    /// The identifier was known: its record was revised.
-    Update,
-    /// The identifier was removed (the Remove Patient Option).
-    Delete,
-}
-
-/// Returns the record of an ITI-104 feed of `identifier` to the person
-/// `person` (`Patient/{id}`), ended in `outcome` (PIXm 3.1.0
-/// §2:3.104.5.1.2).
-#[must_use]
-pub fn feed(
-    call: &Call,
-    action: Feed,
-    identifier: &Identifier,
-    person: Option<&str>,
-    outcome: Outcome,
-) -> Exchange {
-    let (profile, subtype, code, client, server) = match action {
-        Feed::Create => (
-            "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Feed.Create.Audit.Manager",
-            CREATE,
-            "C",
-            SOURCE_ROLE,
-            DESTINATION_ROLE,
-        ),
-        Feed::Update => (
-            "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Feed.Update.Audit.Manager",
-            UPDATE,
-            "U",
-            SOURCE_ROLE,
-            DESTINATION_ROLE,
-        ),
-        Feed::Delete => (
-            "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Feed.Delete.Audit.Manager",
-            DELETE,
-            "D",
-            APPLICATION,
-            CUSTODIAN,
-        ),
-    };
-    call.exchange(
-        EventKind {
-            profile,
-            event_type: REST,
-            subtypes: vec![subtype, ITI_104],
-            action: code,
-            client,
-            server,
-        },
-        outcome,
-        vec![person_data(person), identifier.patient()],
-    )
-}
-
 /// Returns the record of an ITI-8 message that did `action` to `identifier`.
 ///
 /// The message ended in `outcome`; ITI TF-2 §3.8.5.1.2 governs an add or a
 /// revision and §3.8.5.2.2 the two sides of a merge: `U` for the survivor,
 /// `D` for the subsumed identifier.
 #[must_use]
-pub fn v2_feed(call: &Call, action: Feed, identifier: &Identifier, outcome: Outcome) -> Exchange {
+pub fn v2_feed(
+    call: &Call,
+    action: FeedAction,
+    identifier: &Identifier,
+    outcome: Outcome,
+) -> Exchange {
     let code = match action {
-        Feed::Create => "C",
-        Feed::Update => "U",
-        Feed::Delete => "D",
+        FeedAction::Create => "C",
+        FeedAction::Update => "U",
+        FeedAction::Delete => "D",
     };
     call.exchange(
         EventKind {
@@ -610,65 +498,6 @@ pub fn pseudonym_minted(call: &Call, person: &str, namespace: &str, outcome: Out
             }),
         ],
     )
-}
-
-/// The search transaction a PDQm Supplier record is of.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Search {
-    /// ITI-78, the Patient search.
-    Query,
-    /// ITI-119, `$match`.
-    Match,
-}
-
-/// Returns the records of a PDQm `search` that found `persons`.
-///
-/// `query` is the raw request and each person a `Patient/{id}`; the search
-/// ended in `outcome`. One record per person, as BALP 1.1.4 §1:52.4.1.6
-/// recommends, or one with no patient when none was found (PDQm 3.2.0
-/// §2:3.78.5.1.2, §2:3.119.5.1.2).
-#[must_use]
-pub fn pdq_search(
-    call: &Call,
-    search: Search,
-    query: &SecretString,
-    persons: &[String],
-    outcome: Outcome,
-) -> Vec<Exchange> {
-    let (profile, subtype) = match search {
-        Search::Query => (
-            "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Query.Audit.Supplier",
-            ITI_78,
-        ),
-        Search::Match => (
-            "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Match.Audit.Supplier",
-            ITI_119,
-        ),
-    };
-    let kind = || EventKind {
-        profile,
-        event_type: REST,
-        subtypes: vec![subtype.clone(), SEARCH],
-        action: "E",
-        client: SOURCE_ROLE,
-        server: DESTINATION_ROLE,
-    };
-    if persons.is_empty() {
-        return vec![call.exchange(kind(), outcome, vec![Entity::Query(query.clone())])];
-    }
-    persons
-        .iter()
-        .map(|person| {
-            call.exchange(
-                kind(),
-                outcome,
-                vec![
-                    Entity::Query(query.clone()),
-                    Entity::PatientReference(SecretString::from(person.clone())),
-                ],
-            )
-        })
-        .collect()
 }
 
 /// The `entity:data` of a write or a read of the person `person`.

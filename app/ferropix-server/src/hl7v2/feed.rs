@@ -20,6 +20,7 @@ use ferrobridge_hl7v2::ack::Code;
 use ferrobridge_hl7v2::parse::{Message, Segment};
 use fhir_types::codec::Value;
 use ihe_atna::balp::{Exchange, Outcome};
+use ihe_iti::pixm::audit::FeedAction;
 use ihe_iti::pixm::server::feed::Feed;
 use ihe_iti::server::format::Format;
 use secrecy::SecretString;
@@ -310,18 +311,18 @@ fn records(call: &Call, read: &Read, applied: Result<&Applied, &FeedError>) -> V
     match (applied, &read.subsumed) {
         (Ok(applied), None) => {
             let action = match applied.action {
-                Action::Create => records::Feed::Create,
-                _ => records::Feed::Update,
+                Action::Create => FeedAction::Create,
+                _ => FeedAction::Update,
             };
             vec![records::v2_feed(call, action, &read.own, Outcome::Success)]
         }
         (Ok(_), Some(subsumed)) => vec![
-            records::v2_feed(call, records::Feed::Update, &read.own, Outcome::Success),
-            records::v2_feed(call, records::Feed::Delete, subsumed, Outcome::Success),
+            records::v2_feed(call, FeedAction::Update, &read.own, Outcome::Success),
+            records::v2_feed(call, FeedAction::Delete, subsumed, Outcome::Success),
         ],
         (Err(_), subsumed) => vec![records::v2_feed(
             call,
-            records::Feed::Update,
+            FeedAction::Update,
             subsumed.as_ref().unwrap_or(&read.own),
             Outcome::MinorFailure,
         )],

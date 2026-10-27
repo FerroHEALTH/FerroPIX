@@ -19,7 +19,7 @@ use std::time::Duration;
 use ferrohealth_health::registry::Registry;
 use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::RequestLog;
-use ferropix_server::audit::records::{Identifier, pix_query, raw_request};
+use ferropix_server::audit::records::raw_request;
 use ferropix_server::audit::reserve::UNAUDITED;
 use ferropix_server::audit::{Audit, Headroom, OpenError};
 use ferropix_server::auth::Smart;
@@ -29,6 +29,8 @@ use ferropix_server::http::router;
 use http::{Method, StatusCode};
 use ihe_atna::atna::spool::{QUARANTINE, SpoolError};
 use ihe_atna::balp::{Exchange, Outcome};
+use ihe_iti::pixm::audit::manager_query;
+use ihe_iti::pixm::identifier::SourceIdentifier;
 use secrecy::SecretString;
 use serde_json::Value;
 use wiremock::matchers;
@@ -56,8 +58,8 @@ fn audit_settings(directory: &Path, url: Option<&str>, max_events: usize) -> Aud
 /// A record naming the synthetic BSN.
 fn bsn_record() -> Exchange {
     let bsn = bsn();
-    pix_query(
-        &call(None),
+    manager_query(
+        &call(None).received(),
         raw_request(
             &url::Url::parse(&format!(
                 "{BASE}/Patient/$ihe-pix?sourceIdentifier={BSN_SYSTEM}%7C{bsn}"
@@ -65,10 +67,7 @@ fn bsn_record() -> Exchange {
             .expect("a URL"),
             None,
         ),
-        &Identifier {
-            system: String::from(BSN_SYSTEM),
-            value: SecretString::from(bsn),
-        },
+        &SourceIdentifier::new(BSN_SYSTEM, SecretString::from(bsn)).expect("an identifier"),
         Outcome::Success,
     )
 }

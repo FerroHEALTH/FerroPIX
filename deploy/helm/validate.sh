@@ -16,7 +16,9 @@
 #      each field's set refuses to render;
 #   5. no Secret is rendered and no credential is a plain value: the
 #      configuration names every secret by a `_file` path;
-#   6. the chart refuses to render without the Secrets it needs.
+#   6. the chart refuses to render without the Secrets it needs;
+#   7. every FerroPIX container sets a memory and an ephemeral-storage limit,
+#      so one pod cannot take its node's memory or disk.
 # deploy/helm/kind-check.sh installs the chart on a cluster for real.
 # No specification governs this: our own design, after FerroEHR's.
 #
@@ -56,6 +58,21 @@ check() {
       fi
     done
     [[ "$containers" -ge 1 ]] || { echo "validate: $(basename "$values") renders no FerroPIX container"; faults=1; }
+    local bounded
+    bounded="$(awk '
+      /^ +limits:$/ { depth = index($0, "l"); memory = 0; storage = 0; open = 1; next }
+      open && match($0, /^ +/) && RLENGTH >= depth {
+        if ($1 == "memory:") memory = 1
+        if ($1 == "ephemeral-storage:") storage = 1
+        next
+      }
+      open { if (memory && storage) n++; open = 0 }
+      END { if (open && memory && storage) n++; print n + 0 }
+    ' <<< "$rendered")"
+    if [[ "$bounded" -lt "$containers" ]]; then
+      echo "validate: $(basename "$values") renders a container without a memory and an ephemeral-storage limit"
+      faults=1
+    fi
     # The user namespace and the groups policy are held at their defaults in
     # every value set that leaves them alone; the kind check's sets hostUsers.
     local pods isolated fields=('enableServiceLinks: false')
@@ -120,9 +137,16 @@ if [[ "${1:-}" = "--self-test" ]]; then
     exit 1
   fi
   grep -q "enableServiceLinks: false" "$work/out" || { echo "validate: self-test failed: the refusal did not say why" >&2; cat "$work/out" >&2; exit 1; }
+  cp -R "$chart/." "$work/ferropix"
+  perl -0pi -e 's/^(    memory: 512Mi\n)    ephemeral-storage: 256Mi\n/$1/m' "$work/ferropix/values.yaml"
+  if check "$work/ferropix" > "$work/out" 2>&1; then
+    echo "validate: self-test failed: a container without an ephemeral-storage limit passed" >&2
+    exit 1
+  fi
+  grep -q "ephemeral-storage limit" "$work/out" || { echo "validate: self-test failed: the refusal did not say why" >&2; cat "$work/out" >&2; exit 1; }
   echo "validate: self-test passed."
   exit 0
 fi
 
 check "$chart"
-echo "validate: the chart lints, renders valid manifests on Kubernetes ${versions[*]}, holds the Restricted fields and renders no credential."
+echo "validate: the chart lints, renders valid manifests on Kubernetes ${versions[*]}, holds the Restricted fields, bounds every container and renders no credential."

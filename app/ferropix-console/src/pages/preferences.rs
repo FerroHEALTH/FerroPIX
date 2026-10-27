@@ -20,7 +20,8 @@ use ferrohealth_ui::view::preferences::{
 use leptos::prelude::*;
 
 use crate::app::{PREFERENCES, current_query, page_context, preferences};
-use crate::locale::{Msg, choices, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{choices, tr, tr_with};
 use crate::pages::not_found::NotFound;
 use crate::pages::title;
 use crate::preferences::{

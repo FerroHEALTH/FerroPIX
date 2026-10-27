@@ -20,7 +20,8 @@ use ferrohealth_ui::view::surface::{Crumb, Header, page_heading};
 use leptos::prelude::*;
 
 use crate::app::{DOMAINS, QUEUE, SEARCH, SOURCES, page_context, param};
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::{Document, Read};
 use crate::pages::not_found::NotFound;
 use crate::pages::{Needs, server_state, title};

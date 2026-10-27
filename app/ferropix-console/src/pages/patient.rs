@@ -39,7 +39,8 @@ use ferropix_operator_api::person::{
 use ferropix_operator_api::reveal::Revealed;
 use leptos::prelude::*;
 
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::Read;
 use crate::pages::registry::channel;
 use crate::pages::{Needs, server_state};

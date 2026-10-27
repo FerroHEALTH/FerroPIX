@@ -39,15 +39,22 @@ use ferrohealth_ui::widget::session::Watch;
 use ferrohealth_ui::widget::shortcuts::LegendWords;
 use leptos::prelude::*;
 use leptos_meta::{Title, provide_meta_context};
+use leptos_router::Lazy;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::hooks::use_location;
 use leptos_router::path;
-use leptos_router::{Lazy, LazyRoute, lazy_route};
 
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::PageContext;
+use follow::follow;
+use in_page::{Posted, listen_posts};
+use routes::{Aside, Patients, Reads, Registry, Work, content, missing};
 use shell::{brand_lockup, footer, navigation, pill};
 
+mod follow;
+pub mod in_page;
+mod routes;
 pub mod shell;
 
 /// The console's version.
@@ -247,7 +254,7 @@ pub async fn page_now(
         .ok_or_else(|| ServerFnError::new("the console's state is missing"))?;
     let parts = use_context::<http::request::Parts>()
         .ok_or_else(|| ServerFnError::new("the request is missing"))?;
-    crate::server::page_for(&state, &parts.headers, &path)
+    crate::server::context::page_for(&state, &parts.headers, &path)
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))
 }
@@ -292,119 +299,6 @@ pub async fn post_now(
         }),
         crate::posts::Answer::Unknown => Err(ServerFnError::new("no form posts to this address")),
     }
-}
-
-/// The page context a post drawn in the page brought, which the page shows
-/// in place of a read until the next navigation.
-#[derive(Debug, Clone, Copy)]
-pub struct Posted(pub RwSignal<Option<PageContext>>);
-
-/// The paths whose plain post draws a page the browser can draw in place:
-/// a search, a trail filter, a reveal, an identifier domain's form and the
-/// pseudonymisation domains' forms.
-#[must_use]
-pub fn posts_in_page(path: &str) -> bool {
-    let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
-    matches!(
-        parts.as_slice(),
-        ["search" | "audit" | "domains" | "pseudonym-domains"]
-            | ["search", "demographics"]
-            | ["domains", _]
-    ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL)
-}
-
-/// Takes the submit of every form [`posts_in_page`] names through
-/// [`post_now`], drawing its answer in place of the plain post's new
-/// document; draw it once, inside the router.
-fn listen_posts() {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let posted = use_context::<Posted>();
-        let navigate = leptos_router::hooks::use_navigate();
-        Effect::new(move |_| {
-            let navigate = navigate.clone();
-            let handle = window_event_listener(leptos::ev::submit, move |event| {
-                post_in_page(&event, posted, navigate.clone());
-            });
-            on_cleanup(move || handle.remove());
-        });
-    }
-}
-
-/// Posts the form under `event` through [`post_now`] and draws its answer
-/// in the page, when its path is one [`posts_in_page`] names.
-#[cfg(target_arch = "wasm32")]
-fn post_in_page(
-    event: &leptos::ev::SubmitEvent,
-    posted: Option<Posted>,
-    navigate: impl Fn(&str, leptos_router::NavigateOptions) + 'static,
-) {
-    use leptos::wasm_bindgen::{JsCast as _, JsValue};
-    if event.default_prevented() {
-        return;
-    }
-    let (Some(Posted(posted)), Some(form)) = (
-        posted,
-        event
-            .target()
-            .and_then(|target| target.dyn_into::<web_sys::HtmlFormElement>().ok()),
-    ) else {
-        return;
-    };
-    let action = form.action();
-    let path = web_sys::Url::new(&action).map_or(action, |url| url.pathname());
-    if !form.method().eq_ignore_ascii_case("post")
-        || form.has_attribute(ferrohealth_ui::widget::submit::RELOADS)
-        || !posts_in_page(&path)
-    {
-        return;
-    }
-    let Ok(data) = web_sys::FormData::new_with_form(&form) else {
-        return;
-    };
-    event.prevent_default();
-    if let Some(by) = event
-        .submitter()
-        .and_then(|by| by.dyn_into::<web_sys::HtmlElement>().ok())
-        && let (Some(name), Some(value)) = (by.get_attribute("name"), by.get_attribute("value"))
-        && data.append_with_str(&name, &value).is_err()
-    {
-        leptos::logging::warn!("the browser refused the submit's value");
-    }
-    let mut fields = Vec::new();
-    if let Ok(entries) = JsValue::from(data.entries()).dyn_into::<web_sys::js_sys::Iterator>() {
-        while let Ok(next) = entries.next() {
-            if next.done() {
-                break;
-            }
-            let pair = web_sys::js_sys::Array::from(&next.value());
-            if let (Some(name), Some(value)) = (pair.get(0).as_string(), pair.get(1).as_string()) {
-                fields.push((name, value));
-            }
-        }
-    }
-    leptos::task::spawn_local(async move {
-        match post_now(path, fields).await {
-            Ok(page) => {
-                if let Some(to) = &page.redirect {
-                    navigate(to, leptos_router::NavigateOptions::default());
-                    return;
-                }
-                let shown = page.path.clone();
-                drop(posted.try_set(Some(page)));
-                if window().location().pathname().ok().as_deref() != Some(shown.as_str()) {
-                    navigate(&shown, leptos_router::NavigateOptions::default());
-                }
-                ferrohealth_ui::widget::submit::drawn();
-            }
-            Err(error) => {
-                leptos::logging::warn!("the post did not come back: {error}");
-                if form.submit().is_err() {
-                    leptos::logging::warn!("the browser refused the plain post");
-                }
-            }
-        }
-    });
 }
 
 /// The console's keyboard shortcuts, which the legend lists (FerroPIX
@@ -581,245 +475,6 @@ fn watch() -> Option<AnyView> {
     let left = page_context().session?;
     let watch = Watch::new(crate::paths::SESSION, EXPIRED, SIGN_OUT, left);
     Some(view! { <SessionWatch watch /> }.into_any())
-}
-
-/// The pages, by the address they answer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Page {
-    /// `/sign-in` and `/sign-in/:state`.
-    SignIn,
-    /// `/`.
-    Dashboard,
-    /// `/queue`.
-    Queue,
-    /// `/queue/:candidate`.
-    Pair,
-    /// `/search` and `/search/demographics`.
-    Search,
-    /// `/patients/:person`.
-    Patient,
-    /// `/patients/:person/merge`.
-    Merge,
-    /// `/patients/:person/unmerge`.
-    Unmerge,
-    /// `/sources`.
-    Sources,
-    /// `/sources/:source`.
-    Source,
-    /// `/domains`.
-    Domains,
-    /// `/domains/:domain`.
-    Domain,
-    /// `/pseudonym-domains`.
-    PseudonymDomains,
-    /// `/configuration`.
-    Configuration,
-    /// `/audit`.
-    Audit,
-    /// `/about`.
-    About,
-    /// `/preferences` and `/preferences/:section`.
-    Preferences,
-}
-
-/// The page the address `path` names, with its parameters by name.
-fn route(path: &str) -> Option<(Page, Vec<(String, String)>)> {
-    let path = path.split(['?', '#']).next().unwrap_or_default();
-    let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
-    let one = |name: &str, value: &str| vec![(String::from(name), String::from(value))];
-    Some(match segments.as_slice() {
-        ["sign-in"] => (Page::SignIn, Vec::new()),
-        ["sign-in", state] => (Page::SignIn, one("state", state)),
-        [""] => (Page::Dashboard, Vec::new()),
-        ["queue"] => (Page::Queue, Vec::new()),
-        ["queue", candidate] => (Page::Pair, one("candidate", candidate)),
-        ["search"] | ["search", "demographics"] => (Page::Search, Vec::new()),
-        ["patients", person] => (Page::Patient, one("person", person)),
-        ["patients", person, "merge"] => (Page::Merge, one("person", person)),
-        ["patients", person, "unmerge"] => (Page::Unmerge, one("person", person)),
-        ["sources"] => (Page::Sources, Vec::new()),
-        ["sources", source] => (Page::Source, one("source", source)),
-        ["domains"] => (Page::Domains, Vec::new()),
-        ["domains", domain] => (Page::Domain, one("domain", domain)),
-        ["pseudonym-domains"] => (Page::PseudonymDomains, Vec::new()),
-        ["configuration"] => (Page::Configuration, Vec::new()),
-        ["audit"] => (Page::Audit, Vec::new()),
-        ["about"] => (Page::About, Vec::new()),
-        ["preferences"] => (Page::Preferences, Vec::new()),
-        ["preferences", section] => (Page::Preferences, one("section", section)),
-        _ => return None,
-    })
-}
-
-/// The read of the page in view and the page context shown, which every
-/// group of pages draws from.
-#[derive(Debug, Clone, Copy)]
-struct Reads {
-    /// The read of the page at the address.
-    read: Resource<Result<PageContext, ServerFnError>>,
-    /// A post's answer at its own address, shown in place of the read.
-    posted: Memo<Option<PageContext>>,
-}
-
-/// The page in view, drawn by `draw` once its read has arrived; the page
-/// before stays until then.
-fn content(draw: fn(Page) -> AnyView) -> AnyView {
-    let Some(Reads { read, posted }) = use_context::<Reads>() else {
-        return ().into_any();
-    };
-    view! {
-        <Transition fallback=|| ()>
-            {move || Suspend::new(async move {
-                let read = read.await;
-                let page = posted.get().or_else(|| read.ok());
-                page.map(|page| drawn(page, draw))
-            })}
-        </Transition>
-    }
-    .into_any()
-}
-
-/// Draws the page `page` is the context of, by the address it was read
-/// for, with `draw`; an address no page answers is the not-found page.
-fn drawn(page: PageContext, draw: fn(Page) -> AnyView) -> AnyView {
-    let found = route(&page.path);
-    provide_context(Shown(page));
-    let Some((page, params)) = found else {
-        return missing(Page::Dashboard);
-    };
-    provide_context(Params(params));
-    draw(page)
-}
-
-/// The not-found page, whatever the page.
-fn missing(_: Page) -> AnyView {
-    view! { <crate::pages::not_found::NotFound /> }.into_any()
-}
-
-/// Declares the lazy route `$name` of a group of pages, drawing each page
-/// `$page` by its component `$component`, so its chunks hold their code
-/// and no other group's.
-macro_rules! group {
-    ($(#[$doc:meta])* $name:ident { $($page:ident => $component:path),+ $(,)? }) => {
-        $(#[$doc])*
-        #[derive(Debug, Clone, Copy)]
-        struct $name;
-
-        #[lazy_route]
-        impl LazyRoute for $name {
-            fn data() -> Self {
-                Self
-            }
-
-            fn view(this: Self) -> AnyView {
-                let _: $name = this;
-                content(|page| match page {
-                    $(Page::$page => view! { <$component /> }.into_any(),)+
-                    _ => missing(page),
-                })
-            }
-        }
-    };
-}
-
-group!(
-    /// The review work: the dashboard, the queue, a pair, a merge and an
-    /// unmerge.
-    Work {
-        Dashboard => crate::pages::screens::Dashboard,
-        Queue => crate::pages::screens::Queue,
-        Pair => crate::pages::screens::Pair,
-        Merge => crate::pages::screens::Merge,
-        Unmerge => crate::pages::screens::Unmerge,
-    }
-);
-
-group!(
-    /// The search and the patient record.
-    Patients {
-        Search => crate::pages::search::SearchPage,
-        Patient => crate::pages::screens::Patient,
-    }
-);
-
-group!(
-    /// The registry and the trail: the sources, the identifier and
-    /// pseudonymisation domains, and the audit trail.
-    Registry {
-        Sources => crate::pages::screens::Sources,
-        Source => crate::pages::screens::Source,
-        Domains => crate::pages::screens::Domains,
-        Domain => crate::pages::screens::Domain,
-        PseudonymDomains => crate::pages::screens::PseudonymDomains,
-        Audit => crate::pages::screens::Audit,
-    }
-);
-
-group!(
-    /// The pages beside the work: sign-in, the configuration, About and
-    /// Your preferences.
-    Aside {
-        SignIn => crate::pages::sign_in::SignInPage,
-        Configuration => crate::pages::screens::Configuration,
-        About => crate::pages::about::AboutPage,
-        Preferences => crate::pages::preferences::PreferencesPage,
-    }
-);
-
-/// Follows the page `page` the browser now draws: sends the browser to the
-/// sign-in it names as its redirect, and sets the root element's theme,
-/// density, motion and hints from its preferences, as the server writes
-/// them on a document it draws; a new language loads the page as a
-/// document, since its words are drawn in its locale.
-fn follow(page: &PageContext) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(to) = &page.redirect {
-            // NOTE: FerroUI `docs/consoles.md`, "The session's end": a session the console's
-            // own read finds gone is said to every tab, so each leaves for sign-in.
-            ferrohealth_ui::widget::session::gone();
-            if window().location().assign(to).is_err() {
-                leptos::logging::warn!("the browser refused the sign-in");
-            }
-            return;
-        }
-        let Some(root) = document().document_element() else {
-            return;
-        };
-        let language = locale_of(page).tag();
-        if root
-            .get_attribute("lang")
-            .is_some_and(|lang| lang != language)
-        {
-            if window().location().reload().is_err() {
-                leptos::logging::warn!("the browser refused to load the page in its language");
-            }
-            return;
-        }
-        let draws = root
-            .get_attribute(DRAWS)
-            .and_then(|draws| draws.parse::<u32>().ok())
-            .unwrap_or_default()
-            .wrapping_add(1);
-        if root.set_attribute(DRAWS, &draws.to_string()).is_err() {
-            leptos::logging::warn!("the browser refused the root's {DRAWS}");
-        }
-        let chosen = Preferences::read(&page.preferences, &page.prefix);
-        for (name, value) in [
-            ("data-theme", chosen.theme.key()),
-            ("data-density", chosen.density.key()),
-            ("data-motion", chosen.motion.key()),
-            ("data-hints", chosen.hints.key()),
-        ] {
-            if root.get_attribute(name).as_deref() != Some(value)
-                && root.set_attribute(name, value).is_err()
-            {
-                leptos::logging::warn!("the browser refused the root's {name}");
-            }
-        }
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    let _: &PageContext = page;
 }
 
 /// The attribute of the root element that counts the pages the browser has

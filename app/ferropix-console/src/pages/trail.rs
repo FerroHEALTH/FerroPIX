@@ -26,7 +26,8 @@ use ferropix_operator_api::actions::{Action, ActionFilter, Actions};
 use leptos::prelude::*;
 
 use crate::app::AUDIT;
-use crate::locale::{Msg, tr};
+use crate::locale::messages::Msg;
+use crate::locale::tr;
 
 /// The route the export posts to.
 pub const EXPORT: &str = "/audit/export";

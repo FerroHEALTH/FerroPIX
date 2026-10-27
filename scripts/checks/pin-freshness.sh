@@ -31,7 +31,8 @@
 # entry on the FHIR package registry lists, a document at an unversioned URL
 # against the sha256 of the bytes served there now, an RFC against the RFC
 # Editor's record of what obsoletes it, and a dated W3C publication against
-# the newest version the W3C API lists. Every corpus row of docs/VERSIONS.md
+# the newest version the W3C API lists, within the lag in days its record
+# names (DID Resolution 1.0, a draft W3C republishes almost daily). Every corpus row of docs/VERSIONS.md
 # has a reader, or its vendor script is listed in UNWATCHED_SCRIPTS with the
 # reason none is needed. Each row of the container image table of
 # docs/VERSIONS.md, which the testkit holds its `PinnedImage` constants to,
@@ -153,16 +154,45 @@ IHE RESTful ATNA supplement	https://www.ihe.net/uploadedFiles/Documents/ITI/IHE_
 # stale only once a later RFC obsoletes it.
 readonly RFC_INDEX=https://www.rfc-editor.org/rfc
 
-# One "matrix label<TAB>W3C shortname<TAB>hold" record per line: a dated W3C
-# publication, read against the newest version of its specification the W3C
-# API lists.
+# One "matrix label<TAB>W3C shortname<TAB>hold<TAB>lag" record per line: a
+# dated W3C publication, read against the newest version of its
+# specification the W3C API lists. A lag (`-` for none) is the days a newer
+# dated version may be ahead of the pin before the pin is stale. DID
+# Resolution 1.0 has one of 90 days: W3C republishes its Candidate
+# Recommendation Draft almost daily, and no code reads it beyond the
+# vendored text, so a weekly issue for each draft would be noise.
 readonly W3C_API=https://api.w3.org/specifications
 readonly WATCHED_W3C="\
-W3C Verifiable Credentials Data Model 1.1	vc-data-model	the version the pinned Netherlands Generic Functions IG cites
-W3C Decentralized Identifiers 1.0	did-core	-
-W3C DID Resolution 1.0	did-resolution	-
-W3C Bitstring Status List 1.0	vc-bitstring-status-list	-
-W3C Web Services Addressing 1.0 SOAP Binding	ws-addr-soap	-"
+W3C Verifiable Credentials Data Model 1.1	vc-data-model	the version the pinned Netherlands Generic Functions IG cites	-
+W3C Decentralized Identifiers 1.0	did-core	-	-
+W3C DID Resolution 1.0	did-resolution	-	90
+W3C Bitstring Status List 1.0	vc-bitstring-status-list	-	-
+W3C Web Services Addressing 1.0 SOAP Binding	ws-addr-soap	-	-"
+
+# w3c_date URL: the date a dated W3C publication URL ends in, as
+# YYYY-MM-DD; nothing for a URL that names no date.
+w3c_date() {
+  sed -nE 's|^https://www\.w3\.org/TR/[0-9]{4}/[A-Za-z]+-.*-([0-9]{4})([0-9]{2})([0-9]{2})/?$|\1-\2-\3|p' <<< "$1"
+}
+
+# w3c_verdict PINNED LATEST HOLD LAG: how the pinned publication reads
+# against the newest one, `current`, `held`, `lagging <days>` (newer by no
+# more than LAG days) or `stale`.
+w3c_verdict() {
+  local pinned="$1" latest="$2" hold="$3" lag="$4" from to
+  if [[ "$pinned" = "$latest" ]]; then
+    echo current
+  elif [[ "$hold" != "-" ]]; then
+    echo held
+  elif [[ "$lag" =~ ^[0-9]+$ ]] \
+    && from="$(day_number "$(w3c_date "$pinned")")" && [[ -n "$from" ]] \
+    && to="$(day_number "$(w3c_date "$latest")")" && [[ -n "$to" ]] \
+    && (( to - from <= lag )); then
+    echo "lagging $(( to - from ))"
+  else
+    echo stale
+  fi
+}
 
 # One "vendor script<TAB>reason" record per line: a script whose corpus rows
 # no reader above watches, with the reason none is needed. The self-test
@@ -593,6 +623,18 @@ self_test() {
   expect "" "$(day_number nightly)" "text that is no date"
   got="$(printf '%s\n' 'manifest-version = "2"' 'date = "2026-10-24"' '[pkg.rustc]' | manifest_date)"
   expect 2026-10-24 "$got" "the date of a channel manifest"
+  local did=https://www.w3.org/TR/2026/CRD-did-resolution-1.0-20261026/
+  expect 2026-10-26 "$(w3c_date "$did")" "the date of a dated W3C publication"
+  expect "" "$(w3c_date https://www.w3.org/TR/did-resolution/)" "an undated W3C URL"
+  expect current "$(w3c_verdict "$did" "$did" - 90)" "the pinned W3C publication is the newest"
+  expect "lagging 1" "$(w3c_verdict "$did" "${did/20261026/20261027}" - 90)" "a draft one day newer, within the lag"
+  expect "lagging 90" "$(w3c_verdict "$did" "${did/20261026/20270124}" - 90)" "a draft exactly the lag newer"
+  expect stale "$(w3c_verdict "$did" "${did/20261026/20270125}" - 90)" "a draft past the lag"
+  expect stale "$(w3c_verdict "$did" "${did/20261026/20261027}" - -)" "a newer draft with no lag"
+  expect stale "$(w3c_verdict "$did" https://www.w3.org/TR/did-resolution/ - 90)" "a lag against an undated newest version"
+  expect held "$(w3c_verdict "$did" "${did/20261026/20270125}" "a cited version" -)" "a held W3C publication"
+  got="$(awk -F'\t' '$1 == "W3C DID Resolution 1.0" { print $4 }' <<< "$WATCHED_W3C")"
+  expect 90 "$got" "the lag of the DID Resolution draft"
   got="$(awk -F'|' -v want="$NIGHTLY_ROW" '{ l = $2; gsub(/^[ \t]+|[ \t]+$/, "", l) } l == want { v = $3; gsub(/[ `]/, "", v); print v; exit }' "$MATRIX")"
   [[ "$got" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || expect "nightly-YYYY-MM-DD" "$got" "the nightly row of $MATRIX"
 
@@ -902,7 +944,7 @@ done < <(corpus_rows "$MATRIX")
 
 # The dated W3C publications, each against the newest version of its
 # specification.
-while IFS=$'\t' read -r label shortname hold; do
+while IFS=$'\t' read -r label shortname hold lag; do
   [[ -n "$label" ]] || continue
 
   pinned="$(matrix_first "$label" 'https://www\.w3\.org/TR/[^ ,;]+')"
@@ -918,13 +960,20 @@ while IFS=$'\t' read -r label shortname hold; do
     printf 'UNREADABLE %s: could not read the newest version of %s from %s (%s)\n' \
       "$label" "$shortname" "$W3C_API" "$latest"
     unreadable=1
-  elif [[ "$pinned" = "$latest" ]]; then
-    printf 'current    %s %s\n' "$label" "$pinned"
-  elif [[ "$hold" != "-" ]]; then
-    printf 'held       %s: pinned %s, newest version %s, held at %s\n' "$label" "$pinned" "$latest" "$hold"
   else
-    printf 'STALE      %s: pinned %s, newest version %s\n' "$label" "$pinned" "$latest"
-    stale=1
+    verdict="$(w3c_verdict "$pinned" "$latest" "$hold" "$lag")"
+    case "$verdict" in
+      current) printf 'current    %s %s\n' "$label" "$pinned" ;;
+      held) printf 'held       %s: pinned %s, newest version %s, held at %s\n' "$label" "$pinned" "$latest" "$hold" ;;
+      lagging\ *)
+        printf 'current    %s %s (newest version %s, %s days newer, within the lag of %s days)\n' \
+          "$label" "$pinned" "$latest" "${verdict#lagging }" "$lag"
+        ;;
+      *)
+        printf 'STALE      %s: pinned %s, newest version %s\n' "$label" "$pinned" "$latest"
+        stale=1
+        ;;
+    esac
   fi
 done <<< "$WATCHED_W3C"
 

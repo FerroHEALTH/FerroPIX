@@ -26,7 +26,8 @@ use ferrohealth_ui::i18n::Locale;
 use http::header::{CACHE_CONTROL, LOCATION, SET_COOKIE};
 use http::{HeaderMap, HeaderValue, StatusCode};
 
-use crate::locale::{Msg, catalog, negotiated, tr_in};
+use crate::locale::messages::Msg;
+use crate::locale::{catalog, negotiated, tr_in};
 use crate::server::ConsoleState;
 use crate::session::{Begun, COOKIE, SIGN_IN_COOKIE, SessionError, SignedIn};
 

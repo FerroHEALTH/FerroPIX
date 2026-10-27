@@ -46,12 +46,13 @@ FerroPIX in prose, `ferropix` in identifiers.
   `POST`, so a BSN never sits in a URL (#52).
 
 The console, `app/ferropix-console`, is built on `ferrohealth-ui`
-(pinned exactly, today `=0.3.7`), and FerroUI leads its UI: the FerroUI
-repository holds the components, the design (`design/`, the only design
-source, with this console's pages under `design/consoles/ferropix/`) and the
-component rules, and its consumer guide
-[`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/docs/consoles.md)
-says how a console uses them. `.claude/rules/leptos-ui.md` points at them
+(pinned exactly at the version the FerroUI row of `docs/VERSIONS.md`
+names), and FerroUI leads its UI: the FerroUI repository holds the
+components, the design (`design/`, the only design source, with this
+console's pages under `design/consoles/ferropix/`) and the component rules,
+and its consumer guide `docs/consoles.md`, read at the tag of the pin, says
+how a console uses them. The server draws the first page and the browser
+hydrates the whole page and draws every page after it. `.claude/rules/leptos-ui.md` points at them
 and keeps only what is particular to this console: its routes, its session
 and server boundary, its client of the FerroPIX server, its configuration
 and headers, its bundle budget, its captures and its words.

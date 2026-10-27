@@ -35,7 +35,8 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 
 use crate::app::current_path;
-use crate::locale::{Msg, tr, tr_with};
+use crate::locale::messages::Msg;
+use crate::locale::{tr, tr_with};
 use crate::model::{Failure, Probe, Reach};
 
 /// The document title of the page `name`, which the root's title format

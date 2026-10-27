@@ -98,7 +98,7 @@ pub async fn posted_context(
     document: Document,
 ) -> PageContext {
     let probe = state.pix().probe(token).await;
-    crate::server::surrounded(
+    crate::server::context::surrounded(
         PageContext {
             path: path.to_owned(),
             operator: steward.name,

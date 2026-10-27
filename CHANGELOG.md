@@ -22,6 +22,12 @@ and this project adheres to
   and audited. `?` opens the shortcut legend on every screen, and `1` to `4`
   open the patient record's tabs (#204).
 
+### Changed
+
+- W3C DID Resolution 1.0 moves to the Candidate Recommendation Draft of
+  2026-10-26, re-vendored by version and digest, as the freshness check
+  reported (#275).
+
 ## [0.0.8] - 2026-10-27
 
 ### Added

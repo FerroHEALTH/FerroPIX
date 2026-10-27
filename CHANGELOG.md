@@ -21,6 +21,13 @@ and this project adheres to
   a person: a patient search runs on Enter or the panel's last row, posted
   and audited. `?` opens the shortcut legend on every screen, and `1` to `4`
   open the patient record's tabs (#204).
+- The console leaves for sign-in the moment its session ends, on FerroUI's
+  session watch (#322): two minutes before the idle timeout a signed-in
+  page warns with Stay signed in and Sign out, signing out in one tab ends
+  every tab, and the sign-in leads back to the page you were on. The new
+  `/session` route answers what the session has left (`GET`, which never
+  extends it) and extends it on the steward's own activity (`POST`), with
+  `401` once the session is gone.
 
 ### Changed
 

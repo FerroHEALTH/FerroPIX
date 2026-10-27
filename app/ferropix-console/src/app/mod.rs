@@ -28,13 +28,14 @@
 )]
 
 use ferrohealth_ui::i18n::{Arg, Locale, provide_locale};
-use ferrohealth_ui::island::{FormNavigator, PageAnnouncer, ShortcutLegend};
+use ferrohealth_ui::island::{FormNavigator, PageAnnouncer, SessionWatch, ShortcutLegend};
 use ferrohealth_ui::theme::Preferences;
 use ferrohealth_ui::view::kbd::{Shortcut, ShortcutGroup};
 use ferrohealth_ui::view::search::{SearchBox, search_box};
 use ferrohealth_ui::view::shell::{Shell, TopBar, shell, topbar};
 use ferrohealth_ui::widget::menu::{ThemeChoice, UserMenu, user_menu};
 use ferrohealth_ui::widget::nav::{Rail, Sidebar, sidebar};
+use ferrohealth_ui::widget::session::Watch;
 use ferrohealth_ui::widget::shortcuts::LegendWords;
 use leptos::prelude::*;
 use leptos_meta::{Title, provide_meta_context};
@@ -90,6 +91,10 @@ pub const ABOUT: &str = "/about";
 
 /// Your preferences, on its Appearance tab.
 pub const PREFERENCES: &str = "/preferences";
+
+/// The sign-in page a request whose session has ended is sent to, which
+/// the session watch loads with the page's address as its return.
+pub const EXPIRED: &str = "/sign-in/expired";
 
 /// The id of the navigation, which the drawer button opens.
 const SIDEBAR_ID: &str = "sidebar";
@@ -558,6 +563,7 @@ fn Root() -> impl IntoView {
             view! {
                 {framed(content)}
                 {legend}
+                {watch()}
             }
             .into_any()
         } else {
@@ -565,6 +571,15 @@ fn Root() -> impl IntoView {
         }
     }
 }
+/// FerroUI's watch over the steward's session, from what it had left as the
+/// server drew the first page (FerroUI `docs/consoles.md`, "The session's
+/// end"); nothing on a page drawn with no session.
+fn watch() -> Option<AnyView> {
+    let left = page_context().session?;
+    let watch = Watch::new(crate::paths::SESSION, EXPIRED, SIGN_OUT, left);
+    Some(view! { <SessionWatch watch /> }.into_any())
+}
+
 /// The pages, by the address they answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -757,6 +772,9 @@ fn follow(page: &PageContext) {
     #[cfg(target_arch = "wasm32")]
     {
         if let Some(to) = &page.redirect {
+            // NOTE: FerroUI `docs/consoles.md`, "The session's end": a session the console's
+            // own read finds gone is said to every tab, so each leaves for sign-in.
+            ferrohealth_ui::widget::session::gone();
             if window().location().assign(to).is_err() {
                 leptos::logging::warn!("the browser refused the sign-in");
             }
@@ -863,6 +881,7 @@ fn framed(content: AnyView) -> AnyView {
         submit: tr(Msg::SearchFind).into(),
         post: true,
         suggest: Some(String::from(crate::pages::search::SUGGEST)),
+        signed_out: Some(String::from(EXPIRED)),
         all: Some(ferrohealth_ui::i18n::Phrase::new(tr_with(
             Msg::SearchPatientsFor,
             &[("query", ferrohealth_ui::i18n::Phrase::open("query"))],

@@ -29,6 +29,7 @@ mod keyboard;
 mod preferences;
 mod pseudo_locale;
 mod screenshots;
+mod session;
 mod sign_in;
 mod stack;
 mod stderr;

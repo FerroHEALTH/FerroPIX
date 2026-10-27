@@ -155,7 +155,13 @@ impl Begun {
 
 /// Begins a sign-in at `service` with `GET /login`.
 pub(crate) async fn begin(service: &axum::Router) -> Result<Begun, Box<dyn Error>> {
-    let (response, _body) = send(service, get("/login")?).await?;
+    begin_at(service, "/login").await
+}
+
+/// Begins a sign-in at `service` with a `GET` of `login`, the sign-in route
+/// with its query.
+pub(crate) async fn begin_at(service: &axum::Router, login: &str) -> Result<Begun, Box<dyn Error>> {
+    let (response, _body) = send(service, get(login)?).await?;
     assert_eq!(
         StatusCode::SEE_OTHER,
         response.status(),

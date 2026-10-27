@@ -11,6 +11,7 @@
 //! halves draw a page from the same values. No specification governs the
 //! console: our own design.
 
+use ferrohealth_ui::widget::session::Left;
 use ferropix_operator_api::actions::{ActionFilter, Actions};
 use ferropix_operator_api::configuration::Configuration;
 use ferropix_operator_api::domain::{DomainPage, Domains};
@@ -236,6 +237,12 @@ pub struct PageContext {
     /// Today's year, month and day in UTC on the console's server, the last
     /// day the birth date's picker allows.
     pub today: Option<(u16, u8, u8)>,
+    /// What the steward's session had left as the server drew the page,
+    /// which the session watch counts down from; `None` with no session.
+    pub session: Option<Left>,
+    /// On a sign-in page, the console's own page its `return` names, which
+    /// the sign-in leads back to.
+    pub back: Option<String>,
 }
 
 impl PageContext {
@@ -258,6 +265,8 @@ impl PageContext {
             provider: String::new(),
             sign_in: false,
             today: None,
+            session: None,
+            back: None,
         }
     }
 }

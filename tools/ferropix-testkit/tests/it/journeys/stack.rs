@@ -112,6 +112,18 @@ impl Stack {
     /// Starts the provider, a stand-in answering as `answers` says and the
     /// console.
     pub(crate) async fn start_with(answers: Server) -> Self {
+        Self::start_session(answers, "").await
+    }
+
+    /// Starts the provider, a refusing stand-in and a console whose
+    /// sessions idle out after `seconds`.
+    pub(crate) async fn start_idle(seconds: u64) -> Self {
+        Self::start_session(Server::Refusing, &format!("idle_timeout_s = {seconds}\n")).await
+    }
+
+    /// Starts the provider, a stand-in answering as `answers` says and the
+    /// console, with the TOML lines `session` added to its `[session]`.
+    async fn start_session(answers: Server, session: &str) -> Self {
         let site = site_root();
         let provider = Provider::start()
             .await
@@ -144,7 +156,7 @@ impl Stack {
         let text = format!(
             "[server]\nlisten = \"{address}\"\nsite_root = {site}\n\n\
              [pix]\nbase_url = \"{server}/\"\ntimeout_ms = 2000\n\n\
-             [session]\nsecure_cookie = false\n\n\
+             [session]\nsecure_cookie = false\n{session}\n\
              [oidc]\nissuer = \"{issuer}\"\nauthorization_endpoint = \"{authorization}\"\n\
              token_endpoint = \"{token}\"\njwks_uri = \"{jwks}\"\nclient_id = \"{CLIENT_ID}\"\n\
              redirect_uri = \"{console}/auth/callback\"\nscopes = [\"openid\", \"__ferropix.admin\"]\n\

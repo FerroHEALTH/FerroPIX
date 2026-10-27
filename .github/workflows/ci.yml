@@ -920,6 +920,10 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny check
+      # fuzz/ is its own workspace with its own lockfile (#310): its licences,
+      # advisories and sources are read against the same deny.toml.
+      - name: cargo deny check over the fuzz workspace
+        run: cargo deny --manifest-path fuzz/Cargo.toml check
       # An `ignore` entry that outlived its finding: cargo-deny reports it as a
       # warning, so the step above stays green on one; this promotes it to an
       # error. Here because cargo-deny and the toolchain are installed.

@@ -63,8 +63,10 @@ specification governs this: our own design".
   keyword per issue.
 - Never weaken, skip, or delete a test to make a build pass; every refusal
   you add has an asserted negative test.
-- Add a `CHANGELOG.md` entry under `[Unreleased]` for any change a caller
-  sees, and name what a caller must change when an interface breaks.
+- Add a changelog fragment, `changelog.d/<issue>-<kebab-slug>.<section>.md`
+  (`changelog.d/README.md`), for any change a caller sees, and name what a
+  caller must change when an interface breaks. Never edit `[Unreleased]` in
+  `CHANGELOG.md`: the release cut assembles the fragments.
 - Never put patient data or a real identifier in a fixture, a test or an
   example.
 - Write prose to `.claude/rules/writing-style.md`.

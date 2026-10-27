@@ -7,11 +7,13 @@
 //! marks, the sign-in and preference routes, and the Leptos pages and the
 //! site bundle.
 //!
-//! Every response carries a Content-Security-Policy whose script source is a
-//! nonce minted for that response alone, `nosniff`, `DENY` framing and no
-//! referrer, and every document is `no-store`. Only the site bundle is
-//! compressed. A request that is not a safe method is taken only from the
-//! console's own pages, a session's access token is refreshed before the
+//! Every response carries the browser security headers of
+//! `ferrohealth-server`'s `console`: a Content-Security-Policy whose script
+//! source is a nonce minted for that response alone, `nosniff`, `DENY`
+//! framing, no referrer and a same-origin opener, and every document is
+//! `no-store`. Only the site bundle is compressed. A request that is not a
+//! safe method is taken only from the console's own pages (`same_origin`
+//! of `ferrohealth-server`), a session's access token is refreshed before the
 //! request it arrives with is served, and a page asks for a live session
 //! (`gate`) and calls the FerroPIX server once before it is drawn. No
 //! specification governs the console's HTTP surface: our own design.
@@ -25,21 +27,22 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use ferrohealth_health::lifecycle::Lifecycle;
 use ferrohealth_health::registry::Registry;
+use ferrohealth_server::console::{self, ConsoleHeaders, CspNonce};
 use ferrohealth_server::health::Health;
+use ferrohealth_server::refusal::RefusalBody;
+use ferrohealth_server::same_origin::{self, SameOrigin};
+use ferrohealth_server::section::ServerSection;
+use ferrohealth_server::serve::Drained;
 use ferrohealth_smart::metadata::{Http, ServerMetadata};
 use ferrohealth_smart::oidc::{OidcError, Provider, RelyingParty};
 use ferrohealth_ui::style::{Brand, STYLESHEET as LIBRARY_STYLESHEET};
-use http::header::{
-    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS,
-    X_FRAME_OPTIONS,
-};
+use http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use http::{HeaderValue, Method, StatusCode};
 use leptos::config::LeptosOptions;
 use leptos::nonce::Nonce;
 use leptos_axum::LeptosRoutes as _;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{And, Predicate as _, SizeAbove};
-use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::app::{ABOUT, PageContext, SEARCH, SIGN_IN};
 use crate::config::settings::{OidcSettings, Settings};
@@ -65,6 +68,9 @@ pub const MARK_LIGHT: &str = "/ferropix-icon.svg";
 
 /// The path of the brand mark in the dark theme.
 pub const MARK_DARK: &str = "/ferropix-icon-dark.svg";
+
+/// The path the site bundle is served under.
+pub const BUNDLE: &str = "/pkg";
 
 /// The name cargo-leptos gives the site bundle's files under `pkg/`.
 pub const OUTPUT_NAME: &str = "ferropix-console";
@@ -227,6 +233,7 @@ pub fn leptos_options(settings: &Settings) -> LeptosOptions {
 pub fn router(state: ConsoleState) -> axum::Router {
     let options = leptos_options(state.settings());
     let form_action = form_action(state.settings());
+    let check = same_origin_check(state.settings());
     let routes = leptos_axum::generate_route_list(crate::app::App);
     let context = {
         let state = state.clone();
@@ -286,9 +293,42 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .layer(axum::middleware::from_fn(
             crate::oidc::refresh::refresh_session,
         ))
-        .layer(axum::middleware::from_fn(same_origin_only))
+        .layer(axum::middleware::from_fn(move |request, next| {
+            same_origin::only(check.clone(), request, next)
+        }))
         .layer(Extension(state));
-    with_security_headers(pages.layer(bundle_compression()), form_action).with_state(options)
+    let headers = ConsoleHeaders::new(form_action).with_bundle(BUNDLE);
+    pages
+        .layer(bundle_compression())
+        .layer(axum::middleware::from_fn(move |request, next| {
+            console::headers(headers.clone(), request, next)
+        }))
+        .with_state(options)
+}
+
+/// The same-origin check of the console's unsafe requests: the console's
+/// origin is that of the OpenID Connect redirect URI, and a refusal is the
+/// catalog's words in the console's locale.
+fn same_origin_check(settings: &Settings) -> SameOrigin {
+    let locale = settings.locale.clone();
+    let body: RefusalBody = Arc::new(move |_uri, _request_id, status, _reason| {
+        (
+            status,
+            [(CACHE_CONTROL, "no-store")],
+            tr_in(catalog(), &locale, Msg::ForeignRequestRefused),
+        )
+            .into_response()
+    });
+    let check = SameOrigin::new().with_body(body);
+    match settings.oidc.as_ref() {
+        // NOTE: RFC 6454 §4: `oidc.redirect_uri` resolves only as an http or https URL,
+        // whose origin is a tuple, so the fallback is never taken and stays closed.
+        Some(oidc) => check
+            .clone()
+            .with_origin(&oidc.redirect_uri)
+            .unwrap_or(check),
+        None => check,
+    }
 }
 
 /// Whether a request for `path` reaches a file or a route that needs no
@@ -439,81 +479,18 @@ async fn capability_download(
 /// Provides the request's nonce and its [`PageContext`] to the render.
 ///
 /// `leptos_axum` provides a nonce of its own before this runs, and the
-/// request parts it provides carry the one [`content_security_policy`]
+/// request parts it provides carry the one `ferrohealth_server::console`
 /// minted, which replaces it.
 fn provide_request_context() {
     let Some(parts) = leptos::context::use_context::<http::request::Parts>() else {
         return;
     };
-    if let Some(nonce) = parts.extensions.get::<Nonce>() {
-        leptos::context::provide_context(nonce.clone());
+    if let Some(nonce) = parts.extensions.get::<CspNonce>() {
+        leptos::context::provide_context(Nonce::from_value(nonce.as_str()));
     }
     if let Some(page) = parts.extensions.get::<PageContext>() {
         leptos::context::provide_context(page.clone());
     }
-}
-
-/// The fetch metadata header that names where a request comes from.
-const SEC_FETCH_SITE: &str = "sec-fetch-site";
-
-/// Refuses every request that is not a safe method, a sign-out and a
-/// preference post among them, unless it comes from the console's own pages
-/// ([`same_origin`]), before anything reads the session.
-///
-/// The session cookie is `SameSite=Lax` as well, so a cross-site `POST`
-/// carries no session in the first place; this check holds without it.
-async fn same_origin_only(
-    Extension(state): Extension<ConsoleState>,
-    request: Request,
-    next: Next,
-) -> Response {
-    if request.method().is_safe() {
-        return next.run(request).await;
-    }
-    let origin = state.settings().oidc.as_ref().map(OidcSettings::origin);
-    if same_origin(request.headers(), origin.as_deref()) {
-        return next.run(request).await;
-    }
-    tracing::warn!(
-        method = %request.method(),
-        "a request that did not come from the console's own pages was refused"
-    );
-    let locale = negotiated(request.headers(), state.settings().locale.clone());
-    (
-        StatusCode::FORBIDDEN,
-        [(CACHE_CONTROL, "no-store")],
-        tr_in(catalog(), &locale, Msg::ForeignRequestRefused),
-    )
-        .into_response()
-}
-
-/// Whether `headers` show a request sent from a page of the console at
-/// `origin`, its own `scheme://host:port`.
-///
-/// `Sec-Fetch-Site` decides when the browser sends it, and only
-/// `same-origin` passes. Without it `Origin` must be `origin`, and without
-/// that the origin of `Referer` must be. A request that shows none of them,
-/// or a console with no known origin, is refused, so an unsafe request is
-/// never taken on trust (the W3C Fetch Metadata Request Headers; RFC 6454
-/// §7).
-#[must_use]
-pub fn same_origin(headers: &http::HeaderMap, origin: Option<&str>) -> bool {
-    if let Some(site) = headers.get(SEC_FETCH_SITE) {
-        return site.as_bytes() == b"same-origin";
-    }
-    let Some(origin) = origin else {
-        return false;
-    };
-    if let Some(sent) = headers.get(http::header::ORIGIN) {
-        return sent.as_bytes() == origin.as_bytes();
-    }
-    // NOTE: RFC 9110 §10.1.3: a `Referer` that is no URL names no origin, which
-    // refuses the request as a missing one does.
-    headers
-        .get(http::header::REFERER)
-        .and_then(|referer| referer.to_str().ok())
-        .and_then(|referer| url::Url::parse(referer).ok())
-        .is_some_and(|referer| referer.origin().ascii_serialization() == origin)
 }
 
 /// The sources of the policy's `form-action`: the console itself, and the
@@ -538,9 +515,17 @@ pub fn form_action(settings: &Settings) -> String {
     }
 }
 
-/// An answer of `text` as `media`.
+/// An answer of `text` as `media`, revalidated so a rebuilt one is fetched
+/// again (RFC 9111 §5.2.2.4).
 fn file(media: &'static str, text: &'static str) -> Response {
-    ([(CONTENT_TYPE, HeaderValue::from_static(media))], text).into_response()
+    (
+        [
+            (CONTENT_TYPE, HeaderValue::from_static(media)),
+            (CACHE_CONTROL, HeaderValue::from_static("no-cache")),
+        ],
+        text,
+    )
+        .into_response()
 }
 
 /// Serves the library's stylesheet.
@@ -608,137 +593,33 @@ fn bundle_compression() -> CompressionLayer<And<SizeAbove, ResponsePredicate>> {
         .compress_when(SizeAbove::new(256).and(bundle))
 }
 
-/// Wraps `router` in the browser security headers every response carries,
-/// with `form_action` as the policy's `form-action` sources.
-fn with_security_headers(
-    router: axum::Router<LeptosOptions>,
-    form_action: String,
-) -> axum::Router<LeptosOptions> {
-    let form_action: Arc<str> = Arc::from(form_action);
-    router
-        .layer(axum::middleware::from_fn(
-            move |request: Request, next: Next| {
-                content_security_policy(Arc::clone(&form_action), request, next)
-            },
-        ))
-        .layer(axum::middleware::from_fn(cache_control))
-        .layer(SetResponseHeaderLayer::overriding(
-            X_CONTENT_TYPE_OPTIONS,
-            HeaderValue::from_static("nosniff"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            X_FRAME_OPTIONS,
-            HeaderValue::from_static("DENY"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            REFERRER_POLICY,
-            HeaderValue::from_static("no-referrer"),
-        ))
-}
-
-/// Mints this response's script nonce, hands it to the renderer through the
-/// request, and answers with the policy that names it and `form_action`.
-async fn content_security_policy(
-    form_action: Arc<str>,
-    mut request: Request,
-    next: Next,
-) -> Response {
-    let nonce = Nonce::new();
-    let policy = HeaderValue::from_str(&policy(&nonce, &form_action));
-    request.extensions_mut().insert(nonce);
-    let mut response = next.run(request).await;
-    match policy {
-        Ok(policy) => {
-            response
-                .headers_mut()
-                .insert(CONTENT_SECURITY_POLICY, policy);
-            response
-        }
-        Err(_invalid) => {
-            tracing::error!("the Content-Security-Policy could not be written as a header");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
-}
-
-/// The Content-Security-Policy of one response, naming its script nonce and
-/// the `form-action` sources [`form_action`] returns.
-///
-/// The WebAssembly bundle needs `'wasm-unsafe-eval'` to be compiled, which
-/// admits no JavaScript `eval` (Content Security Policy Level 3). Scripts run
-/// by nonce alone, styles come from the console alone, and nothing admits
-/// `'unsafe-inline'`.
-#[must_use]
-pub fn policy(nonce: &Nonce, form_action: &str) -> String {
-    format!(
-        "default-src 'self'; \
-         script-src 'self' 'wasm-unsafe-eval' 'nonce-{nonce}'; \
-         style-src 'self'; \
-         img-src 'self' data:; \
-         connect-src 'self'; \
-         object-src 'none'; \
-         base-uri 'self'; \
-         form-action {form_action}; \
-         frame-ancestors 'none'"
-    )
-}
-
-/// Marks every document `no-store`, and the site bundle, the stylesheets
-/// and the marks `no-cache`, so a rebuilt one is fetched again (RFC 9111
-/// §5.2.2).
-async fn cache_control(request: Request, next: Next) -> Response {
-    let path = request.uri().path();
-    let asset = path.starts_with("/pkg/")
-        || [STYLESHEET, THEME, FAVICON, MARK_LIGHT, MARK_DARK].contains(&path);
-    let mut response = next.run(request).await;
-    let value = if asset && response.status().is_success() {
-        "no-cache"
-    } else {
-        "no-store"
-    };
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static(value));
-    response
-}
-
-/// Serves `router` on `listener` until `shutdown` resolves.
+/// Serves `router` on `listener` until `shutdown` resolves, then drains as
+/// `ferrohealth-server` does: `lifecycle` turns draining, and the requests in
+/// flight get the family's default drain delay and shutdown bound.
 ///
 /// # Errors
 /// Returns the I/O error of a listener that fails.
 pub async fn serve(
     listener: tokio::net::TcpListener,
     router: axum::Router,
+    lifecycle: Lifecycle,
     shutdown: impl Future<Output = ()> + Send + 'static,
-) -> std::io::Result<()> {
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown)
-        .await
+) -> std::io::Result<Drained> {
+    let section = ServerSection::default();
+    ferrohealth_server::serve::serve(
+        listener,
+        router,
+        lifecycle,
+        shutdown,
+        section.drain_delay(),
+        section.shutdown_timeout(),
+    )
+    .await
 }
 
 #[cfg(test)]
 mod tests {
-    use leptos::nonce::Nonce;
-
-    use super::{is_public, is_sign_in, policy};
-
-    #[test]
-    fn the_policy_allows_scripts_only_by_nonce_and_never_eval() {
-        let nonce = Nonce::new();
-        let policy = policy(&nonce, "'self'");
-        let script = policy
-            .split(';')
-            .map(str::trim)
-            .find(|directive| directive.starts_with("script-src"))
-            .expect("a script-src directive");
-        assert_eq!(
-            format!("script-src 'self' 'wasm-unsafe-eval' 'nonce-{nonce}'"),
-            script
-        );
-        assert!(policy.contains("style-src 'self';"), "{policy}");
-        assert!(!policy.contains("'unsafe-eval'"), "{policy}");
-        assert!(!policy.contains("'unsafe-inline'"), "{policy}");
-    }
+    use super::{is_public, is_sign_in};
 
     #[test]
     fn only_the_bundle_the_files_and_the_sign_in_routes_need_no_session() {

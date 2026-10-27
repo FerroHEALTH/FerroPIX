@@ -1409,6 +1409,7 @@ dependencies = [
  "tower",
  "tower-http 0.7.1",
  "tracing",
+ "url",
  "uuid",
 ]
 
@@ -1603,7 +1604,6 @@ dependencies = [
  "tokio-rustls",
  "toml",
  "tower",
- "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
  "unicode-normalization",

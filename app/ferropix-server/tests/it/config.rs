@@ -26,7 +26,13 @@ fn resolve(
 fn every_section_loads_and_resolves() {
     let secrets = Secrets::new();
     let settings = resolve(FULL, &secrets).expect("the full configuration resolves");
-    assert_eq!("/pix", settings.server.base_path);
+    assert_eq!("/pix", settings.server.base_path.as_str());
+    assert_eq!(
+        "https://pix.example.org/pix",
+        settings.public_base_url.as_str()
+    );
+    assert_eq!(1000, settings.server.drain_delay_ms);
+    assert_eq!(5000, settings.server.shutdown_timeout_ms);
     assert_eq!(8080, settings.server.listen.port());
     assert!(
         settings
@@ -233,10 +239,10 @@ fn the_dev_profile_runs_on_loopback_with_basic_users_and_refuses_another_address
     let development = format!(
         r#"
 profile = "development"
+public_base_url = "http://localhost:8080"
 
 [server]
 listen = "127.0.0.1:8080"
-public_base_url = "http://localhost:8080"
 
 [[auth.basic.users]]
 user = "dev-source"
@@ -281,7 +287,7 @@ fn an_empty_configuration_names_the_first_missing_key() {
         .resolve()
         .expect_err("the public base URL has no default");
     assert!(
-        matches!(&error, Error::Missing { key } if key == "server.public_base_url"),
+        matches!(&error, Error::Missing { key } if key == "public_base_url"),
         "{error:?}"
     );
 }

@@ -14,8 +14,8 @@
 //! [`pages`] in the steward's preferences ([`preferences`]) and the
 //! request's [`locale`]; [`server`] serves it with the health, sign-in and
 //! preference routes under the browser security headers, [`config`] reads
-//! the TOML configuration, [`cli`] and [`command`] run the binary, and
-//! [`healthcheck`] is the job a container runtime runs beside it. No
+//! the TOML configuration, and [`cli`] and [`command`] run the binary over
+//! the subcommands and the probe of `ferrohealth-server`. No
 //! specification governs the console: our own design (`docs/architecture.md`
 //! §12).
 //!
@@ -38,8 +38,6 @@ pub mod command;
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod document;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod healthcheck;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod locale;
 #[cfg(not(target_arch = "wasm32"))]

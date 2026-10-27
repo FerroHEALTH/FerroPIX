@@ -129,12 +129,15 @@ impl Harness {
         let spool = tempfile::tempdir().expect("a temporary directory");
         let mut audit_settings = settings.audit.clone();
         audit_settings.spool_dir = spool.path().join("spool");
-        let audit = Audit::open(&audit_settings, &settings.server.public_base_url)
-            .expect("the audit spool opens");
+        let audit =
+            Audit::open(&audit_settings, &settings.public_base_url).expect("the audit spool opens");
         let health = Registry::default();
         let lifecycle = crate::support::serving();
         let routes = fhir::routes(
-            &settings.server,
+            fhir::Address {
+                base: settings.server.base_path.as_str(),
+                public_base_url: &settings.public_base_url,
+            },
             Mounts::all(),
             &smart,
             &health,
@@ -168,7 +171,7 @@ impl Harness {
             store,
             matching: settings.matching.clone(),
             deprecated: settings.pdqm.deprecated,
-            public_base_url: settings.server.public_base_url.clone(),
+            public_base_url: settings.public_base_url.clone(),
             audit_settings: settings.audit.clone(),
             _postgres: postgres,
             _secrets: secrets,

@@ -5,12 +5,12 @@
 //!
 //! `serve` runs the console, `config check` reads and resolves the
 //! configuration the way `serve` would and exits, and `healthcheck` asks the
-//! console on this host whether it answers, for a container runtime with no
+//! console on this host for its readiness, for a container runtime with no
 //! HTTP client of its own. No specification governs the command line: our own
 //! design.
 
-use clap::{Parser, Subcommand};
-use ferrohealth_server::cli::ConfigArgs;
+use clap::Parser;
+use ferrohealth_server::cli::{Common, ConfigArgs};
 
 /// The `ferropix-console` command line.
 #[derive(Debug, Parser, PartialEq, Eq)]
@@ -21,39 +21,17 @@ pub struct Cli {
     /// applied last.
     #[command(flatten)]
     pub config: ConfigArgs,
-    /// The job to run.
+    /// The job to run: `serve`, `config check` or `healthcheck`, the jobs
+    /// every FerroHEALTH binary shares.
     #[command(subcommand)]
-    pub command: Command,
-}
-
-/// What the binary does.
-#[derive(Debug, Subcommand, PartialEq, Eq)]
-pub enum Command {
-    /// Serves the console until the process is asked to stop.
-    Serve,
-    /// Works on the configuration.
-    Config {
-        /// The job to run.
-        #[command(subcommand)]
-        command: ConfigCommand,
-    },
-    /// Asks the console running on this host whether it answers, and exits
-    /// `0` only when its health route answers `200`.
-    Healthcheck,
-}
-
-/// The `config` jobs.
-#[derive(Debug, Subcommand, PartialEq, Eq)]
-pub enum ConfigCommand {
-    /// Reads and resolves the configuration, secrets included, and reports
-    /// whether the console would start on it.
-    Check,
+    pub command: Common,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Command, ConfigCommand};
+    use super::Cli;
     use clap::{CommandFactory, Parser};
+    use ferrohealth_server::cli::{Common, ConfigCommand};
 
     #[test]
     fn the_command_line_is_well_formed() {
@@ -63,17 +41,14 @@ mod tests {
     #[test]
     fn every_job_parses_with_and_without_a_configuration_file() {
         for (args, command) in [
-            (vec!["ferropix-console", "serve"], Command::Serve),
+            (vec!["ferropix-console", "serve"], Common::Serve),
             (
                 vec!["ferropix-console", "config", "check"],
-                Command::Config {
+                Common::Config {
                     command: ConfigCommand::Check,
                 },
             ),
-            (
-                vec!["ferropix-console", "healthcheck"],
-                Command::Healthcheck,
-            ),
+            (vec!["ferropix-console", "healthcheck"], Common::Healthcheck),
         ] {
             let parsed = Cli::try_parse_from(&args).expect("the job parses");
             assert_eq!(command, parsed.command, "{args:?}");

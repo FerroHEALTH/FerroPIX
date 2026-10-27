@@ -139,7 +139,7 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    # Longer than the 10-second drain window of [server] drain_timeout_ms.
+    # Longer than the drain of [server] drain_delay_ms and shutdown_timeout_ms.
     stop_grace_period: 20s
 
   # The operator console, a client of the server's operator API that

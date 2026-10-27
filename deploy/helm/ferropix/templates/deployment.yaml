@@ -29,7 +29,7 @@ spec:
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
-      # Longer than the server's drain window, [server] drain_timeout_ms.
+      # Longer than the server's drain, [server] drain_delay_ms and shutdown_timeout_ms.
       terminationGracePeriodSeconds: 30
       containers:
         - name: ferropix

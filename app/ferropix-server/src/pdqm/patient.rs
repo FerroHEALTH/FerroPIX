@@ -5,7 +5,7 @@
 //! every open link and the demographics of one of its records.
 //!
 //! `Patient.id` is the person's id. Its identifiers are the person's id in
-//! the Master Patient Identification Domain, `[server] public_base_url`
+//! the Master Patient Identification Domain, `public_base_url`
 //! (PMIR 1.6.0 §2:3.93.4.1.3), and the identifiers a PIX query answers for
 //! the person ([`crate::store::xref::identifiers`]), each in its domain's
 //! system, opened from its sealed form for the answer alone. Its demographics are the current version of

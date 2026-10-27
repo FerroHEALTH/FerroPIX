@@ -62,8 +62,10 @@ pub enum Profile {
 pub struct Config {
     /// The deployment profile.
     pub profile: Profile,
-    /// The HTTP surface (`[server]`).
-    pub server: section::server::Server,
+    /// The URL a client reaches `{base}` at (`public_base_url`).
+    pub public_base_url: String,
+    /// The HTTP surface (`[server]`), with its TLS (`[server.tls]`).
+    pub server: ferrohealth_server::section::ServerSection,
     /// The console, the request log and the OTLP export (`[telemetry]`).
     pub telemetry: ferrohealth_telemetry::section::TelemetrySection,
     /// The PostgreSQL store (`[db]`).

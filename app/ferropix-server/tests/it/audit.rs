@@ -567,7 +567,10 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
         &settings.server,
         Health::new(health.clone(), lifecycle.clone()),
         Some(fhir::routes(
-            &settings.server,
+            fhir::Address {
+                base: settings.server.base_path.as_str(),
+                public_base_url: &settings.public_base_url,
+            },
             Mounts::all(),
             &smart,
             &health,

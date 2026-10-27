@@ -149,9 +149,10 @@ impl Issuer {
 pub(crate) fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
     let text = format!(
         r#"
+public_base_url = "http://localhost:8080"
+
 [server]
 listen = "127.0.0.1:0"
-public_base_url = "http://localhost:8080"
 
 [auth]
 audience = ["{AUDIENCE}"]
@@ -207,7 +208,7 @@ pub(crate) fn backend(settings: &Settings) -> fhir::Backend {
 /// audit spool in the temporary directory returned beside it.
 pub(crate) async fn application(settings: Settings) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let backend = backend(&settings);
-    application_with(settings, &backend).await
+    Box::pin(application_with(settings, &backend)).await
 }
 
 /// Returns the application of `settings` with every route mounted, its
@@ -217,7 +218,7 @@ pub(crate) async fn application_with(
     settings: Settings,
     backend: &fhir::Backend,
 ) -> (Router, Arc<Smart>, tempfile::TempDir) {
-    application_logged(settings, backend, RequestLog::default()).await
+    Box::pin(application_logged(settings, backend, RequestLog::default())).await
 }
 
 /// Returns the application of [`application_with`], with `log` as its
@@ -235,12 +236,15 @@ pub(crate) async fn application_logged(
     let spool = tempfile::tempdir().expect("a temporary directory");
     let mut audit_settings = settings.audit.clone();
     audit_settings.spool_dir = spool.path().join("spool");
-    let audit = Audit::open(&audit_settings, &settings.server.public_base_url)
-        .expect("the audit spool opens");
+    let audit =
+        Audit::open(&audit_settings, &settings.public_base_url).expect("the audit spool opens");
     let health = Registry::default();
     let lifecycle = crate::support::serving();
     let guarded = fhir::routes(
-        &settings.server,
+        fhir::Address {
+            base: settings.server.base_path.as_str(),
+            public_base_url: &settings.public_base_url,
+        },
         Mounts::all(),
         &smart,
         &health,
@@ -636,10 +640,10 @@ async fn a_development_surface_of_basic_users_names_the_basic_service_and_no_dis
     let text = format!(
         r#"
 profile = "development"
+public_base_url = "http://localhost:8080"
 
 [server]
 listen = "127.0.0.1:0"
-public_base_url = "http://localhost:8080"
 
 [[auth.basic.users]]
 user = "dev-source"

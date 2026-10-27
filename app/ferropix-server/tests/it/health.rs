@@ -12,15 +12,14 @@
 
 use std::process::Command;
 use std::sync::Arc;
-use std::time::Duration;
 
 use ferrohealth_health::document::State;
 use ferrohealth_health::lifecycle::Lifecycle;
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome, Registry};
 use ferrohealth_server::health::Health;
+use ferrohealth_server::section::ServerSection;
 use ferrohealth_telemetry::request_log::RequestLog;
-use ferropix_server::config::section::server::ServerSettings;
-use ferropix_server::http::{router, serve_until};
+use ferropix_server::http::router;
 use http::{Method, StatusCode};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -52,14 +51,13 @@ impl HealthIndicator for Fixed {
 }
 
 /// The settings of a server on a free loopback port at the root.
-fn server() -> ServerSettings {
-    ServerSettings {
+fn server() -> ServerSection {
+    ServerSection {
         listen: "127.0.0.1:0".parse().expect("a socket address"),
-        base_path: String::new(),
-        public_base_url: url::Url::parse("http://localhost:8080").expect("a URL"),
-        body_limit: 1024,
-        request_timeout: Duration::from_secs(5),
-        drain_timeout: Duration::from_millis(300),
+        body_limit_bytes: 1024,
+        request_timeout_ms: 5000,
+        shutdown_timeout_ms: 300,
+        ..ServerSection::default()
     }
 }
 
@@ -183,14 +181,12 @@ async fn healthcheck_exits_one_on_a_server_whose_readiness_answers_503() {
         None,
     );
     let (stop, stopped) = oneshot::channel::<()>();
-    let task = tokio::spawn(serve_until(
-        listener,
-        app,
-        Duration::from_millis(300),
-        async move {
+    let task = tokio::spawn(async move {
+        ferrohealth_server::serve::run(listener, app, &server(), Lifecycle::default(), async move {
             stopped.await.unwrap_or(());
-        },
-    ));
+        })
+        .await
+    });
     let quickstart = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("quickstart.toml");
     let output = tokio::task::spawn_blocking(move || {
         Command::new(env!("CARGO_BIN_EXE_ferropix"))

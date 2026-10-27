@@ -67,14 +67,15 @@ impl Secrets {
 /// A production configuration with every section of the tree set.
 pub(crate) const FULL: &str = r#"
 profile = "production"
+public_base_url = "https://pix.example.org/pix"
 
 [server]
 listen = "0.0.0.0:8080"
 base_path = "/pix"
-public_base_url = "https://pix.example.org/pix"
 body_limit_bytes = 2097152
 request_timeout_ms = 20000
-drain_timeout_ms = 5000
+drain_delay_ms = 1000
+shutdown_timeout_ms = 5000
 
 [telemetry]
 filter = "info,ferropix_server=debug"

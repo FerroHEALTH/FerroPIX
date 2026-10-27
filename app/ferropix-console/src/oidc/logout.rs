@@ -9,7 +9,7 @@
 //!
 //! A sign-out is a `POST`, which the server takes only from the console's own
 //! pages, as it takes every request that is not a safe method
-//! ([`crate::server::same_origin`]).
+//! (`ferrohealth_server::same_origin`).
 
 use axum::Extension;
 use axum::response::{IntoResponse, Response};

@@ -8,22 +8,23 @@ paths: ["app/ferropix-console/**"]
 # Leptos console rules (`app/ferropix-console`)
 
 **FerroUI leads the UI.** The console draws with `ferrohealth-ui`, pinned
-exactly in the root `[workspace.dependencies]` (today `=0.3.7`, a row of
-`docs/VERSIONS.md`), and the FerroUI repository (FerroHEALTH/FerroUI) is the
-source for its components, design, tokens, icons, accessibility bar,
-interaction contract, words and quality control. Read these first, at the git
-tag that matches the pin (today `v0.3.7`), and on `main` only while the
-console moves to the next release:
+exactly in the root `[workspace.dependencies]` at the version the
+FerroUI row of `docs/VERSIONS.md` names, and the FerroUI repository
+(FerroHEALTH/FerroUI) is the source for its components, design, tokens,
+icons, accessibility bar, interaction contract, words and quality control.
+Read these first, at the git tag that matches the pin (the links below are
+the `v0.5.2` copies; read the tag of the pin when it moves):
 
-- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/docs/consoles.md):
-  the consumer guide, what the library owns and what a console owns.
-- [`.claude/rules/leptos-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/.claude/rules/leptos-ui.md):
+- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/docs/consoles.md):
+  the consumer guide, what the library owns and what a console owns, how a
+  console builds and how it watches the session's end.
+- [`.claude/rules/leptos-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/.claude/rules/leptos-ui.md):
   the component rules of every FerroHEALTH console. The section numbers this
-  file cites (FerroUI §N) are those of the `v0.3.7` copy.
-- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/crates/ferrohealth-ui/CLAUDE.md):
-  the interaction contract and islands mode.
-- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.3.7/design/COMPONENTS.md)
-  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.3.7/design/consoles/ferropix):
+  file cites (FerroUI §N) are those of the `v0.5.2` copy.
+- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/crates/ferrohealth-ui/CLAUDE.md):
+  the interaction contract and the rendering mode.
+- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/design/COMPONENTS.md)
+  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.5.2/design/consoles/ferropix):
   every component by its ID, the family rules, and this console's pages as
   reviewed. FerroUI's `design/` is the only design source; a design folder
   anywhere else is stale and is never synced from.
@@ -45,23 +46,46 @@ the workspace resolves, never memory.
 
 ## 1. The shape
 
-- **Islands mode, two halves chosen by target** (FerroUI §1, §2, §15). The
-  host build is the server half: every module but the hydrate entry is
-  `#[cfg(not(target_arch = "wasm32"))]`, and the server draws every page
-  whole. The `wasm32-unknown-unknown` build is the browser entry alone,
-  `hydrate()` over `leptos::mount::hydrate_islands()`, linking FerroUI for
-  its islands. The crate has no `ssr` or `hydrate` feature, so a workspace
-  `--all-features` build never turns both on.
-- **Every island is FerroUI's.** The console writes no `#[island]` of its own
-  until a widget shares state with the console's code (FerroUI §1); one that
-  does is justified against the bundle bytes it adds (§4).
-- **A page reads nothing asynchronously while it renders.** The `gate`
-  middleware of `server.rs` holds the session and calls the FerroPIX server
-  once before the render, and hands the page a `PageContext` (the steward's
-  name, the outcome of the liveness route, on About the
-  `CapabilityStatement`). A page is a synchronous server component drawn
-  from it, so no resource is serialized and no streaming script runs.
-- **Every important action is a link or a form** (FerroUI §1 layer 3): a
+- **The whole page hydrates, two halves chosen by target** (FerroUI
+  `docs/consoles.md`, "How a console builds", and FerroUI §15). The server
+  draws the first page; the `wasm32-unknown-unknown` build, `hydrate()`
+  over FerroUI's `widget::hydration::hydrate`, takes the whole tree over and
+  draws every page after it in the browser, so a link, a tab or a search
+  keeps the document. The host build is the server half (`leptos/ssr`,
+  axum, the session and the client of the FerroPIX server, each
+  `#[cfg(not(target_arch = "wasm32"))]`); the page tree (`app`, `pages`,
+  `model`, `locale`, `preferences`, `paths`) compiles for both. Neither
+  half turns on the `leptos` feature `islands`, and the crate has no `ssr`
+  or `hydrate` feature, so a workspace `--all-features` build never turns
+  both on.
+- **The pages sit in four lazy route groups** (`app`'s `Work`, `Patients`,
+  `Registry` and `Aside`), each a chunk of its own under `--split`, loaded
+  the first time the browser draws one of its pages. The shell is FerroUI's,
+  drawn once around them and following the router
+  (`widget::nav::follow_path`).
+- **Every page is drawn from its `PageContext`.** The `gate` middleware of
+  `server.rs` holds the session, and `page_for` calls the FerroPIX server
+  once before the first page renders (the steward's name, the outcome of the
+  liveness route, on About the `CapabilityStatement`); the context reaches
+  the hydrating page serialized. After a navigation the page is read
+  through the `page` server function (`app::page_now`), and a form drawn in
+  place (a search, a trail filter, a reveal, a domain's form) posts through
+  the `post` server function (`app::post_now`). Both reads are a resource
+  taken in the page's `Transition` and in an effect, never in a memo
+  (#323), and the old page stays until the new one comes.
+- **The session's end is watched** (FerroUI `docs/consoles.md`, "The
+  session's end"). The shell of a signed-in page draws FerroUI's
+  `SessionWatch` over the session route (`paths::SESSION`,
+  `session::route`: `GET` reads what the session has left, `POST` extends
+  it), from what the session had left as the server drew the first page; a
+  session the watch or a page read finds gone sends every tab to
+  `/sign-in/expired` with the page's address as its return (#322).
+- **Every widget is FerroUI's** (FerroUI §1, "The interaction contract
+  and the three parts"). The console writes a component of its own only
+  where a widget shares state with the console's code, justified against
+  the bundle bytes it adds (§4); the posts drawn in place and the page
+  reads above are the console's own because they share the page context.
+- **Every important action is a link or a form** (FerroUI §1, item 3): a
   search, a preference, Try again, sign-out and the sidebar's rail all work
   with the WebAssembly withheld.
 - **The bundle name is fixed at compile time.** `.cargo/config.toml` sets

@@ -35,7 +35,7 @@ pub const EXPORT: &str = "/audit/export";
 /// The tone of an action's kind.
 fn tone(kind: &str) -> Tone {
     match kind {
-        "reveal" | "export" => Tone::Warn,
+        "reveal" | "export" | "pseudonym-resolve" => Tone::Warn,
         "merge" | "unmerge" | "decide" => Tone::Info,
         "domain-create" | "domain-update" => Tone::Accent,
         _ => Tone::Neutral,

@@ -20,6 +20,9 @@ use ferropix_operator_api::actions::ActionFilter;
 use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Decided, Decision, Verdict};
 use ferropix_operator_api::domain::{Domain, DomainChange, NewDomain};
 use ferropix_operator_api::patient::DomainKind;
+use ferropix_operator_api::pseudonym::{
+    NewPseudonymDomain, PseudonymDomain, PseudonymDomainChange, Resolution, Resolve,
+};
 use ferropix_operator_api::reveal::{MAX_SECONDS, Reveal, Target};
 use ferropix_operator_api::search::{DemographicsSearch, IdentifierSearch, Results};
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
@@ -133,8 +136,8 @@ pub enum Answer {
 }
 
 /// Answers the form `pairs` posted to `path` by the request with
-/// `headers`: a search, a trail filter, a reveal, or an administrator's
-/// domain create or change.
+/// `headers`: a search, a trail filter, a reveal, an administrator's
+/// domain create or change, or a pseudonymisation domain's form.
 pub async fn answer(
     state: &ConsoleState,
     headers: &HeaderMap,
@@ -170,6 +173,10 @@ pub async fn answer(
         ["domains", domain] if crate::pages::screens::is_uuid(domain) => {
             changed(state, &token, domain, pairs).await
         }
+        ["pseudonym-domains"] => match pseudonymised(state, &token, pairs).await {
+            Some(document) => document,
+            None => return Answer::Back(back),
+        },
         _ => return Answer::Unknown,
     };
     Answer::Drawn {
@@ -654,6 +661,68 @@ async fn deferral(
     )
     .await
     .map(|_| ())
+}
+
+/// A post of the pseudonymisation domains page: a resolve, or an
+/// administrator's create or change, by its form field; and the page's
+/// document with the outcome. `None` for a post that names no form, or a
+/// change that names no domain.
+async fn pseudonymised(
+    state: &ConsoleState,
+    token: &AccessToken,
+    pairs: &[(String, String)],
+) -> Option<Document> {
+    use crate::pages::pseudonyms::{CHANGE, CREATE, FORM, RESOLVE};
+    let pix = state.pix();
+    let mut written = None;
+    let mut resolved = None;
+    match field(pairs, FORM).as_deref() {
+        Some(RESOLVE) => {
+            let resolve = Resolve {
+                namespace: field(pairs, "namespace").unwrap_or_default(),
+                pseudonym: field(pairs, "pseudonym").unwrap_or_default(),
+                reason: field(pairs, "reason").unwrap_or_default(),
+            };
+            let answer: Read<Resolution> = pix
+                .post("operator/pseudonyms/resolve", &resolve, token)
+                .await;
+            resolved = Some(answer);
+        }
+        Some(CREATE) => {
+            let new = NewPseudonymDomain {
+                namespace: field(pairs, "namespace").unwrap_or_default(),
+                name: field(pairs, "name").unwrap_or_default(),
+                consumer_client_id: field(pairs, "consumer"),
+                reason: field(pairs, "reason"),
+            };
+            let answer: Read<PseudonymDomain> =
+                pix.post("operator/pseudonym-domains", &new, token).await;
+            written = Some(answer.map(|_| ()));
+        }
+        Some(CHANGE) => {
+            let domain = field(pairs, "domain").filter(|id| crate::pages::screens::is_uuid(id))?;
+            let change = PseudonymDomainChange {
+                name: field(pairs, "name"),
+                consumer_client_id: field(pairs, "consumer"),
+                retire: field(pairs, "retire").is_some(),
+                reason: field(pairs, "reason").unwrap_or_default(),
+            };
+            let answer: Read<serde::de::IgnoredAny> = pix
+                .patch(
+                    &format!("operator/pseudonym-domains/{domain}"),
+                    &change,
+                    token,
+                )
+                .await;
+            written = Some(answer.map(|_| ()));
+        }
+        _ => return None,
+    }
+    Some(Document::PseudonymDomains {
+        domains: pix.read("operator/pseudonym-domains", token).await,
+        written,
+        resolved,
+    })
 }
 
 #[cfg(test)]

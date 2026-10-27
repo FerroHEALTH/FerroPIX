@@ -16,6 +16,7 @@ pub mod dashboard;
 pub mod not_found;
 pub mod patient;
 pub mod preferences;
+pub mod pseudonyms;
 pub mod queue;
 pub mod registry;
 pub mod screens;

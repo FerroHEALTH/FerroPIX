@@ -45,14 +45,14 @@ never act while you type in a field, and a phone shows none.
 | Dashboard, `/` | The open queue with the pairs waiting more than seven days, the share of records linked automatically over 24 hours, the versions fed today and the subscriptions in error; the queue's depth and the feeds per hour by channel as charts, each with its figures table; the HTTP and MLLP listeners and the feed sender; the oldest pairs in the queue. |
 | Review queue, `/queue` | The pairs the scorer found worth a look, the grade first, then the score, then the longest wait: both leading names, their birth dates and domains, the score with its bar, the grade and the time queued. `j` and `k` move the focused row and Enter opens the pair; `o` or `d` opens it at a glance in a side panel, with Open to decide and Defer (a date and your reason). The filters (grade, domain system, days waiting, the deferred pairs) and the paging are posted, so none of them reaches an address. |
 | Search, `/search` | By identifier (the domain chosen from the server's domains, the value masked as you type) and by demographics, each posted, so nothing you type reaches an address. The results open each patient; a demographics search adds the grade and score. The top bar's field reads what you typed: a date or a name searches by demographics with the field filled, anything else is an identifier searched in every domain. |
-| Patient, `/patients/{person}` | The leading demographics, then four tabs: the identifiers per domain, masked, each with its reveal; the source records side by side, each field marked against the leading demographics; the history on a timeline; the pseudonyms, masked. A reveal asks your reason, is recorded by the server as a privacy disclosure, and shows the value for the seconds Your preferences set. |
+| Patient, `/patients/{person}` | The leading demographics, then four tabs: the identifiers per domain, masked, each with its reveal; the source records side by side, each field marked against the leading demographics; the history on a timeline; the pseudonyms, masked, with a link to Resolve a pseudonym. A reveal asks your reason, is recorded by the server as a privacy disclosure, and shows the value for the seconds Your preferences set. |
 | Sources, `/sources` | Every system allowed to feed, its channel, how it is admitted, the domains that name it and its last activity, and one source's last messages. Sources are set in the server's configuration file. |
 | Identifier domains, `/domains` | Every domain with its system, kind, Source, record count and last feed, and one domain with its last feeds. An administrator adds a domain, renames one, gives it another Source or retires it, each with a reason; the server's refusal shows in place. |
+| Pseudonymisation domains, `/pseudonym-domains` | Every pseudonymisation domain with its namespace, its consumer, how many pseudonyms it holds and its state, and Resolve a pseudonym: the domain, the pseudonym and your reason, posted, answered with the patient it belongs to and recorded by the server as a disclosure. The pseudonym never reaches an address and the answer never shows it. An administrator adds a domain, renames one, names another consumer or retires it, each with a reason. |
 | Configuration, `/configuration` | The matching thresholds, field weights, blocking keys and the built-in deterministic rules, read-only, each value marked when the environment set it or nothing did. |
 | Audit trail, `/audit` | The steward actions, newest first, under posted filters (actor, kind, person, dates), each row with its reason, its references and its request id, and the export of the filtered rows as CSV, itself an audited action. |
 
-The review queue, compare and decide, merge and unmerge and the
-pseudonymisation domains follow with the
+Compare and decide, and merge and unmerge follow with the
 [v0.0.10 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/10);
 until then those pages say the server serves no operator API for them yet. The console ships as its own container image,
 published by the release lane from the first tagged release
@@ -123,9 +123,9 @@ The identifier domains. [Dark theme](img/console/domains-dark.png).
 
 One identifier domain with its last feeds. [Dark theme](img/console/domain-dark.png).
 
-![The pseudonymisation domains, which follow with v0.0.10](img/console/pseudonym-domains.png)
+![The pseudonymisation domains and Resolve a pseudonym](img/console/pseudonym-domains.png)
 
-The pseudonymisation domains, which follow with v0.0.10. [Dark theme](img/console/pseudonym-domains-dark.png).
+The pseudonymisation domains and Resolve a pseudonym. [Dark theme](img/console/pseudonym-domains-dark.png).
 
 ![The matching configuration](img/console/configuration.png)
 

@@ -761,6 +761,34 @@ messages! {
     DomainRetire = "domain-retire",
     /// The retire switch's help.
     DomainRetireHelp = "domain-retire-help",
+    /// The consumer column.
+    ColConsumer = "col-consumer",
+    /// The note drawn in place of the pseudonymisation domain forms
+    /// without the administrator scope.
+    PseudonymAdminOnly = "pseudonym-admin-only",
+    /// The change form's disclosure and submit on the pseudonymisation
+    /// domains page.
+    PseudonymChange = "pseudonym-change",
+    /// The retire switch's help for a pseudonymisation domain.
+    PseudonymRetireHelp = "pseudonym-retire-help",
+    /// The resolve form's title, and the patient tab's link to it.
+    ResolveTitle = "resolve-title",
+    /// The resolve form's note.
+    ResolveNote = "resolve-note",
+    /// The resolve form's pseudonym field.
+    ResolvePseudonym = "resolve-pseudonym",
+    /// The resolve form's submit.
+    ResolveSubmit = "resolve-submit",
+    /// The note drawn in place of the resolve form with no active domain.
+    ResolveNoDomain = "resolve-no-domain",
+    /// The answer's title.
+    ResolvedTitle = "resolved-title",
+    /// The answer's sentence before the person.
+    ResolvedPerson = "resolved-person",
+    /// The answer's note that the resolution is a disclosure.
+    ResolvedDisclosure = "resolved-disclosure",
+    /// What a refused resolve shows.
+    WhatPseudonymResolve = "what-pseudonym-resolve",
     /// The side panel's Open to decide.
     QueueDecide = "queue-decide",
     /// The legend's words for the queue row's side panel.

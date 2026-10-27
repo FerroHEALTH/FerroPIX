@@ -386,14 +386,30 @@ pub fn Domain() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn PseudonymDomains() -> impl IntoView {
-    // TODO(#116): draw the pseudonymisation domains and the resolve form.
-    Screen::new(
+    let screen = Screen::new(
         Msg::PseudonymDomains,
         Msg::PseudonymDomainsSub,
         Msg::WhatPseudonymDomains,
         "GET /operator/pseudonym-domains",
-    )
-    .view()
+    );
+    let context = page_context();
+    let admin = context.admin;
+    let body = match context.document {
+        Some(Document::PseudonymDomains {
+            domains,
+            written,
+            resolved,
+        }) => Some(drawn(&domains, &screen, |domains| {
+            crate::pages::pseudonyms::pseudonym_domains(
+                domains,
+                written.as_ref(),
+                resolved.as_ref(),
+                admin,
+            )
+        })),
+        _ => None,
+    };
+    screen.with(body).view()
 }
 
 /// The configuration at `/configuration` (design 25).

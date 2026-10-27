@@ -53,7 +53,7 @@ pub(crate) const FILLED_PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 
 /// The routes the filled stand-in answers: the method, the path and the
 /// document under [`DOCUMENTS`] it answers with.
-pub(crate) const FILLED: [(&str, &str, &str); 15] = [
+pub(crate) const FILLED: [(&str, &str, &str); 17] = [
     ("GET", "/operator/overview", "overview"),
     ("GET", "/operator/dependencies", "dependencies"),
     (
@@ -69,6 +69,8 @@ pub(crate) const FILLED: [(&str, &str, &str); 15] = [
         "/operator/domains/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
         "domain-page",
     ),
+    ("GET", "/operator/pseudonym-domains", "pseudonym-domains"),
+    ("POST", "/operator/pseudonyms/resolve", "resolution"),
     ("GET", "/operator/candidates", "candidates"),
     (
         "GET",
@@ -239,6 +241,7 @@ mod tests {
     use ferropix_operator_api::health::Dependencies;
     use ferropix_operator_api::overview::Overview;
     use ferropix_operator_api::person::Person;
+    use ferropix_operator_api::pseudonym::{PseudonymDomains, Resolution};
     use ferropix_operator_api::reveal::Revealed;
     use ferropix_operator_api::search::Results;
     use ferropix_operator_api::source::{SourcePage, Sources};
@@ -266,6 +269,8 @@ mod tests {
                 "actions" => reads::<Actions>(name),
                 "results" => reads::<Results>(name),
                 "revealed" => reads::<Revealed>(name),
+                "pseudonym-domains" => reads::<PseudonymDomains>(name),
+                "resolution" => reads::<Resolution>(name),
                 "candidates" => reads::<Candidates>(name),
                 "candidate" => reads::<Candidate>(name),
                 "decided" => reads::<Decided>(name),

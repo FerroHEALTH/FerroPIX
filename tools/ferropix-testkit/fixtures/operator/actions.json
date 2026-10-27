@@ -1,6 +1,16 @@
 {
   "actions": [
     {
+      "id": "action-2",
+      "kind": "pseudonym-resolve",
+      "actor": "Synthetic Operator",
+      "at": "2026-10-25T10:00:00Z",
+      "person": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+      "pseudonym_domain": "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60",
+      "reason": "Synthetic phone call",
+      "request_id": "request-2"
+    },
+    {
       "id": "action-1",
       "kind": "reveal",
       "actor": "Synthetic Steward",

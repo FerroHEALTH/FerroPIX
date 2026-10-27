@@ -20,6 +20,7 @@ use ferropix_operator_api::actions::ActionFilter;
 use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Decided, Decision, Verdict};
 
 use ferropix_operator_api::domain::{Domain, DomainChange, NewDomain};
+use ferropix_operator_api::merge::{NewMerge, Outcome as MergeOutcome, Preview, Revert};
 use ferropix_operator_api::patient::DomainKind;
 use ferropix_operator_api::pseudonym::{
     NewPseudonymDomain, PseudonymDomain, PseudonymDomainChange, Resolution, Resolve,
@@ -162,6 +163,18 @@ pub async fn answer(
         ["search"] | ["search", "demographics"] => searched(state, &token, pairs).await,
         ["audit"] => crate::document::trail(state.pix(), &token, filter_of(pairs)).await,
         ["queue"] => queued(state, &token, pairs).await,
+        ["patients", person, "merge"] if crate::pages::screens::is_uuid(person) => {
+            match merged(state, &token, person, pairs).await {
+                Ok(survivor) => return Answer::Back(survivor),
+                Err(document) => *document,
+            }
+        }
+        ["patients", person, "unmerge"] if crate::pages::screens::is_uuid(person) => {
+            match unmerged(state, &token, person, pairs).await {
+                Ok(page) => return Answer::Back(page),
+                Err(document) => *document,
+            }
+        }
         ["queue", candidate] if crate::pages::screens::is_uuid(candidate) => {
             match decided(state, &token, candidate, pairs).await {
                 Ok(next) => return Answer::Back(next),
@@ -670,6 +683,129 @@ async fn decided(
         candidate: pix.read(&route, token).await,
         outcome: Some(outcome),
     }))
+}
+
+/// The preview of merging `merged` into `survivor`.
+async fn preview_of(
+    state: &ConsoleState,
+    token: &AccessToken,
+    survivor: &str,
+    merged: &str,
+) -> Read<Preview> {
+    let query = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("survivor", survivor)
+        .append_pair("merged", merged)
+        .finish();
+    state
+        .pix()
+        .read(&format!("operator/merges/preview?{query}"), token)
+        .await
+}
+
+/// A post of the merge page of `person`: a preview of merging the patient
+/// it names, the older surviving unless the post names the survivor, or the
+/// merge itself.
+///
+/// # Errors
+///
+/// The merge page's document with the preview, or with the refusal and a
+/// fresh preview when the server refused the merge.
+async fn merged(
+    state: &ConsoleState,
+    token: &AccessToken,
+    person: &str,
+    pairs: &[(String, String)],
+) -> Result<String, Box<Document>> {
+    let page = |preview, refused| {
+        Box::new(Document::Merge {
+            person: person.to_owned(),
+            preview,
+            refused,
+        })
+    };
+    let uuid = |name: &str| field(pairs, name).filter(|id| crate::pages::screens::is_uuid(id));
+    if field(pairs, crate::pages::merge::FORM).as_deref() == Some(crate::pages::merge::MERGE) {
+        let (Some(survivor), Some(merged)) = (uuid("survivor"), uuid("merged")) else {
+            return Err(page(None, None));
+        };
+        let merge = NewMerge {
+            survivor: survivor.clone(),
+            survivor_version: field(pairs, "survivor_version").unwrap_or_default(),
+            merged: merged.clone(),
+            merged_version: field(pairs, "merged_version").unwrap_or_default(),
+            reason: field(pairs, "reason").unwrap_or_default(),
+        };
+        return match state
+            .pix()
+            .post::<_, MergeOutcome>("operator/merges", &merge, token)
+            .await
+        {
+            Ok(outcome) => Ok(format!("/patients/{}", outcome.survivor)),
+            Err(probe) => Err(page(
+                Some(preview_of(state, token, &survivor, &merged).await),
+                Some(probe),
+            )),
+        };
+    }
+    let Some(other) = uuid("other").filter(|other| other != person) else {
+        return Err(page(None, None));
+    };
+    if let Some(survivor) = uuid("survivor") {
+        let merged = if survivor == other {
+            person.to_owned()
+        } else {
+            other
+        };
+        return Err(page(
+            Some(preview_of(state, token, &survivor, &merged).await),
+            None,
+        ));
+    }
+    let first = preview_of(state, token, person, &other).await;
+    // NOTE: no specification governs this: our own design; the older patient survives
+    // unless the steward chooses the other, as RFC 3339 UTC times compare as text.
+    let preview = match &first {
+        Ok(found) if found.merged.created_at < found.survivor.created_at => {
+            preview_of(state, token, &other, person).await
+        }
+        _ => first,
+    };
+    Err(page(Some(preview), None))
+}
+
+/// A post of the unmerge page of `person`: the revert of the merge it
+/// names, with the survivor's version the preview read.
+///
+/// # Errors
+///
+/// The unmerge page's document, read again, with the refusal.
+async fn unmerged(
+    state: &ConsoleState,
+    token: &AccessToken,
+    person: &str,
+    pairs: &[(String, String)],
+) -> Result<String, Box<Document>> {
+    let merge = field(pairs, "merge").filter(|id| crate::pages::screens::is_uuid(id));
+    let refused = match merge {
+        Some(merge) => {
+            let revert = Revert {
+                survivor_version: field(pairs, "survivor_version").unwrap_or_default(),
+                reason: field(pairs, "reason").unwrap_or_default(),
+            };
+            match state
+                .pix()
+                .post::<_, MergeOutcome>(&format!("operator/merges/{merge}/revert"), &revert, token)
+                .await
+            {
+                Ok(_) => return Ok(format!("/patients/{person}")),
+                Err(probe) => Some(probe),
+            }
+        }
+        None => None,
+    };
+    Err(Box::new(
+        crate::document::unmerge(state.pix(), token, person, refused).await,
+    ))
 }
 
 /// The query string of `GET /operator/candidates` for `filter`.

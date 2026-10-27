@@ -91,7 +91,23 @@ pub fn patient(person: &Person, tab: &str, revealed: Option<&Read<Revealed>>) ->
         "pseudonyms" => pseudonyms(person),
         _ => identifiers(person),
     };
+    let unmerge = crate::pages::merge::latest_merge(person).map(|_| {
+        view! {
+            <a href=format!("{base}/unmerge") class=Variant::Secondary.class()>
+                {label(Some(Glyph::UNDO), tr(Msg::PatientUnmerge))}
+            </a>
+        }
+    });
+    let actions = view! {
+        <div class="fui-actions">
+            <a href=format!("{base}/merge") class=Variant::Secondary.class()>
+                {label(Some(Glyph::GIT_COMPARE), tr(Msg::PatientMergeInto))}
+            </a>
+            {unmerge}
+        </div>
+    };
     stack(view! {
+        {actions}
         {summary(person)}
         {revealed.map(reveal_answer)}
         {binder(tr(Msg::PatientTabs), tabs, current, panel)}

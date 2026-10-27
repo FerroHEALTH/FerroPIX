@@ -5,9 +5,9 @@
 //!
 //! A search, a trail filter, a reveal, an identifier domain's form, the
 //! pseudonymisation domains' forms, the queue's filters, paging and
-//! deferral, and a pair's decision are each drawn from their answer with no
-//! new document. No specification governs the console's pages: our own
-//! design.
+//! deferral, a pair's decision, and a merge and its revert are each drawn
+//! from their answer with no new document. No specification governs the
+//! console's pages: our own design.
 
 use leptos::prelude::*;
 
@@ -29,7 +29,7 @@ pub fn posts_in_page(path: &str) -> bool {
         ["search" | "audit" | "domains" | "pseudonym-domains" | "queue"]
             | ["search", "demographics"]
             | ["domains" | "queue", _]
-    ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL)
+    ) || matches!(parts.as_slice(), ["patients", _, last] if *last == crate::pages::patient::REVEAL || *last == "merge" || *last == "unmerge")
 }
 
 /// Takes the submit of every form [`posts_in_page`] names through

@@ -26,6 +26,7 @@ mod browser;
 mod chromedriver;
 mod in_place;
 mod keyboard;
+mod merge;
 mod pair;
 mod preferences;
 mod pseudo_locale;

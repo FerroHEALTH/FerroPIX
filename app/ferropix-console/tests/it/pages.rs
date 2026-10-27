@@ -107,10 +107,14 @@ async fn the_dashboard_says_what_the_console_keeps_while_the_server_is_away()
     Ok(())
 }
 
+/// The pages that read nothing until the steward names what they preview.
+const ASKING: [&str; 1] = ["/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/merge"];
+
 /// The pages that read a document of the operator API before they are
 /// drawn.
-const READING: [&str; 11] = [
+const READING: [&str; 12] = [
     "/",
+    "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/unmerge",
     "/queue",
     "/queue/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
     "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
@@ -142,6 +146,13 @@ async fn a_server_whose_operator_api_refuses_a_page_is_named_and_an_unserved_pag
         let (response, page) = send(&service, get_with(route, &cookie)?).await?;
         assert_eq!(StatusCode::OK, response.status(), "{route}");
         assert!(page.contains("Server up"), "{route}'s status pill says so");
+        if ASKING.contains(&route) {
+            assert!(
+                page.contains("name=\"other\""),
+                "{route} asks for the other patient before it reads anything"
+            );
+            continue;
+        }
         assert!(
             page.contains("/operator/"),
             "{route} names the route it reads"

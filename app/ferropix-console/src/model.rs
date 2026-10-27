@@ -17,6 +17,7 @@ use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Candidates};
 use ferropix_operator_api::configuration::Configuration;
 use ferropix_operator_api::domain::{DomainPage, Domains};
 use ferropix_operator_api::health::Dependencies;
+use ferropix_operator_api::merge::Preview;
 use ferropix_operator_api::overview::Overview;
 use ferropix_operator_api::person::Person;
 use ferropix_operator_api::pseudonym::{PseudonymDomains, Resolution};
@@ -174,6 +175,28 @@ pub enum Document {
         candidate: Read<Box<Candidate>>,
         /// What the decision just posted came to.
         outcome: Option<DecisionOutcome>,
+    },
+    /// The merge of a person, with the preview of merging another into it
+    /// or it into another, and a refused merge.
+    Merge {
+        /// The person the page is about.
+        person: String,
+        /// The preview the steward asked for.
+        preview: Option<Read<Preview>>,
+        /// The merge the server refused.
+        refused: Option<Probe>,
+    },
+    /// The unmerge of a person: the latest merge into it, the preview of
+    /// its revert, and a refused revert.
+    Unmerge {
+        /// The person the page is about.
+        person: String,
+        /// The latest merge into the person that is not reverted.
+        merge: Option<String>,
+        /// The preview of its revert, or the person's refused read.
+        preview: Option<Read<Preview>>,
+        /// The revert the server refused.
+        refused: Option<Probe>,
     },
     /// A person, `GET /operator/persons/{id}`, with a reveal the steward
     /// just asked for.

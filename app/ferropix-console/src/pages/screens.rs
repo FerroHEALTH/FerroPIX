@@ -217,6 +217,31 @@ fn patient_screen(title: Msg, subtitle: Msg, what: Msg, route: &str, below: bool
     }
     let mut screen =
         Screen::new(title, subtitle, what, route.replace("{person}", &person)).under(crumbs);
+    if below {
+        screen.body = match page_context().document {
+            Some(Document::Merge {
+                person: id,
+                preview,
+                refused,
+            }) => Some(crate::pages::merge::merge(
+                &id,
+                preview.as_ref(),
+                refused.as_ref(),
+            )),
+            Some(Document::Unmerge {
+                person: id,
+                merge,
+                preview,
+                refused,
+            }) => Some(crate::pages::merge::unmerge(
+                &id,
+                merge.as_ref(),
+                preview.as_ref(),
+                refused.as_ref(),
+            )),
+            _ => None,
+        };
+    }
     if !below {
         let tab = crate::app::current_query()
             .split('&')
@@ -259,7 +284,6 @@ pub fn Patient() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Merge() -> impl IntoView {
-    // TODO(#111): draw the merge preview and its confirmation.
     patient_screen(
         Msg::Merge,
         Msg::MergeSub,
@@ -276,7 +300,6 @@ pub fn Merge() -> impl IntoView {
     reason = "the #[component] macro drops a #[must_use] from the function it writes"
 )]
 pub fn Unmerge() -> impl IntoView {
-    // TODO(#111): draw the latest merge, the preview of its revert and the confirmation.
     patient_screen(
         Msg::Unmerge,
         Msg::UnmergeSub,

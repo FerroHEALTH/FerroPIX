@@ -13,6 +13,7 @@
 
 pub mod about;
 pub mod dashboard;
+pub mod merge;
 pub mod not_found;
 pub mod pair;
 pub mod patient;

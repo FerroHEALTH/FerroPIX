@@ -39,6 +39,16 @@ pub async fn load(pix: &Pix, token: &AccessToken, path: &str) -> Option<Document
                 .await,
             outcome: None,
         },
+        ["patients", person, "merge"] if crate::pages::screens::is_uuid(person) => {
+            Document::Merge {
+                person: (*person).to_owned(),
+                preview: None,
+                refused: None,
+            }
+        }
+        ["patients", person, "unmerge"] if crate::pages::screens::is_uuid(person) => {
+            unmerge(pix, token, person, None).await
+        }
         ["patients", person] if crate::pages::screens::is_uuid(person) => Document::Person {
             person: pix.read(&format!("operator/persons/{person}"), token).await,
             revealed: None,
@@ -72,6 +82,44 @@ pub async fn load(pix: &Pix, token: &AccessToken, path: &str) -> Option<Document
         _ => return None,
     };
     Some(document)
+}
+
+/// Reads the unmerge page of `person`: the latest merge into it that no
+/// later revert undid, from its history, and the preview of its revert,
+/// with `refused`, a revert the server refused.
+pub async fn unmerge(
+    pix: &Pix,
+    token: &AccessToken,
+    person: &str,
+    refused: Option<crate::model::Probe>,
+) -> Document {
+    let read: crate::model::Read<ferropix_operator_api::person::Person> =
+        pix.read(&format!("operator/persons/{person}"), token).await;
+    let found = match read {
+        Ok(found) => found,
+        Err(probe) => {
+            return Document::Unmerge {
+                person: person.to_owned(),
+                merge: None,
+                preview: Some(Err(probe)),
+                refused,
+            };
+        }
+    };
+    let merge = crate::pages::merge::latest_merge(&found);
+    let preview = match &merge {
+        Some(merge) => Some(
+            pix.read(&format!("operator/merges/preview?revert={merge}"), token)
+                .await,
+        ),
+        None => None,
+    };
+    Document::Unmerge {
+        person: person.to_owned(),
+        merge,
+        preview,
+        refused,
+    }
 }
 
 /// Reads the page of the audit trail `filter` names.

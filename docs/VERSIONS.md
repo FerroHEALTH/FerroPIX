@@ -235,6 +235,14 @@ redistribution is fetched into the git-ignored `.vendor-cache/` and only its
 | IHE XCPD example messages | the twelve ITI-55 example files of IHE's implementation material (ITI TF-2 Appendix W), committed, pin-set digest `9ac6d57712fadf4d7b905b2bc5aa3596e7bbb7524cb3151e44230ab71e4e55e6` | `scripts/vendor/ihe-xcpd-examples.sh`, `docs/specs/ihe-xcpd-examples/PROVENANCE.md` |
 | IHE ITI Technical Framework Volume 2 HL7 v2 pages | the ITI-8, ITI-9 and ITI-10 pages (Revision 20.0), the ITI-21 page (Revision 20.2) and the ITI-22 page (Revision 20.1), all cache only, pin-set digest `ff7b90dfcd52d54ab9bec50dcec64fdd0ac811a6b02f45d3314c01385dd9358d` | `scripts/vendor/ihe-iti-tf.sh`, `docs/specs/ihe-iti-tf-hl7v2/PROVENANCE.md` |
 
+The weekly `scripts/checks/pin-freshness.sh` reads each W3C row against the
+newest version the W3C API lists. W3C republishes the DID Resolution 1.0
+Candidate Recommendation Draft almost daily, and `nl-generic-functions`
+checks only that its vendored text is present, so that row is stale only
+once a newer draft is more than 90 days ahead of the pin; within that lag
+it reads as current, with the newer draft and its distance printed beside
+it.
+
 ## The usage report contract
 
 The installation report the server sends to FerroPULSE follows FerroPULSE's

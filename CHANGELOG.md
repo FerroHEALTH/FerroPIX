@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-10-27
+
 ### Added
 
 - The console's pseudonymisation domains page draws every domain with its
@@ -48,6 +50,11 @@ and this project adheres to
 - The book's steward's guide walks the review queue, the three decisions,
   the merge and the unmerge in the console, with what each records and
   how a stale decision is answered (#106).
+
+### Changed
+
+- The Helm chart is 0.3.2, the same templates and values as 0.3.1, with
+  v0.0.10 as its appVersion.
 
 ## [0.0.9] - 2026-10-27
 

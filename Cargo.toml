@@ -148,7 +148,7 @@ sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "r
 # it started. The console's browser half marks the page hydrated through
 # web-sys, at the version wasm-bindgen already resolves. Verified against
 # crates.io on 2026-10-24.
-thirtyfour = { version = "0.37.5", default-features = false, features = ["reqwest", "cdp"] }
+thirtyfour = { version = "0.38.0", default-features = false, features = ["reqwest", "cdp"] }
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
 web-sys = { version = "0.3.106", default-features = false }
 

@@ -142,7 +142,7 @@ impl Harness {
                 matching: settings.matching.clone(),
                 deprecated: settings.pdqm.deprecated,
                 configured: ferropix_server::operator::Configured {
-                    origins: ferropix_server::config::origin::Origins::default(),
+                    provenance: ferrohealth_config::provenance::Provenance::default(),
                     senders: vec![ferropix_server::config::section::hl7v2::Sender {
                         application: String::from("ADT"),
                         facility: String::from("EAST"),

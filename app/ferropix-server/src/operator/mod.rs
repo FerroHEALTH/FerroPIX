@@ -69,7 +69,7 @@ use crate::store::{Store, StoreError};
 #[derive(Debug, Clone, Default)]
 pub struct Configured {
     /// Where each setting came from.
-    pub origins: crate::config::origin::Origins,
+    pub provenance: ferrohealth_config::provenance::Provenance,
     /// The HL7 v2 senders, empty when the face is off.
     pub senders: Vec<crate::config::section::hl7v2::Sender>,
 }

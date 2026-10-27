@@ -7,10 +7,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use secrecy::{ExposeSecret as _, SecretString};
+use ferrohealth_secret::file::SecretError;
+use secrecy::ExposeSecret as _;
 
-use ferropix_console::config::error::{Error, Problem, Stage};
-use ferropix_console::config::{Config, secret};
+use ferropix_console::config::Config;
+use ferropix_console::config::error::Error;
 
 fn environment(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs
@@ -54,44 +55,46 @@ fn an_override_wins_over_the_file_and_reads_as_toml_or_text() {
 }
 
 #[test]
-fn an_unknown_key_in_the_file_is_refused_at_its_line_without_its_value() {
+fn an_unknown_key_in_the_file_is_refused_by_name_without_its_value() {
     let text = "[server]\nlisten = \"127.0.0.1:3000\"\npassword = \"hunter2\"\n";
     let error = Config::from_sources(Some(text), &BTreeMap::new()).expect_err("an unknown key");
-    let Error::Parse { fault } = &error else {
-        panic!("a parse fault, got {error:?}");
-    };
-    assert_eq!(Problem::UnknownKey, fault.problem);
-    assert_eq!(Stage::File, fault.stage);
-    assert_eq!(Some(3), fault.position.map(|(line, _)| line));
-    assert_eq!(Some("password"), fault.key.as_deref());
+    assert!(matches!(error, Error::Load(_)), "{error:?}");
     let shown = format!("{error} {error:?}");
+    assert!(shown.contains("server.password"), "{shown}");
     assert!(!shown.contains("hunter2"), "{shown}");
 }
 
 #[test]
-fn an_unknown_key_from_the_environment_is_refused_after_the_overrides() {
+fn an_unknown_key_from_the_environment_is_refused_naming_its_variable() {
     let error = Config::from_sources(
         None,
         &environment(&[("FERROPIX_CONSOLE__PIX__TOKEN", "s3cret")]),
     )
     .expect_err("an unknown key");
-    let Error::Parse { fault } = &error else {
-        panic!("a parse fault, got {error:?}");
-    };
-    assert_eq!(Problem::UnknownKey, fault.problem);
-    assert_eq!(Stage::Merged, fault.stage);
+    assert!(matches!(error, Error::Load(_)), "{error:?}");
     let shown = format!("{error} {error:?}");
+    assert!(shown.contains("pix.token"), "{shown}");
+    assert!(shown.contains("FERROPIX_CONSOLE__PIX__TOKEN"), "{shown}");
     assert!(!shown.contains("s3cret"), "{shown}");
 }
 
 #[test]
-fn text_that_is_not_toml_is_refused_as_syntax() {
+fn a_variable_of_the_server_is_left_to_the_server() {
+    let settings = Config::from_sources(
+        None,
+        &environment(&[("FERROPIX__SERVER__LISTEN", "0.0.0.0:8080")]),
+    )
+    .expect("the server's variable is not the console's")
+    .resolve()
+    .expect("the defaults resolve");
+    assert_eq!("127.0.0.1:3000", settings.listen.to_string());
+}
+
+#[test]
+fn text_that_is_not_toml_is_refused_at_its_line() {
     let error = Config::from_sources(Some("[server\n"), &BTreeMap::new()).expect_err("no TOML");
-    let Error::Parse { fault } = &error else {
-        panic!("a parse fault, got {error:?}");
-    };
-    assert_eq!(Problem::Syntax, fault.problem);
-    assert_eq!(Some(1), fault.position.map(|(line, _)| line));
+    assert!(matches!(error, Error::Load(_)), "{error:?}");
+    assert!(error.to_string().contains("line 1"), "{error}");
 }
 
 #[test]
@@ -217,57 +220,77 @@ fn each_oidc_or_session_value_its_key_does_not_admit_is_refused_by_key() {
     }
 }
 
+/// The `[oidc]` section with `lines` added, resolved.
+fn oidc_with(lines: &str) -> Result<ferropix_console::config::settings::Settings, Error> {
+    Config::from_sources(Some(&format!("{OIDC}{lines}")), &BTreeMap::new())?.resolve()
+}
+
 #[test]
-fn a_secret_is_read_from_its_file_trimmed() {
+fn a_secret_is_read_from_its_file_without_its_line_ending() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let path = dir.path().join("secret");
-    std::fs::write(&path, "  s3cret\n").expect("the secret file");
-    let read = secret::resolve("oidc.client_secret", None, Some(&path))
-        .expect("the secret reads")
+    std::fs::write(&path, "s3cret\n").expect("the secret file");
+    let settings = oidc_with(&format!(
+        "client_secret_file = {:?}\n",
+        path.display().to_string()
+    ))
+    .expect("the secret reads");
+    let secret = settings
+        .oidc
+        .and_then(|oidc| oidc.client_secret)
         .expect("a secret");
-    assert_eq!("s3cret", read.expose_secret());
+    assert_eq!("s3cret", secret.expose_secret());
 }
 
 #[test]
 fn an_inline_secret_stands_and_no_secret_is_none() {
-    let inline = SecretString::from("inline");
-    let read = secret::resolve("k", Some(&inline), None).expect("the secret stands");
+    let settings = oidc_with("client_secret = \"inline\"\n").expect("the secret stands");
+    let secret = settings.oidc.and_then(|oidc| oidc.client_secret);
     assert_eq!(
         Some("inline"),
-        read.as_ref().map(secrecy::ExposeSecret::expose_secret)
+        secret.as_ref().map(secrecy::ExposeSecret::expose_secret)
     );
-    assert!(
-        secret::resolve("k", None, None)
-            .expect("nothing to read")
-            .is_none()
-    );
+    let settings = oidc_with("").expect("nothing to read");
+    assert!(settings.oidc.and_then(|oidc| oidc.client_secret).is_none());
 }
 
 #[test]
 fn a_secret_set_twice_is_refused_by_key() {
     let dir = tempfile::tempdir().expect("a temporary directory");
-    let inline = SecretString::from("inline");
-    let error = secret::resolve("k", Some(&inline), Some(dir.path())).expect_err("both set");
+    let error = oidc_with(&format!(
+        "client_secret = \"inline\"\nclient_secret_file = {:?}\n",
+        dir.path().display().to_string()
+    ))
+    .expect_err("both set");
     assert!(
-        matches!(&error, Error::Conflict { key } if key == "k"),
+        matches!(&error, Error::Secret(SecretError::Both { key }) if key == "oidc.client_secret"),
         "{error:?}"
     );
+    assert!(!error.to_string().contains("inline"), "{error}");
 }
 
 #[test]
-fn a_missing_or_empty_secret_file_is_refused_by_its_file_key() {
+fn a_missing_or_empty_secret_file_is_refused_by_its_key() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let missing = dir.path().join("missing");
-    let error = secret::resolve("k", None, Some(&missing)).expect_err("no file");
+    let error = oidc_with(&format!(
+        "client_secret_file = {:?}\n",
+        missing.display().to_string()
+    ))
+    .expect_err("no file");
     assert!(
-        matches!(&error, Error::Secret { key, .. } if key == "k_file"),
+        matches!(&error, Error::Secret(SecretError::Read { key, .. }) if key == "oidc.client_secret"),
         "{error:?}"
     );
     let empty = dir.path().join("empty");
-    std::fs::write(&empty, " \n").expect("the empty file");
-    let error = secret::resolve("k", None, Some(&empty)).expect_err("an empty file");
+    std::fs::write(&empty, "\n").expect("the empty file");
+    let error = oidc_with(&format!(
+        "client_secret_file = {:?}\n",
+        empty.display().to_string()
+    ))
+    .expect_err("an empty file");
     assert!(
-        matches!(&error, Error::EmptySecret { key, .. } if key == "k_file"),
+        matches!(&error, Error::Secret(SecretError::Empty { key, .. }) if key == "oidc.client_secret"),
         "{error:?}"
     );
 }

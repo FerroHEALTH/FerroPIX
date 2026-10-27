@@ -63,6 +63,11 @@ jiff.workspace = true
 # The ID Token of a sign-in, verified against the provider's JWK Set
 # (OpenID Connect Core 1.0 §3.1.3.7).
 jsonwebtoken.workspace = true
+# The configuration loader, the secret types and the `--config` and `--set`
+# arguments the family shares.
+ferrohealth-config.workspace = true
+ferrohealth-secret.workspace = true
+ferrohealth-server.workspace = true
 # The calls to the FerroPIX server and to the OpenID Provider.
 reqwest = { workspace = true, features = ["rustls", "json"] }
 secrecy = { workspace = true, features = ["serde"] }
@@ -70,7 +75,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
-toml.workspace = true
 # The site bundle is served brotli- or gzip-compressed, as the request's
 # Accept-Encoding chooses.
 tower-http = { workspace = true, features = ["set-header", "compression-br", "compression-gzip"] }

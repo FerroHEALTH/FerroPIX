@@ -62,8 +62,9 @@ pub struct Settings {
     pub usage_report: UsageReportSettings,
     /// The development table, under the development profile.
     pub dev: Option<Dev>,
-    /// Where each setting came from.
-    pub origins: crate::config::origin::Origins,
+    /// Where each setting came from: the provenance of the load, which the
+    /// run path sets; the default (every key a default) until it does.
+    pub provenance: ferrohealth_config::provenance::Provenance,
 }
 
 impl Config {
@@ -133,7 +134,7 @@ impl Config {
             operator: self.operator.clone(),
             usage_report,
             dev: self.dev.clone(),
-            origins: self.origins.clone(),
+            provenance: ferrohealth_config::provenance::Provenance::default(),
         })
     }
 }

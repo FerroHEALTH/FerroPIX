@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The console's configuration: a TOML file, `FERROPIX_CONSOLE__`
-//! environment overrides over it, and every secret reachable through a
-//! `<key>_file` sibling read at start.
+//! The console's configuration, read by `ferrohealth-config`.
+//!
+//! The layers are the defaults, a TOML file, the `FERROPIX_CONSOLE__`
+//! environment overrides and the `--set` arguments, and every secret is
+//! reachable through a `<key>_file` sibling read at start.
 //!
 //! [`Config`] is the tree as written, every default in its struct's
-//! `Default` impl; [`Config::load`](crate::config::Config::load) reads it and
+//! `Default` impl; [`Config::load`] reads it and
 //! [`Config::resolve`](crate::config::Config::resolve) turns it into the
 //! checked [`settings::Settings`] the server runs on. An override names its
 //! key by path, `FERROPIX_CONSOLE__PIX__BASE_URL` for `[pix]
@@ -36,24 +38,50 @@
 //! ```
 
 pub mod error;
-pub mod load;
-pub mod secret;
 pub mod settings;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use secrecy::SecretString;
-use serde::Deserialize;
+use ferrohealth_config::loader::{Loaded, Loader};
+use ferrohealth_secret::secret::Secret;
+use ferrohealth_server::cli::ConfigArgs;
+use serde::{Deserialize, Serialize};
 
-/// The environment variable that names the configuration file when
-/// `--config` does not.
-pub const CONFIG_PATH_ENV: &str = "FERROPIX_CONSOLE_CONFIG";
+use crate::config::error::Error;
 
-/// The prefix of every environment override.
-pub const ENV_PREFIX: &str = "FERROPIX_CONSOLE__";
+/// The prefix of every environment override and of
+/// `FERROPIX_CONSOLE_CONFIG`.
+pub const PREFIX: &str = "FERROPIX_CONSOLE";
+
+impl Config {
+    /// Reads the configuration of the running process: the file `args`
+    /// names (or `FERROPIX_CONSOLE_CONFIG` does), the environment, and the
+    /// `--set` pairs of `args`, last.
+    ///
+    /// # Errors
+    /// Returns [`Error::Load`] with every refusal of the loader.
+    pub fn load(args: &ConfigArgs) -> Result<Loaded<Self>, Error> {
+        Ok(Loader::new(PREFIX)?.load_with(args.config.as_deref(), &args.sets)?)
+    }
+
+    /// Reads `text` as the configuration file and applies `environment`
+    /// over it, for a test that states both (setting a variable is `unsafe`
+    /// in edition 2024).
+    ///
+    /// # Errors
+    /// Returns [`Error::Load`] with every refusal of the loader.
+    pub fn from_sources(
+        text: Option<&str>,
+        environment: &BTreeMap<String, String>,
+    ) -> Result<Self, Error> {
+        let loaded = Loader::new(PREFIX)?.load_sources::<Self>(text, None, environment)?;
+        Ok(loaded.into_parts().0)
+    }
+}
 
 /// The configuration tree as written.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// `[server]`: where the console listens and where its site bundle is.
@@ -64,11 +92,12 @@ pub struct Config {
     pub session: Session,
     /// `[oidc]`: the OpenID Provider operators sign in with; without it the
     /// console offers no sign-in.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub oidc: Option<Oidc>,
 }
 
 /// `[server]`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Server {
     /// The socket address the console listens on.
@@ -92,7 +121,7 @@ impl Default for Server {
 }
 
 /// `[pix]`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Pix {
     /// The root of the FerroPIX server's HTTP surface, under which it serves
@@ -117,7 +146,7 @@ impl Default for Pix {
 
 /// `[session]`: the pending sign-ins and the signed-in sessions, each a pool
 /// of its own.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Session {
     /// Whether the cookies carry `Secure`, so a browser sends them over HTTPS
@@ -153,7 +182,7 @@ impl Default for Session {
 
 /// `[oidc]`: an OAuth 2.0 authorization code client with PKCE at an OpenID
 /// Provider.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Oidc {
     /// The provider's issuer identifier, which an ID Token's `iss` must equal
@@ -170,8 +199,10 @@ pub struct Oidc {
     /// The console's client identifier at the provider (RFC 6749 §2.2).
     pub client_id: String,
     /// The console's client secret, inline, for a confidential client.
-    pub client_secret: Option<SecretString>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_secret: Option<Secret>,
     /// A file holding the console's client secret.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret_file: Option<PathBuf>,
     /// The redirection endpoint the provider sends the operator back to
     /// (RFC 6749 §3.1.2), the console's `/auth/callback`.
@@ -185,10 +216,12 @@ pub struct Oidc {
     /// The provider's end-session endpoint, where a sign-out sends the
     /// operator (OpenID Connect RP-Initiated Logout 1.0 §2); without it a
     /// sign-out ends the console's session alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub end_session_endpoint: Option<String>,
     /// Where the provider sends the operator after it signed them out, as
     /// registered with the provider (OpenID Connect RP-Initiated Logout 1.0
     /// §3).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub post_logout_redirect_uri: Option<String>,
 }
 

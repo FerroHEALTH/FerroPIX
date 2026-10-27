@@ -5,8 +5,10 @@
 
 use std::collections::BTreeMap;
 
+use ferrohealth_secret::REDACTED;
+use ferrohealth_secret::secret::Secret;
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferropix_server::config::Config;
-use ferropix_server::config::secret::{REDACTED, Secret, SecretUrl};
 
 use crate::support::{DATA_KEY, FULL, PASSWORD, Secrets};
 

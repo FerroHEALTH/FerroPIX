@@ -27,8 +27,10 @@ use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid};
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
-use crate::config::secret::{Secret, read_file};
 use crate::config::section::is_loopback_url;
+use ferrohealth_secret::file::read_secret_file;
+use ferrohealth_secret::secret::Secret;
+use secrecy::ExposeSecret as _;
 
 /// The `[xcpd]` section as written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -240,9 +242,9 @@ impl Xcpd {
             trust: self
                 .reply_trust_file
                 .as_deref()
-                .map(|path| read_file("xcpd.reply_trust_file", path))
+                .map(|path| read_secret_file("xcpd.reply_trust", path))
                 .transpose()?
-                .map(|pem| pem.expose().to_owned()),
+                .map(|pem| pem.expose_secret().to_owned()),
         })
     }
 
@@ -252,12 +254,12 @@ impl Xcpd {
         match (&self.client_certificate_file, &self.client_key_file) {
             (None, None) => Ok(None),
             (Some(certificate), Some(key)) => {
-                let certificate = read_file("xcpd.client_certificate_file", certificate)?;
-                let key = read_file("xcpd.client_key_file", key)?;
+                let certificate = read_secret_file("xcpd.client_certificate", certificate)?;
+                let key = read_secret_file("xcpd.client_key", key)?;
                 Ok(Some(Secret::new(format!(
                     "{}\n{}\n",
-                    certificate.expose(),
-                    key.expose()
+                    certificate.expose_secret(),
+                    key.expose_secret()
                 ))))
             }
             (Some(_), None) => Err(Error::Missing {
@@ -430,7 +432,8 @@ mod tests {
                 s.client_certificate_file = Some(dir.path().join("absent.crt"));
                 s.client_key_file = Some(key.clone());
             }),
-            Err(Error::SecretFile { key, .. }) if key == "xcpd.client_certificate_file"
+            Err(Error::Secret(ferrohealth_secret::file::SecretError::Read { key, .. }))
+                if key == "xcpd.client_certificate"
         ));
     }
 }

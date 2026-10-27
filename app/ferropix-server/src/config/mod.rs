@@ -1,33 +1,45 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The configuration tree: one TOML file, then the environment overrides,
-//! then one typed [`settings::Settings`] the run path holds.
+//! The configuration tree, read by `ferrohealth-config`.
 //!
-//! The file is the one `--config` or `FERROPIX_CONFIG` names, and every key
-//! can be overridden by `FERROPIX__<SECTION>__<KEY>`. Every table refuses an
-//! unknown key, every default lives inline in its own `Default` impl, and
-//! every secret is a [`secret::Secret`] or [`secret::SecretUrl`] read from its
-//! key or its `<key>_file` sibling. No specification governs the
+//! The defaults, one TOML file, the environment overrides and the `--set`
+//! arguments make one typed [`settings::Settings`] the run path holds.
+//!
+//! The file is the one `--config` or `FERROPIX_CONFIG` names, every key can
+//! be overridden by `FERROPIX__<SECTION>__<KEY>` and by `--set key=value`,
+//! and `RUST_LOG` sets `telemetry.filter`. Every table refuses an unknown
+//! key, every default lives inline in its own `Default` impl, and every
+//! secret is a `ferrohealth_secret` type read from its key or its
+//! `<key>_file` sibling ([`secret`]). No specification governs the
 //! configuration: our own design, in the family's shape.
 
 pub mod error;
-mod load;
-pub mod origin;
-pub mod secret;
 pub mod section;
 pub mod settings;
 
+use std::collections::BTreeMap;
+
+use ferrohealth_config::loader::{Loaded, Loader};
+use ferrohealth_secret::file::read_secret;
+use ferrohealth_server::cli::ConfigArgs;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-/// The prefix of every environment override.
-///
-/// The name after it is the dotted key with `__` between levels, the key in
-/// either case: `FERROPIX__SERVER__LISTEN` sets `[server] listen`.
-pub const ENV_PREFIX: &str = "FERROPIX__";
+use crate::config::error::Error;
 
-/// The environment variable naming the configuration file.
-pub const CONFIG_PATH_ENV: &str = "FERROPIX_CONFIG";
+/// The prefix of every environment override and of `FERROPIX_CONFIG`.
+pub const PREFIX: &str = "FERROPIX";
+
+/// Returns the loader of the server's configuration: the `FERROPIX`
+/// namespace, with `RUST_LOG` as the alias of `telemetry.filter`.
+///
+/// # Errors
+/// Returns [`Error::Load`] when the namespace is refused, which it never is
+/// for [`PREFIX`].
+pub fn loader() -> Result<Loader, Error> {
+    Ok(Loader::new(PREFIX)?.alias("RUST_LOG", "telemetry.filter"))
+}
 
 /// The deployment profile.
 ///
@@ -85,7 +97,57 @@ pub struct Config {
     /// The development table, admitted under `profile = "development"` only
     /// (`[dev]`).
     pub dev: Option<section::dev::Dev>,
-    /// Where each setting came from, recorded as the tree is read.
-    #[serde(skip)]
-    pub origins: origin::Origins,
+}
+
+impl Config {
+    /// Reads the configuration of the running process: the file `args`
+    /// names (or `FERROPIX_CONFIG` does), the environment, and the `--set`
+    /// pairs of `args`, last.
+    ///
+    /// # Errors
+    /// Returns [`Error::Load`] with every refusal of the loader.
+    pub fn load(args: &ConfigArgs) -> Result<Loaded<Self>, Error> {
+        Ok(loader()?.load_with(args.config.as_deref(), &args.sets)?)
+    }
+
+    /// Reads `text` as the configuration file and applies `environment`
+    /// over it, for a test that states both (setting a variable is `unsafe`
+    /// in edition 2024).
+    ///
+    /// # Errors
+    /// Returns [`Error::Load`] with every refusal of the loader.
+    pub fn from_sources(
+        text: Option<&str>,
+        environment: &BTreeMap<String, String>,
+    ) -> Result<Self, Error> {
+        let loaded = loader()?.load_sources::<Self>(text, None, environment)?;
+        Ok(loaded.into_parts().0)
+    }
+}
+
+/// Reads the secret set under `key` or in the file its `<key>_file` sibling
+/// names, as the redacting type `T`, or `None` when neither is set.
+///
+/// Under [`Profile::Production`] a value set under `key` itself is refused,
+/// so a secret never sits in the configuration file or the environment of a
+/// production server (no specification governs this: our own design).
+///
+/// # Errors
+/// Returns [`Error::InlineSecret`] for an inline value under production and
+/// [`Error::Secret`] with every refusal of `ferrohealth_secret::file`.
+pub fn secret<T>(
+    key: &str,
+    inline: Option<T>,
+    file: Option<&std::path::Path>,
+    profile: Profile,
+) -> Result<Option<T>, Error>
+where
+    T: From<SecretString>,
+{
+    if inline.is_some() && file.is_none() && profile == Profile::Production {
+        return Err(Error::InlineSecret {
+            key: key.to_owned(),
+        });
+    }
+    Ok(read_secret(key, inline, file)?)
 }

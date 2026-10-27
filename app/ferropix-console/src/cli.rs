@@ -9,17 +9,18 @@
 //! HTTP client of its own. No specification governs the command line: our own
 //! design.
 
-use std::path::PathBuf;
-
 use clap::{Parser, Subcommand};
+use ferrohealth_server::cli::ConfigArgs;
 
 /// The `ferropix-console` command line.
 #[derive(Debug, Parser, PartialEq, Eq)]
 #[command(name = "ferropix-console", version, about = "The FerroPIX Console")]
 pub struct Cli {
-    /// The configuration file to read, overriding `FERROPIX_CONSOLE_CONFIG`.
-    #[arg(long, value_name = "PATH", global = true)]
-    pub config: Option<PathBuf>,
+    /// `--config`, the file to read in place of the one
+    /// `FERROPIX_CONSOLE_CONFIG` names, and the `--set key=value` pairs
+    /// applied last.
+    #[command(flatten)]
+    pub config: ConfigArgs,
     /// The job to run.
     #[command(subcommand)]
     pub command: Command,
@@ -76,10 +77,10 @@ mod tests {
         ] {
             let parsed = Cli::try_parse_from(&args).expect("the job parses");
             assert_eq!(command, parsed.command, "{args:?}");
-            assert_eq!(None, parsed.config, "{args:?}");
+            assert_eq!(None, parsed.config.config, "{args:?}");
         }
         let parsed = Cli::try_parse_from(["ferropix-console", "serve", "--config", "console.toml"])
             .expect("the job parses");
-        assert_eq!(Some("console.toml".into()), parsed.config);
+        assert_eq!(Some("console.toml".into()), parsed.config.config);
     }
 }

@@ -13,6 +13,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use ferrohealth_server::cli::ConfigArgs;
 
 /// The `ferropix` command line.
 #[derive(Debug, Parser, PartialEq, Eq)]
@@ -22,9 +23,10 @@ use clap::{Parser, Subcommand};
     about = "The FerroPIX Master Patient Index over IHE PIXm and PDQm"
 )]
 pub struct Cli {
-    /// The configuration file to read, overriding `FERROPIX_CONFIG`.
-    #[arg(long, value_name = "PATH", global = true)]
-    pub config: Option<PathBuf>,
+    /// `--config`, the file to read in place of the one `FERROPIX_CONFIG`
+    /// names, and the `--set key=value` pairs applied last.
+    #[command(flatten)]
+    pub config: ConfigArgs,
     /// The job to run.
     #[command(subcommand)]
     pub command: Command,
@@ -162,11 +164,14 @@ mod tests {
         ] {
             let parsed = Cli::try_parse_from(&args).expect("the job parses");
             assert_eq!(command, parsed.command, "{args:?}");
-            assert_eq!(None, parsed.config, "{args:?}");
+            assert_eq!(None, parsed.config.config, "{args:?}");
         }
         let parsed = Cli::try_parse_from(["ferropix", "serve", "--config", "/etc/ferropix.toml"])
             .expect("--config parses after the job");
-        assert_eq!(Some(PathBuf::from("/etc/ferropix.toml")), parsed.config);
+        assert_eq!(
+            Some(PathBuf::from("/etc/ferropix.toml")),
+            parsed.config.config
+        );
     }
 
     #[test]

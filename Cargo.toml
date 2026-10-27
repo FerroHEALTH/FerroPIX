@@ -58,6 +58,14 @@ fhir-types = { version = "0.1.128", default-features = false }
 # fetchers. The server pins it exactly, as a product pins every family crate;
 # the published crates take their own caret requirement on it.
 ferrohealth-smart = { version = "=0.7.4", default-features = false }
+# The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
+# defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
+# provenance and the key-or-file rule for secrets, and the `--config` and
+# `--set` arguments of ferrohealth-server. Each pinned exactly, as a product
+# pins every family crate. Verified against crates.io on 2026-10-27.
+ferrohealth-config = "=0.2.5"
+ferrohealth-secret = "=0.2.0"
+ferrohealth-server = { version = "=0.3.4", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser and the original-mode acknowledgment, over the generated v2 tables,

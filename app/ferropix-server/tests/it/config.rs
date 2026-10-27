@@ -98,12 +98,13 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         let text = FULL.replacen(anchor, &format!("{anchor}misspelt_key = 1\n"), 1);
         assert_ne!(FULL, text, "{table} is in the full configuration");
         let error = resolve(&text, &secrets).expect_err("an unknown key is refused");
-        let Error::Parse { fault } = &error else {
-            panic!("{table}: a parse refusal, not {error:?}");
-        };
         assert!(
-            fault.message.contains("misspelt_key"),
-            "{table}: the refusal names the key: {fault}"
+            matches!(error, Error::Load(_)),
+            "{table}: a load refusal, not {error:?}"
+        );
+        assert!(
+            error.to_string().contains("misspelt_key"),
+            "{table}: the refusal names the key: {error}"
         );
     }
     for (table, text) in [

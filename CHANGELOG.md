@@ -12,6 +12,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-10-27
+
 ### Added
 
 - The console hydrates the whole page on FerroUI 0.5, so a link, a search,
@@ -34,6 +36,8 @@ and this project adheres to
 - W3C DID Resolution 1.0 moves to the Candidate Recommendation Draft of
   2026-10-26, re-vendored by version and digest, as the freshness check
   reported (#275).
+- The Helm chart is 0.3.1, the same templates and values as 0.3.0, with
+  v0.0.9 as its appVersion.
 
 ## [0.0.8] - 2026-10-27
 

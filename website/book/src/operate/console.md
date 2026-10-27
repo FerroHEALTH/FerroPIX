@@ -271,8 +271,8 @@ steward out there too.
 
 A session ends after `[session] idle_timeout_s` without a request from you,
 and after `absolute_timeout_s` whatever you do. Two minutes before the idle
-timeout, every signed-in page shows a warning with the time left, **Stay
-signed in** and **Sign out**. Your own typing and clicks keep the session
+timeout, every signed-in page shows a warning with the time left,
+**Stay signed in** and **Sign out**. Your own typing and clicks keep the session
 alive, at most once a minute; the page's own checks never do. When the
 session ends, or you sign out in another tab, every open tab of the console
 loads the sign-in page that says your session ended, and signing in again

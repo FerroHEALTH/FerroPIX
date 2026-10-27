@@ -54,7 +54,7 @@ pub struct LoginQuery {
 ///
 /// A sign-in returns to it; anything else is `None`: another origin, a
 /// scheme-relative or backslashed address, a control character, text past
-/// [`RETURN_LIMIT`], or a sign-in, sign-out or callback route.
+/// `RETURN_LIMIT`, or a sign-in, sign-out or callback route.
 #[must_use]
 pub fn return_path(text: &str) -> Option<&str> {
     let route = text.split(['?', '#']).next().unwrap_or_default();

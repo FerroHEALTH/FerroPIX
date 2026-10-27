@@ -119,7 +119,7 @@ pub fn patient(person: &Person, tab: &str, revealed: Option<&Read<Revealed>>) ->
 fn summary(person: &Person) -> AnyView {
     let leading = person.leading.clone().unwrap_or_default();
     let status = match person.status {
-        PersonStatus::Active => badge(Tone::Ok, tr(Msg::Active)).into_any(),
+        PersonStatus::Active => badge(Tone::Ok, tr(Msg::StateActive)).into_any(),
         PersonStatus::Merged => badge(Tone::Neutral, tr(Msg::Merged)).into_any(),
     };
     let merged_into = person.merged_into.clone().map(|survivor| {
@@ -223,7 +223,7 @@ fn masked(domain: &str, system: &str, masked: &str) -> AnyView {
 /// The words of a record's state.
 fn record_state(state: RecordState) -> AnyView {
     match state {
-        RecordState::Active => badge(Tone::Ok, tr(Msg::Active)).into_any(),
+        RecordState::Active => badge(Tone::Ok, tr(Msg::StateActive)).into_any(),
         RecordState::Subsumed => badge(Tone::Neutral, tr(Msg::Subsumed)).into_any(),
         RecordState::Removed => badge(Tone::Bad, tr(Msg::Removed)).into_any(),
     }

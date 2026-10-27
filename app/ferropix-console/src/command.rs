@@ -10,6 +10,8 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use ferrohealth_config::loader::Loaded;
+use ferrohealth_telemetry::section::TelemetrySection;
+use ferrohealth_telemetry::telemetry::{Console, Service, Telemetry};
 
 use crate::cli::{Cli, Command, ConfigCommand};
 use crate::config::Config;
@@ -67,7 +69,10 @@ where
         Command::Config {
             command: ConfigCommand::Check,
         } => config_check(&loaded, settings),
-        Command::Serve => runtime_then(|| serve(settings)),
+        Command::Serve => {
+            let telemetry = loaded.settings().telemetry.clone();
+            runtime_then(|| serve(settings, telemetry))
+        }
     }
 }
 
@@ -154,17 +159,31 @@ async fn healthcheck(settings: &Settings) -> ExitCode {
     clippy::print_stderr,
     reason = "a refusal before the subscriber starts has no other place to go"
 )]
-async fn serve(settings: Settings) -> ExitCode {
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_unset| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .try_init();
-    if let Err(error) = subscriber {
-        eprintln!("ferropix-console: cannot start the log: {error}");
+async fn serve(settings: Settings, section: TelemetrySection) -> ExitCode {
+    let service = Service::new("ferropix-console", env!("CARGO_PKG_VERSION"))
+        .export_crate("ferropix_console");
+    let telemetry = match Telemetry::new(&section, service) {
+        Ok(telemetry) => telemetry,
+        Err(error) => {
+            eprintln!("ferropix-console: cannot start the log: {}", chain(&error));
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) = telemetry.install(&section, &Console::detect()) {
+        eprintln!("ferropix-console: cannot start the log: {}", chain(&error));
         return ExitCode::FAILURE;
     }
+    ferrohealth_telemetry::panic::install_hook();
+    let code = listen_and_serve(settings).await;
+    if let Err(error) = telemetry.shutdown() {
+        tracing::warn!(error = %chain(&error), "the telemetry did not flush");
+    }
+    code
+}
+
+/// Builds the state `settings` describe and serves it until `SIGTERM` or
+/// `SIGINT`.
+async fn listen_and_serve(settings: Settings) -> ExitCode {
     let listen = settings.listen;
     let state = match ConsoleState::new(settings) {
         Ok(state) => state,

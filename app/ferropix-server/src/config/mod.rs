@@ -64,8 +64,8 @@ pub struct Config {
     pub profile: Profile,
     /// The HTTP surface (`[server]`).
     pub server: section::server::Server,
-    /// The `tracing` console and the OTLP endpoint (`[telemetry]`).
-    pub telemetry: section::telemetry::Telemetry,
+    /// The console, the request log and the OTLP export (`[telemetry]`).
+    pub telemetry: ferrohealth_telemetry::section::TelemetrySection,
     /// The PostgreSQL store (`[db]`).
     pub db: section::db::Db,
     /// The resource server (`[auth]`).

@@ -14,6 +14,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_operator_api::health::{IndicatorState, State};
 use ferropix_server::config::section::server::ServerSettings;
 use ferropix_server::health::{Check, HealthIndicator, Registry};
@@ -89,7 +90,13 @@ async fn readiness_answers_503_naming_each_down_indicator_and_200_otherwise() {
             vec!["audit_spool", "database"],
         ),
     ] {
-        let app = router(&server, &registry(&indicators), None);
+        let app = router(
+            &server,
+            &registry(&indicators),
+            None,
+            RequestLog::default(),
+            None,
+        );
         let answer = send(&app, Method::GET, "/health/readiness", None).await;
         assert_eq!(expected, answer.status, "{indicators:?}");
         let document = answer.json();
@@ -113,7 +120,13 @@ async fn healthcheck_exits_one_on_a_server_whose_readiness_answers_503() {
     let secrets = Secrets::new();
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("a free port");
     let port = listener.local_addr().expect("an address").port();
-    let app = router(&server(), &registry(&[("database", State::Down)]), None);
+    let app = router(
+        &server(),
+        &registry(&[("database", State::Down)]),
+        None,
+        RequestLog::default(),
+        None,
+    );
     let (stop, stopped) = oneshot::channel::<()>();
     let task = tokio::spawn(serve_until(
         listener,
@@ -203,7 +216,7 @@ async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
     let requests: Vec<serde_json::Value> = log
         .lines()
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|line| line["target"] == "ferropix_server::request")
+        .filter(|line| line["target"] == ferrohealth_telemetry::request_log::TARGET)
         .collect();
     assert_eq!(3, requests.len(), "one line per request: {log}");
     let first = &requests[0]["fields"];
@@ -211,14 +224,19 @@ async fn a_bsn_sent_by_get_to_ihe_pix_appears_in_no_log_line_or_span() {
     assert_eq!("GET", first["method"]);
     assert_eq!(503, first["status"]);
     assert_eq!("east-lab", first["caller"]);
-    assert_eq!("-", first["domain"]);
+    assert!(first["domain"].is_null(), "a query writes to no domain");
     assert!(
         first["request_id"]
             .as_str()
-            .is_some_and(|id| !id.is_empty())
+            .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()),
+        "the server's id"
     );
+    assert_eq!(false, first["client_named"]);
     assert!(first["latency_ms"].is_number());
-    assert_eq!("-", requests[1]["fields"]["caller"], "a refused caller");
+    assert!(
+        requests[1]["fields"]["caller"].is_null(),
+        "a refused request names no caller"
+    );
     assert_eq!(401, requests[1]["fields"]["status"]);
     assert_eq!("<unmatched>", requests[2]["fields"]["route"]);
 }

@@ -19,6 +19,7 @@ use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
 use axum::Router;
 use axum::body::Body;
+use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::auth::guard::{NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
@@ -215,6 +216,16 @@ pub(crate) async fn application_with(
     settings: Settings,
     backend: &fhir::Backend,
 ) -> (Router, Arc<Smart>, tempfile::TempDir) {
+    application_logged(settings, backend, RequestLog::default()).await
+}
+
+/// Returns the application of [`application_with`], with `log` as its
+/// request log.
+pub(crate) async fn application_logged(
+    settings: Settings,
+    backend: &fhir::Backend,
+    log: RequestLog,
+) -> (Router, Arc<Smart>, tempfile::TempDir) {
     let smart = Arc::new(
         Box::pin(Smart::discover(settings.auth, &settings.domains))
             .await
@@ -236,7 +247,7 @@ pub(crate) async fn application_with(
         backend,
     );
     (
-        router(&settings.server, &health, Some(guarded)),
+        router(&settings.server, &health, Some(guarded), log, None),
         smart,
         spool,
     )

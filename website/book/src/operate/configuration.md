@@ -14,8 +14,8 @@ The server loads and checks every section below at start, and `serve`
 starts the store (see [The store](#the-store)) and runs the HTTP listener
 with its health routes and the guard in front of the FHIR face and the
 operator API (`[auth]`), the usage report
-([`[usage_report]`](#usage_report)) and, with `telemetry.otlp_endpoint`
-set, the span export. The PIXm Manager, the PDQm Supplier and the operator
+([`[usage_report]`](#usage_report)) and, with a `[telemetry.otlp]` table,
+the span and metric export. The PIXm Manager, the PDQm Supplier and the operator
 API serve today
 ([The PIXm Manager](../integrate/pixm-manager.md),
 [The PDQm Supplier](../integrate/pdqm-supplier.md),
@@ -119,18 +119,33 @@ The server routes, under `server.base_path`:
 |---|---|
 | `GET {base}/health` | `200` while the process is up. |
 | `GET {base}/health/readiness` | `200` while every readiness indicator is up, the `database` indicator of the store among them, and `503` while one is down ([Operations](operations.md)). |
+| `GET {base}/metrics` | Every metric in the Prometheus text format, among them `http_server_request_duration_seconds` by method, route template and status. It needs no token, so keep it off the public side of your proxy. |
 
-Every answer carries `x-request-id`: the one the request sent when it is
-printable ASCII of at most 128 characters, or a minted UUID. A handler that
-fails answers `500` with that id and no detail.
+The server mints its own UUID for every request, which the request log and
+the steward trail of `GET {base}/operator/actions` carry. Every answer carries `x-request-id`:
+the one the request sent when it is printable ASCII of at most 128
+characters, which is echoed and never logged, or else the server's id. A
+handler that fails answers `500` naming the server's id and no detail.
 
 ### `[telemetry]`
 
+The section is `ferrohealth-telemetry`'s, the one every FerroHEALTH product
+reads.
+
 | Key | Default | What it sets |
 |---|---|---|
-| `telemetry.filter` | `"info"` | The log filter, in the `tracing-subscriber` `EnvFilter` syntax. |
+| `telemetry.filter` | `"info,hyper=warn,tower=warn,h2=warn"` | The log filter, in the `tracing-subscriber` `EnvFilter` syntax. A filter that does not parse refuses the start. |
 | `telemetry.format` | `"auto"` | `"json"`, `"pretty"`, or `"auto"`: pretty on a terminal, JSON otherwise. |
-| `telemetry.otlp_endpoint` | `""` | The OTLP/gRPC collector `serve` exports its spans to, `http` or `https` (TLS over the WebPKI roots). One `request` span per request, with the method, the matched route template and the status: no raw path, query string, body, header value, identifier or token, and no log event. Empty exports nothing. |
+| `telemetry.logged_query_parameters` | `[]` | The query parameters whose values the request line carries in its `query` field. Name only parameters that hold no identifier or free text; the ITI-83 and ITI-78 parameters carry identifiers and demographics. |
+| `telemetry.environment` | none | The deployment environment the exported spans and metrics name (`deployment.environment.name`), such as `production`. |
+| `telemetry.otlp.endpoint` | none | The collector's OTLP/gRPC endpoint; `https://` speaks TLS. It may carry a credential, so `config check` shows it masked. A `[telemetry.otlp]` table without it refuses the start. |
+| `telemetry.otlp.traces` | `true` | Whether the spans are exported: one `request` span per request, with the method, the matched route template, the status and the server's request id. No raw path, query string, body, header value, identifier or token, and no log event. |
+| `telemetry.otlp.metrics` | `true` | Whether the metrics are pushed. |
+| `telemetry.otlp.sample_ratio` | `1.0` | The share of the traces that are sampled, from `0.0` to `1.0`. |
+| `telemetry.otlp.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. |
+| `telemetry.otlp.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. |
+
+Without a `[telemetry.otlp]` table nothing is exported.
 
 ### `[db]`
 

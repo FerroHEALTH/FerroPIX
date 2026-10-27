@@ -414,7 +414,7 @@ fn call(face: &Face, parts: &Parts) -> Call {
         &access,
         remote,
         face.supplier.fhir_base(),
-        crate::http::request_id::of(&parts.headers),
+        crate::http::exchanged_request_id(parts),
     )
 }
 

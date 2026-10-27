@@ -46,11 +46,11 @@ use crate::config::section::matching::Matching;
 use crate::feed::{self, Action, Applied, Context, FeedError, Feeder};
 use crate::fhir::status::Case;
 use crate::fhir::wire;
-use crate::http::request_id;
 use crate::store::Store;
 use crate::store::pseudonym;
 use crate::store::record::{self, Channel};
 use crate::store::xref::{self, Lookup};
+use ferrohealth_telemetry::request_log::RequestId;
 
 /// An ITI-83 answer with the pseudonyms it minted, as the person's
 /// `Patient/{id}` and the domain's namespace.
@@ -437,7 +437,11 @@ impl Manager {
         Context {
             actor,
             channel: Channel::Fhir,
-            request_id: request_id::of(&parts.headers).map(str::to_owned),
+            request_id: parts
+                .extensions
+                .get::<RequestId>()
+                .map(RequestId::id)
+                .map(str::to_owned),
         }
     }
 
@@ -457,7 +461,7 @@ impl Manager {
             &access,
             remote,
             &self.endpoint,
-            request_id::of(&parts.headers),
+            crate::http::exchanged_request_id(parts),
         )
     }
 

@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_operator_api::health::{IndicatorState, State};
 use ferropix_server::config::Profile;
 use ferropix_server::config::section::usage_report::{Deployment, UsageReportSettings};
@@ -32,7 +33,9 @@ use serde_json::{Value, json};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::auth::{Captured, EVERY_SCOPE, Issuer, application, bearer, send, settings};
+use crate::auth::{
+    Captured, EVERY_SCOPE, Issuer, application_logged, backend, bearer, send, settings,
+};
 use crate::support::Secrets;
 
 /// The vendored schema tree, `scripts/vendor/ferropulse-schemas.sh`.
@@ -300,9 +303,10 @@ async fn every_report_counts_by_route_group_and_names_no_patient_domain_host_or_
         .flat_map(|domain| [domain.system.clone(), domain.name.clone()])
         .collect();
     assert!(!domains.is_empty(), "the server seeds a domain");
-    let (app, _, _spool) = application(settings).await;
     let window = Arc::new(Window::new(""));
-    let app = app.layer(axum::Extension(Arc::clone(&window)));
+    let backend = backend(&settings);
+    let log = RequestLog::default().with_recorder(window.clone());
+    let (app, _, _spool) = application_logged(settings, &backend, log).await;
     let bsn = ferropix_testkit::synthetic::bsn(1)
         .expect("the synthetic range holds a BSN")
         .digits();

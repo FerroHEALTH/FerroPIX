@@ -110,10 +110,12 @@ impl Config {
     /// that is absent, does not parse or is not one its key admits,
     /// [`Error::Zero`] for a zero timeout or pool bound, [`Error::Scope`] for
     /// `offline_access` listed in `oidc.scopes`, [`Error::InsecureCookie`]
-    /// for `session.secure_cookie = false` on a console that is not `http`
-    /// on loopback, and the secret errors of `oidc.client_secret`.
+    /// for `session.secure_cookie = false` on a console that is not plain
+    /// HTTP on loopback (its `oidc.redirect_uri`, or its `server.listen`
+    /// address when it signs in nowhere), and the secret errors of
+    /// `oidc.client_secret`.
     pub fn resolve(&self) -> Result<Settings, Error> {
-        let listen = self
+        let listen: SocketAddr = self
             .server
             .listen
             .parse()
@@ -140,11 +142,11 @@ impl Config {
         let oidc = self.oidc.as_ref().map(resolve_oidc).transpose()?;
         // NOTE: RFC 6265bis §4.1.2.5: a cookie without `Secure` travels over plain
         // HTTP, so it is admitted only where the console itself is HTTP on loopback.
-        if !session.secure_cookie
-            && oidc.as_ref().is_some_and(|oidc| {
-                !(oidc.redirect_uri.scheme() == "http" && is_loopback(&oidc.redirect_uri))
-            })
-        {
+        let plain_on_loopback = oidc.as_ref().map_or_else(
+            || listen.ip().is_loopback(),
+            |oidc| oidc.redirect_uri.scheme() == "http" && is_loopback(&oidc.redirect_uri),
+        );
+        if !session.secure_cookie && !plain_on_loopback {
             return Err(Error::InsecureCookie {
                 key: String::from("session.secure_cookie"),
             });

@@ -74,7 +74,9 @@ pub enum Error {
     },
     /// Cookies without `Secure` on a console that is not plain HTTP on
     /// loopback, where they would travel in the clear.
-    #[error("`{key}` may be false only for a console whose redirect_uri is http on loopback")]
+    #[error(
+        "`{key}` may be false only for a console that is plain HTTP on loopback: its oidc.redirect_uri, or its server.listen address when it signs in nowhere"
+    )]
     InsecureCookie {
         /// The key.
         key: String,

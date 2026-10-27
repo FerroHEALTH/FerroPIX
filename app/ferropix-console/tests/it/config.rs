@@ -294,3 +294,42 @@ fn a_missing_or_empty_secret_file_is_refused_by_its_key() {
         "{error:?}"
     );
 }
+
+/// The configuration `text` resolved.
+fn resolved(text: &str) -> Result<ferropix_console::config::settings::Settings, Error> {
+    Config::from_sources(Some(text), &BTreeMap::new())?.resolve()
+}
+
+#[test]
+fn cookies_without_secure_are_admitted_only_on_plain_http_on_loopback() {
+    let insecure = "[session]\nsecure_cookie = false\n";
+    for listen in ["127.0.0.1:3000", "[::1]:3000"] {
+        let settings = resolved(&format!("[server]\nlisten = \"{listen}\"\n\n{insecure}"))
+            .unwrap_or_else(|error| {
+                panic!("{listen}: a loopback console signing in nowhere: {error}")
+            });
+        assert!(!settings.session.secure_cookie, "{listen}");
+    }
+    for listen in ["0.0.0.0:3000", "192.0.2.10:3000", "[::]:3000"] {
+        let error = resolved(&format!("[server]\nlisten = \"{listen}\"\n\n{insecure}"))
+            .expect_err("cookies in the clear beyond loopback");
+        assert!(
+            matches!(&error, Error::InsecureCookie { key } if key == "session.secure_cookie"),
+            "{listen}: {error:?}"
+        );
+    }
+    let loopback_redirect = OIDC.replace(
+        "https://console.example.org/auth/callback",
+        "http://127.0.0.1:3000/auth/callback",
+    );
+    let settings = resolved(&format!(
+        "[server]\nlisten = \"0.0.0.0:3000\"\n\n{insecure}\n{loopback_redirect}"
+    ))
+    .expect("a console whose redirect is http on loopback");
+    assert!(!settings.session.secure_cookie);
+    let error = resolved(&format!(
+        "[server]\nlisten = \"127.0.0.1:3000\"\n\n{insecure}\n{OIDC}"
+    ))
+    .expect_err("an https redirect with cookies in the clear");
+    assert!(matches!(error, Error::InsecureCookie { .. }), "{error:?}");
+}

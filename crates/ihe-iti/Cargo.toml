@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.64"
+version = "0.0.65"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -156,7 +156,7 @@ atna = ["dep:ihe-atna", "ihe-atna/atna"]
 async-trait = { workspace = true, optional = true }
 # A shared crate takes a caret requirement on another family shared crate
 # (crates-publishing rule), so a patch of either reaches a product's lockfile.
-ferrohealth-smart = { version = "0.8.1", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.8.2", default-features = false, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 ihe-atna = { version = "0.3.0", default-features = false, optional = true }

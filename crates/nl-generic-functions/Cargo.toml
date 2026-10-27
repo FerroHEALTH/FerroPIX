@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.32"
+version = "0.0.33"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -95,7 +95,7 @@ jsonwebtoken = { workspace = true, optional = true }
 # The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.
-ferrohealth-smart = { version = "0.8.1", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.8.2", default-features = false, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }

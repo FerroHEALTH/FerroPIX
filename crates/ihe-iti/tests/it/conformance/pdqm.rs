@@ -16,10 +16,10 @@ use fhir_types::r4::patient::Patient;
 use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use ihe_atna::user::OnBehalfOf;
-use ihe_iti::pdqm::error::PdqmError;
+use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::input::MatchInput;
 use ihe_iti::pdqm::matches::MatchGrade;
-use ihe_iti::pdqm::server::matching::{MatchEntry, MatchRequest, match_set};
+use ihe_iti::pdqm::server::matching::{MatchEntry, MatchRequest, MatchSetError, match_set};
 use ihe_iti::pdqm::server::search::PatientSearch;
 use ihe_iti::pdqm::server::searchset::{Paging, SearchEntry, searchset};
 use ihe_iti::pdqm::server::{Score, retrieved};
@@ -30,7 +30,7 @@ use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{encoded, example, examples, is_audit, record, verdict};
+use super::{encoded, example, examples, is_audit, record, verdict_noted};
 use crate::pdqm::{DOMAIN, FHIR_JSON, PROMPT, client, entry, schmidt, supplier};
 
 /// The vendored package under `docs/specs/`.
@@ -49,7 +49,7 @@ const PATIENT_ONLY: &str = "example/Parameters-ex-match-input-patient-only.json"
 async fn conformance_the_pdqm_examples_hold_their_pass_list() {
     let mut cases = Vec::new();
     for id in examples(PACKAGE).into_iter().filter(|id| !is_audit(id)) {
-        cases.push(verdict(id.clone(), check(id)).await);
+        cases.push(verdict_noted(id.clone(), check(id)).await);
     }
     record(
         "pdqm",
@@ -58,15 +58,16 @@ async fn conformance_the_pdqm_examples_hold_their_pass_list() {
     );
 }
 
-/// Checks the example `id` by the resource and the profile it holds.
-async fn check(id: String) {
+/// Checks the example `id` by the resource and the profile it holds,
+/// returning how it was handled when that is an asserted refusal.
+async fn check(id: String) -> Option<String> {
     let name = id.trim_start_matches("example/");
     let held = json(&id);
     let profile = held["meta"]["profile"][0].as_str().unwrap_or_default();
     if name.starts_with("Bundle-") && profile.ends_with("QueryPatientResourceResponseMessage") {
         search_answer(&id).await;
     } else if name.starts_with("Bundle-") && profile.ends_with("MatchParametersOut") {
-        match_answer(&id).await;
+        return match_answer(&id).await;
     } else if name.starts_with("Parameters-") {
         match_input(&id);
     } else if name.starts_with("Patient-") && profile.ends_with("MatchInputPatient") {
@@ -76,6 +77,7 @@ async fn check(id: String) {
     } else {
         panic!("no ihe-iti reader or writer takes this example");
     }
+    None
 }
 
 fn json(id: &str) -> Value {
@@ -227,9 +229,11 @@ pub(super) async fn matcher(status: u16, id: &str) -> MockServer {
 }
 
 /// An ITI-119 answer: a failure Bundle of outcomes alone read by the client
-/// as the failure it reports (§2:3.119.4.1.3, Case 9), any other read as a
-/// `200` and written by the Supplier.
-async fn match_answer(id: &str) {
+/// as the failure it reports (§2:3.119.4.1.3, Case 9), a match with an
+/// outcome of `error` or `fatal` severity refused by both sides as
+/// [`error_outcome`] asserts, any other read as a `200` and written by the
+/// Supplier.
+async fn match_answer(id: &str) -> Option<String> {
     let example = bundle(id);
     let held = json(id);
     let input = MatchInput::new(DOMAIN, &SecretString::from("12345")).expect("an input");
@@ -243,7 +247,10 @@ async fn match_answer(id: &str) {
         };
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(!issues.is_empty(), "the client keeps the issue types");
-        return;
+        return None;
+    }
+    if let Some(index) = error_outcome(&example) {
+        return Some(refused_error_outcome(id, index, &example, &input).await);
     }
     let server = matcher(200, id).await;
     let found = client(&server)
@@ -292,6 +299,59 @@ async fn match_answer(id: &str) {
         held,
         "the Supplier writes every element and value the example holds"
     );
+    None
+}
+
+/// The position of the first `OperationOutcome` entry of `bundle` with an
+/// issue of `error` or `fatal` severity.
+fn error_outcome(bundle: &Bundle) -> Option<usize> {
+    bundle.entry.iter().position(|entry| match &entry.resource {
+        Some(Resource::OperationOutcome(outcome)) => outcome
+            .issue
+            .iter()
+            .any(|issue| matches!(issue.severity.value.as_deref(), Some("error" | "fatal"))),
+        _ => false,
+    })
+}
+
+/// A match answer of patients with an outcome of `error` severity at
+/// `index`: Case 10 answers its warnings with `200`, and its
+/// "`OperationOutcome` Resources returned do not have error or fatal
+/// severity" (§2:3.119.4.1.3), so the client refuses it as a `200` and the
+/// Supplier refuses to write it.
+async fn refused_error_outcome(
+    id: &str,
+    index: usize,
+    example: &Bundle,
+    input: &MatchInput,
+) -> String {
+    assert!(
+        !patients(example).is_empty(),
+        "the answer holds matches beside the outcome"
+    );
+    let server = matcher(200, id).await;
+    let answer = client(&server)
+        .match_patient(input, &OnBehalfOf::System, PROMPT)
+        .await;
+    assert!(
+        matches!(
+            answer,
+            Err(PdqmError::Malformed(Malformation::ErrorOutcome { index: at })) if at == index
+        ),
+        "the client refuses the error outcome at entry {index}: {answer:?}"
+    );
+    let request =
+        MatchRequest::from_request("", Format::Json, example_text(PATIENT_ONLY).as_bytes())
+            .expect("the Patient-only input");
+    let written = match_set(&request, Vec::new(), outcomes(example), None);
+    assert!(
+        matches!(written, Err(MatchSetError::ErrorOutcome)),
+        "the Supplier refuses to write it: {written:?}"
+    );
+    String::from(
+        "refused as PDQm 3.2.0 §2:3.119.4.1.3 Case 10 requires (an error outcome in a 200), \
+         by the client and the Supplier",
+    )
 }
 
 /// An ITI-119 input `Parameters`, read by the Supplier in JSON and XML.

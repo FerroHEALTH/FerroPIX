@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 #
 # The AuditEvent examples of the PIXm, PDQm and PMIR packages, against the record ihe-iti writes for each.
-# One example per line: a passing example is its path, a failing one is
-# `fail <path>: <reason>`; the last line is the total. The corpus test
-# writes it under scripts/checks/conformance.sh --update, and fails when a
-# listed pass stops passing.
+# One example per line: a passing example is its path, followed by
+# `: <how>` when the pass is a refusal the specification requires, and
+# a failing one is `fail <path>: <reason>`; the last line is the total.
+# The corpus test writes it under scripts/checks/conformance.sh
+# --update, and fails when a listed pass stops passing.
 ihe-pdqm/example/AuditEvent-ex-auditPdqmMatch-consumer.json
 fail ihe-pdqm/example/AuditEvent-ex-auditPdqmMatch-supplier.json: ihe-iti writes no IHE.PDQm.Match.Audit.Supplier record: the server side records it in ferropix-server
 ihe-pdqm/example/AuditEvent-ex-auditPdqmQuery-consumer.json

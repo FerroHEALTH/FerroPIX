@@ -7,9 +7,8 @@
 //! No specification governs health probes: our own design
 //! (`docs/architecture.md` §9).
 
-use ferropix_operator_api::health::IndicatorState;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 
-use crate::health::{Check, HealthIndicator};
 use crate::store::{DbFailure, Store};
 
 /// The name the indicator answers under in the readiness document.
@@ -38,9 +37,9 @@ impl HealthIndicator for Database {
     fn check(&self) -> Check<'_> {
         Box::pin(async move {
             match sqlx::query("SELECT 1").execute(self.store.pool()).await {
-                Ok(_) => IndicatorState::up(),
+                Ok(_) => Outcome::up(),
                 Err(error) => {
-                    IndicatorState::down(format!("the store does not answer: {}", DbFailure(error)))
+                    Outcome::down(format!("the store does not answer: {}", DbFailure(error)))
                 }
             }
         })

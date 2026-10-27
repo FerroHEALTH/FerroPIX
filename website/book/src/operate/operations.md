@@ -14,10 +14,18 @@ of the server applies its migrations with `db migrate` or at the start of
 
 | Route | Token | Answers |
 |---|---|---|
-| `GET {base}/health` | none | `200` while the process is up. |
-| `GET {base}/health/readiness` | none | `200` while every readiness indicator is up, `503` while one is down, with a JSON document naming each indicator, its state and, when it is down, why. |
+| `GET {base}/health/liveness` | none | `200` while the process serves; it checks nothing. |
+| `GET {base}/health/readiness` | none | `200` while the server serves and no readiness indicator is down, `503` otherwise, with the family's readiness document: the `state`, the `phase` (`booting`, `serving` or `draining`) and each indicator's `name` and `state`, never why. |
+| `GET {base}/health` | none | The status of readiness with the state alone, `{"state":"up"}`. |
 | `GET {base}/metrics` | none | `200` with every metric in the Prometheus text format. |
 | `GET {base}/operator/dependencies` | `auth.steward_scope` | `200` with the readiness document and the last outcome of every upstream the server sends to. |
+
+The routes are those of `ferrohealth-server` over the registry of
+`ferrohealth-health`, the ones every FerroHEALTH product serves. Readiness
+answers `503` until the listener is bound and from the moment `SIGTERM` or
+`SIGINT` arrives, so a load balancer stops sending before the drain. The
+open readiness route leaves out why an indicator is down; the dependency
+report gives the reason behind the steward scope.
 
 The `database` indicator is down while no statement reaches PostgreSQL,
 and the `audit_spool` indicator is down when less than a tenth of the

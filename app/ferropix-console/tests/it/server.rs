@@ -96,7 +96,34 @@ async fn the_health_route_answers_up_with_the_headers() {
     assert_eq!(StatusCode::OK, response.status());
     assert_hardened(&response);
     assert_eq!("no-store", header(&response, &CACHE_CONTROL));
-    assert_eq!(r#"{"status":"up"}"#, text(response).await);
+    assert_eq!(r#"{"state":"up"}"#, text(response).await);
+}
+
+#[tokio::test]
+async fn liveness_answers_and_readiness_is_withdrawn_once_the_drain_starts() {
+    let site = site();
+    let state =
+        ConsoleState::new(settings(site.path(), "http://127.0.0.1:9/")).expect("the state builds");
+    let lifecycle = state.lifecycle().clone();
+    let app = router(state);
+    let ready = app
+        .clone()
+        .oneshot(get("/health/readiness"))
+        .await
+        .expect("the console answers");
+    assert_eq!(StatusCode::OK, ready.status());
+    lifecycle.drain();
+    let draining = app
+        .clone()
+        .oneshot(get("/health/readiness"))
+        .await
+        .expect("the console answers");
+    assert_eq!(StatusCode::SERVICE_UNAVAILABLE, draining.status());
+    let live = app
+        .oneshot(get("/health/liveness"))
+        .await
+        .expect("the console answers");
+    assert_eq!(StatusCode::OK, live.status(), "liveness asks nothing");
 }
 
 #[tokio::test]

@@ -19,12 +19,13 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
 use ferropix_server::fhir::{self, Backend, Mounts};
-use ferropix_server::health::Registry;
 use ferropix_server::http::router;
 use ferropix_server::store::{Job, Store};
 use ferropix_testkit::containers::{Postgres, e2e_enabled, postgres};
@@ -131,12 +132,13 @@ impl Harness {
         let audit = Audit::open(&audit_settings, &settings.server.public_base_url)
             .expect("the audit spool opens");
         let health = Registry::default();
+        let lifecycle = crate::support::serving();
         let routes = fhir::routes(
-            &settings.server.base_path,
-            &settings.server.public_base_url,
+            &settings.server,
             Mounts::all(),
             &smart,
             &health,
+            &lifecycle,
             &audit,
             &Backend {
                 store: store.clone(),
@@ -156,7 +158,7 @@ impl Harness {
         Self {
             app: router(
                 &settings.server,
-                &health,
+                Health::new(health, lifecycle),
                 Some(routes),
                 RequestLog::default(),
                 None,

@@ -972,13 +972,16 @@ is recorded as the system acting for itself, any other with its user. With
 no `[audit] url` the records stay in the spool until one is named. The
 readiness indicator `audit_spool` is down under a tenth of either bound.
 
-**Health.** `GET {base}/health` is liveness; `GET {base}/health/readiness`
-runs the indicators (the database, the audit spool's headroom, the MLLP
-listener's socket, the feed sender's backlog) and answers `503` with the
-`ferropix_operator_api::health::Readiness` document naming each one that is
-down. `GET {base}/operator/dependencies` is the same report with the
-ATNA repository's and each subscriber's last outcome, behind the steward
-scope, so an anonymous reader learns no endpoint, the ruling FerroFED made
+**Health.** The health routes are `ferrohealth-server`'s over the registry
+and lifecycle of `ferrohealth-health`: `GET {base}/health/liveness` checks
+nothing; `GET {base}/health/readiness` runs the indicators (the database,
+the audit spool's headroom, the MLLP listener's socket, the feed sender's
+backlog) and answers `503` with the family's readiness document while one
+is down, while the server boots and from the moment it drains, naming each
+indicator and never its detail; `GET {base}/health` answers the state
+alone. `GET {base}/operator/dependencies` is the readiness document with
+every detail and the ATNA repository's and each subscriber's last outcome,
+behind the steward scope, so an anonymous reader learns no endpoint, the ruling FerroFED made
 as its decision A83. The container `HEALTHCHECK` is `ferropix healthcheck`.
 
 The registry holds the indicators of the subsystems that exist, each added

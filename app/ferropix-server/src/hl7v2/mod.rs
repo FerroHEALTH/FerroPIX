@@ -50,7 +50,7 @@ use ferrobridge_hl7v2::inbound::{self, Inbound, Received};
 use ferrobridge_hl7v2::mllp::{self, Codec, Connection, Handler, Malformed, Timeouts};
 use ferrobridge_hl7v2::parse::structure::structure_declared;
 use ferrobridge_hl7v2::parse::{Component, Message};
-use ferropix_operator_api::health::IndicatorState;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 use ihe_atna::balp::{NetworkAddress, Peer};
 use ihe_atna::user::OnBehalfOf;
 use tokio::net::TcpListener;
@@ -63,7 +63,6 @@ use crate::config::section::hl7v2::{Hl7v2Settings, Sender};
 use crate::config::section::matching::Matching;
 use crate::config::section::profiles::Deprecated;
 use crate::feed::Feeder;
-use crate::health::{Check, HealthIndicator};
 use crate::hl7v2::authority::Authorities;
 use crate::hl7v2::cursor::Cursors;
 use crate::hl7v2::stamped::Stamped;
@@ -391,9 +390,9 @@ impl HealthIndicator for Listening {
     fn check(&self) -> Check<'_> {
         Box::pin(async move {
             if self.is_up() {
-                IndicatorState::up()
+                Outcome::up()
             } else {
-                IndicatorState::down("the MLLP listener is not accepting")
+                Outcome::down("the MLLP listener is not accepting")
             }
         })
     }

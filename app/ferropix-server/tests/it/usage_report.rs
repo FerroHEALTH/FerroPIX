@@ -18,11 +18,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ferrohealth_health::document::State;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome, Registry};
 use ferrohealth_telemetry::request_log::RequestLog;
-use ferropix_operator_api::health::{IndicatorState, State};
 use ferropix_server::config::Profile;
 use ferropix_server::config::section::usage_report::{Deployment, UsageReportSettings};
-use ferropix_server::health::{Check, HealthIndicator, Registry};
 use ferropix_server::usage_report::payload::Service;
 use ferropix_server::usage_report::reporter::{
     self, Facts, Prepared, ReportError, Reporter, Sources, StartOutcome,
@@ -158,8 +158,9 @@ impl HealthIndicator for Fixed {
         let state = self.1;
         Box::pin(async move {
             match state {
-                State::Up => IndicatorState::up(),
-                State::Down => IndicatorState::down("the synthetic indicator is down"),
+                State::Up => Outcome::up(),
+                State::Degraded => Outcome::degraded("the synthetic indicator is slow"),
+                State::Down => Outcome::down("the synthetic indicator is down"),
             }
         })
     }
@@ -187,6 +188,7 @@ fn sources(window: Arc<Window>) -> Sources {
             3,
         ),
         health: health(),
+        lifecycle: crate::support::serving(),
         window,
     }
 }
@@ -268,6 +270,7 @@ async fn an_idle_daily_report_carries_an_empty_window() {
     let bare = Sources {
         facts: Facts::new(Profile::Development, Vec::new(), 0),
         health: Registry::default(),
+        lifecycle: crate::support::serving(),
         window: Arc::new(Window::new("")),
     };
     let window = Arc::clone(&bare.window);

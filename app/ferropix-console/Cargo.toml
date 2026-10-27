@@ -71,6 +71,9 @@ ferrohealth-server.workspace = true
 # The `[telemetry]` section, the console log and the panic hook the family
 # shares.
 ferrohealth-telemetry.workspace = true
+# The health routes' registry and lifecycle, and the readiness document the
+# dependency report carries.
+ferrohealth-health = { workspace = true, features = ["registry"] }
 # The calls to the FerroPIX server and to the OpenID Provider.
 reqwest = { workspace = true, features = ["rustls", "json"] }
 secrecy = { workspace = true, features = ["serde"] }

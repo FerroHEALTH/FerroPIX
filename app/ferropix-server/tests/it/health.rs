@@ -14,10 +14,12 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_health::document::State;
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome, Registry};
+use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::RequestLog;
-use ferropix_operator_api::health::{IndicatorState, State};
 use ferropix_server::config::section::server::ServerSettings;
-use ferropix_server::health::{Check, HealthIndicator, Registry};
 use ferropix_server::http::{router, serve_until};
 use http::{Method, StatusCode};
 use tokio::net::TcpListener;
@@ -41,8 +43,9 @@ impl HealthIndicator for Fixed {
         let state = self.1;
         Box::pin(async move {
             match state {
-                State::Up => IndicatorState::up(),
-                State::Down => IndicatorState::down("the stub is down"),
+                State::Up => Outcome::up(),
+                State::Degraded => Outcome::degraded("the stub is slow"),
+                State::Down => Outcome::down("the stub is down"),
             }
         })
     }
@@ -60,17 +63,21 @@ fn server() -> ServerSettings {
     }
 }
 
-/// Returns a registry of the indicators named, each `Up` or `Down`.
-fn registry(indicators: &[(&'static str, State)]) -> Registry {
-    indicators
+/// Returns the health of a serving process over the indicators named, each
+/// in its state.
+fn registry(indicators: &[(&'static str, State)]) -> Health {
+    let registry = indicators
         .iter()
         .fold(Registry::default(), |registry, (name, state)| {
             registry.and(Arc::new(Fixed(name, *state)))
-        })
+        });
+    let lifecycle = Lifecycle::default();
+    lifecycle.booted();
+    Health::new(registry, lifecycle)
 }
 
 #[tokio::test]
-async fn readiness_answers_503_naming_each_down_indicator_and_200_otherwise() {
+async fn readiness_answers_503_naming_each_down_indicator_and_never_its_detail() {
     let server = server();
     for (indicators, expected, down) in [
         (vec![], StatusCode::OK, vec![]),
@@ -92,7 +99,7 @@ async fn readiness_answers_503_naming_each_down_indicator_and_200_otherwise() {
     ] {
         let app = router(
             &server,
-            &registry(&indicators),
+            registry(&indicators),
             None,
             RequestLog::default(),
             None,
@@ -100,19 +107,67 @@ async fn readiness_answers_503_naming_each_down_indicator_and_200_otherwise() {
         let answer = send(&app, Method::GET, "/health/readiness", None).await;
         assert_eq!(expected, answer.status, "{indicators:?}");
         let document = answer.json();
-        let named: Vec<&str> = document["indicators"]
-            .as_object()
-            .expect("the indicators are an object")
+        let listed = document["indicators"]
+            .as_array()
+            .expect("the indicators are a list");
+        let named: Vec<&str> = listed
             .iter()
-            .filter(|(_, state)| state["state"] == "down")
-            .map(|(name, _)| name.as_str())
+            .filter(|state| state["state"] == "down")
+            .filter_map(|state| state["name"].as_str())
             .collect();
         assert_eq!(down, named, "{indicators:?}");
+        assert!(
+            listed.iter().all(|state| state.get("detail").is_none()),
+            "the open route names no detail: {document}"
+        );
         let aggregate = if down.is_empty() { "up" } else { "down" };
         assert_eq!(aggregate, document["state"], "{indicators:?}");
-        let live = send(&app, Method::GET, "/health", None).await;
+        assert_eq!("serving", document["phase"], "{indicators:?}");
+        let summary = send(&app, Method::GET, "/health", None).await;
+        assert_eq!(
+            expected, summary.status,
+            "the summary answers readiness's status"
+        );
+        assert_eq!(
+            serde_json::json!({ "state": aggregate }),
+            summary.json(),
+            "the summary is the state alone"
+        );
+        let live = send(&app, Method::GET, "/health/liveness", None).await;
         assert_eq!(StatusCode::OK, live.status, "liveness asks no indicator");
     }
+}
+
+#[tokio::test]
+async fn readiness_answers_503_while_booting_and_from_the_moment_the_drain_starts() {
+    let lifecycle = Lifecycle::default();
+    let health = Health::new(registry_of_up(), lifecycle.clone());
+    let app = router(&server(), health, None, RequestLog::default(), None);
+    for (phase, expected) in [
+        ("booting", StatusCode::SERVICE_UNAVAILABLE),
+        ("serving", StatusCode::OK),
+        ("draining", StatusCode::SERVICE_UNAVAILABLE),
+    ] {
+        match phase {
+            "serving" => lifecycle.booted(),
+            "draining" => lifecycle.drain(),
+            _ => {}
+        }
+        let answer = send(&app, Method::GET, "/health/readiness", None).await;
+        assert_eq!(expected, answer.status, "{phase}");
+        assert_eq!(phase, answer.json()["phase"], "{phase}");
+        let live = send(&app, Method::GET, "/health/liveness", None).await;
+        assert_eq!(
+            StatusCode::OK,
+            live.status,
+            "{phase}: liveness asks nothing"
+        );
+    }
+}
+
+/// A registry whose one indicator is up.
+fn registry_of_up() -> Registry {
+    Registry::default().and(Arc::new(Fixed("database", State::Up)))
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -122,7 +177,7 @@ async fn healthcheck_exits_one_on_a_server_whose_readiness_answers_503() {
     let port = listener.local_addr().expect("an address").port();
     let app = router(
         &server(),
-        &registry(&[("database", State::Down)]),
+        registry(&[("database", State::Down)]),
         None,
         RequestLog::default(),
         None,

@@ -1499,6 +1499,7 @@ dependencies = [
  "console_error_panic_hook",
  "cookie",
  "ferrohealth-config",
+ "ferrohealth-health",
  "ferrohealth-secret",
  "ferrohealth-server",
  "ferrohealth-smart",
@@ -1536,6 +1537,7 @@ dependencies = [
 name = "ferropix-operator-api"
 version = "0.0.7"
 dependencies = [
+ "ferrohealth-health",
  "serde",
  "serde_json",
 ]
@@ -1550,6 +1552,7 @@ dependencies = [
  "clap",
  "ferrobridge-hl7v2",
  "ferrohealth-config",
+ "ferrohealth-health",
  "ferrohealth-secret",
  "ferrohealth-server",
  "ferrohealth-smart",

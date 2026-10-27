@@ -20,7 +20,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ferropix_operator_api::health::{IndicatorState, Upstream, UpstreamKind};
+use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
+use ferropix_operator_api::health::{self, Upstream, UpstreamKind};
 use ihe_atna::atna::feed::{FeedAddressError, FeedRepository};
 use ihe_atna::atna::forwarder::Forwarder;
 use ihe_atna::atna::spool::{Bounds, Content, Spool, SpoolError};
@@ -28,7 +29,6 @@ use ihe_atna::balp::{Exchange, NetworkAddress, Observer, RecordError, SOURCE_APP
 use secrecy::SecretSlice;
 
 use crate::config::section::audit::AuditSettings;
-use crate::health::{Check, HealthIndicator};
 
 /// The place one record reserves before its transaction runs: room for the
 /// largest record a transaction writes, the raw request of a search
@@ -185,9 +185,9 @@ impl Audit {
         let status = forwarder.status();
         let last = (status.delivered > 0 || status.retries > 0).then(|| {
             if status.reachable {
-                IndicatorState::up()
+                health::Outcome::up()
             } else {
-                IndicatorState::down(format!(
+                health::Outcome::down(format!(
                     "the last delivery failed; {} record(s) wait in the spool",
                     status.depth.waiting()
                 ))
@@ -203,7 +203,7 @@ impl Audit {
 
     /// Returns the spool's headroom as the readiness indicator reports it.
     #[must_use]
-    pub fn headroom(&self) -> IndicatorState {
+    pub fn headroom(&self) -> Outcome {
         let depth = self.spool.depth();
         let messages = u64::try_from(depth.messages).unwrap_or(u64::MAX);
         let max_messages = u64::try_from(self.bounds.max_messages).unwrap_or(u64::MAX);
@@ -211,7 +211,7 @@ impl Audit {
             bound.saturating_sub(held).saturating_mul(100) < bound.saturating_mul(HEADROOM_PERCENT)
         };
         if tight(messages, max_messages) || tight(depth.bytes, self.bounds.max_bytes) {
-            IndicatorState::down(format!(
+            Outcome::down(format!(
                 "the audit spool holds {} of {} records and {} of {} bytes ({} quarantined)",
                 depth.messages,
                 self.bounds.max_messages,
@@ -220,7 +220,7 @@ impl Audit {
                 depth.quarantined
             ))
         } else {
-            IndicatorState::up()
+            Outcome::up()
         }
     }
 }

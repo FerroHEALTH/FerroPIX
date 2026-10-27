@@ -72,6 +72,11 @@ ferrohealth-server = { version = "=0.3.4", default-features = false }
 # export, the Prometheus exposition and the panic hook. Pinned exactly, as a
 # product pins every family crate. Verified against crates.io on 2026-10-27.
 ferrohealth-telemetry = { version = "=0.2.2", default-features = false }
+# The health family of FerroHEALTH/FerroSYS: the readiness document, which
+# the operator console's browser half reads too, and with `registry` the
+# indicators and the lifecycle the server runs. Pinned exactly at the version
+# ferrohealth-server requires. Verified against crates.io on 2026-10-27.
+ferrohealth-health = { version = "=0.1.1", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser and the original-mode acknowledgment, over the generated v2 tables,

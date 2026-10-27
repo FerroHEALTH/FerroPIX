@@ -117,8 +117,9 @@ The server routes, under `server.base_path`:
 
 | Route | Answer |
 |---|---|
-| `GET {base}/health` | `200` while the process is up. |
-| `GET {base}/health/readiness` | `200` while every readiness indicator is up, the `database` indicator of the store among them, and `503` while one is down ([Operations](operations.md)). |
+| `GET {base}/health/liveness` | `200` while the process serves. |
+| `GET {base}/health/readiness` | `200` while the server serves and no readiness indicator is down, the `database` indicator of the store among them, and `503` otherwise ([Operations](operations.md)). |
+| `GET {base}/health` | The status of readiness, with `{"state":…}` alone. |
 | `GET {base}/metrics` | Every metric in the Prometheus text format, among them `http_server_request_duration_seconds` by method, route template and status. It needs no token, so keep it off the public side of your proxy. |
 
 The server mints its own UUID for every request, which the request log and

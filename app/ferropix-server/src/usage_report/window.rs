@@ -15,11 +15,12 @@ use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use ferrobridge_hl7v2::ack::Code;
+use ferrohealth_server::health::{LIVENESS, READINESS, SUMMARY};
 use ferrohealth_telemetry::request_log::{Completed, Recorder};
 use http::{Method, StatusCode};
 
 use crate::auth::table::{self, Mount};
-use crate::http::{LIVENESS, METRICS, READINESS};
+use crate::http::METRICS;
 use crate::usage_report::payload::{
     BUCKET_BOUNDS_MS, BUCKETS, Counters, Group, GroupStats, MAX_COUNT, MAX_MS, Metrics,
     RequestsBucket, Window24h,
@@ -40,7 +41,7 @@ impl Group {
         let Some(template) = template else {
             return Some(Self::Other);
         };
-        if template == LIVENESS || template == READINESS || template == METRICS {
+        if [LIVENESS, READINESS, SUMMARY, METRICS].contains(&template) {
             return None;
         }
         let Some(route) = table::ROUTES

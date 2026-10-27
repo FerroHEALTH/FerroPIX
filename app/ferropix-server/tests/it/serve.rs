@@ -11,12 +11,13 @@ use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::routing::get;
+use ferrohealth_health::registry::Registry;
+use ferrohealth_server::health::Health;
 use ferrohealth_server::request_id;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Service, Telemetry};
 use ferropix_server::config::section::server::ServerSettings;
-use ferropix_server::health::Registry;
 use ferropix_server::http::{router, serve_until, with_middleware};
 use http::StatusCode;
 use tokio::net::TcpListener;
@@ -70,7 +71,7 @@ async fn the_health_routes_answer_under_the_base_path_and_nowhere_else() {
     let running = start(
         router(
             &server,
-            &Registry::default(),
+            Health::new(Registry::default(), crate::support::serving()),
             None,
             RequestLog::default(),
             None,
@@ -81,6 +82,7 @@ async fn the_health_routes_answer_under_the_base_path_and_nowhere_else() {
     let base = format!("http://{}", running.address);
     for (path, status) in [
         ("/pix/health", StatusCode::OK),
+        ("/pix/health/liveness", StatusCode::OK),
         ("/pix/health/readiness", StatusCode::OK),
         ("/health", StatusCode::NOT_FOUND),
     ] {
@@ -113,7 +115,7 @@ async fn the_metrics_route_exposes_the_request_duration_of_each_route_template()
     let running = start(
         router(
             &server,
-            &Registry::default(),
+            Health::new(Registry::default(), crate::support::serving()),
             None,
             log,
             Some(Arc::clone(&telemetry)),
@@ -152,7 +154,7 @@ async fn a_legal_request_id_is_echoed_and_an_illegal_one_replaced() {
     let running = start(
         router(
             &server,
-            &Registry::default(),
+            Health::new(Registry::default(), crate::support::serving()),
             None,
             RequestLog::default(),
             None,

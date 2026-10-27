@@ -16,13 +16,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use ferropix_operator_api::health::State;
+use ferrohealth_health::document::State;
+use ferrohealth_health::lifecycle::Lifecycle;
+use ferrohealth_health::registry::Registry;
 use http::StatusCode;
 use tokio::task::JoinHandle;
 
 use crate::config::Profile;
 use crate::config::section::usage_report::{Deployment, UsageReportSettings};
-use crate::health::Registry;
 use crate::usage_report::payload::{
     CpuBucket, DomainsBucket, Event, LicenceGrant, MAX_UPTIME_S, MemoryBucket, Product, Report,
     SchemaV2, Service, Status, report_git_sha,
@@ -230,6 +231,8 @@ pub struct Sources {
     pub facts: Facts,
     /// The readiness registry, read at each report.
     pub health: Registry,
+    /// The process's lifecycle, which the readiness document names.
+    pub lifecycle: Lifecycle,
     /// The window the request log fills.
     pub window: Arc<Window>,
 }
@@ -494,11 +497,12 @@ pub async fn start(
 /// Returns the status of this process as of now: the facts fixed at start
 /// and the store's and the audit spool's readiness.
 async fn status_of(sources: &Sources) -> Status {
-    let report = sources.health.evaluate().await;
+    let report = sources.health.readiness(&sources.lifecycle).await;
     let up = |name: &str| {
         report
             .indicators
-            .get(name)
+            .iter()
+            .find(|indicator| indicator.name == name)
             .map(|indicator| indicator.state == State::Up)
     };
     Status {

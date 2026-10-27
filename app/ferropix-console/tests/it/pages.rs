@@ -125,7 +125,7 @@ async fn a_server_whose_operator_api_refuses_a_page_is_named_and_an_unserved_pag
 -> Result<(), Box<dyn Error>> {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/health"))
+        .and(path("/health/liveness"))
         .and(header(
             "authorization",
             format!("Bearer {OPERATOR_TOKEN}").as_str(),
@@ -165,7 +165,7 @@ async fn a_server_that_refuses_the_steward_is_named_with_its_status() -> Result<
 {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/health"))
+        .and(path("/health/liveness"))
         .respond_with(ResponseTemplate::new(401))
         .mount(&server)
         .await;
@@ -202,7 +202,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
 -> Result<(), Box<dyn Error>> {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/health"))
+        .and(path("/health/liveness"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
@@ -249,7 +249,7 @@ async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_th
 -> Result<(), Box<dyn Error>> {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/health"))
+        .and(path("/health/liveness"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;

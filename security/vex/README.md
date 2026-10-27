@@ -29,6 +29,11 @@ later.
   so a statement that stops being true stops hiding anything: the finding
   returns.
 
+`osv-scanner.toml`, beside `Cargo.lock`, lists the same judgements for
+OSV-Scanner and the OpenSSF Scorecard Vulnerabilities check, which read no
+VEX: a RustSec advisory's entry points to its statement here, and an advisory
+OSV knows and RustSec does not carries its argument in that file.
+
 ## Documents
 
 | File | Subject | Authored |

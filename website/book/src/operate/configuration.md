@@ -105,8 +105,6 @@ quickstart mounts it beside PostgreSQL
 
 ### `[server]`
 
-| Key | Default | What it sets |
-|---|---|---|
 `[server]` is the section every FerroHEALTH server shares, read by
 `ferrohealth-server`.
 

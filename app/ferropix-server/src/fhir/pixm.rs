@@ -258,20 +258,7 @@ impl Manager {
             .collect();
         let mut minted = Vec::new();
         if pix.targets().is_empty() {
-            let pseudonyms = pseudonym::held(&mut connection, person)
-                .await
-                .map_err(|error| store_failure(&error))?;
-            let own = |namespace: &str| {
-                pseudonymised
-                    .iter()
-                    .any(|domain| domain.namespace == namespace && domain.serves(client))
-            };
-            held.extend(
-                pseudonyms
-                    .into_iter()
-                    .filter(|(namespace, _value)| own(namespace))
-                    .map(|(namespace, value)| (namespace, value.to_string())),
-            );
+            held.extend(own_pseudonyms(&mut connection, person, &pseudonymised, client).await?);
         }
         for domain in asked.iter().filter(|domain| domain.serves(client)) {
             let resolved = pseudonym::resolve(&mut connection, person, domain.id, true)
@@ -554,4 +541,27 @@ fn store_failure(error: &crate::store::StoreError) -> Case {
 fn internal(what: &'static str) -> Case {
     tracing::error!(fault = what, "an ITI-83 answer could not be written");
     Case::Internal
+}
+
+/// The pseudonyms `person` already holds in the domains of `pseudonymised`
+/// the caller of client id `client` is the consumer of, as `(namespace,
+/// value)`: a query naming no `targetSystem` carries no other domain's.
+async fn own_pseudonyms(
+    connection: &mut sqlx::PgConnection,
+    person: record::PersonId,
+    pseudonymised: &[pseudonym::PseudonymDomain],
+    client: Option<&str>,
+) -> Result<Vec<(String, String)>, Case> {
+    let pseudonyms = pseudonym::held(connection, person)
+        .await
+        .map_err(|error| store_failure(&error))?;
+    Ok(pseudonyms
+        .into_iter()
+        .filter(|(namespace, _value)| {
+            pseudonymised
+                .iter()
+                .any(|domain| &domain.namespace == namespace && domain.serves(client))
+        })
+        .map(|(namespace, value)| (namespace, value.to_string()))
+        .collect())
 }

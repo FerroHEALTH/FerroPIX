@@ -14,6 +14,7 @@
 pub mod about;
 pub mod dashboard;
 pub mod not_found;
+pub mod pair;
 pub mod patient;
 pub mod preferences;
 pub mod pseudonyms;

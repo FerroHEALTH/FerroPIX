@@ -761,6 +761,72 @@ messages! {
     DomainRetire = "domain-retire",
     /// The retire switch's help.
     DomainRetireHelp = "domain-retire-help",
+    /// The notice that a record changed since the pair was scored.
+    PairChanged = "pair-changed",
+    /// The compare's card and caption.
+    PairCompare = "pair-compare",
+    /// The score breakdown's card.
+    PairBreakdown = "pair-breakdown",
+    /// The persons' card.
+    PairPersons = "pair-persons",
+    /// The name of the neighbouring pairs' links.
+    PairNeighbours = "pair-neighbours",
+    /// The previous pair.
+    PairPrevious = "pair-previous",
+    /// The next pair.
+    PairNext = "pair-next",
+    /// A pair decided as one patient.
+    PairLinked = "pair-linked",
+    /// A pair decided as two patients.
+    PairNotAMatch = "pair-not-a-match",
+    /// Who decided a pair already decided.
+    PairDecided = "pair-decided",
+    /// A record's version in the compare.
+    PairVersion = "pair-version",
+    /// A field that agrees.
+    AgreementAgree = "agreement-agree",
+    /// A field that agrees in part.
+    AgreementPartial = "agreement-partial",
+    /// A field that differs.
+    AgreementDisagree = "agreement-disagree",
+    /// A field absent on one side.
+    AgreementAbsent = "agreement-absent",
+    /// One field's line in the breakdown.
+    PairContribution = "pair-contribution",
+    /// Before the blocking key that produced the pair.
+    PairBlockingKey = "pair-blocking-key",
+    /// No blocking key: a shared authoritative identifier named the pair.
+    PairNoBlockingKey = "pair-no-blocking-key",
+    /// The hard conflicts that held a shared identifier from linking.
+    PairConflicts = "pair-conflicts",
+    /// The card that says a link merges two patients.
+    PairMerges = "pair-merges",
+    /// What linking this pair does.
+    PairMergesNote = "pair-merges-note",
+    /// The Link button that asks first.
+    PairLinkAsk = "pair-link-ask",
+    /// The danger dialog's question.
+    PairMergeTitle = "pair-merge-title",
+    /// The danger dialog's sentence.
+    PairMergeMessage = "pair-merge-message",
+    /// The danger dialog's confirm.
+    PairLinkMerge = "pair-link-merge",
+    /// Reload the pair.
+    PairReload = "pair-reload",
+    /// The bar's line after a 409.
+    PairStale = "pair-stale",
+    /// The Link decision.
+    PairLink = "pair-link",
+    /// The Not a match decision.
+    PairNotAMatchAction = "pair-not-a-match-action",
+    /// The decision bar's name.
+    PairDecision = "pair-decision",
+    /// The reason's hint.
+    PairReasonHint = "pair-reason-hint",
+    /// The reason's error.
+    PairReasonMissing = "pair-reason-missing",
+    /// The deferral date's help.
+    PairUntilHelp = "pair-until-help",
     /// The consumer column.
     ColConsumer = "col-consumer",
     /// The note drawn in place of the pseudonymisation domain forms

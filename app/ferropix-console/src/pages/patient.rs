@@ -280,7 +280,7 @@ fn identifiers(person: &Person) -> AnyView {
 
 /// The compared fields of a record: name, birth date, gender, address and
 /// telecom.
-const FIELDS: [(&str, Msg); 5] = [
+pub(crate) const FIELDS: [(&str, Msg); 5] = [
     ("name", Msg::FullName),
     ("birth", Msg::BirthDate),
     ("gender", Msg::Gender),
@@ -289,7 +289,7 @@ const FIELDS: [(&str, Msg); 5] = [
 ];
 
 /// The value of the field `key` of `demographics`, as text.
-fn value_of(demographics: &Demographics, key: &str) -> Option<String> {
+pub(crate) fn value_of(demographics: &Demographics, key: &str) -> Option<String> {
     match key {
         "name" => full_name(demographics),
         "birth" => demographics.birth_date.clone(),
@@ -313,7 +313,7 @@ fn value_of(demographics: &Demographics, key: &str) -> Option<String> {
 }
 
 /// One record of the compare.
-fn compare_record(
+pub(crate) fn compare_record(
     key: String,
     title: String,
     sub: Option<String>,

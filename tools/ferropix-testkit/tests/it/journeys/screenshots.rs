@@ -63,7 +63,7 @@ const SHOTS: [(&str, &str); 23] = [
     ("expired", "/sign-in/expired"),
     ("dashboard", "/"),
     ("queue", "/queue"),
-    ("queue-pair", "/queue/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"),
+    ("queue-pair", "/queue/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01"),
     ("search", "/search"),
     ("search-demographics", "/search/demographics"),
     ("patient", "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"),

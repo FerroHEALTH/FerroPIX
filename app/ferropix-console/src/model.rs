@@ -13,7 +13,7 @@
 
 use ferrohealth_ui::widget::session::Left;
 use ferropix_operator_api::actions::{ActionFilter, Actions};
-use ferropix_operator_api::candidate::{CandidateQuery, Candidates};
+use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Candidates};
 use ferropix_operator_api::configuration::Configuration;
 use ferropix_operator_api::domain::{DomainPage, Domains};
 use ferropix_operator_api::health::Dependencies;
@@ -137,6 +137,16 @@ pub struct Prefill {
     pub born: Option<String>,
 }
 
+/// What a decision posted on a pair came to, when it did not lead on to
+/// the next pair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DecisionOutcome {
+    /// The server refused it: a `409` when the pair changed under the page.
+    Refused(Probe),
+    /// It was not sent: a decision needs a reason.
+    NoReason,
+}
+
 /// The document of one page.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Document {
@@ -156,6 +166,14 @@ pub enum Document {
         candidates: Read<Candidates>,
         /// The outcome of the deferral just posted.
         deferred: Option<Read<()>>,
+    },
+    /// One pair to compare and decide, `GET /operator/candidates/{id}`,
+    /// with what a decision just posted came to.
+    Pair {
+        /// The candidate and its evidence.
+        candidate: Read<Box<Candidate>>,
+        /// What the decision just posted came to.
+        outcome: Option<DecisionOutcome>,
     },
     /// A person, `GET /operator/persons/{id}`, with a reveal the steward
     /// just asked for.

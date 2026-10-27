@@ -42,7 +42,10 @@ pub fn selectors(key: &str) -> Option<Vec<String>> {
             ".fui-worklist-grid tr[aria-current='true'] button[command='show-modal']:not([hidden])",
         ));
     }
-    found.push(format!("[aria-keyshortcuts~=\"{key}\"]:not([disabled])"));
+    // NOTE: WAI-ARIA 1.2, `aria-keyshortcuts`: a letter key is named by its upper-case
+    // character, as FerroUI's `view::kbd::aria_keys` writes it.
+    let named = ferrohealth_ui::view::kbd::aria_keys(key)?;
+    found.push(format!("[aria-keyshortcuts~=\"{named}\"]:not([disabled])"));
     Some(found)
 }
 
@@ -77,6 +80,11 @@ fn pressed(event: &leptos::ev::KeyboardEvent) {
             leptos::logging::warn!("the browser refused the focus");
         }
     } else {
+        // NOTE: HTML Living Standard, the `dialog` element: a modal returns the focus to the
+        // element that held it when it opened, so the control the key pressed takes it first.
+        if target.focus().is_err() {
+            leptos::logging::warn!("the browser refused the focus");
+        }
         target.click();
     }
 }
@@ -91,7 +99,7 @@ mod tests {
         assert_eq!(2, open.len());
         assert!(open[0].contains("aria-current"));
         assert_eq!(
-            vec![String::from("[aria-keyshortcuts~=\"l\"]:not([disabled])")],
+            vec![String::from("[aria-keyshortcuts~=\"L\"]:not([disabled])")],
             selectors("l").expect("l is the console's")
         );
         assert_eq!(None, selectors("?"), "the legend's key is FerroUI's");

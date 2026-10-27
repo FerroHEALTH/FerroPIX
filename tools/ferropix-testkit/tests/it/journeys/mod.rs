@@ -26,6 +26,7 @@ mod browser;
 mod chromedriver;
 mod in_place;
 mod keyboard;
+mod pair;
 mod preferences;
 mod pseudo_locale;
 mod pseudonyms;
@@ -58,7 +59,7 @@ const PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 const SCREENS: [&str; 20] = [
     "/",
     "/queue",
-    "/queue/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+    "/queue/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01",
     "/search",
     "/search/demographics",
     "/patients/0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",

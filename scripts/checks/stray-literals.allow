@@ -24,3 +24,5 @@ allow ^the console's state is missing$      # a server function's refusal, which
 allow ^the request is missing$              # a server function's refusal, which the browser half logs for a developer
 allow ^no form posts to this address$       # a server function's refusal, which the browser half logs for a developer
 allow ^[jk] \| (down|up)$                    # keys as the shortcut legend parses them (FerroUI view::kbd), drawn as key caps
+allow ^o \| d$                               # keys as the shortcut legend parses them (FerroUI view::kbd), drawn as key caps
+allow ^\.fui-worklist-grid                   # a CSS selector the console's key listener queries

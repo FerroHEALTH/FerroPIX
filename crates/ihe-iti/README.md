@@ -15,7 +15,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `mcsd` | Mobile Care Services Discovery | ITI-90, ITI-91 |
 | `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
-| `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna) | ITI-83, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
+| `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna): the client side's, and the PIXm Manager's and the PDQm Supplier's from a `received::Received` request | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
 | `smart` | The IUA authorizer over the OAuth 2.0 client-credentials token of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) | ITI-72 |
 | `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |

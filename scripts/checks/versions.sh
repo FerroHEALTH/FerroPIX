@@ -22,7 +22,8 @@
 #      the lockfiles, JSON (which has no comment syntax), the raster images
 #      (PNG and ICO, which have none either), test fixtures and the fuzz
 #      seeds (bytes a target reads, written from the vendored examples)
-#      carry no header.
+#      and the changelog fragments (text the release cut moves into
+#      CHANGELOG.md, which carries the header) carry no header.
 #
 # Usage:
 #   scripts/checks/versions.sh [--root DIR]   check this repository, or DIR
@@ -170,6 +171,11 @@ self_test() {
   mkdir -p "$d/fuzz/seeds/pix_query"
   printf 'sourceIdentifier=urn%%3Aoid%%3A2.999.1%%7C1' > "$d/fuzz/seeds/pix_query/gen-a.txt"
   expect 0 "a fuzz seed without the header"
+  mkdir -p "$d/changelog.d"
+  printf -- '- An entry (#1).\n' > "$d/changelog.d/1-an-entry.added.md"
+  expect 0 "a changelog fragment without the header"
+  printf 'The fragment format.\n' > "$d/changelog.d/README.md"
+  expect 1 "the fragment README without the header"
   rm -r "$work"
   if [[ "$failed" -ne 0 ]]; then
     exit 1
@@ -279,7 +285,7 @@ fi
 # 5. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/*) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/* | changelog.d/[0-9]*.md) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

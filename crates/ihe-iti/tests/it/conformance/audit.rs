@@ -13,11 +13,16 @@
 use std::sync::Arc;
 
 use ihe_atna::balp::Exchange;
+use ihe_atna::balp::{NetworkAddress, Outcome, Peer};
 use ihe_atna::user::OnBehalfOf;
+use ihe_iti::pdqm::audit::{SupplierSearch, supplier_records};
 use ihe_iti::pdqm::input::MatchInput;
+use ihe_iti::pixm::audit::{FeedAction, manager_feed, manager_query};
+use ihe_iti::pixm::identifier::SourceIdentifier;
 use ihe_iti::pmir::audit::received;
 use ihe_iti::pmir::feed::Feed;
 use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest};
+use ihe_iti::received::Received;
 use secrecy::SecretString;
 use serde_json::Value;
 use url::Url;
@@ -68,11 +73,12 @@ async fn check(package: &'static str, id: String) {
         "IHE.PMIR.Audit.Subscription.Create" => (pmir_subscription(0).await, false),
         "IHE.PMIR.Audit.Subscription.Read" => (pmir_subscription(1).await, false),
         "IHE.PMIR.Audit.Subscription.Delete" => (pmir_subscription(2).await, false),
-        other if other.ends_with(".Manager") || other.ends_with(".Supplier") => {
-            panic!(
-                "ihe-iti writes no {other} record: the server side records it in ferropix-server"
-            )
-        }
+        "IHE.PIXm.Query.Audit.Manager" => (pixm_query_manager(), true),
+        "IHE.PIXm.Feed.Create.Audit.Manager" => (pixm_feed_manager(FeedAction::Create), true),
+        "IHE.PIXm.Feed.Update.Audit.Manager" => (pixm_feed_manager(FeedAction::Update), true),
+        "IHE.PIXm.Feed.Delete.Audit.Manager" => (pixm_feed_manager(FeedAction::Delete), true),
+        "IHE.PDQm.Query.Audit.Supplier" => (pdqm_supplier(SupplierSearch::Query), true),
+        "IHE.PDQm.Match.Audit.Supplier" => (pdqm_supplier(SupplierSearch::Match), true),
         other => panic!("ihe-iti writes no record of the profile {other}"),
     };
     let profile: Value = serde_json::from_str(&example(
@@ -181,6 +187,67 @@ async fn pmir_subscription(n: usize) -> Exchange {
         .into_iter()
         .nth(n)
         .expect("a record of each interaction")
+}
+
+/// The request a Manager or a Supplier received from a client at an IPv6
+/// address, at its FHIR base, made by the client for itself.
+fn at_the_server() -> Received {
+    Received::new(
+        Peer {
+            who: String::from("ex-device"),
+            network: NetworkAddress::Ip("2001:db8:85a3::8a2e:370:7334".parse().expect("an IP")),
+        },
+        NetworkAddress::uri(&Url::parse("http://server.example.com/fhir").expect("a URL")),
+        OnBehalfOf::System,
+    )
+}
+
+/// The identifier the PIXm Manager examples name as the patient.
+fn red_994() -> SourceIdentifier {
+    SourceIdentifier::new(
+        "urn:oid:1.3.6.1.4.1.21367.13.20.1000",
+        SecretString::from("IHERED-994"),
+    )
+    .expect("an identifier")
+}
+
+/// The Manager's record of the ITI-83 query its example shows.
+fn pixm_query_manager() -> Exchange {
+    manager_query(
+        &at_the_server(),
+        SecretString::from(
+            "https://server.example.com/fhir/Patient/$ihe-pix?sourceIdentifier=urn:oid:1.3.6.1.4.1.21367.13.20.1000|IHERED-994&targetSystem=urn:oid:1.3.6.1.4.1.21367.13.20.3000",
+        ),
+        &red_994(),
+        Outcome::Success,
+    )
+}
+
+/// The Manager's record of an ITI-104 feed that did `action` to the
+/// example's identifier, cross-referenced to the example's Patient.
+fn pixm_feed_manager(action: FeedAction) -> Exchange {
+    manager_feed(
+        &at_the_server(),
+        action,
+        &red_994(),
+        Some("Patient/ex-patient"),
+        Outcome::Success,
+    )
+}
+
+/// The Supplier's record of an ITI-78 search or an ITI-119 match that found
+/// one patient.
+fn pdqm_supplier(search: SupplierSearch) -> Exchange {
+    let [exchange] = supplier_records(
+        &at_the_server(),
+        search,
+        &SecretString::from("https://server.example.com/fhir/Patient?family=Schmidt"),
+        &[String::from("Patient/ex-patient")],
+        Outcome::Success,
+    )
+    .try_into()
+    .expect("one record for one patient");
+    exchange
 }
 
 /// The one exchange `kept` holds.

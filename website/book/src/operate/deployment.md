@@ -97,6 +97,10 @@ curl http://localhost:8080/health/readiness
 - **Hardening.** The server runs with a read-only root filesystem, every
   capability dropped, `no-new-privileges`, a `tmpfs` for `/tmp`, and its
   state on a named volume.
+- **Health.** `compose.yaml` declares the healthcheck of the server and of
+  the console on the service, the same check their images carry, so
+  `podman compose up --wait` waits for the same readiness `docker compose`
+  does: Podman runs the published images without their own healthcheck.
 - **Secrets.** All four are files under `./secrets`, mounted under
   `/run/secrets/`, never environment variables. PostgreSQL creates the
   `ferropix` role from `ferropix-db-password` on its first start

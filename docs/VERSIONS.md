@@ -90,7 +90,7 @@ it, and the `mac-arm64` pair verified again here on 2026-10-24.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| thirtyfour | `0.37.5` | `Cargo.toml` |
+| thirtyfour | `0.38.1` | `Cargo.toml` |
 | Chrome for Testing (Chrome and chromedriver) | `156.0.8078.47` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
 | Chrome for Testing, `chrome-linux64.zip` SHA-256 | `e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50` | `scripts/release/journey-tools.sh` |
 | Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `ad7f2b49a4dc679af286b1b1b386670d93ca7868079f69012d21ba0ac8293df3` | `scripts/release/journey-tools.sh` |

@@ -143,12 +143,12 @@ tokio-rustls = "0.26.6"
 testcontainers = "0.28.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "runtime-tokio"] }
 # The operator console's browser journeys (tools/ferropix-testkit, #98): the
-# WebDriver client at the version FerroBRIDGE and FerroFED pin, and the
+# WebDriver client at the version FerroBRIDGE pins, and the
 # process-group kill that stops each journey's chromedriver with the Chrome
 # it started. The console's browser half marks the page hydrated through
 # web-sys, at the version wasm-bindgen already resolves. Verified against
-# crates.io on 2026-10-24.
-thirtyfour = { version = "0.37.5", default-features = false, features = ["reqwest", "cdp"] }
+# crates.io on 2026-10-28.
+thirtyfour = { version = "0.38.1", default-features = false, features = ["reqwest", "cdp"] }
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
 web-sys = { version = "0.3.106", default-features = false }
 

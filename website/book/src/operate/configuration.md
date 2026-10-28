@@ -114,7 +114,7 @@ quickstart mounts it beside PostgreSQL
 | `server.base_path` | `""` | The path every route is mounted under: empty for the root, or `/` and path segments with no trailing `/`. |
 | `server.body_limit_bytes` | `1048576` | The largest request body read; a larger one is answered `413`. |
 | `server.request_timeout_ms` | `30000` | How long one request may take; a slower one is answered `408`. |
-| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head; a client still sending one then is disconnected. |
+| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head, counted from accept or from its last response; a client that has not sent one by then, one that sent nothing included, is disconnected. |
 | `server.drain_delay_ms` | `0` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
 | `server.shutdown_timeout_ms` | `10000` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
 | `server.max_concurrent_requests` | unset | How many requests the server serves at once; past it a request is answered `503` with `Retry-After`. The health routes are never refused. Unset, there is no bound. |

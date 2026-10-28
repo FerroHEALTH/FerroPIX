@@ -13,6 +13,48 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-10-28
+
+### Fixed
+
+- A response to a request whose body FerroPIX left unread, such as a `404`
+  to a `POST` of a path it does not serve or a declared-length `413`, now
+  carries `Connection: close`, so a client opens a new connection for its
+  next request where it used to meet a closed socket (RFC 9112 §9.6) (#371).
+- Every request leaves one request line, a timeout `408`, a declared-length
+  `413` and the `500` of a panicked handler included, and a `413` for a body
+  with no declared length that passes `[server] body_limit_bytes` is
+  answered with an `OperationOutcome`, as the declared-length `413` is (#371).
+- Every accepted connection sets `TCP_NODELAY`, so a small response no
+  longer waits on the client's delayed acknowledgment, and an HTTP/2 request
+  still running when the drain bound passes is cancelled before the server
+  exits, as an HTTP/1.1 request already was (#371).
+- `[auth] ca_file` is trusted under `mode = "introspection"` too: with
+  `ferrohealth-smart` 0.8.6 the server reads the issuer's metadata, calls
+  the introspection endpoint and requests its own token trusting it, so an
+  issuer behind a private certificate authority is reached with the setting
+  that reaches it under `mode = "jwt"` (#373).
+- The console takes `ferrohealth-ui` 0.5.5: the skip link moves the focus
+  to the main area once the page has hydrated, so the next Tab reaches the
+  page's first control (WCAG 2.2 SC 2.4.1); a search answered with `401`
+  sends every other tab of the console to sign-in; and the search panel no
+  longer panics when a navigation leaves the page while it opens (#373).
+
+### Security
+
+Shipped with functional changes because: the fix exists only in `ferrohealth-server` 0.3.7, which carries functional fixes in the same serving path beside it, so there is no security-only release of the crate for FerroPIX to take. The release also takes the newest shared crates (#373), so the fix ships on the family's current line.
+
+- The server and the console take `ferrohealth-server`
+  0.3.7 in place of 0.3.4 (GHSA-2mc2-h3jq-c5wg). Every earlier release held
+  a plain-HTTP connection that never sent a byte for as long as the client
+  kept it open, so silent connections from a client with no credentials
+  could exhaust the process's file descriptors and stop it answering, health
+  checks included; the listener then retried a failed `accept` at once and
+  logged every failure. Such a connection now closes once
+  `[server] header_read_timeout_ms` passes (30 s by default), counted from
+  accept, and after an `EMFILE` or `ENFILE` the listener pauses up to 1 s
+  before it accepts again and logs one warning every 10 seconds (#371).
+
 ## [0.0.10] - 2026-10-27
 
 ### Added

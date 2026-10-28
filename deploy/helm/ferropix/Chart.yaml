@@ -10,10 +10,10 @@ description: >-
 type: application
 # The chart's own version line, SemVer over its values and rendered output
 # (https://helm.sh/docs/topics/charts/#charts-and-versioning).
-version: 0.3.2
+version: 0.3.3
 # The default image tag of the server and the console: the product version,
 # which scripts/checks/versions.sh holds equal to the workspace version.
-appVersion: "0.0.10"
+appVersion: "0.0.11"
 # PodDisruptionBudget.unhealthyPodEvictionPolicy is stable from 1.31
 # (KEP-3017), the newest field this chart renders.
 kubeVersion: ">=1.31.0-0"

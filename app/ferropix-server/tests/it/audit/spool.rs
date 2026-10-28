@@ -26,6 +26,7 @@ use ferropix_server::auth::Smart;
 use ferropix_server::config::section::audit::AuditSettings;
 use ferropix_server::fhir::{self, Mounts};
 use ferropix_server::http::router;
+use ferropix_server::problem::Kind;
 use http::{Method, StatusCode};
 use ihe_atna::atna::spool::{QUARANTINE, SpoolError};
 use ihe_atna::balp::{Exchange, Outcome};
@@ -163,6 +164,17 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
     ] {
         let answer = send(&app, method, path, Some(&token)).await;
         assert_eq!(StatusCode::SERVICE_UNAVAILABLE, answer.status, "{path}");
+        if path.starts_with("/operator") {
+            assert_eq!(
+                (
+                    Kind::AuditUnavailable.problem_type().uri().to_owned(),
+                    UNAUDITED.to_owned()
+                ),
+                answer.problem(),
+                "{path}"
+            );
+            continue;
+        }
         let outcome = answer.json();
         assert_eq!("transient", outcome["issue"][0]["code"], "{path}");
         assert_eq!(UNAUDITED, outcome["issue"][0]["diagnostics"], "{path}");

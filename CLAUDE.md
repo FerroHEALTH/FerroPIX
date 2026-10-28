@@ -129,7 +129,9 @@ The build order is the milestones:
   span export and `/metrics` of `ferrohealth-telemetry` with the request id
   of `ferrohealth-server`, the routes inside `ferrohealth-server`'s stack
   with its bounded drain, probe and shared subcommands, `[server]` being its
-  `ServerSection` (`src/http/`, every stack refusal an `OperationOutcome`),
+  `ServerSection` (`src/http/`, every stack refusal an `OperationOutcome`
+  on the FHIR face and the XCPD gateway and an RFC 9457 problem elsewhere,
+  the problem types defined once in `src/problem.rs`),
   the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it

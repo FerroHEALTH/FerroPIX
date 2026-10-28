@@ -15,6 +15,7 @@ use axum::body::Body;
 use ferropix_operator_api::configuration::{Configuration, Mode, Origin};
 use ferropix_operator_api::matching::Matching;
 use ferropix_server::auth::table::{Need, ROUTES};
+use ferropix_server::problem::{self, Kind};
 use http::{Method, Request, StatusCode, header};
 use tower::ServiceExt as _;
 
@@ -188,8 +189,13 @@ async fn a_demographics_search_that_states_no_field_is_refused_before_it_runs() 
     .await;
     assert_eq!(StatusCode::BAD_REQUEST, status, "{body}");
     assert_eq!(Some("no-store"), cache.as_deref());
-    let outcome: serde_json::Value = serde_json::from_str(&body).expect("an outcome");
-    assert_eq!("invalid", outcome["issue"][0]["code"]);
+    let problem: serde_json::Value = serde_json::from_str(&body).expect("a problem");
+    assert_eq!(
+        Kind::InvalidRequest.problem_type().uri(),
+        problem["type"],
+        "{problem}"
+    );
+    assert_eq!(400, problem["status"], "{problem}");
 }
 
 #[tokio::test]
@@ -286,7 +292,11 @@ async fn a_person_or_domain_id_that_is_no_uuid_is_not_found_and_a_bad_trail_filt
     for path in ["/operator/persons/p-1", "/operator/domains/d-1"] {
         let answer = send(&app, Method::GET, path, Some(&steward)).await;
         assert_eq!(StatusCode::NOT_FOUND, answer.status, "{path}");
-        assert_eq!("not-found", answer.json()["issue"][0]["code"], "{path}");
+        assert_eq!(
+            Kind::NotFound.problem_type().uri(),
+            answer.problem().0,
+            "{path}"
+        );
     }
     for query in ["person=p-1", "from=yesterday", "limit=many", "colour=red"] {
         let answer = send(
@@ -300,4 +310,139 @@ async fn a_person_or_domain_id_that_is_no_uuid_is_not_found_and_a_bad_trail_filt
         assert!(!answer.body.contains("yesterday"), "{query}");
         assert!(!answer.body.contains("colour"), "{query}");
     }
+}
+
+/// A made-up identifier and pseudonym no real person carries, which no
+/// problem may quote.
+const SENTINEL: &str = "Qz7SYNTHETIC-4711";
+
+#[tokio::test]
+async fn no_operator_problem_quotes_the_request_an_identifier_or_a_pseudonym() {
+    let issuer = Issuer::start().await;
+    let secrets = Secrets::new();
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
+    let steward = bearer(&issuer.token("east-lab", "__ferropix.steward"));
+    let person = "00000000-0000-7000-8000-000000000000";
+    let cases = [
+        (
+            Method::POST,
+            String::from("/operator/search/identifier"),
+            steward.clone(),
+            Some(("text/plain", format!("urn:oid:2.999.1.1|{SENTINEL}"))),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            Method::POST,
+            String::from("/operator/search/identifier"),
+            steward.clone(),
+            Some((
+                "application/json",
+                format!(r#"{{"system":"urn:oid:2.999.1.1","value":"{SENTINEL}","#),
+            )),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            Method::GET,
+            format!("/operator/persons/{SENTINEL}"),
+            steward.clone(),
+            None,
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::GET,
+            format!("/operator/actions?person={SENTINEL}"),
+            steward.clone(),
+            None,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            Method::POST,
+            String::from("/operator/pseudonyms/resolve"),
+            steward.clone(),
+            Some((
+                "application/json",
+                format!(
+                    r#"{{"namespace":"urn:oid:2.999.9","pseudonym":"{SENTINEL}","reason":" "}}"#
+                ),
+            )),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            Method::POST,
+            format!("/operator/persons/{person}/reveal"),
+            steward.clone(),
+            Some((
+                "application/json",
+                format!(r#"{{"target":{{"record":"{SENTINEL}"}},"reason":""}}"#),
+            )),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            Method::GET,
+            String::from("/operator/overview"),
+            bearer(SENTINEL),
+            None,
+            StatusCode::UNAUTHORIZED,
+        ),
+    ];
+    for (method, uri, authorization, body, status) in cases {
+        assert_quotes_nothing(&app, method, &uri, &authorization, body, status).await;
+    }
+}
+
+/// Sends one request and asserts its answer is an RFC 9457 problem of
+/// `status` that quotes nothing of [`SENTINEL`].
+async fn assert_quotes_nothing(
+    app: &axum::Router,
+    method: Method,
+    uri: &str,
+    authorization: &str,
+    body: Option<(&str, String)>,
+    status: StatusCode,
+) {
+    let label = format!("{method} {uri}");
+    let mut request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::AUTHORIZATION, authorization);
+    let body = match body {
+        Some((media_type, text)) => {
+            request = request.header(header::CONTENT_TYPE, media_type);
+            Body::from(text)
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(request.body(body).expect("a legal request"))
+        .await
+        .expect("the router answers");
+    assert_eq!(status, response.status(), "{label}");
+    assert_eq!(
+        Some(ferrohealth_server::problem::MEDIA_TYPE),
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        "{label}"
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+        .await
+        .expect("the body reads");
+    let text = String::from_utf8(bytes.to_vec()).expect("UTF-8");
+    assert!(!text.contains("Qz7"), "{label}: {text}");
+    let problem: serde_json::Value = serde_json::from_str(&text).expect("a problem");
+    let members = problem.as_object().expect("an object");
+    assert!(
+        members
+            .keys()
+            .all(|name| ["type", "title", "status", "detail", "instance"].contains(&name.as_str())),
+        "{label}: RFC 9457 §3.1 members alone: {text}"
+    );
+    assert_eq!(Some(u64::from(status.as_u16())), problem["status"].as_u64());
+    let kind = problem["type"].as_str().unwrap_or_default();
+    assert!(
+        kind == "about:blank" || kind.starts_with(problem::BASE),
+        "{label}: {kind}"
+    );
 }

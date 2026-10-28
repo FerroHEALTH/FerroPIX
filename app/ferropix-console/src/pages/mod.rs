@@ -81,10 +81,20 @@ fn probe_refusal(probe: &Probe, what: &str) -> Refusal {
             (None, tr_with(Msg::UnreachableOther, &[("what", what)]))
         }
     };
-    let issues = probe
-        .issues
-        .iter()
-        .map(|issue| {
+    let problem = probe.problem.iter().map(|problem| {
+        let named = problem
+            .title
+            .clone()
+            .or_else(|| problem.slug().map(str::to_owned))
+            .unwrap_or_else(|| problem.kind.clone());
+        let shown = Issue::new(Severity::Error, named);
+        match &problem.detail {
+            Some(text) => shown.text(text.clone()),
+            None => shown,
+        }
+    });
+    let issues = problem
+        .chain(probe.issues.iter().map(|issue| {
             let severity = match issue.severity.as_str() {
                 "fatal" => Severity::Fatal,
                 "warning" => Severity::Warning,
@@ -96,7 +106,7 @@ fn probe_refusal(probe: &Probe, what: &str) -> Refusal {
                 Some(text) => shown.text(text.clone()),
                 None => shown,
             }
-        })
+        }))
         .collect();
     Refusal {
         status,

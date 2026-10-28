@@ -34,9 +34,12 @@ records, and a patient index answers about every patient. A Source's
 The answers:
 
 - No valid token: `401` with a `WWW-Authenticate: Bearer` challenge and an
-  `OperationOutcome` with a `security` issue.
+  `OperationOutcome` with a `security` issue on the FHIR face, or the
+  problem [`unauthenticated`](problems.md#unauthenticated) on the operator
+  API.
 - A token without the scope: `403` with `error="insufficient_scope"` and a
-  `security` issue.
+  `security` issue, or the problem
+  [`not-permitted`](problems.md#not-permitted).
 - A Source changing a domain it does not feed: `403` with a `forbidden`
   issue.
 

@@ -14,8 +14,9 @@ The console reads the FerroPIX server's [operator API](operator-api.md),
 whose documents it compiles against, once per page before it draws it, with
 your own access token. A page never shows a row the server did not send:
 when the server refused the connection, did not answer in time or refused
-the console, the page says so in place, with the server's issue, and one
-refused part never blanks a page.
+the console, the page says so in place, with the title and the detail of
+the server's [problem](problems.md), and one refused part never blanks a
+page.
 
 The browser draws every page after the first itself, so a link, a search, a
 filter or a reveal keeps the page you are on and loads no new document; with

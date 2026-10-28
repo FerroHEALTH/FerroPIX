@@ -30,7 +30,6 @@ use ferropix_operator_api::search::{
 use fhir_types::r4::address::Address;
 use fhir_types::r4::human_name::HumanName;
 use fhir_types::r4::patient::Patient;
-use http::StatusCode;
 use http::request::Parts;
 use ihe_atna::balp::Outcome;
 use secrecy::SecretString;
@@ -38,19 +37,19 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::audit::records;
-use crate::fhir::outcome::IssueType;
 use crate::matching::scorer::{Grade, mask};
 use crate::operator::person::leading;
 use crate::operator::{Operator, OperatorError, domain_kind, snapshot, wire};
 use crate::pdqm::matching;
+use crate::problem::Kind;
 use crate::store::identifier::Rule;
 use crate::store::{record, xref};
 
-/// The diagnostics of an identifier search in a domain FerroPIX does not
+/// The detail of an identifier search in a domain FerroPIX does not
 /// know.
 pub const UNKNOWN_DOMAIN: &str = "the identifier domain is unknown or retired";
 
-/// The diagnostics of a demographics search that states no field.
+/// The detail of a demographics search that states no field.
 pub const NO_FIELD: &str = "a demographics search states at least one field";
 
 /// A body of either search, with the page it asks for.
@@ -98,11 +97,7 @@ pub async fn by_identifier(operator: &Operator, request: Request) -> Response {
     let found = match identifier_persons(operator, &search).await {
         Ok(Some(found)) => found,
         Ok(None) => {
-            return wire::refuse(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                IssueType::NotFound,
-                UNKNOWN_DOMAIN,
-            );
+            return wire::refuse(Kind::UnknownDomain, UNKNOWN_DOMAIN);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -118,7 +113,7 @@ pub async fn by_demographics(operator: &Operator, request: Request) -> Response 
         Err(refused) => return *refused,
     };
     let Some(input) = input(&search) else {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NO_FIELD);
+        return wire::refuse(Kind::InvalidRequest, NO_FIELD);
     };
     let window = Window::of(search.offset, search.limit);
     let matched = match matched(operator, &input).await {

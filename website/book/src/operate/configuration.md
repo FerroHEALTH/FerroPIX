@@ -135,14 +135,16 @@ again.
 | `server.tls.certificate_file` | none, required | The certificate chain in PEM, the leaf first. |
 | `server.tls.key_file` | none, required | The private key of the leaf, in PEM. |
 | `server.tls.client_auth` | `"none"` | Whether the listener asks a client certificate: `"none"`, `"optional"` or `"required"`. |
-| `server.tls.client_ca_file` | unset | The CA bundle a client certificate must chain to; required unless `client_auth` is `"none"`. |
+| `server.tls.client_ca_file` | unset | The CA bundle a client certificate must chain to; required when `client_auth` is `"optional"` or `"required"`, and refused at load beside `"none"`, the default included. |
 | `server.tls.reload_interval_s` | unset | How often the files are read again; unset, only `SIGHUP` reads them. |
 | `server.tls.healthcheck_identity_file` | unset | The client certificate chain and key, in one PEM, that `ferropix healthcheck` presents to a listener that asks one. |
 | `server.tls.min_version` | `"1.3"` | The oldest TLS version the listener speaks, `"1.3"` or `"1.2"`. |
 
 Every refusal the stack writes itself, a `408`, a `413` and a `503` for
-load, is a FHIR `OperationOutcome` (`timeout`, `too-long`, `throttled`), as
-is the `500` of a handler that failed, which names the server's request id.
+load, is a FHIR `OperationOutcome` (`timeout`, `too-long`, `throttled`) on
+the FHIR face and the XCPD gateway, as is the `500` of a handler that
+failed, which names the server's request id. On every other route each is
+an `about:blank` [problem](problems.md) whose `instance` is the request id.
 
 The server routes, under `server.base_path`:
 

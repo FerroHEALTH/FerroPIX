@@ -40,31 +40,31 @@ use uuid::Uuid;
 use crate::audit::records::{self, operator::Disclosed};
 use crate::auth::table::Route;
 use crate::config::section::domain::is_system;
-use crate::fhir::outcome::IssueType;
 use crate::operator::{Operator, OperatorError, Recorded, count, record_action, wire};
+use crate::problem::Kind;
 use crate::store::pseudonym;
 use crate::store::record::PersonId;
 
-/// The diagnostics of an id that names no pseudonymisation domain.
+/// The detail of an id that names no pseudonymisation domain.
 pub const NO_SUCH_DOMAIN: &str = "no pseudonymisation domain has this id";
 
-/// The diagnostics of a domain write whose fields do not hold.
+/// The detail of a domain write whose fields do not hold.
 pub const NOT_A_DOMAIN: &str = "a pseudonymisation domain names an absolute URI as its namespace and a name, and a consumer is no blank";
 
-/// The diagnostics of a namespace another domain holds.
+/// The detail of a namespace another domain holds.
 pub const NAMESPACE_TAKEN: &str =
     "another pseudonymisation domain or an identifier domain holds this namespace";
 
-/// The diagnostics of a change to, or a mint in, a retired domain.
+/// The detail of a change to, or a mint in, a retired domain.
 pub const RETIRED: &str = "the pseudonymisation domain is retired: it mints nothing";
 
-/// The diagnostics of a write or a resolution without a reason.
+/// The detail of a write or a resolution without a reason.
 pub const NO_REASON: &str = "the request states its reason, in at most 500 characters";
 
-/// The diagnostics of a person id that names no person.
+/// The detail of a person id that names no person.
 pub const NO_SUCH_PERSON: &str = "no person has this id";
 
-/// The diagnostics of a pseudonym that resolves to no person.
+/// The detail of a pseudonym that resolves to no person.
 pub const NOT_RESOLVED: &str = "no unretired pseudonymisation domain holds this pseudonym";
 
 /// The columns of one domain row, each timestamp RFC 3339 UTC.
@@ -180,14 +180,14 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         .as_deref()
         .is_some_and(|client| client.trim().is_empty());
     if !is_system(&new.namespace) || new.name.trim().is_empty() || blank_consumer {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_A_DOMAIN);
+        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if new
         .reason
         .as_deref()
         .is_some_and(|reason| !reasoned(reason))
     {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NO_REASON);
+        return wire::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -209,7 +209,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     let (transaction, id) = match outcome {
         Ok(Some(written)) => written,
         Ok(None) => {
-            return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, NAMESPACE_TAKEN);
+            return wire::refuse(Kind::AlreadyHeld, NAMESPACE_TAKEN);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -236,11 +236,11 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     if !reasoned(&change.reason) {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NO_REASON);
+        return wire::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let blank = |text: &Option<String>| text.as_deref().is_some_and(|text| text.trim().is_empty());
     if blank(&change.name) || blank(&change.consumer_client_id) {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_A_DOMAIN);
+        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -277,7 +277,7 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
         Ok(Changed::Written(transaction, namespace)) => (transaction, namespace),
         Ok(Changed::Missing) => return no_such_domain(),
         Ok(Changed::Retired) => {
-            return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, RETIRED);
+            return wire::refuse(Kind::Retired, RETIRED);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -372,7 +372,7 @@ async fn finish(
 
 /// Returns the `404` of an id that names no domain.
 fn no_such_domain() -> Response {
-    wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NO_SUCH_DOMAIN)
+    wire::refuse(Kind::NotFound, NO_SUCH_DOMAIN)
 }
 
 /// Answers `POST {base}/operator/pseudonyms`: the survivor's pseudonym in
@@ -387,7 +387,7 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
         return no_such_domain();
     };
     let Some(person) = wire::uuid(&asked.person) else {
-        return wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NO_SUCH_PERSON);
+        return wire::refuse(Kind::NotFound, NO_SUCH_PERSON);
     };
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -415,10 +415,10 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
         Ok(Minting::Done(transaction, survivor, minted)) => (transaction, survivor, minted),
         Ok(Minting::NoDomain) => return no_such_domain(),
         Ok(Minting::Retired) => {
-            return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, RETIRED);
+            return wire::refuse(Kind::Retired, RETIRED);
         }
         Ok(Minting::NoPerson) => {
-            return wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NO_SUCH_PERSON);
+            return wire::refuse(Kind::NotFound, NO_SUCH_PERSON);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -497,7 +497,7 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     if !reasoned(&asked.reason) {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NO_REASON);
+        return wire::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let Some(value) = wire::uuid(asked.pseudonym.trim()) else {
         return not_resolved();
@@ -557,5 +557,5 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
 
 /// Returns the `404` of a pseudonym that resolves to no person.
 fn not_resolved() -> Response {
-    wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NOT_RESOLVED)
+    wire::refuse(Kind::NotFound, NOT_RESOLVED)
 }

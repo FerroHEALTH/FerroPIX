@@ -146,8 +146,9 @@ async fn a_deferral_posts_the_candidate_s_versions_and_a_refusal_is_drawn_in_pla
         .await;
     Mock::given(method("POST"))
         .and(path(format!("/operator/candidates/{CANDIDATE}/decide")))
-        .respond_with(ResponseTemplate::new(409).set_body_string(
-            r#"{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"conflict","diagnostics":"a record changed after the candidate was read"}]}"#,
+        .respond_with(ResponseTemplate::new(409).set_body_raw(
+            r#"{"type":"https://ferropix.eu/docs/operate/problems.html#stale","title":"What the request was decided on changed since it was read","status":409,"detail":"a record changed after the candidate was read"}"#,
+            "application/problem+json",
         ))
         .mount(&filled)
         .await;

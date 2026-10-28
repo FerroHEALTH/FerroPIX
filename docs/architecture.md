@@ -949,9 +949,11 @@ grouping (PIXm 3.1.0 §2:3.83.5.2, §2:3.104.5.2; PDQm 3.2.0 §2:3.78.5.2,
 - A path under `{base}/fhir` or `{base}/operator` that no row names needs
   a credential before the router answers `404`, so an anonymous probe
   learns nothing of the router.
-- A refusal is an `OperationOutcome` with a `security` issue (`401`,
-  `403`), or a `forbidden` issue for a Source outside its domain, with a
-  fixed diagnostics text.
+- A refusal on the FHIR face is an `OperationOutcome` with a `security`
+  issue (`401`, `403`), or a `forbidden` issue for a Source outside its
+  domain, with a fixed diagnostics text; on the operator API it is the
+  RFC 9457 problem `unauthenticated` or `not-permitted` with the same text
+  (D40).
 - The discovery document and the `CapabilityStatement` name the first
   issuer whose metadata names a `token_endpoint`; issuers none of which
   names one refuse the start, and a development surface of Basic users
@@ -1224,7 +1226,7 @@ identifier chips per domain (masked, section 12.5), the score and grade
 for a demographics search, and the row opens the patient. The table's
 state is in the session. Empty: "No patient matches" with the two things
 to try (fewer fields, `:exact` off). Loading: the table's skeleton. Error:
-the `refusal` with the server's `OperationOutcome` issues. Keyboard: `/`
+the `refusal` with the server's problem details (D40). Keyboard: `/`
 focuses the field, Tab between segments, Enter posts, `j`/`k` walk the
 rows, Enter opens. Phone: the form stacks, the table stacks to cards.
 
@@ -1341,7 +1343,8 @@ on the server so the first paint is right (FerroUI family rule 9).
 `{base}/operator`, behind `[operator] enabled` and the steward scope, read
 and decided through `ferropix-operator-api` types. Every search and every
 lookup that carries an identifier is a `POST`; every list keeps its paging
-in the body or the session; every answer is `no-store`.
+in the body or the session; every answer is `no-store`; every refusal is
+an RFC 9457 problem of a type the book documents (D40).
 
 | Route | Does |
 |---|---|
@@ -1874,3 +1877,4 @@ The milestones carry the order; every issue cites the section it builds.
 | D37 | The changes of one ITI-93 message | applied in history order, each in its own transaction; a refused change leaves the changes before and after it applied, and the response names it; a store failure ends the message with `503` and the changes before it stay applied, so a resent message applies again (a create of a held identity is an update, a merge already made changes nothing) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry, which presumes each entry is applied or refused on its own; how the entries share transactions no specification governs: our own design |
 | D38 | Minting a pseudonym on the ITI-83 ask | a pseudonymisation domain is a `targetSystem` of ITI-83; the consumer's first ask mints the person's pseudonym and answers it, no other caller reads it (#339), a query naming no `targetSystem` mints nothing and carries the caller's own domains alone; one pseudonym per `(person, domain)` under concurrency; each mint its own BALP Create record; PIXm resolves no pseudonym back, which stays the steward's audited resolution | PIXm 3.1.0 §2:3.83.4.1.3 has the Manager use the `targetSystem` to determine the identifiers that match, and §2:3.83.4.1.2.2 selects the answer from the domains it names; the clinical record carries only the pseudonym, so it must exist on the clinical domain's first ask (FerroHEALTH/FerroEHR#3380); who may mint and read no specification governs: our own design, holding the domains apart (GDPR Art. 4(5), Art. 25(2)) |
 | D39 | What the top bar's search panel answers as the steward types | the console's pages, the identifier domains and the preferences whose names hold the words, the domains read from the operator API's domain list; never a person, so the panel writes no BALP record and no steward action; a patient search runs only on Enter or the panel's last row, posted, and records what D26 records | no specification governs it; BALP 1.1.4 §1:52.4.1.6 wants a Query record per patient search, and a search at every pause in typing would record searches the steward never submitted |
+| D40 | The error body outside the FHIR and IHE routes | RFC 9457 problem details, `application/problem+json`, through the `problem` module of `ferrohealth-server`: the operator API, the health and metrics routes and the stack's own `408`, `413`, `429`, `503` and panic `500` there; FerroPIX's types defined once in a `ProblemTypes` registry under `https://ferropix.eu/docs/operate/problems.html#`, each `type` a section of that book page; a status that says all there is to say is `about:blank`; a detail is a fixed sentence, never a value of the request; the FHIR face and the XCPD gateway keep the `OperationOutcome` and the SOAP answer | RFC 9457 §3.1 and §4 define the members and ask that a type URI resolve to its documentation, §5 that a problem carry no more than the client needs; FHIR R4 `http.html` §3.1.0.4.2 prescribes the `OperationOutcome` on a FHIR route; the family adopts RFC 9457 for every other error body (owner, 2026-10-28, #379) |

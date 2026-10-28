@@ -20,19 +20,18 @@ use ferropix_operator_api::person::{
     HISTORY, HistoryEntry, HistoryEvent, IdentifierHandle, IdentifierRow, Link, LinkKind, Person,
     PseudonymRow, RecordState, SourceRecord,
 };
-use http::StatusCode;
 use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::audit::records::{self, operator::StewardAction};
-use crate::fhir::outcome::IssueType;
 use crate::matching::scorer::mask;
 use crate::operator::{
     Operator, OperatorError, Recorded, channel, demographics, domain_kind, opened, record_action,
     snapshot, wire,
 };
 use crate::pdqm::patient::{SERVED, SERVED_ORDER};
+use crate::problem::Kind;
 use crate::store::seal::Sealer;
 
 /// The format every timestamp of the document is written in, RFC 3339 UTC.
@@ -77,11 +76,7 @@ pub async fn answer(operator: &Operator, request: Request) -> Response {
 
 /// Returns the `404` of an id that names no person.
 fn not_found() -> Response {
-    wire::refuse(
-        StatusCode::NOT_FOUND,
-        IssueType::NotFound,
-        wire::NO_SUCH_PERSON,
-    )
+    wire::refuse(Kind::NotFound, wire::NO_SUCH_PERSON)
 }
 
 /// Reads the person `id`, or `None` when the store holds none.

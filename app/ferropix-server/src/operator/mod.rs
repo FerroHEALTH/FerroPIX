@@ -23,8 +23,9 @@
 //! - [`merges`]: a steward's merge, its revert and the preview of either.
 //!
 //! Every answer is a [`ferropix_operator_api`] document in JSON, never kept
-//! by a cache (`Cache-Control: no-store`); a refusal is an
-//! `OperationOutcome` whose diagnostics quote nothing from the request. A
+//! by a cache (`Cache-Control: no-store`); a refusal is an RFC 9457
+//! problem of a [`crate::problem::Kind`] whose detail quotes nothing from
+//! the request. A
 //! route that reads a person, a search or an export writes its BALP record
 //! into the place the audit layer reserved before it answers, and a record
 //! that cannot be stored refuses the answer with `503`. No log line, span or

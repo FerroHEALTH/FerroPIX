@@ -25,6 +25,7 @@ use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 
 use ferropix_operator_api::overview::Overview;
+use ferropix_operator_api::problem::{self, Problem};
 
 use crate::model::{Capability, Failure, Probe, Reach, ServerIssue};
 
@@ -79,7 +80,7 @@ impl Failure {
     }
 }
 
-/// The issues of an `OperationOutcome`, the only part a refusal's body is
+/// The issues of an `OperationOutcome`, the only part a FHIR refusal's body is
 /// read for.
 #[derive(Debug, Default, serde::Deserialize)]
 struct Outcome {
@@ -246,6 +247,7 @@ impl Pix {
             at: at.clone(),
             request_id: request_id.clone(),
             issues: Vec::new(),
+            problem: None,
         };
         let Ok(url) = self.base.join(route) else {
             return (probe(Reach::Unreachable(Failure::Other)), None);
@@ -268,21 +270,34 @@ impl Pix {
         let status = response.status();
         if !status.is_success() {
             tracing::warn!(route = shown.as_str(), %request_id, %status, "the FerroPIX server refused a call");
-            let issues = response
+            let is_problem = response
+                .headers()
+                .get(http::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.split(';').next())
+                .is_some_and(|essence| essence.trim().eq_ignore_ascii_case(problem::MEDIA_TYPE));
+            let text = response
                 .text()
                 .await
                 .ok()
-                .filter(|text| text.len() <= BODY_LIMIT)
-                .and_then(|text| serde_json::from_str::<Outcome>(&text).ok())
-                .unwrap_or_default()
-                .issue;
-            return (
-                Probe {
-                    issues,
-                    ..probe(Reach::Refused(status))
+                .filter(|text| text.len() <= BODY_LIMIT);
+            // NOTE: no specification governs this: our own design; a refusal body
+            // that does not read is shown as the status alone, never as an error.
+            let refused = probe(Reach::Refused(status));
+            let refused = match text {
+                Some(text) if is_problem => Probe {
+                    problem: serde_json::from_str::<Problem>(&text).ok().map(Box::new),
+                    ..refused
                 },
-                None,
-            );
+                Some(text) => Probe {
+                    issues: serde_json::from_str::<Outcome>(&text)
+                        .unwrap_or_default()
+                        .issue,
+                    ..refused
+                },
+                None => refused,
+            };
+            return (refused, None);
         }
         let too_long = response.content_length().is_some_and(|length| {
             usize::try_from(length).map_or(true, |length| length > BODY_LIMIT)

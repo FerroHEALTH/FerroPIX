@@ -4,7 +4,8 @@
 //! The HTTP surface on a real socket, inside the stack of
 //! `ferrohealth-server`: the health and metrics routes under the base path,
 //! the request id, the body limit, the request timeout and the panic catch,
-//! each refusal an `OperationOutcome`, and the bounded drain.
+//! each refusal an `OperationOutcome` on the FHIR face and an RFC 9457
+//! problem elsewhere, and the bounded drain.
 #![expect(
     clippy::disallowed_types,
     reason = "the test seam: the refusals are read as JSON values"
@@ -240,61 +241,101 @@ async fn a_legal_request_id_is_echoed_and_an_illegal_one_replaced() {
     running.stop.send(()).expect("the server is running");
 }
 
+/// Reads `response` as an RFC 9457 problem and returns its `type`, its
+/// `detail` and its `instance`, after checking its status member.
+async fn problem(response: reqwest::Response) -> (String, String, String) {
+    assert_eq!(
+        Some("application/problem+json"),
+        response
+            .headers()
+            .get(http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+    );
+    let status = response.status().as_u16();
+    let problem: serde_json::Value = response.json().await.expect("a JSON body");
+    assert_eq!(
+        Some(u64::from(status)),
+        problem["status"].as_u64(),
+        "{problem}"
+    );
+    let text = |key: &str| problem[key].as_str().unwrap_or_default().to_owned();
+    (text("type"), text("detail"), text("instance"))
+}
+
+/// The product routes a stack refusal is driven on: one of the FHIR face,
+/// which keeps its `OperationOutcome`, and one outside it, which answers a
+/// problem.
+const FACES: [&str; 2] = ["/fhir", "/operator"];
+
 #[tokio::test]
-async fn a_body_over_the_limit_is_answered_413_with_an_operation_outcome() {
+async fn a_body_over_the_limit_is_answered_413_with_an_operation_outcome_or_a_problem() {
     let server = settings("");
     let lifecycle = Lifecycle::default();
+    let echo = || axum::routing::post(|body: String| async move { body });
     let app = product(
         &server,
-        Router::new().route(
-            "/echo",
-            axum::routing::post(|body: String| async move { body }),
-        ),
+        Router::new()
+            .route("/fhir/echo", echo())
+            .route("/operator/echo", echo()),
         &lifecycle,
     );
     let running = start(app, &server).await;
-    let url = format!("http://{}/echo", running.address);
-    let small = client()
-        .post(&url)
-        .body("a".repeat(server.body_limit_bytes))
-        .send()
-        .await
-        .expect("the server answers");
-    assert_eq!(StatusCode::OK, small.status());
-    let large = client()
-        .post(&url)
-        .body("a".repeat(server.body_limit_bytes + 1))
-        .send()
-        .await
-        .expect("the server answers");
-    assert_eq!(StatusCode::PAYLOAD_TOO_LARGE, large.status());
-    assert_eq!("too-long", issue(large).await.0);
+    for face in FACES {
+        let url = format!("http://{}{face}/echo", running.address);
+        let small = client()
+            .post(&url)
+            .body("a".repeat(server.body_limit_bytes))
+            .send()
+            .await
+            .expect("the server answers");
+        assert_eq!(StatusCode::OK, small.status(), "{face}");
+        let large = client()
+            .post(&url)
+            .body("a".repeat(server.body_limit_bytes + 1))
+            .send()
+            .await
+            .expect("the server answers");
+        assert_eq!(StatusCode::PAYLOAD_TOO_LARGE, large.status(), "{face}");
+        if face == "/fhir" {
+            assert_eq!("too-long", issue(large).await.0);
+        } else {
+            assert_eq!("about:blank", problem(large).await.0);
+        }
+    }
     running.stop.send(()).expect("the server is running");
 }
 
 #[tokio::test]
-async fn a_request_past_its_timeout_is_answered_408_with_an_operation_outcome() {
+async fn a_request_past_its_timeout_is_answered_408_with_an_operation_outcome_or_a_problem() {
     let server = settings("");
     let lifecycle = Lifecycle::default();
+    let slow = || {
+        get(|| async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            "late"
+        })
+    };
     let app = product(
         &server,
-        Router::new().route(
-            "/slow",
-            get(|| async {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                "late"
-            }),
-        ),
+        Router::new()
+            .route("/fhir/slow", slow())
+            .route("/operator/slow", slow()),
         &lifecycle,
     );
     let running = start(app, &server).await;
-    let response = client()
-        .get(format!("http://{}/slow", running.address))
-        .send()
-        .await
-        .expect("the server answers");
-    assert_eq!(StatusCode::REQUEST_TIMEOUT, response.status());
-    assert_eq!("timeout", issue(response).await.0);
+    for face in FACES {
+        let response = client()
+            .get(format!("http://{}{face}/slow", running.address))
+            .send()
+            .await
+            .expect("the server answers");
+        assert_eq!(StatusCode::REQUEST_TIMEOUT, response.status(), "{face}");
+        if face == "/fhir" {
+            assert_eq!("timeout", issue(response).await.0);
+        } else {
+            assert_eq!("about:blank", problem(response).await.0);
+        }
+    }
     running.stop.send(()).expect("the server is running");
 }
 
@@ -302,35 +343,55 @@ async fn a_request_past_its_timeout_is_answered_408_with_an_operation_outcome() 
 async fn a_panicking_handler_is_a_500_naming_the_server_s_request_id_and_not_the_message() {
     let server = settings("");
     let lifecycle = Lifecycle::default();
-    let app = product(&server, Router::new().route("/boom", get(boom)), &lifecycle);
+    let app = product(
+        &server,
+        Router::new()
+            .route("/fhir/boom", get(boom))
+            .route("/operator/boom", get(boom)),
+        &lifecycle,
+    );
     let running = start(app, &server).await;
-    let response = client()
-        .get(format!("http://{}/boom", running.address))
-        .header(request_id::HEADER, "corr-boom")
-        .send()
-        .await
-        .expect("the server answers");
-    assert_eq!(StatusCode::INTERNAL_SERVER_ERROR, response.status());
-    assert_eq!(
-        Some("corr-boom"),
-        response
-            .headers()
-            .get(request_id::HEADER)
-            .and_then(|v| v.to_str().ok()),
-        "the client's id is echoed"
-    );
-    let (code, diagnostics) = issue(response).await;
-    assert_eq!("exception", code);
-    let server_id = diagnostics
-        .strip_prefix("the server could not complete the request (request id ")
-        .and_then(|rest| rest.strip_suffix(')'))
-        .unwrap_or_else(|| panic!("the diagnostics: {diagnostics}"));
-    assert!(
-        uuid::Uuid::parse_str(server_id).is_ok(),
-        "the body names the server's id, which the log carries: {diagnostics}"
-    );
-    assert!(!diagnostics.contains("corr-boom"), "{diagnostics}");
-    assert!(!diagnostics.contains("must not carry"), "{diagnostics}");
+    for face in FACES {
+        let response = client()
+            .get(format!("http://{}{face}/boom", running.address))
+            .header(request_id::HEADER, "corr-boom")
+            .send()
+            .await
+            .expect("the server answers");
+        assert_eq!(StatusCode::INTERNAL_SERVER_ERROR, response.status());
+        assert_eq!(
+            Some("corr-boom"),
+            response
+                .headers()
+                .get(request_id::HEADER)
+                .and_then(|v| v.to_str().ok()),
+            "the client's id is echoed"
+        );
+        let (server_id, text) = if face == "/fhir" {
+            let (code, diagnostics) = issue(response).await;
+            assert_eq!("exception", code);
+            let server_id = diagnostics
+                .strip_prefix("the server could not complete the request (request id ")
+                .and_then(|rest| rest.strip_suffix(')'))
+                .unwrap_or_else(|| panic!("the diagnostics: {diagnostics}"))
+                .to_owned();
+            (server_id, diagnostics)
+        } else {
+            let (kind, detail, instance) = problem(response).await;
+            assert_eq!("about:blank", kind);
+            let server_id = instance
+                .strip_prefix("urn:uuid:")
+                .unwrap_or_else(|| panic!("the instance: {instance}"))
+                .to_owned();
+            (server_id, format!("{detail} {instance}"))
+        };
+        assert!(
+            uuid::Uuid::parse_str(&server_id).is_ok(),
+            "{face}: the body names the server's id, which the log carries: {text}"
+        );
+        assert!(!text.contains("corr-boom"), "{text}");
+        assert!(!text.contains("must not carry"), "{text}");
+    }
     running.stop.send(()).expect("the server is running");
 }
 

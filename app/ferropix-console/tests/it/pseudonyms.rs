@@ -163,8 +163,9 @@ async fn a_refused_resolve_shows_the_server_s_issue_in_place() -> Result<(), Box
     .await;
     Mock::given(method("POST"))
         .and(path("/operator/pseudonyms/resolve"))
-        .respond_with(ResponseTemplate::new(404).set_body_string(
-            r#"{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"not-found","diagnostics":"no unretired pseudonymisation domain holds this pseudonym"}]}"#,
+        .respond_with(ResponseTemplate::new(404).set_body_raw(
+            r#"{"type":"https://ferropix.eu/docs/operate/problems.html#not-found","title":"What the request names does not exist","status":404,"detail":"no unretired pseudonymisation domain holds this pseudonym"}"#,
+            "application/problem+json",
         ))
         .mount(&filled)
         .await;

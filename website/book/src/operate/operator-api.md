@@ -14,8 +14,9 @@ API; its shape is FerroPIX's own design.
 
 The documents are JSON, defined once in the `ferropix-operator-api` crate
 that the server writes and the console reads, so the two cannot drift apart.
-Every answer carries `Cache-Control: no-store`. A refusal is a FHIR
-`OperationOutcome` whose diagnostics never quote the request.
+Every answer carries `Cache-Control: no-store`. A refusal is an RFC 9457
+problem, `application/problem+json`, whose detail never quotes the request;
+[Problem types](problems.md) lists every type with what to do about it.
 
 ## Routes
 
@@ -194,7 +195,8 @@ formula starts with `'`.
 | `POST` and `PATCH /operator/domains` | `domain-create`, `domain-update` | a create or update of the domain, naming no patient |
 
 The server stores the BALP record before it sends the answer, and answers
-`503` with a `transient` issue when it cannot. A search writes no steward
+`503` with the problem [`audit-unavailable`](problems.md#audit-unavailable)
+when it cannot. A search writes no steward
 action: its BALP record is the trail. The dashboard, the domain and source
 reads, the matching configuration and the trail name no patient and record
 nothing.

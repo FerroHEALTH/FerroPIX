@@ -27,7 +27,7 @@ use crate::pages::title;
 
 /// The FerroUI release the console is built on, as `Cargo.toml` pins it
 /// exactly (a test holds the two together).
-pub const FERROUI: &str = "0.5.2";
+pub const FERROUI: &str = "0.5.5";
 
 /// The route Download fetches the `CapabilityStatement` from.
 pub const METADATA_DOWNLOAD: &str = "/about/capability-statement.json";

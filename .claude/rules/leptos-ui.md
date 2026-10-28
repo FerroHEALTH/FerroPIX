@@ -13,18 +13,18 @@ FerroUI row of `docs/VERSIONS.md` names, and the FerroUI repository
 (FerroHEALTH/FerroUI) is the source for its components, design, tokens,
 icons, accessibility bar, interaction contract, words and quality control.
 Read these first, at the git tag that matches the pin (the links below are
-the `v0.5.2` copies; read the tag of the pin when it moves):
+the `v0.5.5` copies; read the tag of the pin when it moves):
 
-- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/docs/consoles.md):
+- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.5/docs/consoles.md):
   the consumer guide, what the library owns and what a console owns, how a
   console builds and how it watches the session's end.
-- [`.claude/rules/leptos-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/.claude/rules/leptos-ui.md):
+- [`.claude/rules/leptos-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.5/.claude/rules/leptos-ui.md):
   the component rules of every FerroHEALTH console. The section numbers this
-  file cites (FerroUI §N) are those of the `v0.5.2` copy.
-- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/crates/ferrohealth-ui/CLAUDE.md):
+  file cites (FerroUI §N) are those of the `v0.5.5` copy.
+- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.5/crates/ferrohealth-ui/CLAUDE.md):
   the interaction contract and the rendering mode.
-- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.2/design/COMPONENTS.md)
-  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.5.2/design/consoles/ferropix):
+- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.5.5/design/COMPONENTS.md)
+  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.5.5/design/consoles/ferropix):
   every component by its ID, the family rules, and this console's pages as
   reviewed. FerroUI's `design/` is the only design source; a design folder
   anywhere else is stale and is never synced from.

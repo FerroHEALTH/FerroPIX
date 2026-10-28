@@ -24,8 +24,8 @@ use ihe_atna::balp::Outcome;
 use uuid::Uuid;
 
 use crate::audit::records;
-use crate::fhir::outcome::IssueType;
 use crate::operator::{Operator, OperatorError, Recorded, record_action, wire};
+use crate::problem::Kind;
 
 /// The media type of an export (RFC 4180 §3).
 pub const CSV: &str = "text/csv; charset=utf-8";
@@ -185,11 +185,7 @@ pub async fn export(operator: &Operator, request: Request) -> Response {
 /// Returns the `400` of a filter whose person, cursor or instant does not
 /// read.
 fn unread_filter() -> Response {
-    wire::refuse(
-        StatusCode::BAD_REQUEST,
-        IssueType::Invalid,
-        wire::NOT_THE_QUERY,
-    )
+    wire::refuse(Kind::InvalidRequest, wire::NOT_THE_QUERY)
 }
 
 /// Reads at most `limit` actions `filter` admits, the newest first, and

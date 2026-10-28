@@ -4,9 +4,11 @@
 //! What every operator route shares on the wire: the JSON answer, the
 //! refusals, the posted body, the query, the caller and the audit record.
 //!
-//! A body or a query that does not read is refused with fixed diagnostics,
-//! never the parser's message, which can quote the value it stopped at. No
-//! specification governs the operator API's wire: our own design.
+//! A refusal is an RFC 9457 problem of a [`crate::problem::Kind`] with a
+//! fixed detail. A body or a query that does not read is refused without
+//! the parser's message, which can quote the value it stopped at (RFC 9457
+//! §5). No specification governs the operator API's documents: our own
+//! design.
 
 use std::net::SocketAddr;
 
@@ -23,21 +25,22 @@ use serde::de::DeserializeOwned;
 use crate::audit::Unrecorded;
 use crate::audit::records::Call;
 use crate::audit::reserve::{Pending, UNAUDITED};
-use crate::fhir::outcome::{IssueType, body, respond};
+use crate::fhir::outcome::body;
 use crate::operator::{Operator, OperatorError};
+use crate::problem::{self, Kind};
 use ferrohealth_telemetry::request_log::RequestId;
 
 /// The media type of every document the operator API reads and writes.
 pub const JSON: &str = "application/json";
 
-/// The diagnostics of a body that is not the route's JSON document.
+/// The detail of a body that is not the route's JSON document.
 pub const NOT_THE_DOCUMENT: &str = "the request body is not the JSON document this route reads";
 
-/// The diagnostics of a query that does not read.
+/// The detail of a query that does not read.
 pub const NOT_THE_QUERY: &str =
     "the request query names a parameter or a value this route does not read";
 
-/// The diagnostics of a person id that names no person.
+/// The detail of a person id that names no person.
 pub const NO_SUCH_PERSON: &str = "no person has this id";
 
 /// Returns `document` as a `200` JSON answer no cache keeps.
@@ -45,11 +48,11 @@ pub fn answer<T: Serialize>(document: &T) -> Response {
     body(StatusCode::OK, document, JSON)
 }
 
-/// Returns the refusal of `status` with one issue of `code` and
-/// `diagnostics`.
+/// Returns the problem of `kind` with `detail`, at the status `kind` is
+/// used with.
 #[must_use]
-pub fn refuse(status: StatusCode, code: IssueType, diagnostics: &'static str) -> Response {
-    respond(status, code, diagnostics, None)
+pub fn refuse(kind: Kind, detail: &'static str) -> Response {
+    problem::refuse(kind, detail)
 }
 
 /// Returns the answer of a route the store could not serve: `503` when the
@@ -58,14 +61,9 @@ pub fn refuse(status: StatusCode, code: IssueType, diagnostics: &'static str) ->
 pub fn failed(error: &OperatorError) -> Response {
     tracing::error!(error = %crate::chain(error), "an operator request could not be answered");
     match error {
-        OperatorError::Store(_) => refuse(
-            StatusCode::SERVICE_UNAVAILABLE,
-            IssueType::Transient,
-            "the store could not be read",
-        ),
-        _ => refuse(
+        OperatorError::Store(_) => refuse(Kind::StoreUnavailable, "the store could not be read"),
+        _ => problem::blank(
             StatusCode::INTERNAL_SERVER_ERROR,
-            IssueType::Exception,
             "the request could not be answered",
         ),
     }
@@ -75,11 +73,7 @@ pub fn failed(error: &OperatorError) -> Response {
 #[must_use]
 pub fn unaudited(error: &Unrecorded) -> Response {
     tracing::error!(error = %crate::chain(error), "an operator answer was withheld: its audit record could not be stored");
-    refuse(
-        StatusCode::SERVICE_UNAVAILABLE,
-        IssueType::Transient,
-        UNAUDITED,
-    )
+    refuse(Kind::AuditUnavailable, UNAUDITED)
 }
 
 /// Reads the JSON document `T` a request posts with the bytes it was read
@@ -100,16 +94,14 @@ pub async fn posted<T: DeserializeOwned>(
         .and_then(|value| value.split(';').next())
         .map(str::trim);
     if !essence.is_some_and(|essence| essence.eq_ignore_ascii_case(JSON)) {
-        return Err(Box::new(refuse(
+        return Err(Box::new(problem::blank(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            IssueType::NotSupported,
             "the operator API reads a body as application/json",
         )));
     }
     let Ok(bytes) = axum::body::to_bytes(body, usize::MAX).await else {
-        return Err(Box::new(refuse(
+        return Err(Box::new(problem::blank(
             StatusCode::PAYLOAD_TOO_LARGE,
-            IssueType::TooLong,
             "the request body is larger than this server reads",
         )));
     };
@@ -117,13 +109,7 @@ pub async fn posted<T: DeserializeOwned>(
     // can quote the value it stopped at, so a refusal says only that it failed.
     serde_json::from_slice(&bytes)
         .map(|document| (document, bytes.to_vec()))
-        .map_err(|_unread| {
-            Box::new(refuse(
-                StatusCode::BAD_REQUEST,
-                IssueType::Invalid,
-                NOT_THE_DOCUMENT,
-            ))
-        })
+        .map_err(|_unread| Box::new(refuse(Kind::InvalidRequest, NOT_THE_DOCUMENT)))
 }
 
 /// Reads the query of `parts` as `T`, or the `400` of a query that does
@@ -138,13 +124,7 @@ pub fn query<T: DeserializeOwned + Default>(parts: &Parts) -> Result<T, Box<Resp
     }
     axum::extract::Query::try_from_uri(&parts.uri)
         .map(|axum::extract::Query(read)| read)
-        .map_err(|_unread| {
-            Box::new(refuse(
-                StatusCode::BAD_REQUEST,
-                IssueType::Invalid,
-                NOT_THE_QUERY,
-            ))
-        })
+        .map_err(|_unread| Box::new(refuse(Kind::InvalidRequest, NOT_THE_QUERY)))
 }
 
 /// Returns the call of the request `parts` holds, at the operator API's

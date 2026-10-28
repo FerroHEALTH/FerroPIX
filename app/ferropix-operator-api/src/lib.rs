@@ -14,7 +14,8 @@
 //! reverse resolution; [`source`] the systems allowed to feed; [`matching`] the matching
 //! configuration in effect and [`configuration`] its settings with their
 //! origins; [`actions`]
-//! the audit trail; and [`patient`] the values several of them share. No
+//! the audit trail; [`patient`] the values several of them share; and
+//! [`problem`] the RFC 9457 problem details a refusal carries. No
 //! specification governs these documents: our own design, after
 //! FerroBRIDGE's operator API crate.
 
@@ -28,6 +29,7 @@ pub mod merge;
 pub mod overview;
 pub mod patient;
 pub mod person;
+pub mod problem;
 pub mod pseudonym;
 pub mod reveal;
 pub mod search;

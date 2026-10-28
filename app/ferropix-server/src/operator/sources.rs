@@ -22,13 +22,12 @@ use axum::extract::{MatchedPath, Request};
 use axum::response::Response;
 use ferropix_operator_api::patient::Channel;
 use ferropix_operator_api::source::{Admission, MESSAGES, Message, Source, SourcePage, Sources};
-use http::StatusCode;
 
 use crate::config::section::hl7v2::Sender;
-use crate::fhir::outcome::IssueType;
 use crate::operator::{Operator, OperatorError, wire};
+use crate::problem::Kind;
 
-/// The diagnostics of an id that names no source.
+/// The detail of an id that names no source.
 pub const NO_SUCH_SOURCE: &str = "no source has this id";
 
 /// The steward action kinds a FHIR feed records.
@@ -66,7 +65,7 @@ pub async fn one(operator: &Operator, request: Request) -> Response {
 
 /// Returns the `404` of an id that names no source.
 fn not_found() -> Response {
-    wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NO_SUCH_SOURCE)
+    wire::refuse(Kind::NotFound, NO_SUCH_SOURCE)
 }
 
 /// Returns the `{id}` of the route, read from the path by its template.

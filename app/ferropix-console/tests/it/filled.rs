@@ -584,8 +584,9 @@ async fn a_refused_domain_create_shows_the_server_s_issue_in_place() -> Result<(
     .await;
     Mock::given(method("POST"))
         .and(path("/operator/domains"))
-        .respond_with(ResponseTemplate::new(409).set_body_string(
-            r#"{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"conflict","diagnostics":"a domain with this system exists"}]}"#,
+        .respond_with(ResponseTemplate::new(409).set_body_raw(
+            r#"{"type":"https://ferropix.eu/docs/operate/problems.html#already-held","title":"Another domain holds this system or namespace","status":409,"detail":"a domain with this system exists"}"#,
+            "application/problem+json",
         ))
         .mount(&filled)
         .await;

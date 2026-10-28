@@ -22,7 +22,6 @@ use ferropix_operator_api::candidate::{
     Evidence, PAGE, PersonIdentifier, Side, Status, Thresholds, Verdict,
 };
 use ferropix_operator_api::patient::{DomainRef, Grade, PersonStatus};
-use http::StatusCode;
 use http::request::Parts;
 use ihe_atna::balp::Outcome;
 use secrecy::SecretString;
@@ -32,22 +31,22 @@ use uuid::Uuid;
 use crate::audit::records::{self, operator::StewardAction};
 use crate::feed::Context;
 use crate::feed::steward::{self, DecideError};
-use crate::fhir::outcome::IssueType;
 use crate::operator::person::{UTC, carried, records as person_records};
 use crate::operator::{Operator, OperatorError, demographics, domain_kind, grade, snapshot, wire};
+use crate::problem::Kind;
 use crate::store::record::Channel;
 
-/// The diagnostics of an id that names no candidate.
+/// The detail of an id that names no candidate.
 pub const NO_SUCH_CANDIDATE: &str = "no candidate has this id";
 
-/// The diagnostics of a decision made on what changed since it was read.
+/// The detail of a decision made on what changed since it was read.
 pub const STALE: &str =
     "the candidate was decided or a record changed since it was read; reload it";
 
-/// The diagnostics of a decision without a reason, or one too long.
+/// The detail of a decision without a reason, or one too long.
 pub const NO_REASON: &str = "a decision needs a reason of at most 500 characters";
 
-/// The diagnostics of a deferral without a day after today.
+/// The detail of a deferral without a day after today.
 pub const NO_DAY: &str =
     "a deferral needs a day after today as YYYY-MM-DD, and only a deferral takes one";
 
@@ -147,7 +146,7 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
         Ok(made) => made,
         Err(DecideError::NotFound) => return not_found(),
         Err(DecideError::Stale) => {
-            return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, STALE);
+            return wire::refuse(Kind::Stale, STALE);
         }
         Err(DecideError::Feed(error)) => {
             return wire::failed(&OperatorError::Unadmitted(feed_error(&error)));
@@ -201,19 +200,9 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
 fn checked(id: Uuid, posted: &Decision) -> Result<steward::Decision, Box<Response>> {
     let reason = posted.reason.trim();
     if reason.is_empty() || reason.chars().count() > REASON {
-        return Err(Box::new(wire::refuse(
-            StatusCode::BAD_REQUEST,
-            IssueType::Invalid,
-            NO_REASON,
-        )));
+        return Err(Box::new(wire::refuse(Kind::ReasonRequired, NO_REASON)));
     }
-    let no_day = || {
-        Box::new(wire::refuse(
-            StatusCode::BAD_REQUEST,
-            IssueType::Invalid,
-            NO_DAY,
-        ))
-    };
+    let no_day = || Box::new(wire::refuse(Kind::InvalidRequest, NO_DAY));
     let verdict = match (posted.verdict, posted.until.as_deref()) {
         (Verdict::Link, None) => steward::Verdict::Link,
         (Verdict::NotAMatch, None) => steward::Verdict::NotAMatch,
@@ -255,11 +244,7 @@ fn feed_error(error: &crate::feed::FeedError) -> &'static str {
 
 /// Returns the `404` of an id that names no candidate.
 fn not_found() -> Response {
-    wire::refuse(
-        StatusCode::NOT_FOUND,
-        IssueType::NotFound,
-        NO_SUCH_CANDIDATE,
-    )
+    wire::refuse(Kind::NotFound, NO_SUCH_CANDIDATE)
 }
 
 /// The raw request of a queue read, for its audit record.

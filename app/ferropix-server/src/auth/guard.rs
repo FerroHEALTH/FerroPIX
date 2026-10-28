@@ -5,11 +5,13 @@
 //!
 //! The `ferrohealth-smart` layer reads [`crate::auth::table`]; the check
 //! behind it holds what a scope reaches and the domain a Source writes to;
-//! every refusal answers with an `OperationOutcome`.
+//! a refusal on the FHIR face answers with an `OperationOutcome` and one on
+//! the operator API with an RFC 9457 problem.
 //!
 //! A request without a valid credential answers `401` and one whose
 //! credential grants no permission for the route `403` (RFC 6750 §3.1),
-//! each with a `security` issue. A Source writing to a domain it is not the
+//! each with a `security` issue or the problem `unauthenticated` or
+//! `not-permitted`. A Source writing to a domain it is not the
 //! Source of answers `403` with a `forbidden` issue (PIXm 3.1.0 §2:3.104.5),
 //! as does an ITI-93 feed from a caller that is not the master domain's
 //! Source (PMIR 1.6.0 §2:3.93.4.1.3).
@@ -31,12 +33,17 @@ use crate::auth::Smart;
 use crate::auth::source::{Verdict, domains_of};
 use crate::auth::table::{self, Need, Route, SourceRule};
 use crate::fhir::outcome::{IssueType, respond};
+use crate::problem::{self, Kind};
 
 /// The diagnostics of a request that carries no valid credential.
 pub const UNAUTHENTICATED: &str = "the request carries no valid access token for this server";
 
 /// The diagnostics of a credential that does not permit the request.
 pub const NOT_PERMITTED: &str = "the access token does not permit this request";
+
+/// The diagnostics of a token the authorization server could not check.
+pub const AUTHORIZATION_UNAVAILABLE: &str =
+    "the access token could not be checked: the authorization server could not be read";
 
 /// The diagnostics of a Source writing to a domain it is not the Source of.
 pub const NOT_THE_SOURCE: &str =
@@ -98,21 +105,21 @@ impl Classify for Classifier {
     }
 }
 
-/// The `OperationOutcome` every refusal of the layer answers with.
+/// The body every refusal of the layer answers with: an `OperationOutcome`
+/// on the FHIR face, a problem on the operator API.
 #[derive(Debug, Clone, Default)]
 pub struct Outcome {
     /// The realm every challenge names.
     realm: Option<String>,
+    /// The base path every route is mounted under.
+    base: String,
 }
 
 impl Outcome {
     /// Returns the response of `refusal`.
     fn respond(&self, refusal: &Refusal) -> Response {
         let (code, diagnostics) = match refusal {
-            Refusal::Unavailable => (
-                IssueType::Transient,
-                "the access token could not be checked: the authorization server could not be read",
-            ),
+            Refusal::Unavailable => (IssueType::Transient, AUTHORIZATION_UNAVAILABLE),
             Refusal::Forbidden | Refusal::Unclassified => (IssueType::Security, NOT_PERMITTED),
             _ => (IssueType::Security, UNAUTHENTICATED),
         };
@@ -125,9 +132,29 @@ impl Outcome {
     }
 }
 
+impl Outcome {
+    /// Returns the problem of `refusal`, at the status the gate chose.
+    fn problem(&self, refusal: &Refusal) -> Response {
+        let challenge = refusal.challenge(self.realm.as_deref());
+        let problem = match refusal.status() {
+            StatusCode::UNAUTHORIZED => Kind::Unauthenticated.problem(UNAUTHENTICATED),
+            StatusCode::FORBIDDEN => Kind::NotPermitted.problem(NOT_PERMITTED),
+            StatusCode::SERVICE_UNAVAILABLE => {
+                Kind::AuthorizationUnavailable.problem(AUTHORIZATION_UNAVAILABLE)
+            }
+            status => ferrohealth_server::problem::Problem::new(status).with_detail(NOT_PERMITTED),
+        };
+        problem::respond(problem, challenge.as_deref())
+    }
+}
+
 impl Render for Outcome {
-    fn render(&self, refusal: &Refusal, _parts: &Parts) -> Response {
-        self.respond(refusal)
+    fn render(&self, refusal: &Refusal, parts: &Parts) -> Response {
+        if problem::is_fhir_or_ihe(&self.base, parts.uri.path()) {
+            self.respond(refusal)
+        } else {
+            self.problem(refusal)
+        }
     }
 }
 
@@ -138,6 +165,7 @@ pub fn layer(base: &str, smart: &Smart) -> AuthLayer<Classifier> {
     let gate = smart.gate().clone();
     let render = Outcome {
         realm: gate.realm().map(str::to_owned),
+        base: base.to_owned(),
     };
     AuthLayer::new(gate, Classifier::new(base, smart)).with_render(render)
 }
@@ -260,6 +288,7 @@ fn check(confine: &Confine, access: &Access, request: &Request) -> Checked {
         return Checked::Refused(
             Outcome {
                 realm: confine.smart.gate().realm().map(str::to_owned),
+                base: confine.base.clone(),
             }
             .respond(&Refusal::Forbidden),
         );

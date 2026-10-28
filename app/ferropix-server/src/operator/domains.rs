@@ -33,13 +33,13 @@ use uuid::Uuid;
 
 use crate::audit::records;
 use crate::config::section::domain::is_system;
-use crate::fhir::outcome::IssueType;
 use crate::operator::{
     Operator, OperatorError, Recorded, channel, count, domain_kind, record_action, snapshot, wire,
 };
+use crate::problem::Kind;
 use crate::store::seed;
 
-/// The diagnostics of an id that names no domain.
+/// The detail of an id that names no domain.
 pub const NO_SUCH_DOMAIN: &str = "no identifier domain has this id";
 
 /// The columns of one domain row, each timestamp RFC 3339 UTC.
@@ -112,7 +112,7 @@ pub async fn one(operator: &Operator, request: Request) -> Response {
 
 /// Returns the `404` of an id that names no domain.
 fn not_found() -> Response {
-    wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NO_SUCH_DOMAIN)
+    wire::refuse(Kind::NotFound, NO_SUCH_DOMAIN)
 }
 
 /// Reads the page of domains `query` asks for.
@@ -201,20 +201,20 @@ async fn feeds(connection: &mut PgConnection, id: Uuid) -> Result<Vec<Feed>, Ope
         .collect()
 }
 
-/// The diagnostics of a domain write whose fields do not hold.
+/// The detail of a domain write whose fields do not hold.
 pub const NOT_A_DOMAIN: &str = "a domain names an absolute URI as its system, a name and a Source, and is local or authoritative";
 
-/// The diagnostics of a Source no issuer lists.
+/// The detail of a Source no issuer lists.
 pub const SOURCE_NOT_ADMITTED: &str =
     "no [[auth.issuer]] lists this client among its clients, and no Basic user is it";
 
-/// The diagnostics of a system another domain holds.
+/// The detail of a system another domain holds.
 pub const SYSTEM_TAKEN: &str = "another identifier domain holds this system";
 
-/// The diagnostics of a change to a retired domain.
+/// The detail of a change to a retired domain.
 pub const RETIRED: &str = "a retired identifier domain stays as it was retired";
 
-/// The diagnostics of a change without a reason.
+/// The detail of a change without a reason.
 pub const NO_REASON: &str = "a change of an identifier domain states its reason";
 
 /// Answers `POST {base}/operator/domains`: a new domain, its Source admitted
@@ -229,21 +229,17 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         DomainKind::Local => "local",
         DomainKind::Authoritative => "authoritative",
         DomainKind::Master => {
-            return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_A_DOMAIN);
+            return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
         }
     };
     if !is_system(&new.system)
         || new.name.trim().is_empty()
         || new.source_client_id.trim().is_empty()
     {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_A_DOMAIN);
+        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if !operator.sources.admits(new.source_client_id.trim()) {
-        return wire::refuse(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            IssueType::Invalid,
-            SOURCE_NOT_ADMITTED,
-        );
+        return wire::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -265,7 +261,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     .await;
     let (transaction, id) = match outcome {
         Ok(Some(written)) => written,
-        Ok(None) => return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, SYSTEM_TAKEN),
+        Ok(None) => return wire::refuse(Kind::AlreadyHeld, SYSTEM_TAKEN),
         Err(error) => return wire::failed(&error),
     };
     let write = Write {
@@ -292,20 +288,16 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     if change.reason.trim().is_empty() {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NO_REASON);
+        return wire::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let blank = |text: &Option<String>| text.as_deref().is_some_and(|text| text.trim().is_empty());
     if blank(&change.name) || blank(&change.source_client_id) {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_A_DOMAIN);
+        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if let Some(source) = &change.source_client_id
         && !operator.sources.admits(source.trim())
     {
-        return wire::refuse(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            IssueType::Invalid,
-            SOURCE_NOT_ADMITTED,
-        );
+        return wire::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -342,7 +334,7 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
         Ok(Changed::Written(transaction, system)) => (transaction, system),
         Ok(Changed::Missing) => return not_found(),
         Ok(Changed::Retired) => {
-            return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, RETIRED);
+            return wire::refuse(Kind::Retired, RETIRED);
         }
         Err(error) => return wire::failed(&error),
     };

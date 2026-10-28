@@ -20,6 +20,7 @@ use ferropix_operator_api::health::Dependencies;
 use ferropix_operator_api::merge::Preview;
 use ferropix_operator_api::overview::Overview;
 use ferropix_operator_api::person::Person;
+use ferropix_operator_api::problem::Problem;
 use ferropix_operator_api::pseudonym::{PseudonymDomains, Resolution};
 use ferropix_operator_api::reveal::Revealed;
 use ferropix_operator_api::search::Results;
@@ -81,9 +82,13 @@ pub struct Probe {
     pub at: String,
     /// The request id the call carried.
     pub request_id: String,
-    /// The issues of the `OperationOutcome` a refusal carried, whose
-    /// diagnostics the server writes without a value from the request.
+    /// The issues of the `OperationOutcome` a refusal of the FHIR face
+    /// carried, whose diagnostics the server writes without a value from
+    /// the request.
     pub issues: Vec<ServerIssue>,
+    /// The RFC 9457 problem a refusal of the operator API carried, whose
+    /// detail the server writes without a value from the request.
+    pub problem: Option<Box<Problem>>,
 }
 
 /// One issue of the `OperationOutcome` the server refused a call with.

@@ -172,8 +172,9 @@ async fn a_stale_decision_is_drawn_in_the_bar_and_one_without_a_reason_is_never_
     Mock::given(method("POST"))
         .and(path(format!("{}/decide", route())))
         .and(body_string_contains("Synthetic"))
-        .respond_with(ResponseTemplate::new(409).set_body_string(
-            r#"{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"conflict","diagnostics":"the candidate was decided"}]}"#,
+        .respond_with(ResponseTemplate::new(409).set_body_raw(
+            r#"{"type":"https://ferropix.eu/docs/operate/problems.html#stale","title":"What the request was decided on changed since it was read","status":409,"detail":"the candidate was decided"}"#,
+            "application/problem+json",
         ))
         .expect(1)
         .mount(&filled)

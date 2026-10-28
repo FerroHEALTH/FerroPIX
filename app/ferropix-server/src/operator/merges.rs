@@ -20,7 +20,6 @@ use ferropix_operator_api::merge::{
     NewMerge, Outcome as MergeOutcome, Party, Preview, PreviewQuery, PseudonymMove, Revert,
 };
 use ferropix_operator_api::patient::{DomainRef, Masked};
-use http::StatusCode;
 use http::request::Parts;
 use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
@@ -30,29 +29,29 @@ use crate::audit::records::{self, operator::StewardAction};
 use crate::feed::Context;
 use crate::feed::merging::{self, Change, MergeRequest, RevertError};
 use crate::feed::steward::DecideError;
-use crate::fhir::outcome::IssueType;
 use crate::matching::scorer::mask;
 use crate::operator::person::{UTC, carried, records as person_records};
 use crate::operator::{Operator, OperatorError, demographics, domain_kind, opened, snapshot, wire};
+use crate::problem::Kind;
 use crate::store::record::{Channel, PersonId};
 use crate::store::seal::Sealer;
 
-/// The diagnostics of an id that names no person or no merge.
+/// The detail of an id that names no person or no merge.
 pub const NOT_FOUND: &str = "no person or merge has this id";
 
-/// The diagnostics of a change made on what moved since it was read.
+/// The detail of a change made on what moved since it was read.
 pub const STALE: &str =
     "a person changed or the merge was reverted since it was read; reload the preview";
 
-/// The diagnostics of a preview or a merge that does not name two
+/// The detail of a preview or a merge that does not name two
 /// different persons, or names a merge too.
 pub const NOT_TWO: &str = "a merge names two different persons, survivor and merged, and a revert preview names one merge";
 
-/// The diagnostics of a revert of a merge that is not the survivor's latest.
+/// The detail of a revert of a merge that is not the survivor's latest.
 pub const NOT_LATEST: &str =
     "a later merge of the survivor has to be reverted first; the revert preview names it";
 
-/// The diagnostics of a change without a reason, or one too long.
+/// The detail of a change without a reason, or one too long.
 pub const NO_REASON: &str = "a merge and a revert need a reason of at most 500 characters";
 
 /// The longest reason a change takes, in characters.
@@ -71,7 +70,7 @@ pub async fn preview(operator: &Operator, request: Request) -> Response {
             read_merge(operator, survivor, merged).await
         }
         (None, None, Some(Some(merge))) => read_revert(operator, merge).await,
-        _ => return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_TWO),
+        _ => return wire::refuse(Kind::InvalidRequest, NOT_TWO),
     };
     let preview = match read {
         Ok(Some(preview)) => preview,
@@ -109,10 +108,10 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     };
     let (Some(survivor), Some(merged)) = (wire::uuid(&posted.survivor), wire::uuid(&posted.merged))
     else {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_TWO);
+        return wire::refuse(Kind::InvalidRequest, NOT_TWO);
     };
     if survivor == merged {
-        return wire::refuse(StatusCode::BAD_REQUEST, IssueType::Invalid, NOT_TWO);
+        return wire::refuse(Kind::InvalidRequest, NOT_TWO);
     }
     let merge_request = MergeRequest {
         survivor: PersonId::from_uuid(survivor),
@@ -154,7 +153,7 @@ pub async fn revert(operator: &Operator, request: Request) -> Response {
     let (transaction, change) = match made {
         Ok(made) => made,
         Err(RevertError::NotLatest { .. }) => {
-            return wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, NOT_LATEST);
+            return wire::refuse(Kind::LaterMerge, NOT_LATEST);
         }
         Err(RevertError::Decide(error)) => return refused(&error),
     };
@@ -209,11 +208,7 @@ fn context(parts: &Parts) -> Context {
 fn reason(posted: &str) -> Result<String, Box<Response>> {
     let reason = posted.trim();
     if reason.is_empty() || reason.chars().count() > REASON {
-        return Err(Box::new(wire::refuse(
-            StatusCode::BAD_REQUEST,
-            IssueType::Invalid,
-            NO_REASON,
-        )));
+        return Err(Box::new(wire::refuse(Kind::ReasonRequired, NO_REASON)));
     }
     Ok(reason.to_owned())
 }
@@ -222,7 +217,7 @@ fn reason(posted: &str) -> Result<String, Box<Response>> {
 fn refused(error: &DecideError) -> Response {
     match error {
         DecideError::NotFound => not_found(),
-        DecideError::Stale => wire::refuse(StatusCode::CONFLICT, IssueType::Conflict, STALE),
+        DecideError::Stale => wire::refuse(Kind::Stale, STALE),
         DecideError::Feed(error) => {
             tracing::error!(error = %crate::chain(error), "a merge or a revert could not be made");
             wire::failed(&OperatorError::Unadmitted("merge"))
@@ -232,7 +227,7 @@ fn refused(error: &DecideError) -> Response {
 
 /// Returns the `404` of an id that names no person or merge.
 fn not_found() -> Response {
-    wire::refuse(StatusCode::NOT_FOUND, IssueType::NotFound, NOT_FOUND)
+    wire::refuse(Kind::NotFound, NOT_FOUND)
 }
 
 /// Reads the preview of merging `merged` into `survivor`, or `None` when

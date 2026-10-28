@@ -6,7 +6,8 @@
 //! The layer in front of every audited route of the permission table takes
 //! one place in the spool and leaves it on the request ([`Pending`]); the
 //! transaction fills it with its record once it knows the outcome. A spool
-//! that has no room refuses the request with `503` and a `transient` issue
+//! that has no room refuses the request with `503`, a `transient` issue on
+//! the FHIR face and the problem `audit-unavailable` on the operator API,
 //! before its handler runs, so no transaction is made that could not be
 //! audited, as FerroFED's audit fails closed. A place the handler leaves
 //! unfilled is given back when the request ends. No specification governs
@@ -25,6 +26,7 @@ use tokio::sync::Mutex;
 use crate::audit::{Audit, Unrecorded, written};
 use crate::auth::table;
 use crate::fhir::outcome::{IssueType, respond};
+use crate::problem::{self, Kind};
 
 /// The diagnostics of a transaction refused because its record could not be
 /// stored.
@@ -112,7 +114,7 @@ pub async fn layer(
     mut request: Request,
     next: Next,
 ) -> Response {
-    let audited = request
+    let route = request
         .extensions()
         .get::<MatchedPath>()
         .map(|matched| {
@@ -122,10 +124,10 @@ pub async fn layer(
                 .unwrap_or(template)
         })
         .and_then(|template| table::find(request.method(), template))
-        .is_some_and(table::Route::audited);
-    if !audited {
+        .filter(|route| route.audited());
+    let Some(route) = route else {
         return next.run(request).await;
-    }
+    };
     match reserving.audit.reserve() {
         Ok(place) => {
             request
@@ -135,6 +137,9 @@ pub async fn layer(
         }
         Err(error) => {
             tracing::error!(error = %crate::chain(&error), "a request was refused: its audit record has no room in the spool");
+            if route.mount == table::Mount::Operator {
+                return problem::refuse(Kind::AuditUnavailable, UNAUDITED);
+            }
             respond(
                 StatusCode::SERVICE_UNAVAILABLE,
                 IssueType::Transient,

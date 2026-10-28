@@ -23,6 +23,7 @@ pub mod matching;
 pub mod operator;
 pub mod outbox;
 pub mod pdqm;
+pub mod problem;
 pub mod serve;
 pub mod store;
 pub mod usage_report;

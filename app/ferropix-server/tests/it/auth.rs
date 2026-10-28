@@ -25,11 +25,12 @@ use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
 use ferropix_server::auth::guard::{NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
-use ferropix_server::auth::table::{Need, ROUTES, Route, SourceRule};
+use ferropix_server::auth::table::{Mount, Need, ROUTES, Route, SourceRule};
 use ferropix_server::config::Config;
 use ferropix_server::config::settings::Settings;
 use ferropix_server::fhir::{self, Mounts};
 use ferropix_server::http::router;
+use ferropix_server::problem::Kind;
 use http::{Method, Request, StatusCode, header};
 use jsonwebtoken::jwk::Jwk;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
@@ -279,6 +280,7 @@ pub(crate) async fn application_logged(
 pub(crate) struct Answer {
     pub(crate) status: StatusCode,
     pub(crate) challenge: Option<String>,
+    pub(crate) media_type: Option<String>,
     pub(crate) body: String,
 }
 
@@ -303,6 +305,42 @@ impl Answer {
             .unwrap_or_default()
             .to_owned()
     }
+
+    /// Returns the `type` and the `detail` of an RFC 9457 problem, after
+    /// checking its media type and that its `status` is the answer's.
+    pub(crate) fn problem(&self) -> (String, String) {
+        assert_eq!(
+            Some("application/problem+json"),
+            self.media_type.as_deref(),
+            "{}",
+            self.body
+        );
+        let problem = self.json();
+        assert_eq!(
+            Some(u64::from(self.status.as_u16())),
+            problem["status"].as_u64(),
+            "{problem}"
+        );
+        let text = |key: &str| problem[key].as_str().unwrap_or_default().to_owned();
+        (text("type"), text("detail"))
+    }
+
+    /// Asserts the refusal of `route` is `issue` with `diagnostics` on the
+    /// FHIR face, and the problem of `kind` with the same detail on the
+    /// operator API.
+    fn refused_as(&self, route: &Route, issue: &str, kind: Kind, diagnostics: &str) {
+        let label = format!("{} {}", route.method, route.path);
+        if route.mount == Mount::Operator {
+            assert_eq!(
+                (kind.problem_type().uri().to_owned(), diagnostics.to_owned()),
+                self.problem(),
+                "{label}"
+            );
+        } else {
+            assert_eq!(issue, self.issue(), "{label}");
+            assert_eq!(diagnostics, self.diagnostics(), "{label}");
+        }
+    }
 }
 
 /// Sends `method` on `uri` with `authorization`, and reads the answer.
@@ -322,17 +360,22 @@ pub(crate) async fn send(
         .await
         .expect("the router answers");
     let status = response.status();
-    let challenge = response
-        .headers()
-        .get(header::WWW_AUTHENTICATE)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned);
+    let header = |name| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let challenge = header(header::WWW_AUTHENTICATE);
+    let media_type = header(header::CONTENT_TYPE);
     let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
         .await
         .expect("the body reads");
     Answer {
         status,
         challenge,
+        media_type,
         body: String::from_utf8(bytes.to_vec()).expect("a UTF-8 body"),
     }
 }
@@ -364,7 +407,7 @@ pub(crate) fn bearer(token: &str) -> String {
 }
 
 #[tokio::test]
-async fn every_guarded_route_answers_a_missing_token_401_with_a_security_issue() {
+async fn every_guarded_route_answers_a_missing_token_401_with_a_security_issue_or_problem() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
     let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
@@ -373,13 +416,13 @@ async fn every_guarded_route_answers_a_missing_token_401_with_a_security_issue()
         let label = format!("{} {}", route.method, route.path);
         assert_eq!(StatusCode::UNAUTHORIZED, answer.status, "{label}");
         assert_eq!(Some("Bearer"), answer.challenge.as_deref(), "{label}");
-        assert_eq!("security", answer.issue(), "{label}");
-        assert_eq!(UNAUTHENTICATED, answer.diagnostics(), "{label}");
+        answer.refused_as(route, "security", Kind::Unauthenticated, UNAUTHENTICATED);
     }
 }
 
 #[tokio::test]
-async fn every_guarded_route_answers_a_token_without_its_scope_403_with_a_security_issue() {
+async fn every_guarded_route_answers_a_token_without_its_scope_403_with_a_security_issue_or_problem()
+ {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
     let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
@@ -393,8 +436,7 @@ async fn every_guarded_route_answers_a_token_without_its_scope_403_with_a_securi
             answer.challenge.as_deref(),
             "{label}: RFC 6750 §3.1"
         );
-        assert_eq!("security", answer.issue(), "{label}");
-        assert_eq!(NOT_PERMITTED, answer.diagnostics(), "{label}");
+        answer.refused_as(route, "security", Kind::NotPermitted, NOT_PERMITTED);
     }
 }
 

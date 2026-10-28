@@ -8,7 +8,8 @@
 //! the body limit, the overload bound, the compression and the request log
 //! of `ferrohealth-telemetry`, so every request's line names the server's id
 //! and never the client's. Every body the stack writes itself, a panic and a
-//! refusal, is a FHIR `OperationOutcome` ([`policy`]). The bounded drain is
+//! refusal, is a FHIR `OperationOutcome` under the FHIR face and the XCPD
+//! gateway and an RFC 9457 problem elsewhere ([`policy`]). The bounded drain is
 //! `ferrohealth_server::serve::run`'s.
 //!
 //! No specification governs the process model: our own design, in the
@@ -24,7 +25,7 @@ use ferrohealth_telemetry::request_log::{RequestId, RequestLog};
 use ferrohealth_telemetry::telemetry::{Telemetry, prometheus_route};
 use http::request::Parts;
 
-use crate::fhir::outcome;
+use crate::problem;
 
 /// The path of the Prometheus exposition under `{base}`.
 pub const METRICS: &str = "/metrics";
@@ -56,16 +57,22 @@ pub fn router(
     if let Some(guarded) = guarded {
         routes = routes.merge(guarded);
     }
-    stack::app(routes, health, server, policy(log))
+    stack::app(
+        routes,
+        health,
+        server,
+        policy(server.base_path.as_str(), log),
+    )
 }
 
-/// The policy of the stack: a panic and every refusal the stack writes
-/// answer an `OperationOutcome`, and `log` is the request log.
+/// The policy of the stack under `base`: a panic and every refusal the
+/// stack writes answer an `OperationOutcome` under the FHIR face and the
+/// XCPD gateway and a problem elsewhere, and `log` is the request log.
 #[must_use]
-pub fn policy(log: RequestLog) -> StackPolicy {
+pub fn policy(base: &str, log: RequestLog) -> StackPolicy {
     StackPolicy {
-        panic_body: outcome::panic_body(),
-        refusal_body: outcome::refusal_body(),
+        panic_body: problem::panic_body(base),
+        refusal_body: problem::refusal_body(base),
         request_log: log,
     }
 }

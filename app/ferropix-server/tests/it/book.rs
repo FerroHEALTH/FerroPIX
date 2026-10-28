@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The book's configuration page lists every key of the tree.
+//! The book's configuration page lists every key of the tree, and its
+//! problem types page has a section for every problem type.
 //!
 //! The keys are read from the tree itself: a production and a development
 //! configuration with every section set are written back, so a key added to
@@ -95,4 +96,37 @@ fn the_configuration_page_lists_every_key_of_the_tree() {
         missing.is_empty(),
         "the book's configuration page does not list {missing:?}"
     );
+}
+
+#[test]
+fn every_problem_type_resolves_to_its_section_of_the_book() {
+    let page_url = ferropix_server::problem::BASE
+        .strip_suffix('#')
+        .expect("the base ends in a fragment");
+    let relative = page_url
+        .strip_prefix("https://ferropix.eu/docs/")
+        .and_then(|path| path.strip_suffix(".html"))
+        .expect("the base is a page of the book");
+    let page = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("../../website/book/src/{relative}.md")),
+    )
+    .expect("the problem types page is read");
+    let types = ferropix_server::problem::types();
+    let missing: Vec<&str> = types
+        .iter()
+        .filter_map(|kind| kind.slug())
+        .filter(|slug| !page.contains(&format!("\n### `{slug}`\n")))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "problem types without a section on the page: {missing:?}"
+    );
+    for kind in types.iter() {
+        assert!(
+            kind.uri().starts_with(ferropix_server::problem::BASE),
+            "{}",
+            kind.uri()
+        );
+    }
 }

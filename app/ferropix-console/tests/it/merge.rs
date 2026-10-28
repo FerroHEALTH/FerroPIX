@@ -36,11 +36,15 @@ fn fixture(name: &str) -> String {
     .expect("the synthetic document")
 }
 
-/// A refusal of the server with `status` and `diagnostics`.
-fn refusal(status: u16, diagnostics: &str) -> ResponseTemplate {
-    ResponseTemplate::new(status).set_body_string(format!(
-        r#"{{"resourceType":"OperationOutcome","issue":[{{"severity":"error","code":"conflict","diagnostics":"{diagnostics}"}}]}}"#
-    ))
+/// A refusal of the server with `status`, as the RFC 9457 problem `slug`
+/// with `detail`.
+fn refusal(status: u16, slug: &str, detail: &str) -> ResponseTemplate {
+    ResponseTemplate::new(status).set_body_raw(
+        format!(
+            r#"{{"type":"https://ferropix.eu/docs/operate/problems.html#{slug}","status":{status},"detail":"{detail}"}}"#
+        ),
+        "application/problem+json",
+    )
 }
 
 #[tokio::test]
@@ -113,7 +117,7 @@ async fn a_merge_posts_both_versions_and_leads_to_the_survivor_and_a_409_is_draw
         .await;
     Mock::given(method("POST"))
         .and(path("/operator/merges"))
-        .respond_with(refusal(409, "a person changed since it was read"))
+        .respond_with(refusal(409, "stale", "a person changed since it was read"))
         .mount(&filled)
         .await;
     let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
@@ -217,6 +221,7 @@ async fn a_revert_posts_the_survivor_s_version_and_a_refusal_is_drawn_in_place()
         .and(path(format!("/operator/merges/{MERGE}/revert")))
         .respond_with(refusal(
             409,
+            "later-merge",
             "a later merge of the survivor has to be reverted first",
         ))
         .mount(&filled)

@@ -1386,9 +1386,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-server"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1750d3b17f33655aafacfd4b6bb7e1c73ea9bbca035a96db772d7c636fcd1cd5"
+checksum = "52cb53133ec283058930a43bf264ee4f90d627b6e3d9b2daa6e7f5dab5a175db"
 dependencies = [
  "axum",
  "clap",
@@ -5082,7 +5082,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

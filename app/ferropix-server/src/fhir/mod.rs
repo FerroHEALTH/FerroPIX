@@ -8,8 +8,9 @@
 //! The capability statement, the SMART discovery document, the PIXm
 //! Manager ([`pixm`]), the PDQm Supplier ([`pdqm`]), the PMIR Registry
 //! ([`registry`] for ITI-93, [`pmir`] for ITI-94) and the operator API
-//! ([`crate::operator`]) answer; a row no handler serves answers `501` with
-//! a `not-supported` issue, so the guard in front of a new route is in place
+//! ([`crate::operator`]) answer; a row no handler serves answers `501`, with
+//! a `not-supported` issue on the FHIR face and a problem on the operator
+//! API, so the guard in front of a new route is in place
 //! and tested first. [`status`] is
 //! the one table of every outcome a transaction answers, and [`wire`] puts
 //! each in JSON or XML.
@@ -414,11 +415,9 @@ async fn pending_fhir() -> Response {
 /// A row of the operator API that no handler serves: none today, so a row
 /// added without its handler answers `501` rather than `404`.
 async fn pending_operator() -> Response {
-    respond(
+    crate::problem::blank(
         StatusCode::NOT_IMPLEMENTED,
-        IssueType::NotSupported,
         "FerroPIX does not serve this route yet",
-        None,
     )
 }
 

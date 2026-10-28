@@ -5,6 +5,14 @@
 # is set. A release publishes the chart itself (release.yml's `chart` leg);
 # this dispatch is for a chart fix that cannot wait for one, and packages the
 # committed appVersion with the images' tags, since no new image exists.
+#
+# Given `release-tag`, it recovers that release's chart leg instead: it
+# packages the chart of the tag's tree with the release as its appVersion and
+# the images the release tagged pinned by digest, as release.yml's leg did. A
+# release runs its workflows from the tag's tree, so a fix to build-chart.yml
+# reaches a published tag only this way. A chart already published under the
+# version is compared by its files and, when they match, its digest is
+# attested (docs/release.md, Recovering the chart leg).
 name: Publish chart
 
 on:
@@ -15,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+      release-tag:
+        description: An existing vX.Y.Z tag whose chart leg to recover; empty for a chart-only publish.
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -23,8 +36,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The digests of the two image indexes the release tagged X.Y.Z, read from
+  # the registry; empty for a chart-only publish.
+  digests:
+    name: released image digests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      packages: read # read the released image indexes
+    outputs:
+      server: ${{ steps.resolve.outputs.server }}
+      console: ${{ steps.resolve.outputs.console }}
+    steps:
+      - name: Resolve the released images
+        id: resolve
+        env:
+          TAG: ${{ inputs.release-tag }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAG" ]; then
+            echo "no release tag: a chart-only publish pins no digest."
+            exit 0
+          fi
+          if ! printf '%s\n' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${TAG}' is not a vX.Y.Z tag" >&2
+            exit 1
+          fi
+          printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          for image in server:ferropix console:ferropix-console; do
+            ref="ghcr.io/ferrohealth/${image#*:}:${TAG#v}"
+            digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r '.digest')"
+            if ! printf '%s\n' "$digest" | grep -qE '^sha256:[0-9a-f]{64}$'; then
+              echo "::error::${ref} names no image index digest, got '${digest}'" >&2
+              exit 1
+            fi
+            echo "${ref} is ${digest}"
+            echo "${image%%:*}=${digest}" >> "$GITHUB_OUTPUT"
+          done
+
   chart:
     name: chart
+    needs: digests
     permissions:
       contents: read # check out the chart
       packages: write # push the chart to GHCR
@@ -33,3 +87,6 @@ jobs:
     uses: ./.github/workflows/build-chart.yml
     with:
       publish: ${{ inputs.publish }}
+      release-tag: ${{ inputs.release-tag }}
+      server-digest: ${{ needs.digests.outputs.server }}
+      console-digest: ${{ needs.digests.outputs.console }}

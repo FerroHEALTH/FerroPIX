@@ -127,6 +127,8 @@ jobs:
         run: bash scripts/release/changelog.sh --self-test
       - name: The release staging checks each tarball and stages the 0700 spool
         run: bash scripts/release/stage-dist.sh --self-test
+      - name: The chart comparison matches a repackaged chart and refuses other files
+        run: bash scripts/release/chart-published.sh --self-test
       - name: The destructive-command hook
         run: |
           set -euo pipefail

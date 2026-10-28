@@ -10,10 +10,18 @@
 # Two callers:
 #   - release.yml, after scan-and-tag, passes the released tag and the
 #     digests of the two images it published: the packaged chart carries the
-#     release as its appVersion and deploys those images by digest, and it is
-#     pushed.
+#     release as its appVersion and deploys those images by digest, and it
+#     asks to publish.
 #   - publish-chart.yml, a manual dispatch for a chart-only fix between
-#     releases, a dry run unless asked to publish.
+#     releases, a dry run unless asked to publish, or, given a release tag,
+#     the recovery of that release's chart leg from the tag's tree.
+#
+# A version already in the registry is published again never. When the
+# chart this run packages unpacks to the same files as the published one
+# (scripts/release/chart-published.sh), the push is skipped and the
+# published digest is attested, so a leg that pushed and then failed its
+# attestation is finished by a re-run with the same signing workflow; when
+# the files differ, a publish is refused.
 #
 # `helm push` appends the chart name, so the chart lands at
 # oci://ghcr.io/ferrohealth/charts/ferropix. A consumer verifies it with:
@@ -33,8 +41,9 @@ on:
         default: false
       release-tag:
         description: >-
-          The vX.Y.Z tag being released; empty for a dispatch between
-          releases, which packages the committed appVersion.
+          The vX.Y.Z tag being released or recovered, whose tree the chart
+          is packaged from; empty for a dispatch between releases, which
+          packages the committed appVersion.
         required: false
         type: string
         default: ""
@@ -50,13 +59,16 @@ on:
         default: ""
     outputs:
       digest:
-        description: The digest of the pushed chart, empty for a dry run.
+        description: The digest of the pushed or already published chart, empty for a dry run.
         value: ${{ jobs.chart.outputs.digest }}
 
 permissions: {}
 
 env:
-  CHART_DIR: deploy/helm/ferropix
+  # A release tag packages the chart of the tag's tree, checked out beside
+  # the workflow's own revision, whose scripts compare the packages.
+  CHART_TREE: ${{ inputs.release-tag != '' && 'tagged' || '.' }}
+  CHART_DIR: ${{ inputs.release-tag != '' && 'tagged/deploy/helm/ferropix' || 'deploy/helm/ferropix' }}
   OCI_NAMESPACE: oci://ghcr.io/ferrohealth/charts
   CHART_REF: ghcr.io/ferrohealth/charts/ferropix
 
@@ -71,11 +83,19 @@ jobs:
       id-token: write # Sigstore, for the keyless attestation
       attestations: write # store it against this repository
     outputs:
-      digest: ${{ steps.push.outputs.digest }}
+      digest: ${{ steps.push.outputs.digest || steps.published.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Check out the released tree
+        if: inputs.release-tag != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ inputs.release-tag }}
+          path: tagged
 
       # The helm and kubeconform ci.yml's helm-chart job validates the chart
       # with, checked against their published SHA-256.
@@ -117,45 +137,73 @@ jobs:
               exit 1
             fi
           done
+          if ! printf '%s\n' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${TAG}' is not a vX.Y.Z tag" >&2
+            exit 1
+          fi
           version="${TAG#v}"
           yq -i ".appVersion = \"${version}\"" "$CHART_DIR/Chart.yaml"
           yq -i ".image.digest = \"${SERVER_DIGEST}\" | .console.image.digest = \"${CONSOLE_DIGEST}\"" \
             "$CHART_DIR/values.yaml"
-          git diff -- "$CHART_DIR"
+          git -C "$CHART_TREE" diff -- deploy/helm/ferropix
 
       - name: Lint and package
         id: package
         run: |
           set -euo pipefail
           helm lint "$CHART_DIR"
-          bash deploy/helm/validate.sh
+          bash "$CHART_TREE/deploy/helm/validate.sh"
           helm package "$CHART_DIR" --destination dist
           version="$(yq '.version' "$CHART_DIR/Chart.yaml")"
           echo "path=dist/ferropix-${version}.tgz" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       # A published chart version is immutable: a version already in the
-      # registry fails a release and is reported on a dry run.
-      - name: Refuse a version already published
+      # registry is compared by its unpacked files with this package. The same
+      # files skip the push and attest the published digest; other files fail
+      # a publish and are reported on a dry run. Only a registry answer of
+      # "not found" counts as unpublished; any other failure stops the leg.
+      - name: Compare with a version already published
+        id: published
         env:
           VERSION: ${{ steps.package.outputs.version }}
-          PUBLISH: ${{ inputs.release-tag != '' || inputs.publish }}
+          PACKAGE: ${{ steps.package.outputs.path }}
+          PUBLISH: ${{ inputs.publish }}
           ACTOR: ${{ github.actor }}
           TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           printf '%s' "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
-          if helm show chart "oci://${CHART_REF}" --version "$VERSION" > /dev/null 2>&1; then
-            if [ "$PUBLISH" = "true" ]; then
-              echo "::error::${CHART_REF}:${VERSION} is published already; raise the chart version in Chart.yaml" >&2
-              exit 1
+          mkdir -p published
+          if ! helm pull "oci://${CHART_REF}" --version "$VERSION" --destination published > pull.log 2>&1; then
+            cat pull.log
+            if grep -qE ': (not found|name unknown)' pull.log; then
+              echo "${CHART_REF}:${VERSION} is not published yet."
+              exit 0
             fi
-            echo "::warning::${CHART_REF}:${VERSION} is published already; a publish would be refused"
+            echo "::error::the registry did not answer whether ${CHART_REF}:${VERSION} is published" >&2
+            exit 1
           fi
+          cat pull.log
+          digest="$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' pull.log)"
+          if [ -z "$digest" ]; then
+            echo "::error::helm pull printed no digest" >&2
+            exit 1
+          fi
+          if bash scripts/release/chart-published.sh compare "published/ferropix-${VERSION}.tgz" "$PACKAGE"; then
+            echo "::notice::${CHART_REF}:${VERSION} is published already with the same files; the push is skipped and ${digest} is attested"
+            echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$PUBLISH" = "true" ]; then
+            echo "::error::${CHART_REF}:${VERSION} is published already with other files; raise the chart version in Chart.yaml" >&2
+            exit 1
+          fi
+          echo "::warning::${CHART_REF}:${VERSION} is published already with other files; a publish would be refused"
 
       - name: Push the chart
         id: push
-        if: inputs.release-tag != '' || inputs.publish
+        if: inputs.publish && steps.published.outputs.digest == ''
         env:
           PACKAGE: ${{ steps.package.outputs.path }}
         run: |
@@ -171,18 +219,18 @@ jobs:
       # The attestation is pushed beside the chart through the Docker
       # credential store, which helm registry login does not fill.
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        if: steps.push.outputs.digest != ''
+        if: inputs.publish && (steps.push.outputs.digest != '' || steps.published.outputs.digest != '')
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest the chart's provenance
-        if: steps.push.outputs.digest != ''
+        if: inputs.publish && (steps.push.outputs.digest != '' || steps.published.outputs.digest != '')
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.CHART_REF }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.push.outputs.digest || steps.published.outputs.digest }}
           push-to-registry: true
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

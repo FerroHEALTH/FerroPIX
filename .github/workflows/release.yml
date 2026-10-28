@@ -422,6 +422,7 @@ jobs:
       attestations: write # store it against this repository
     uses: ./.github/workflows/build-chart.yml
     with:
+      publish: true
       release-tag: ${{ needs.plan.outputs.tag }}
       server-digest: ${{ needs.build-image.outputs.digest }}
       console-digest: ${{ needs.build-console.outputs.digest }}

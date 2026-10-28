@@ -145,6 +145,7 @@ to achieve SLSA v1 Build Level 3").
 | `crate` | `release-crate.yml` | each listed `.crate`, its checksum and its attestation |
 | `vulnerability-record` | in `release.yml` | Trivy over both pushed images (both platforms each) and the server tarballs at every severity, fixed or not; `scripts/checks/vex-coverage.sh` refuses the release while a finding has no OpenVEX judgement under `security/vex/`, and the record (each finding joined with its statement) and the raw reports are attached to the draft |
 | `scan-and-tag` | `scan-and-tag.yml` | the gate of `trivy.yaml` (HIGH and CRITICAL with a fix) on each digest, then the tags `X.Y.Z` and, for a release that is not a pre-release, `X.Y` and `latest`, each verified after it is applied |
+| `chart` | `build-chart.yml` | after `scan-and-tag`, the Helm chart of the tag's tree with the release as its appVersion and both images pinned by digest, pushed to `oci://ghcr.io/ferrohealth/charts/ferropix` and its provenance attested |
 
 `finalize-release` publishes the draft only once every asset of every leg
 is attached, and `scan-and-tag` runs only after the vulnerability record,
@@ -161,6 +162,9 @@ gh attestation verify oci://ghcr.io/ferrohealth/ferropix:X.Y.Z \
 gh attestation verify oci://ghcr.io/ferrohealth/ferropix-console:X.Y.Z \
   --repo FerroHEALTH/FerroPIX \
   --signer-workflow FerroHEALTH/FerroPIX/.github/workflows/release-console.yml
+gh attestation verify oci://ghcr.io/ferrohealth/charts/ferropix:<chart-version> \
+  --repo FerroHEALTH/FerroPIX \
+  --signer-workflow FerroHEALTH/FerroPIX/.github/workflows/build-chart.yml
 ```
 
 `scripts/release/stage-dist.sh X.Y.Z` stages the published binaries under
@@ -169,6 +173,32 @@ publishes the images, the owner sets the GHCR packages
 `ghcr.io/ferrohealth/ferropix` and `ghcr.io/ferrohealth/ferropix-console`
 to public visibility and links each to this repository; a new package is
 private by default.
+
+## Recovering the chart leg
+
+A chart version in the registry is never published twice. When the chart
+leg finds its version published already, it unpacks both packages and
+compares their files (`scripts/release/chart-published.sh`), since `helm
+package` stamps the packaging time into the tarball: the same files skip
+the push and attest the published digest, other files refuse the publish.
+A chart leg that pushed and then failed its attestation, on a Sigstore
+outage for example, is finished by a re-run of the failed jobs, and the
+attestation keeps `build-chart.yml` as its signing workflow.
+
+A release runs its workflows from the tag's tree, so a re-run of a tag cut
+before a fix to `build-chart.yml` runs the old leg. Recover such a tag with
+the `Publish chart` workflow dispatched from `main`, which packages the
+chart of the tag's tree with the digests the release tagged its images
+with:
+
+```sh
+gh workflow run publish-chart.yml --repo FerroHEALTH/FerroPIX --ref main \
+  -f release-tag=vX.Y.Z -f publish=true
+```
+
+Verify the attestation as above, then close the milestone the release run
+left open: `scripts/release/milestone.sh close vX.Y.Z`, which still refuses
+while the milestone holds an open item.
 
 ## The published image, every week
 

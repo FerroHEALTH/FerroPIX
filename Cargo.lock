@@ -1350,9 +1350,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-config"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55185416ca7b4e0c900c4b387ef25045d751fb6b36c54e6f7b668dad193edd03"
+checksum = "8fb490bb6126a8536e8ee377284d746cc14f7c42423c4d7ec58e6e3d16a3c4c2"
 dependencies = [
  "ferrohealth-secret",
  "percent-encoding",
@@ -1416,9 +1416,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-smart"
-version = "0.8.2"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ba264f2eb606f54d313db4acfb2abfda5c6ca8e96818355145cde9ccce620b2"
+checksum = "b1627443f1a75c1749df49b1bfc6d0690e4e2650e68f280b55be42bebc1c2bc6"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -1466,15 +1466,19 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-ui"
-version = "0.5.2"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b518c00bbb08b8c62847d6cea27ca049f6f8a02a73b655c5ae8dfb586607047"
+checksum = "18cb1b15ac534ea45890df6bd8ce6121a846a723e85c48bb2fa457e61d0059d2"
 dependencies = [
+ "axum",
  "fluent-templates",
+ "form_urlencoded",
+ "http",
  "intl-memoizer",
  "leptos",
  "leptos_router",
  "serde",
+ "tower",
  "wasm-bindgen-futures",
  "web-sys",
 ]
@@ -2416,9 +2420,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59a861f46577c742e5ee6aa56c14c482ba940f6933e92be61bc81b36601eb1a3"
+checksum = "b1c95f2654cb583d1c2350a5ee18f2087b70e52b851c689f7c7e2bee430d27a9"
 dependencies = [
  "async-trait",
  "base64 0.23.1",

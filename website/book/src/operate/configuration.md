@@ -265,7 +265,7 @@ admitted. A section with no issuer and no Basic user is refused, and so is
 | `auth.jwks_file` | `""` | A key set file to read in place of the issuer's `jwks_uri`. |
 | `auth.timeout_ms` | `10000` | How long one call to an authorization server may take. |
 | `auth.realm` | `""` | The protection space the `WWW-Authenticate` challenges name (RFC 9110 §11.5); empty for none. |
-| `auth.ca_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it. Read once at start; a file that holds no certificate refuses the start. |
+| `auth.ca_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and under `mode = "introspection"` the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
 | `auth.mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. Introspection takes the flat `auth.issuer` and no `jwks_file`. |
 | `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |

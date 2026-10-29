@@ -121,13 +121,15 @@ pub fn respond(
 /// The body of a request whose handler panicked.
 ///
 /// It is an `OperationOutcome` of one `exception` issue naming the server's
-/// request id, and never the panic message, since a handler may have
-/// panicked over an identifier.
+/// request id, the id the request log and the panic line carry, and never
+/// the panic message, since a handler may have panicked over an identifier.
 #[must_use]
 pub fn panic_body() -> PanicBody {
-    Arc::new(|_uri, request_id| {
-        let diagnostics =
-            format!("the server could not complete the request (request id {request_id})");
+    Arc::new(|_uri, ids| {
+        let diagnostics = format!(
+            "the server could not complete the request (request id {})",
+            ids.server
+        );
         let outcome = OperationOutcome {
             issue: vec![OperationOutcomeIssue {
                 severity: "error".into(),
@@ -148,7 +150,7 @@ pub fn panic_body() -> PanicBody {
 /// of the server has one shape (FHIR R4 `http.html`, §3.1.0.4.2).
 #[must_use]
 pub fn refusal_body() -> RefusalBody {
-    Arc::new(|_uri, _request_id, status, _reason| {
+    Arc::new(|_uri, _ids, status, _reason| {
         let (code, diagnostics) = refusal_type(status);
         body(status, &document(code, diagnostics), FHIR_JSON)
     })

@@ -306,7 +306,7 @@ async fn a_body_over_the_limit_is_answered_413_with_an_operation_outcome_or_a_pr
 }
 
 #[tokio::test]
-async fn a_request_past_its_timeout_is_answered_408_with_an_operation_outcome_or_a_problem() {
+async fn a_request_past_its_timeout_is_answered_408_naming_the_server_s_request_id() {
     let server = settings("");
     let lifecycle = Lifecycle::default();
     let slow = || {
@@ -326,14 +326,34 @@ async fn a_request_past_its_timeout_is_answered_408_with_an_operation_outcome_or
     for face in FACES {
         let response = client()
             .get(format!("http://{}{face}/slow", running.address))
+            .header(request_id::HEADER, "corr-slow")
             .send()
             .await
             .expect("the server answers");
         assert_eq!(StatusCode::REQUEST_TIMEOUT, response.status(), "{face}");
+        assert_eq!(
+            Some("corr-slow"),
+            response
+                .headers()
+                .get(request_id::HEADER)
+                .and_then(|v| v.to_str().ok()),
+            "the client's id is echoed"
+        );
         if face == "/fhir" {
-            assert_eq!("timeout", issue(response).await.0);
+            let (code, diagnostics) = issue(response).await;
+            assert_eq!("timeout", code);
+            assert!(!diagnostics.contains("corr-slow"), "{diagnostics}");
         } else {
-            assert_eq!("about:blank", problem(response).await.0);
+            let (kind, detail, instance) = problem(response).await;
+            assert_eq!("about:blank", kind);
+            let server_id = instance
+                .strip_prefix("urn:uuid:")
+                .unwrap_or_else(|| panic!("the instance: {instance}"));
+            assert!(
+                uuid::Uuid::parse_str(server_id).is_ok(),
+                "the problem names the server's id, which the log carries: {instance}"
+            );
+            assert!(!detail.contains("corr-slow"), "{detail}");
         }
     }
     running.stop.send(()).expect("the server is running");

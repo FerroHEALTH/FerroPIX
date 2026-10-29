@@ -69,7 +69,7 @@ ferrohealth-smart = { version = "=0.8.6", default-features = false }
 # requires. Verified against crates.io on 2026-10-29.
 ferrohealth-config = "=0.2.6"
 ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.4.0", default-features = false }
+ferrohealth-server = { version = "=0.4.1", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration`, the OTLP
 # export, the Prometheus exposition and the panic hook. Pinned exactly, as a

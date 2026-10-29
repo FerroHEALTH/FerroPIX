@@ -114,7 +114,8 @@ quickstart mounts it beside PostgreSQL
 | `server.base_path` | `""` | The path every route is mounted under: empty for the root, or `/` and path segments with no trailing `/`. |
 | `server.body_limit_bytes` | `1048576` | The largest request body read; a larger one is answered `413`. |
 | `server.request_timeout_ms` | `30000` | How long one request may take; a slower one is answered `408`. |
-| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head, counted from accept or from its last response; a client that has not sent one by then, one that sent nothing included, is disconnected. |
+| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head, counted from accept or from the first byte of the head; a client that has not sent the whole head by then is disconnected. |
+| `server.idle_timeout_ms` | `120000` | How long a kept-alive HTTP/1.1 connection may wait for its next request after an answer; past it the server closes the connection with a clean end of stream. HTTP/2 connections keep their own protocol's rules. |
 | `server.drain_delay_ms` | `0` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
 | `server.shutdown_timeout_ms` | `10000` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
 | `server.max_concurrent_requests` | unset | How many requests the server serves at once; past it a request is answered `503` with `Retry-After`. The health routes are never refused. Unset, there is no bound. |
@@ -144,7 +145,9 @@ Every refusal the stack writes itself, a `408`, a `413` and a `503` for
 load, is a FHIR `OperationOutcome` (`timeout`, `too-long`, `throttled`) on
 the FHIR face and the XCPD gateway, as is the `500` of a handler that
 failed, which names the server's request id. On every other route each is
-an `about:blank` [problem](problems.md) whose `instance` is the request id.
+an `about:blank` [problem](problems.md) whose `instance` is the server's
+request id, which the request log names, even when the request sent an
+`X-Request-Id` of its own.
 
 The server routes, under `server.base_path`:
 

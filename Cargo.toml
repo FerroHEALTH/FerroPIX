@@ -66,10 +66,10 @@ ferrohealth-smart = { version = "=0.8.6", default-features = false }
 # provenance and the key-or-file rule for secrets, and the `--config` and
 # `--set` arguments of ferrohealth-server. Each pinned exactly, as a product
 # pins every family crate; ferrohealth-secret at the version ferrohealth-smart
-# requires. Verified against crates.io on 2026-10-28.
+# requires. Verified against crates.io on 2026-10-29.
 ferrohealth-config = "=0.2.6"
 ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.3.8", default-features = false }
+ferrohealth-server = { version = "=0.4.0", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration`, the OTLP
 # export, the Prometheus exposition and the panic hook. Pinned exactly, as a

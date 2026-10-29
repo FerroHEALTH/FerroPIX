@@ -321,7 +321,7 @@ pub fn router(state: ConsoleState) -> axum::Router {
 /// catalog's words in the console's locale.
 fn same_origin_check(settings: &Settings) -> SameOrigin {
     let locale = settings.locale.clone();
-    let body: RefusalBody = Arc::new(move |_uri, _request_id, status, _reason| {
+    let body: RefusalBody = Arc::new(move |_uri, _ids, status, _reason| {
         (
             status,
             [(CACHE_CONTROL, "no-store")],

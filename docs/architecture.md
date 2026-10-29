@@ -174,7 +174,7 @@ message and position without quoting the line.
 | Section | Holds |
 |---|---|
 | `public_base_url` | the top-level key: the `[base]` the `CapabilityStatement` and every `targetId` name |
-| `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
+| `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `header_read_timeout_ms`, `idle_timeout_ms` (a kept-alive connection idle that long is closed), `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
 | `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
 | `[auth]` | `ferrohealth-smart`'s `AuthSection`: the issuer or `[[auth.issuer]]` entries with their RFC 8414 metadata, key sets or RFC 7662 introspection, `ca_file`, the audience, `[[auth.basic.users]]` under the development profile only, and `product_scope`, the steward scope |

@@ -239,7 +239,16 @@ pub fn routes(
         };
         router = router.route(route.path, handler);
     }
+    guarded(router, base, smart, audit)
+}
+
+/// Returns `router` behind the audit reservation, the Source rule and the
+/// guard, which cover a path no route matches too.
+fn guarded(router: Router, base: &str, smart: &Arc<Smart>, audit: &Audit) -> Router {
+    // NOTE: no specification governs this: our own design; a declared fallback keeps
+    // these layers over a path no route matches through every merge of the stack.
     router
+        .fallback(unmatched)
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(Reserving::new(base, audit.clone())),
             reserve::layer,
@@ -399,6 +408,11 @@ fn consumer(address: &str, last: Option<crate::store::outbox::LastNotification>)
         last,
         at,
     }
+}
+
+/// A path no route matches: `404` with no body, once the guard admitted it.
+async fn unmatched() -> StatusCode {
+    StatusCode::NOT_FOUND
 }
 
 /// A row of the FHIR face that no handler serves: none today, so a row

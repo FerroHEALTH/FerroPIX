@@ -28,7 +28,7 @@ use crate::journeys::{SCREENS, SIGN_IN_SCREENS};
 const THEMES: [&str; 2] = ["light", "dark"];
 
 /// The width SC 1.4.10 names: 320 CSS pixels.
-const REFLOW_WIDTH: u32 = 320;
+pub(crate) const REFLOW_WIDTH: u32 = 320;
 
 /// How many tab presses past the number of controls a walk allows itself:
 /// the document and the browser's own chrome take stops on the way round.
@@ -278,7 +278,7 @@ return findings.join('\n');
 /// Whether the page scrolls sideways: the overflow in CSS pixels and the
 /// innermost elements that reach past the viewport, or an empty string when
 /// it fits.
-const SIDEWAYS: &str = r"
+pub(crate) const SIDEWAYS: &str = r"
 const width = document.documentElement.clientWidth;
 const over = document.documentElement.scrollWidth - width;
 if (over <= 1) { return ''; }

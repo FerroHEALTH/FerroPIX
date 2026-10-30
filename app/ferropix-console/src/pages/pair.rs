@@ -8,13 +8,13 @@
 //! rows first; the score breakdown with each field's weight, the total and
 //! the thresholds on one scale; the blocking key and any hard conflict;
 //! each record's person with its identifiers, masked; and FerroUI's docked
-//! decision bar with Link (`l`), Not a match (`n`), Defer (`d`), the reason
-//! (`r`) and the date a deferral comes back. A link that merges two persons
-//! asks first in FerroUI's danger dialog, which names the effect. A
-//! decision posts the record versions the page was drawn from, so one
-//! made on a stale page comes back as `409`, drawn in the bar with the ways
-//! on. Previous (`[`) and Next (`]`) lead to the neighbouring pairs. No
-//! specification governs the screen: our own design.
+//! decision bar with Link, Not a match, Defer, the reason and the date a
+//! deferral comes back. A link that merges two persons asks first in
+//! FerroUI's danger dialog, which names the effect. A decision posts the
+//! record versions the page was drawn from, so one made on a stale page
+//! comes back as `409`, drawn in the bar with the ways on. Previous and Next
+//! lead to the neighbouring pairs. No specification governs the screen: our
+//! own design.
 
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
@@ -27,7 +27,6 @@ use ferrohealth_ui::view::dock::{
 };
 use ferrohealth_ui::view::form::{Field, INPUT};
 use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
-use ferrohealth_ui::view::kbd::aria_keys;
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::score::{Contribution, Score, Threshold, score_breakdown};
 use ferrohealth_ui::view::surface::{card, definitions, stack};
@@ -112,16 +111,15 @@ fn is_conflict(probe: &Probe) -> bool {
     probe.reach == Reach::Refused(http::StatusCode::CONFLICT)
 }
 
-/// Previous (`[`) and Next (`]`), the neighbouring pairs in the queue's
-/// order, and the queue.
+/// Previous and Next, the neighbouring pairs in the queue's order.
+// TODO(#390): announce `[` and `]` again once a FerroUI module binds a control's key.
 fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
-    let link = |id: Option<&String>, words: Msg, key: &str, glyph: Glyph| {
+    let link = |id: Option<&String>, words: Msg, glyph: Glyph| {
         id.map_or_else(Html::empty, |id| {
             h(format!(
-                "<a href=\"{}\" class=\"{}\" aria-keyshortcuts=\"{}\">{}</a>",
+                "<a href=\"{}\" class=\"{}\">{}</a>",
                 t(format!("{QUEUE}/{id}")),
                 Variant::Secondary.small(),
-                t(aria_keys(key).unwrap_or_default()),
                 label(Some(glyph), visit.tr(words)),
             ))
         })
@@ -132,15 +130,9 @@ fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
         link(
             candidate.previous.as_ref(),
             Msg::PairPrevious,
-            "[",
             Glyph::CHEVRON_LEFT
         ),
-        link(
-            candidate.next.as_ref(),
-            Msg::PairNext,
-            "]",
-            Glyph::CHEVRON_RIGHT
-        ),
+        link(candidate.next.as_ref(), Msg::PairNext, Glyph::CHEVRON_RIGHT),
     ))
 }
 
@@ -350,8 +342,8 @@ fn versions(candidate: &Candidate) -> Html {
     ))
 }
 
-/// The card that says a link merges two persons, with Link… (`l`), which
-/// asks in the danger dialog naming the effect before it posts.
+/// The card that says a link merges two persons, with Link…, which asks in
+/// the danger dialog naming the effect before it posts.
 fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
     let action = format!("{QUEUE}/{}", candidate.id);
     let fields = Html::join([
@@ -388,10 +380,9 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
     card(
         visit.tr(Msg::PairMerges),
         h(format!(
-            "<p>{}</p><button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{MERGE_DIALOG}\" aria-haspopup=\"dialog\" aria-keyshortcuts=\"{}\">{}</button>{dialog}",
+            "<p>{}</p><button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{MERGE_DIALOG}\" aria-haspopup=\"dialog\">{}</button>{dialog}",
             t(visit.tr(Msg::PairMergesNote)),
             Variant::Primary.class(),
-            t(aria_keys("l").unwrap_or_default()),
             label(Some(Glyph::LINK), visit.tr(Msg::PairLinkAsk)),
         )),
     )
@@ -399,6 +390,7 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
 
 /// The docked decision bar: the reason, the deferral's date, and Link (when
 /// it merges nothing), Not a match and Defer.
+// TODO(#390): announce `l`, `n`, `d` and `r` again once a FerroUI module binds them.
 fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> Html {
     let line = match outcome {
         Some(DecisionOutcome::Refused(probe)) if is_conflict(probe) => {
@@ -430,7 +422,6 @@ fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) 
             label: visit.tr(Msg::PairLink),
             variant: Variant::Primary,
             glyph: Some(Glyph::LINK),
-            shortcut: Some(String::from("l")),
             ..Decision::default()
         });
     }
@@ -438,14 +429,12 @@ fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) 
         value: String::from("not-a-match"),
         label: visit.tr(Msg::PairNotAMatchAction),
         glyph: Some(Glyph::X),
-        shortcut: Some(String::from("n")),
         ..Decision::default()
     });
     decisions.push(Decision {
         value: String::from("defer"),
         label: visit.tr(Msg::Defer),
         glyph: Some(Glyph::CLOCK),
-        shortcut: Some(String::from("d")),
         ..Decision::default()
     });
     decision_bar(DecisionBar {
@@ -458,7 +447,6 @@ fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) 
                 name: String::from("reason"),
                 label: visit.tr(Msg::RevealReason),
                 placeholder: visit.tr(Msg::PairReasonHint),
-                shortcut: Some(String::from("r")),
                 error: no_reason.then(|| visit.tr(Msg::PairReasonMissing)),
                 focus: no_reason,
                 ..DockField::default()

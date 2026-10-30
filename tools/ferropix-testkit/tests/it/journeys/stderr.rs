@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! What the test process writes to its standard error while a journey runs,
-//! which is where the console's server half, run in process, logs Leptos's
-//! warnings. The descriptor is passed through a pipe: every byte still
-//! reaches the original standard error, and the journey reads the copy once
-//! it ends. Leptos writes its warnings with `eprintln!` on the server
-//! (`reactive_graph::log_warning`), which reaches the descriptor under
-//! nextest, the suite's runner, since nextest runs every test binary with
-//! `--nocapture`. No specification governs this: our own design.
+//! which is where the console's server, run in process, reports a panic.
+//! The descriptor is passed through a pipe: every byte still reaches the
+//! original standard error, and the journey reads the copy once it ends.
+//! The standard library's panic hook writes to the descriptor, which reaches
+//! it under nextest, the suite's runner, since nextest runs every test
+//! binary with `--nocapture`. No specification governs this: our own design.
 
 use std::fs::File;
 use std::io::{Read as _, Write as _};
@@ -17,9 +16,9 @@ use std::thread::JoinHandle;
 
 use tokio::sync::{Mutex, MutexGuard};
 
-/// The words of Leptos's warning for a resource read outside a `Suspense`,
-/// a `Transition` or an effect (`leptos_server` 0.8, `Resource`).
-pub(crate) const RESOURCE_OUTSIDE_SUSPENSE: &str = "you are reading a resource in `hydrate` mode";
+/// The words the standard library's panic hook writes for a panic
+/// (`std::panic`, the default hook: "thread '…' panicked at …").
+pub(crate) const SERVER_PANIC: &str = "panicked at";
 
 /// One copy at a time in a process, so two journeys under one runner never
 /// swap the descriptor under each other.
@@ -106,11 +105,11 @@ impl Drop for Stderr {
 async fn the_copy_holds_what_the_process_wrote_and_the_descriptor_comes_back() {
     let copy = Stderr::copy().await;
     std::io::stderr()
-        .write_all(format!("a journey's line naming {RESOURCE_OUTSIDE_SUSPENSE}\n").as_bytes())
+        .write_all(format!("a journey's line naming {SERVER_PANIC}\n").as_bytes())
         .expect("the standard error takes a line");
     let written = copy.end();
     assert!(
-        written.contains(RESOURCE_OUTSIDE_SUSPENSE),
+        written.contains(SERVER_PANIC),
         "the copy holds the line written while it ran: {written:?}"
     );
     let again = Stderr::copy().await;

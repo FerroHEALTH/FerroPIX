@@ -16,7 +16,7 @@
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::table::view::{
-    Body, Column, DataTable, EXCLUDED, Role, Sorting, cell, data_table, title_cell,
+    ACTIONS, Body, Column, DataTable, EXCLUDED, Role, Sorting, cell, data_table, title_cell,
 };
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
@@ -324,9 +324,20 @@ fn candidate_row(
                 ),
             ),
             cell(age, waited(visit, candidate)),
-            cell(open, glance(visit, filter, candidate)),
+            actions_cell(open, &glance(visit, filter, candidate)),
         ]),
     })
+}
+
+/// The cell of `column` holding the row's actions, `actions`.
+// NOTE: FerroUI COMPONENTS.md R9: the row is its link's target, so its actions sit in the
+// actions cell (`table::view::ACTIONS`), above the link.
+fn actions_cell(column: &Column, actions: &Html) -> Html {
+    h(format!(
+        "<td data-label=\"{}\" data-role=\"{}\" class=\"{ACTIONS}\">{actions}</td>",
+        t(column.label.text()),
+        column.role.key()
+    ))
 }
 
 /// The page of candidates in the work-list, or the queue's empty state.
@@ -401,8 +412,7 @@ fn waited(visit: &Visit, candidate: &CandidateRow) -> Html {
 }
 
 /// The side panel of a row: the pair at a glance, Open to decide and the
-/// deferral, opened by `o` or `d`; with no script its opener leads to the
-/// pair's own page.
+/// deferral; with no script its opener leads to the pair's own page.
 fn glance(visit: &Visit, filter: &CandidateQuery, candidate: &CandidateRow) -> Html {
     let locale = &visit.locale;
     let id = &candidate.id;

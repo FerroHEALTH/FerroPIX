@@ -22,7 +22,7 @@ use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
 
 /// The settings a console with its FerroPIX server at `server` runs on.
 pub(crate) fn settings(server: &str) -> Settings {
-    let text = format!("[server]\nlisten = \"127.0.0.1:0\"\n\n[pix]\nbase_url = \"{server}\"\n",);
+    let text = format!("[server]\nlisten = \"127.0.0.1:0\"\n\n[pix]\nbase_url = \"{server}\"\n");
     Config::from_sources(Some(&text), &BTreeMap::new())
         .expect("the configuration reads")
         .resolve()

@@ -415,6 +415,27 @@ fn result_row(
     })
 }
 
+/// The console's pages the search panel offers, each its address, its
+/// words and its glyph.
+const SUGGESTED_PAGES: [(&str, Msg, Glyph); 8] = [
+    (
+        crate::app::DASHBOARD,
+        Msg::Dashboard,
+        Glyph::LAYOUT_DASHBOARD,
+    ),
+    (crate::app::QUEUE, Msg::Queue, Glyph::LIST_CHECKS),
+    (SEARCH, Msg::Search, Glyph::USER_ROUND_SEARCH),
+    (crate::app::SOURCES, Msg::Sources, Glyph::RADIO_TOWER),
+    (crate::app::DOMAINS, Msg::Domains, Glyph::TAGS),
+    (crate::app::AUDIT, Msg::Audit, Glyph::FILE_CLOCK),
+    (
+        crate::app::CONFIGURATION,
+        Msg::Configuration,
+        Glyph::FILE_TEXT,
+    ),
+    (crate::app::ABOUT, Msg::About, Glyph::INFO),
+];
+
 /// What the top bar's search panel offers for `words`.
 ///
 /// That is the console's pages, the identifier domains in `domains` (`None` when the server did not
@@ -437,36 +458,19 @@ pub fn suggestions(
         mark: Some(Mark::Glyph(glyph)),
         tag: None,
     };
-    let pages = [
-        (
-            crate::app::DASHBOARD,
-            Msg::Dashboard,
-            Glyph::LAYOUT_DASHBOARD,
-        ),
-        (crate::app::QUEUE, Msg::Queue, Glyph::LIST_CHECKS),
-        (SEARCH, Msg::Search, Glyph::USER_ROUND_SEARCH),
-        (crate::app::SOURCES, Msg::Sources, Glyph::RADIO_TOWER),
-        (crate::app::DOMAINS, Msg::Domains, Glyph::TAGS),
-        (crate::app::AUDIT, Msg::Audit, Glyph::FILE_CLOCK),
-        (
-            crate::app::CONFIGURATION,
-            Msg::Configuration,
-            Glyph::FILE_TEXT,
-        ),
-        (crate::app::ABOUT, Msg::About, Glyph::INFO),
-    ]
-    .into_iter()
-    .map(|(href, words, glyph)| (href, tr(locale, words), glyph))
-    .filter(|(_, name, _)| holds(name))
-    .map(|(href, name, glyph)| {
-        hit(
-            String::from(href),
-            name,
-            tr(locale, Msg::SuggestPage),
-            glyph,
-        )
-    })
-    .collect::<Vec<_>>();
+    let pages = SUGGESTED_PAGES
+        .into_iter()
+        .map(|(href, words, glyph)| (href, tr(locale, words), glyph))
+        .filter(|(_, name, _)| holds(name))
+        .map(|(href, name, glyph)| {
+            hit(
+                String::from(href),
+                name,
+                tr(locale, Msg::SuggestPage),
+                glyph,
+            )
+        })
+        .collect::<Vec<_>>();
     let unfinished = domains
         .is_none()
         .then(|| tr(locale, Msg::SuggestDomainsUnread));

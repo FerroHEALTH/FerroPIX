@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Your preferences in a real browser: a choice applies on the change once
-//! the page has hydrated, is kept in its own cookie, is on `<html>` at the
+//! FerroUI's modules run, is kept in its own cookie, is on `<html>` at the
 //! first paint of the next page, and survives a fresh load
-//! (`.claude/rules/leptos-ui.md` §4, FerroUI family rule 9).
+//! (`.claude/rules/console-ui.md` §4, FerroUI family rule 9).
 
 use std::time::Instant;
 
@@ -20,6 +20,7 @@ use crate::journeys::stack::{PREFERENCE_PREFIX, Stack};
 /// `<html>` carrying it.
 pub(crate) async fn choose(journey: &Journey, stack: &Stack, name: &str, value: &str, drawn: &str) {
     journey.open(&stack.url("/preferences")).await;
+    enhanced(journey, name).await;
     let kept = By::Css(format!("html[{drawn}='{value}']"));
     let card = journey
         .element(
@@ -32,6 +33,21 @@ pub(crate) async fn choose(journey: &Journey, stack: &Stack, name: &str, value: 
         .await;
     journey
         .count_becoming(kept, 1, &format!("<html> to carry the {name} {value}"))
+        .await;
+}
+
+/// Waits until FerroUI's `preference` module has taken the form of the
+/// preference `name`: it hides the form's Save, which a change no longer
+/// needs, since it posts the form at once.
+async fn enhanced(journey: &Journey, name: &str) {
+    journey
+        .count_becoming(
+            By::Css(format!(
+                "form:has([name='{name}']) button[type='submit'][hidden]"
+            )),
+            1,
+            &format!("the {name} form to post on a change"),
+        )
         .await;
 }
 
@@ -70,6 +86,7 @@ async fn each_preference_round_trips_through_its_cookie_to_the_first_paint() {
         choose(journey, &stack, "density", "compact", "data-density").await;
         cookie_becoming(journey, "density", "compact").await;
 
+        enhanced(journey, "reveal").await;
         let option = journey
             .element(
                 By::Css("select[name='reveal'] option[value='30']"),

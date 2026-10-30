@@ -38,7 +38,7 @@ async fn at(journey: &Journey, wanted: &str) {
             .map(|url| url.path().to_owned())
             .unwrap_or_default();
         if address == wanted {
-            journey.hydrated().await;
+            journey.ready().await;
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;

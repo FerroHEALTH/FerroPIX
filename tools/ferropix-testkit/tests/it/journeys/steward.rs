@@ -4,12 +4,13 @@
 //! The steward's work end to end: the queue's oldest pair opened, its
 //! compare and breakdown read, a decision made with a reason and the next
 //! pair opened, then two patients merged from the preview and the merge
-//! reverted from the patient's page. No specification governs the
-//! console: our own design.
+//! reverted from the patient's page; once with FerroUI's modules running
+//! and once with them withheld, where every step is a link, a form or a
+//! native dialog. No specification governs the console: our own design.
 
 use thirtyfour::prelude::*;
 
-use crate::journeys::browser::{Journey, with_journey};
+use crate::journeys::browser::{Journey, with_journey, with_journey_withheld};
 use crate::journeys::journeys_enabled;
 use crate::journeys::sign_in::sign_in;
 use crate::journeys::stack::{FILLED_CANDIDATE, FILLED_PERSON, Server, Stack};
@@ -34,7 +35,7 @@ async fn at(journey: &Journey, wanted: &str) {
             .map(|url| url.path().to_owned())
             .unwrap_or_default();
         if path == wanted {
-            journey.hydrated().await;
+            journey.ready().await;
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -50,15 +51,22 @@ async fn draws(journey: &Journey, words: &str) -> bool {
         .is_ok_and(|answer| answer == "yes")
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_steward_works_the_queue_merges_and_reverts() {
-    if !journeys_enabled() {
-        return;
-    }
-    let stack = Stack::start_with(Server::Filled).await;
-    with_journey(async |journey| {
-        sign_in(journey, &stack).await;
-        journey.open(&stack.url("/queue")).await;
+/// Works the queue, merges and reverts, as the steward does: the oldest
+/// pair opened by Enter on its row when the modules run, and by its link
+/// when they are withheld.
+async fn work(journey: &Journey, stack: &Stack) {
+    sign_in(journey, stack).await;
+    journey.open(&stack.url("/queue")).await;
+    if journey.withheld() {
+        journey
+            .press(
+                By::Css(format!(
+                    ".fui-worklist-grid tr[data-key] a[href='/queue/{FILLED_CANDIDATE}']"
+                )),
+                "the oldest pair's link",
+            )
+            .await;
+    } else {
         let first = journey
             .element(
                 By::Css(".fui-worklist-grid tr[data-key]"),
@@ -67,60 +75,77 @@ async fn a_steward_works_the_queue_merges_and_reverts() {
             .await;
         first.focus().await.expect("the row takes the focus");
         journey.keys(&first, Key::Enter, "the pair").await;
-        at(journey, &format!("/queue/{FILLED_CANDIDATE}")).await;
-        assert!(draws(journey, "The two records").await, "the compare");
-        assert!(
-            draws(journey, "Why the pair scored this").await,
-            "the breakdown"
-        );
-        let reason = journey.element(By::Id("decide-reason"), "the reason").await;
-        reason
-            .send_keys("Synthetic ward call")
-            .await
-            .expect("the reason");
-        journey
-            .press(By::Css("button[value='not-a-match']"), "Not a match")
-            .await;
-        at(journey, &format!("/queue/{NEXT}")).await;
-        let patient = format!("/patients/{FILLED_PERSON}");
-        journey.open(&stack.url(&format!("{patient}/merge"))).await;
-        let other = journey
-            .element(By::Id("merge-other"), "the other patient")
-            .await;
-        other.send_keys(OTHER).await.expect("the id");
-        journey.keys(&other, Key::Enter, "the preview").await;
-        assert!(draws(journey, "What the merge does").await, "the preview");
-        journey
-            .press(By::Css("button[commandfor='merge-confirm']"), "Merge…")
-            .await;
-        let reason = journey.element(By::Id("merge-reason"), "the reason").await;
-        reason
-            .send_keys("Synthetic ward call")
-            .await
-            .expect("the reason");
-        journey.keys(&reason, Key::Enter, "the merge").await;
-        at(journey, &patient).await;
-        journey
-            .open(&stack.url(&format!("{patient}?tab=history")))
-            .await;
-        assert!(
-            draws(journey, "Merged").await,
-            "the history shows the merge"
-        );
-        journey
-            .press(By::Css(format!("a[href='{patient}/unmerge']")), "Unmerge…")
-            .await;
-        at(journey, &format!("{patient}/unmerge")).await;
-        journey
-            .press(By::Css("button[commandfor='revert-confirm']"), "Unmerge…")
-            .await;
-        let reason = journey.element(By::Id("revert-reason"), "the reason").await;
-        reason
-            .send_keys("Synthetic mistake")
-            .await
-            .expect("the reason");
-        journey.keys(&reason, Key::Enter, "the revert").await;
-        at(journey, &patient).await;
-    })
-    .await;
+    }
+    at(journey, &format!("/queue/{FILLED_CANDIDATE}")).await;
+    assert!(draws(journey, "The two records").await, "the compare");
+    assert!(
+        draws(journey, "Why the pair scored this").await,
+        "the breakdown"
+    );
+    let reason = journey.element(By::Id("decide-reason"), "the reason").await;
+    reason
+        .send_keys("Synthetic ward call")
+        .await
+        .expect("the reason");
+    journey
+        .press(By::Css("button[value='not-a-match']"), "Not a match")
+        .await;
+    at(journey, &format!("/queue/{NEXT}")).await;
+    let patient = format!("/patients/{FILLED_PERSON}");
+    journey.open(&stack.url(&format!("{patient}/merge"))).await;
+    let other = journey
+        .element(By::Id("merge-other"), "the other patient")
+        .await;
+    other.send_keys(OTHER).await.expect("the id");
+    journey.keys(&other, Key::Enter, "the preview").await;
+    assert!(draws(journey, "What the merge does").await, "the preview");
+    journey
+        .press(By::Css("button[commandfor='merge-confirm']"), "Merge…")
+        .await;
+    let reason = journey.element(By::Id("merge-reason"), "the reason").await;
+    reason
+        .send_keys("Synthetic ward call")
+        .await
+        .expect("the reason");
+    journey.keys(&reason, Key::Enter, "the merge").await;
+    at(journey, &patient).await;
+    journey
+        .open(&stack.url(&format!("{patient}?tab=history")))
+        .await;
+    assert!(
+        draws(journey, "Merged").await,
+        "the history shows the merge"
+    );
+    journey
+        .press(By::Css(format!("a[href='{patient}/unmerge']")), "Unmerge…")
+        .await;
+    at(journey, &format!("{patient}/unmerge")).await;
+    journey
+        .press(By::Css("button[commandfor='revert-confirm']"), "Unmerge…")
+        .await;
+    let reason = journey.element(By::Id("revert-reason"), "the reason").await;
+    reason
+        .send_keys("Synthetic mistake")
+        .await
+        .expect("the reason");
+    journey.keys(&reason, Key::Enter, "the revert").await;
+    at(journey, &patient).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_steward_works_the_queue_merges_and_reverts() {
+    if !journeys_enabled() {
+        return;
+    }
+    let stack = Stack::start_with(Server::Filled).await;
+    with_journey(async |journey| work(journey, &stack).await).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_steward_works_the_queue_merges_and_reverts_with_the_modules_withheld() {
+    if !journeys_enabled() {
+        return;
+    }
+    let stack = Stack::start_with(Server::Filled).await;
+    with_journey_withheld(async |journey| work(journey, &stack).await).await;
 }

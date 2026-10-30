@@ -11,7 +11,7 @@ use std::error::Error;
 use std::time::Duration;
 
 use axum::body::Body;
-use ferrohealth_ui::widget::session::Left;
+use ferrohealth_ui::view::session::Left;
 use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
 use http::{Request, StatusCode};
 
@@ -183,7 +183,7 @@ async fn the_sign_in_page_carries_its_return_to_the_providers_action() -> Result
 #[tokio::test]
 async fn a_signed_in_page_draws_the_session_watch_and_a_sign_in_page_does_not()
 -> Result<(), Box<dyn Error>> {
-    let warning = ferrohealth_ui::widget::session::WARNING_ID;
+    let warning = ferrohealth_ui::view::session::WARNING_ID;
     let (_provider, service, cookie) = signed_in().await?;
     let (response, body) = send(&service, get_with("/sources", &cookie)?).await?;
     assert_eq!(StatusCode::OK, response.status(), "{body}");

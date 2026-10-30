@@ -8,7 +8,6 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Write;
-use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use axum::body::Body;
@@ -21,13 +20,9 @@ use ferropix_console::config::settings::Settings;
 use ferropix_console::server::{ConsoleState, router};
 use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
 
-/// The settings a console with its site bundle under `site_root` and its
-/// FerroPIX server at `server` runs on.
-pub(crate) fn settings(site_root: &Path, server: &str) -> Settings {
-    let text = format!(
-        "[server]\nlisten = \"127.0.0.1:0\"\nsite_root = {site_root:?}\n\n[pix]\nbase_url = \"{server}\"\n",
-        site_root = site_root.to_string_lossy(),
-    );
+/// The settings a console with its FerroPIX server at `server` runs on.
+pub(crate) fn settings(server: &str) -> Settings {
+    let text = format!("[server]\nlisten = \"127.0.0.1:0\"\n\n[pix]\nbase_url = \"{server}\"\n",);
     Config::from_sources(Some(&text), &BTreeMap::new())
         .expect("the configuration reads")
         .resolve()

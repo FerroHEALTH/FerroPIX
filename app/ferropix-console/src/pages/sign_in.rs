@@ -15,73 +15,67 @@
 //! identity provider configured draws the card with its action disabled and
 //! says so.
 
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::island::SessionEnded;
-use ferrohealth_ui::view::shell::{brand_mark, centred, lockup_plain};
+use ferrohealth_ui::view::session::{session_ended, sign_in_address};
+use ferrohealth_ui::view::shell::{brand_mark, lockup_plain};
 use ferrohealth_ui::view::sign_in::{Notice, Provider, SignIn, State, sign_in};
-use leptos::prelude::*;
 
-use crate::app::shell::footer;
 use crate::locale::messages::Msg;
-use crate::locale::tr;
-use crate::pages::title;
+use crate::pages::Drawn;
 use crate::paths::{MARK_DARK, MARK_LIGHT};
+use crate::visit::Visit;
 
 /// The sign-in page, in the state its route names.
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn SignInPage() -> impl IntoView {
-    let page = crate::app::page_context();
-    let configured = page.sign_in;
-    let named = crate::app::param("state");
+#[must_use]
+pub fn sign_in_page(visit: &Visit) -> Drawn {
+    let page = &visit.page;
+    let named = visit.param("state");
     // NOTE: FerroUI `docs/consoles.md`, "The session's end": the signed-out page tells every
     // other tab the session has ended, as the page a gone session is sent to does here.
-    let ended = matches!(named.as_deref(), Some("signed-out" | "expired"))
-        .then(|| view! { <SessionEnded /> });
+    let ended = if matches!(named.as_deref(), Some("signed-out" | "expired")) {
+        session_ended()
+    } else {
+        Html::empty()
+    };
     let login = page.back.as_deref().map_or_else(
         || String::from(crate::paths::LOGIN),
-        |back| ferrohealth_ui::widget::session::sign_in_address(crate::paths::LOGIN, back),
+        |back| sign_in_address(crate::paths::LOGIN, back),
     );
-    let state = if configured {
+    let state = if page.sign_in {
         match named.as_deref() {
-            Some("signed-out") => State::SignedOut(Notice::new(tr(Msg::SignedOut))),
-            Some("expired") => State::Expired(Notice::new(tr(Msg::SessionExpired))),
+            Some("signed-out") => State::SignedOut(Notice::new(visit.tr(Msg::SignedOut))),
+            Some("expired") => State::Expired(Notice::new(visit.tr(Msg::SessionExpired))),
             _ => State::Ready,
         }
     } else {
-        State::Unavailable(Notice::new(tr(Msg::SignInUnavailable)))
+        State::Unavailable(Notice::new(visit.tr(Msg::SignInUnavailable)))
     };
-    let card = sign_in(SignIn {
-        lockup: lockup_plain(
-            brand_mark(MARK_LIGHT, MARK_DARK),
-            tr(Msg::Product),
-            tr(Msg::ConsoleWord),
-        )
-        .into_any(),
-        title: Some(tr(Msg::SignInTitle)),
-        state,
-        provider: Some(Provider {
-            href: login,
-            label: tr(Msg::SignInWith),
-            busy: tr(Msg::SignInTaking),
-            glyph: Glyph::LOG_IN,
-        }),
-        basic: None,
-        line: None,
-        note: None,
-        links: vec![(
-            tr(Msg::Documentation),
-            String::from("https://ferropix.eu/docs/"),
-        )],
-        caption: Some(tr(Msg::SignInCaption)),
-    })
-    .into_any();
-    view! {
-        {title(tr(Msg::SignIn))}
-        {centred(card, footer())}
-        {ended}
-    }
+    let card = sign_in(
+        &visit.locale,
+        SignIn {
+            lockup: lockup_plain(
+                brand_mark(MARK_LIGHT, MARK_DARK),
+                visit.tr(Msg::Product),
+                visit.tr(Msg::ConsoleWord),
+            ),
+            title: Some(visit.tr(Msg::SignInTitle)),
+            state,
+            provider: Some(Provider {
+                href: login,
+                label: visit.tr(Msg::SignInWith),
+                busy: visit.tr(Msg::SignInTaking),
+                glyph: Glyph::LOG_IN,
+            }),
+            basic: None,
+            line: None,
+            note: None,
+            links: vec![(
+                visit.tr(Msg::Documentation),
+                String::from("https://ferropix.eu/docs/"),
+            )],
+            caption: Some(visit.tr(Msg::SignInCaption)),
+        },
+    );
+    Drawn::new(visit.tr(Msg::SignIn), card.then(ended))
 }

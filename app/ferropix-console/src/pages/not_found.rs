@@ -7,46 +7,41 @@
 
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::view::error_page::{ErrorPage, Status, Way, error_page};
-use leptos::prelude::*;
+use http::StatusCode;
 
 use crate::app::{DASHBOARD, SEARCH};
 use crate::locale::messages::Msg;
-use crate::locale::tr;
-use crate::pages::title;
+use crate::markup::t;
+use crate::pages::Drawn;
+use crate::visit::Visit;
 
 /// The not-found page, answered `404`.
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn NotFound() -> impl IntoView {
-    #[cfg(not(target_arch = "wasm32"))]
-    if let Some(response) = use_context::<leptos_axum::ResponseOptions>() {
-        response.set_status(http::StatusCode::NOT_FOUND);
+#[must_use]
+pub fn not_found(visit: &Visit) -> Drawn {
+    let page = error_page(
+        &visit.locale,
+        ErrorPage {
+            status: Status::NotFound,
+            title: visit.tr(Msg::NotFoundTitle),
+            body: t(visit.tr(Msg::NotFoundBody)),
+            hint: None,
+            ways: vec![
+                Way {
+                    label: visit.tr(Msg::NotFoundBack),
+                    href: String::from(DASHBOARD),
+                    glyph: Some(Glyph::ARROW_LEFT),
+                },
+                Way {
+                    label: visit.tr(Msg::NotFoundSearch),
+                    href: String::from(SEARCH),
+                    glyph: Some(Glyph::SEARCH),
+                },
+            ],
+            detail: None,
+        },
+    );
+    Drawn {
+        status: StatusCode::NOT_FOUND,
+        ..Drawn::new(visit.tr(Msg::NotFoundTitle), page)
     }
-    let page = error_page(ErrorPage {
-        status: Status::NotFound,
-        title: tr(Msg::NotFoundTitle),
-        body: tr(Msg::NotFoundBody).into_any(),
-        hint: None,
-        ways: vec![
-            Way {
-                label: tr(Msg::NotFoundBack),
-                href: String::from(DASHBOARD),
-                glyph: Some(Glyph::ARROW_LEFT),
-            },
-            Way {
-                label: tr(Msg::NotFoundSearch),
-                href: String::from(SEARCH),
-                glyph: Some(Glyph::SEARCH),
-            },
-        ],
-        detail: None,
-    });
-    view! {
-        {title(tr(Msg::NotFoundTitle))}
-        {page}
-    }
-    .into_any()
 }

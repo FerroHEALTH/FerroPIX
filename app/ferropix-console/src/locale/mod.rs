@@ -5,7 +5,7 @@
 //!
 //! Each catalog is embedded at build time and looked up in the locale the
 //! request chose, so the console's words and the library's follow one
-//! choice (`.claude/rules/leptos-ui.md`, FerroUI §13).
+//! choice (`.claude/rules/console-ui.md`, FerroUI §13).
 //!
 //! English is the one catalog that ships and the reference every lookup
 //! falls back to; a language joins as one directory with no code change.
@@ -23,7 +23,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use ferrohealth_ui::i18n::{Arg, Locale, library_catalog, locale};
+use ferrohealth_ui::i18n::{Arg, Locale, library_catalog};
 use ferrohealth_ui::theme::Preferences;
 use fluent_templates::fluent_bundle::FluentValue;
 use fluent_templates::{LanguageIdentifier, Loader};
@@ -161,21 +161,20 @@ pub fn pseudo() -> Locale {
     language.with_catalog(catalog())
 }
 
-/// The console's message `msg` in the page's locale.
+/// The console's message `msg` in `locale`.
 #[must_use]
-pub fn tr(msg: Msg) -> String {
-    tr_in(catalog(), &locale(), msg)
+pub fn tr(locale: &Locale, msg: Msg) -> String {
+    tr_in(catalog(), locale, msg)
 }
 
-/// The console's message `msg` in the page's locale, with the placeables
-/// `args` filled in.
+/// The console's message `msg` in `locale`, with the placeables `args`
+/// filled in.
 #[must_use]
-pub fn tr_with(msg: Msg, args: &[(&'static str, Arg)]) -> String {
-    locale().lookup_with(catalog(), msg.id(), args)
+pub fn tr_with(locale: &Locale, msg: Msg, args: &[(&'static str, Arg)]) -> String {
+    locale.lookup_with(catalog(), msg.id(), args)
 }
 
-/// The message `msg` of `catalog` in `locale`: for a handler, where no page
-/// tree is in reach.
+/// The message `msg` of `catalog` in `locale`.
 #[must_use]
 pub fn tr_in(catalog: &dyn Loader, locale: &Locale, msg: Msg) -> String {
     locale.lookup(catalog, msg.id())

@@ -23,10 +23,10 @@ authors = ["Ruben Talstra"]
 # each.
 [workspace.dependencies]
 async-trait = "0.1.92"
-# The operator console's HTTP service (app/ferropix-console): axum under
-# leptos_axum, with tower's middleware and tower-http's headers and
-# compression, at the versions FerroBRIDGE's and FerroUI's consoles resolve.
-# Verified against crates.io on 2026-10-23.
+# The operator console's HTTP service (app/ferropix-console): axum, with
+# tower's middleware and tower-http's compression, at the versions
+# FerroBRIDGE's and FerroUI's consoles resolve. Verified against crates.io on
+# 2026-10-23.
 axum = "0.8.9"
 tower = "0.5.3"
 tower-http = { version = "0.7.1", default-features = false }
@@ -34,22 +34,12 @@ tracing = "0.1.44"
 clap = { version = "4.6.7", features = ["derive"] }
 cookie = { version = "0.18.2", default-features = false }
 toml = { version = "1.1.6", default-features = false, features = ["std", "parse", "display", "serde"] }
-# The console's UI: Leptos 0.8 in islands mode, the FerroUI components pinned
-# exactly and moved in lockstep with every console (.claude/rules/leptos-ui.md),
-# and the console's own Fluent catalog. The browser half's glue is the
-# wasm-bindgen the site build's CLI must equal. Verified against crates.io on
-# 2026-10-23.
-leptos = { version = "0.8.22", default-features = false }
-leptos_axum = "0.8.10"
-# The task executor the server render and the server functions run on,
-# started where leptos_axum's route registration would start it.
-any_spawner = { version = "0.3.0", features = ["tokio"] }
-leptos_meta = { version = "0.8.7", default-features = false }
-leptos_router = { version = "0.8.17", default-features = false }
-ferrohealth-ui = "=0.5.5"
+# The console's UI: the FerroUI components, drawn on the server and pinned
+# exactly, moved in lockstep with every console (.claude/rules/console-ui.md),
+# and the console's own Fluent catalog. Verified against crates.io on
+# 2026-10-30.
+ferrohealth-ui = "=0.6.0"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
-wasm-bindgen = "0.2.129"
-console_error_panic_hook = "0.1.7"
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
@@ -145,12 +135,9 @@ sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "r
 # The operator console's browser journeys (tools/ferropix-testkit, #98): the
 # WebDriver client at the version FerroBRIDGE pins, and the
 # process-group kill that stops each journey's chromedriver with the Chrome
-# it started. The console's browser half marks the page hydrated through
-# web-sys, at the version wasm-bindgen already resolves. Verified against
-# crates.io on 2026-10-28.
+# it started. Verified against crates.io on 2026-10-28.
 thirtyfour = { version = "0.38.1", default-features = false, features = ["reqwest", "cdp"] }
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
-web-sys = { version = "0.3.106", default-features = false }
 
 # The reliability bar (no specification governs it: our own design), the
 # FerroHEALTH family's lint set as FerroAUTH carries it.
@@ -255,25 +242,6 @@ mem_forget = "deny"
 pointer_format = "deny"
 empty_drop = "warn"
 deref_by_slicing = "warn"
-
-# The operator console's WebAssembly bundle (app/ferropix-console), built by
-# cargo-leptos: optimized for size, since the browser downloads it (the Cargo
-# reference, profiles; no specification governs this: our own design). It
-# keeps the inherited overflow checks and drops the line tables, which
-# wasm-bindgen strips from the bundle anyway.
-[profile.wasm-release]
-inherits = "release"
-opt-level = "z"
-lto = true
-codegen-units = 1
-debug = false
-
-# The console's development bundle, cargo-leptos's `lib-profile-dev`.
-[profile.wasm-dev]
-inherits = "release"
-opt-level = 1
-lto = false
-codegen-units = 256
 
 # A clean 500 relies on catch_unwind, which only catches unwinding panics, and
 # tests ignore the panic setting, so abort would be untestable

@@ -6,7 +6,7 @@
 //! The `gate` middleware reads the document of the page a request asks for
 //! once, with the steward's own token, and hands it to the render in the
 //! page's context, so a page reads nothing while it renders
-//! (`.claude/rules/leptos-ui.md` §1). A page whose document the server
+//! (`.claude/rules/console-ui.md` §1). A page whose document the server
 //! refused or did not send draws that call's refusal in place. A posted
 //! form (a search, a trail filter, a reveal) is read the same way by its
 //! handler and drawn at the same address, so nothing a steward typed

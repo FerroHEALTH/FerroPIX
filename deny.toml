@@ -13,14 +13,7 @@
 version = 2
 yanked = "deny"
 # An exception is dated and names the event that deletes it.
-ignore = [
-  # 2026-10-23 (#119): paste is unmaintained, a compile-time proc-macro under
-  # the Leptos 0.8 family of the operator console with no runtime surface.
-  # Deleted when no Leptos crate in the lock depends on paste. Its OpenVEX
-  # statement is security/vex/rust-advisories.toml.
-  # https://rustsec.org/advisories/RUSTSEC-2024-0436
-  { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; a compile-time proc-macro under the Leptos 0.8 family of the operator console, with no runtime surface" },
-]
+ignore = []
 
 [licenses]
 version = 2

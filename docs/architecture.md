@@ -88,8 +88,9 @@ console are that open part, and they are FerroPIX's own design.
 
 The family's shape, which FerroFED fixed as its decision A55 and FerroBRIDGE
 and FerroTERM followed: a server that answers an API and holds no browser
-session, and a console that is its own binary and image, a Leptos
-application rendered on the server and hydrated in the browser, with a
+session, and a console that is its own binary and image, every page drawn
+whole on the server with FerroUI's components and FerroUI's small script
+modules on top (FerroUI 0.6, FerroHEALTH/FerroUI#510), with a
 backend-for-frontend that holds the operator's session and calls the server
 with the operator's own token. No specification governs the process model:
 our own design, after the siblings.
@@ -113,7 +114,7 @@ our own design, after the siblings.
                    ▲
                    │  /operator, with the steward's token
    ┌───────────────┴──────────────────────────────────────────┐
-   │ ferropix-console (the console): server-rendered Leptos     │
+   │ ferropix-console (the console): server-rendered FerroUI    │
    │   OIDC sign-in, session on the console's server           │
    └──────────────────────────────────────────────────────────┘
 ```
@@ -1054,8 +1055,8 @@ No specification governs packaging: our own design, after FerroFED.
 **The images.** `docker/Dockerfile` and `docker/console/Dockerfile`, each one
 stage on `gcr.io/distroless/static-debian13:nonroot` pinned by digest,
 copying the static binary the release lane stages under
-`dist/<os>_<arch>/` (and, for the console, the site bundle under
-`dist/console/site/`), compiling nothing, running as `65532:65532`, with the
+`dist/<os>_<arch>/` (for the console under `dist/console/`), compiling
+nothing, running as `65532:65532`, with the
 `HEALTHCHECK` on the binary's own `healthcheck` subcommand, the OCI labels
 (title, description, url, documentation, source, vendor, authors, the
 manufacturer, licence `BUSL-1.1`, base name). The server image exposes
@@ -1087,8 +1088,8 @@ auditable`), which attests each tarball; `build-image` calls
 signer identity before it extracts them, pushes the multi-platform index,
 and attests the index and each manifest with SLSA provenance and an SPDX
 SBOM as OCI referrers; `build-console` calls `release-console.yml`, whose
-`binary` and `site` jobs attest the console's binary and bundle and whose
-`image` job packs and attests `ferropix-console`; `finalize-release`
+`binary` job attests the console's binary and whose `image` job packs and
+attests `ferropix-console`; `finalize-release`
 publishes; `crates` publishes `ihe-iti` and `nl-generic-functions` when they
 moved; `milestone` closes the milestone. A reusable workflow runs on a VM a
 caller cannot add steps to, which is what keeps the signing identity out of
@@ -1115,8 +1116,7 @@ FerroPIX lacks these lanes, each added as its own issue (section 14):
 | `fuzz.yml` | `cargo fuzz` for a bounded time, weekly and on a pull request that touches a target's input | the server parses untrusted input on every request: the `Parameters` and `Patient` bodies, the search parameters, the MLLP frame and the v2 message; a panic is a defect, an `Err` is the parser's job |
 | `pin-freshness.yml` | reads the newest upstream release of every pin no Dependabot ecosystem watches (the FHIR packages, the IHE pages' digests, the container images, the distroless digest, Chrome for Testing) and opens one issue when one is behind | the corpora and the images are pinned by digest and nothing else watches them |
 | `contribution-licence.yml` | the licence box of the pull request body as a required check of its own, re-run on `edited`, skipped for a bot | `pr-guards.yml` re-runs the `ci.yml` job on an edited body, inside `conclusion`; a workflow of its own reports the box without waiting for the CI run |
-| `console` (in `ci.yml`) | clippy on `wasm32-unknown-unknown`, the site bundle against its byte budget | the console's browser half |
-| `journeys` (in `ci.yml`) | the console's browser journeys and the painted-contrast battery behind `FERROPIX_JOURNEYS` | section 12.5 |
+| `journeys` (in `ci.yml`) | the console's browser journeys and the painted-contrast battery behind `FERROPIX_JOURNEYS`, with FerroUI's script modules running and withheld | section 12.5 |
 
 ## 12. The operator console
 
@@ -1630,7 +1630,11 @@ masked identifier, `✓` agree, `≠` differ, `–` absent.
 ### 12.7 FerroUI component inventory and gaps
 
 Checked against `ferrohealth-ui` 0.2.1 on `main` (2026-10-21): every public
-view and widget, the stylesheet's classes, and the gallery.
+view and widget, the stylesheet's classes, and the gallery. From FerroUI
+0.6.0 every `island` and `widget` part named below lives under `view`, drawn
+on the server, with its behaviour in FerroUI's script modules; FerroUI's
+`docs/migration-0.6.md` maps each to its successor, and the console takes
+them at the pin of `docs/VERSIONS.md`.
 
 **What each screen draws with (existing components):**
 

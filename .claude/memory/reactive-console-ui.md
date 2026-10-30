@@ -1,12 +1,19 @@
 ---
 name: reactive-console-ui
-description: The consoles must be reactive with no full page reload for an interaction (owner, 2026-10-25); WebAssembly is the normal path and the no-WebAssembly page only the fallback
+description: "Superseded on 2026-10-29 by the owner's rulings on FerroUI #510: every console is drawn on the server, a navigation is one document load, an in-page change is a FerroUI module, and no console runs WebAssembly; was: no full page reload for an interaction (owner, 2026-10-25)"
 metadata:
   type: feedback
 ---
 
 <!-- SPDX-FileCopyrightText: Cadasto B.V. -->
 <!-- SPDX-License-Identifier: BUSL-1.1 -->
+
+**Superseded.** The owner's rulings of 2026-10-29 on FerroUI #510 replace
+this: FerroUI 0.6.0 draws every component on the server, a link or a form
+loads one complete document the console's server drew, an in-page change (a
+tab, a menu, a dialog, a side panel) is a FerroUI module toggling what the
+server drew, and no console runs Leptos or WebAssembly. FerroPIX moved
+under #388. The ruling below is kept as the record of what it replaced.
 
 The owner ruled on 2026-10-25 that every FerroHEALTH console stays reactive:
 a link, a form or an action never reloads the whole document. WebAssembly is

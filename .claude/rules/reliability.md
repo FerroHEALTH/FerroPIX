@@ -106,7 +106,7 @@ the Clippy book.
   and HashSet iteration order is undefined; anything that feeds generated code,
   a serialized document, or an ordered result iterates ordered structures
   (`BTreeMap`, sorted vectors). A render is a pure function of its input, so
-  the server pass and hydration draw the same markup.
+  a page drawn twice from one request's data draws the same markup.
 - **No debug or print output from libraries** (`dbg_macro`, `print_stdout`,
   `print_stderr` denied): libraries speak `tracing`; only a binary or a tool
   crate writes to stdio (crate-root `#![allow]`/`#![expect]` relaxations there,

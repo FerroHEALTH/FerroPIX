@@ -96,7 +96,8 @@ impl Config {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    /// `[server]`: where the console listens and where its site bundle is.
+    /// `[server]`: where the console listens and the language a page falls
+    /// back to.
     pub server: Server,
     /// `[pix]`: the FerroPIX server the console is a client of.
     pub pix: Pix,

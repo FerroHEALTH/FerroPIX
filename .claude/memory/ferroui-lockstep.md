@@ -21,10 +21,13 @@ and experience in the family.
 
 **How to apply:**
 
-- It is server rendered in Leptos islands mode like the other consoles and,
-  like every console, reactive: a link, a form or an action never reloads
-  the whole document, with the no-WebAssembly page only the fallback
-  ([[reactive-console-ui]], FerroUI #410). It takes every component from FerroUI, and draws in the library's FerroPIX brand theme
+- From FerroUI 0.6.0 it is drawn on the server like every console: each
+  page one whole document an axum handler draws with FerroUI's Askama
+  components, FerroUI's small script modules adding behaviour on top, no
+  Leptos and no WebAssembly, every page complete with the modules refused
+  (owner rulings of 2026-10-29 on FerroUI #510; moved under #388; this
+  supersedes [[reactive-console-ui]]). It takes every component from
+  FerroUI, and draws in the library's FerroPIX brand theme
   (Plum & Iron, `Brand::Pix`, filed on FerroUI), never by forking a
   component or keeping a theme of its own.
 - A component or a pattern FerroUI lacks is filed on FerroUI and built

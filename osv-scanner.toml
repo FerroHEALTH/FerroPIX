@@ -18,9 +18,3 @@
 [[IgnoredVulns]]
 id = "GHSA-qwgh-2vcv-g2f7"
 reason = "block-buffer 0.10.4 keeps its cursor in a separate pos field, so a panic in compress cannot corrupt it; the fix exists only on the 0.12 line, which digest 0.10 cannot take"
-
-# 2026-10-27 (#361): paste is unmaintained, with no fix to move to; judged in
-# deny.toml and its OpenVEX statement in security/vex/rust-advisories.toml.
-[[IgnoredVulns]]
-id = "RUSTSEC-2024-0436"
-reason = "paste is unmaintained; a compile-time proc-macro under the Leptos 0.8 family of the operator console, with no runtime surface (deny.toml, security/vex/rust-advisories.toml)"

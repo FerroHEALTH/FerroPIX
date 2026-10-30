@@ -77,7 +77,7 @@ placeholder tree). The
   against `release-build.yml`, pushes `ghcr.io/ferrohealth/ferropix` for
   both platforms by digest and attests the index and both manifests as OCI
   referrers; `release-console.yml` builds and attests the console's musl
-  binary and site bundle, verifies both and pushes and attests
+  binary, verifies it and pushes and attests
   `ghcr.io/ferrohealth/ferropix-console` the same way; `release-crate.yml`
   packages, attests and attaches each `.crate`. Its `vulnerability-record` job scans the image and the tarballs
   at every severity and refuses the release while a finding lacks an

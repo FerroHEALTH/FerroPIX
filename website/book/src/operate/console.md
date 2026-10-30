@@ -18,9 +18,11 @@ the console, the page says so in place, with the title and the detail of
 the server's [problem](problems.md), and one refused part never blanks a
 page.
 
-The browser draws every page after the first itself, so a link, a search, a
-filter or a reveal keeps the page you are on and loads no new document; with
-no WebAssembly each is a plain link or form post that draws the page again.
+The console's server draws every page whole, so a link, a search, a filter
+or a reveal loads one complete page the server drew with what it read. Small
+script modules of FerroUI add the keyboard, the side panels and the session
+warning on top; every page works without them, each action being a plain
+link or form post.
 
 ## Searching from the top bar
 
@@ -47,8 +49,8 @@ you do it.
 | Page | What it shows |
 |---|---|
 | Dashboard, `/` | The open queue with the pairs waiting more than seven days, the share of records linked automatically over 24 hours, the versions fed today and the subscriptions in error; the queue's depth and the feeds per hour by channel as charts, each with its figures table; the HTTP and MLLP listeners and the feed sender; the oldest pairs in the queue. |
-| Review queue, `/queue` | The pairs the scorer found worth a look, the grade first, then the score, then the longest wait: both leading names, their birth dates and domains, the score with its bar, the grade and the time queued. `j` and `k` move the focused row and Enter opens the pair; `o` or `d` opens it at a glance in a side panel, with Open to decide and Defer (a date and your reason). The filters (grade, domain system, days waiting, the deferred pairs) and the paging are posted, so none of them reaches an address. |
-| Compare and decide, `/queue/{candidate}` | The two records side by side, the rows that differ first; the score breakdown with each field's weight, the total and the thresholds on one scale; the blocking key and any hard conflict; each record's patient with its identifiers, masked. The docked bar decides with your reason: Link (`l`), Not a match (`n`) or Defer (`d`) with the date the pair comes back; `r` puts the focus in the reason, and `[` and `]` lead to the neighbouring pairs. A link that merges two patients asks first in a dialog that names the effect. The decision carries the versions the page showed, so a pair someone decided first comes back as stale, with the next pair and a reload as the ways on, and nothing is sent without a reason. |
+| Review queue, `/queue` | The pairs the scorer found worth a look, the grade first, then the score, then the longest wait: both leading names, their birth dates and domains, the score with its bar, the grade and the time queued. `j` and `k` move the focused row and Enter opens the pair; At a glance opens it in a side panel, with Open to decide and Defer (a date and your reason). The filters (grade, domain system, days waiting, the deferred pairs) and the paging are posted, so none of them reaches an address. |
+| Compare and decide, `/queue/{candidate}` | The two records side by side, the rows that differ first; the score breakdown with each field's weight, the total and the thresholds on one scale; the blocking key and any hard conflict; each record's patient with its identifiers, masked. The docked bar decides with your reason: Link, Not a match or Defer with the date the pair comes back, and Previous and Next lead to the neighbouring pairs. A link that merges two patients asks first in a dialog that names the effect. The decision carries the versions the page showed, so a pair someone decided first comes back as stale, with the next pair and a reload as the ways on, and nothing is sent without a reason. |
 | Search, `/search` | By identifier (the domain chosen from the server's domains, the value masked as you type) and by demographics, each posted, so nothing you type reaches an address. The results open each patient; a demographics search adds the grade and score. The top bar's field reads what you typed: a date or a name searches by demographics with the field filled, anything else is an identifier searched in every domain. |
 | Patient, `/patients/{person}` | The leading demographics, then four tabs: the identifiers per domain, masked, each with its reveal; the source records side by side, each field marked against the leading demographics; the history on a timeline; the pseudonyms, masked, with a link to Resolve a pseudonym. A reveal asks your reason, is recorded by the server as a privacy disclosure, and shows the value for the seconds Your preferences set. |
 | Merge, `/patients/{person}/merge` | Merge into… on the patient's page: name the other patient by its id, then the preview shows both patients with the older surviving (one press swaps them), the identifiers that move, the pseudonyms that then resolve to the survivor, the subscriptions told and the candidates closed. Merge… asks in a dialog that names how many identifiers move and takes your reason; nothing is posted before it confirms. A patient that changed after the preview comes back as stale, with the preview read again. |
@@ -162,15 +164,13 @@ The page an unknown address draws. [Dark theme](img/console/not-found-dark.png).
 
 ## Build and run it
 
-The console is a Leptos app the server renders whole; the browser loads a
-small WebAssembly bundle for the interactive parts, and every page works
-without it. Build the site bundle and the binary with
-[cargo-leptos](https://github.com/leptos-rs/cargo-leptos), then serve:
+The console is one binary: its server draws every page and serves FerroUI's
+stylesheet and script modules itself, so it needs no build step beside
+cargo. Build it and serve:
 
 ```sh
-cd app/ferropix-console
-cargo leptos build --release --split
-ferropix-console serve --config console.toml
+cargo build --release -p ferropix-console
+target/release/ferropix-console serve --config console.toml
 ```
 
 | Command | What it does |
@@ -182,7 +182,7 @@ ferropix-console serve --config console.toml
 ## The image
 
 `ghcr.io/ferrohealth/ferropix-console`, for `linux/amd64` and
-`linux/arm64`, carries the static binary and the site bundle on
+`linux/arm64`, carries the static binary on
 `gcr.io/distroless/static-debian13:nonroot`, pinned by digest; nothing is
 compiled inside it.
 
@@ -191,7 +191,6 @@ compiled inside it.
 | Entrypoint | `/usr/local/bin/ferropix-console`, default job `serve` |
 | User | `65532:65532` |
 | Port | `3000/tcp` (`FERROPIX_CONSOLE__SERVER__LISTEN=0.0.0.0:3000`) |
-| Site bundle | `/site` (`FERROPIX_CONSOLE__SERVER__SITE_ROOT`), root-owned |
 | Health | `HEALTHCHECK` runs `ferropix-console healthcheck`, which asks `GET /health/readiness` over loopback |
 
 The console keeps its sessions in memory and writes no file, so run it with
@@ -232,7 +231,6 @@ refusal names the key, never its value. A server variable such as
 ```toml
 [server]
 listen = "0.0.0.0:3000"
-site_root = "/site"
 locale = "en"
 
 [pix]
@@ -251,7 +249,7 @@ redirect_uri = "https://console.example.org/auth/callback"
 
 | Section | What it sets |
 |---|---|
-| `[server]` | Where the console listens, where its site bundle is, and the language a page falls back to. |
+| `[server]` | Where the console listens and the language a page falls back to. |
 | `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[operator] admin_scope` names (default `__ferropix.admin`). |
 | `[session]` | Whether the cookies are `Secure`, and the sign-in and session timeouts and bounds. `secure_cookie = false` is refused unless the console is plain HTTP on loopback: its `oidc.redirect_uri`, or its `server.listen` address when it signs in nowhere. |
 | `[oidc]` | The OpenID Provider stewards sign in at. Without it the console offers no sign-in. |
@@ -282,21 +280,22 @@ timeout, every signed-in page shows a warning with the time left,
 alive, at most once a minute; the page's own checks never do. When the
 session ends, or you sign out in another tab, every open tab of the console
 loads the sign-in page that says your session ended, and signing in again
-brings you back to the page you were on. Without the page's WebAssembly
-there is no warning: the next page you open goes to the sign-in page.
+brings you back to the page you were on. Without the page's scripts there
+is no warning: the next page you open goes to the sign-in page.
 
 ## What the console never does
 
 - It puts no identifier other than the person id FerroPIX minted in an
   address: a search posts what was typed, and the identifier field is masked
   as it is typed. The eye inside the field shows the identifier only while
-  you hold it (pointer, touch, Space or Enter); without the page's
-  WebAssembly the eye is disabled and the field stays masked.
+  you hold it (pointer, touch, Space or Enter); without the page's scripts
+  the eye is disabled and the field stays masked.
 - It keeps nothing in browser storage, and every page is `Cache-Control:
   no-store`.
-- It runs no script but its own WebAssembly bundle: every response carries a
-  Content-Security-Policy whose scripts run by a nonce minted for that
-  response.
+- It runs no script but FerroUI's modules from its own address: every
+  response carries a Content-Security-Policy that admits scripts and
+  stylesheets from the console's own origin alone, with no inline script or
+  style.
 
 ## Your preferences
 

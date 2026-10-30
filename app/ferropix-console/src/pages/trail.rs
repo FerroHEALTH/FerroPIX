@@ -34,6 +34,12 @@ use crate::visit::Visit;
 /// The route the export posts to.
 pub const EXPORT: &str = "/audit/export";
 
+/// The input type of a text filter.
+const TEXT: &str = "text";
+
+/// The input type of a date filter.
+const DATE: &str = "date";
+
 /// The tone of an action's kind.
 fn tone(kind: &str) -> Tone {
     match kind {
@@ -62,17 +68,17 @@ fn filter_field(
 fn filters(visit: &Visit, filter: &ActionFilter) -> Html {
     h(format!(
         "<form method=\"post\" action=\"{AUDIT}\" class=\"fui-form\"><div class=\"fui-form-grid\">{}{}{}{}{}</div><div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button><button type=\"submit\" formaction=\"{EXPORT}\" class=\"{}\">{}</button></div></form>",
-        filter_field(visit, "actor", Msg::ColActor, filter.actor.as_ref(), "text"),
-        filter_field(visit, "kind", Msg::ColKind, filter.kind.as_ref(), "text"),
+        filter_field(visit, "actor", Msg::ColActor, filter.actor.as_ref(), TEXT),
+        filter_field(visit, "kind", Msg::ColKind, filter.kind.as_ref(), TEXT),
         filter_field(
             visit,
             "person",
             Msg::ColPerson,
             filter.person.as_ref(),
-            "text"
+            TEXT
         ),
-        filter_field(visit, "from", Msg::FilterFrom, filter.from.as_ref(), "date"),
-        filter_field(visit, "to", Msg::FilterTo, filter.to.as_ref(), "date"),
+        filter_field(visit, "from", Msg::FilterFrom, filter.from.as_ref(), DATE),
+        filter_field(visit, "to", Msg::FilterTo, filter.to.as_ref(), DATE),
         Variant::Primary.class(),
         label(Some(Glyph::LIST_FILTER), visit.tr(Msg::ApplyFilters)),
         Variant::Secondary.class(),

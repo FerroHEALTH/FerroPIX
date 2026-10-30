@@ -44,9 +44,11 @@ The rules that follow from it:
 - **Nothing is hand-written that a shared crate or another product
   provides.** When the shared crate lacks something, it is added in the
   owning repository and released; a local copy is never the workaround.
-- **Every console is reactive.** A link, a form or an action never reloads
-  the whole document; WebAssembly is the normal path and the
-  no-WebAssembly page only the fallback (FerroUI #410).
+- **Every console is drawn on the server.** Each page is one document the
+  console's server draws with FerroUI's components, FerroUI's script
+  modules add behaviour on top, and every page works with them refused; no
+  console runs Leptos or WebAssembly (owner rulings of 2026-10-29 on
+  FerroUI #510, superseding FerroUI #410).
 
 FerroSYS is shared crates like FerroAUDIT and FerroAUTH, never a control plane
 or a central service. Out of scope until the owner says otherwise: FerroFORMS

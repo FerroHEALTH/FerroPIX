@@ -43,9 +43,6 @@ pin() {
 # The rows whose pin each file their "Repeated in" cell names must carry
 # word for word: the build and test tools a workflow or a script installs.
 readonly REPEATED_ROWS=(
-  "cargo-leptos"
-  "wasm-bindgen"
-  "Binaryen"
   "Nightly toolchain (fuzz lane)"
   "cargo-fuzz"
   "thirtyfour"
@@ -133,10 +130,10 @@ self_test() {
   case_dir
   mkdir -p "$d/scripts"
   # shellcheck disable=SC2016 # the backticks are Markdown in the fixture
-  printf '| Binaryen | version_133 | `scripts/tools.sh` |\n' >> "$d/docs/VERSIONS.md"
-  printf '# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\nversion="version_133"\n' > "$d/scripts/tools.sh"
+  printf '| cargo-fuzz | 0.13.1 | `scripts/tools.sh` |\n' >> "$d/docs/VERSIONS.md"
+  printf '# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\nversion="0.13.1"\n' > "$d/scripts/tools.sh"
   expect 0 "a tool pin its script repeats"
-  sed -i.bak 's/version_133/version_132/' "$d/scripts/tools.sh" && rm "$d/scripts/tools.sh.bak"
+  sed -i.bak 's/0\.13\.1/0.13.0/' "$d/scripts/tools.sh" && rm "$d/scripts/tools.sh.bak"
   expect 1 "a tool pin its script does not repeat"
   case_dir
   printf '[workspace.package]\nversion = "1.2.3"\n' >> "$d/Cargo.toml"

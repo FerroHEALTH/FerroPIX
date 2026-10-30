@@ -20,7 +20,7 @@ then by score, then the longest wait. Each row shows both leading names,
 their birth dates and domains, the score and the grade.
 
 - `j` and `k` move the focused row, and Enter opens the pair.
-- `o` opens the pair at a glance in a side panel, with Open to decide and
+- At a glance opens the pair in a side panel, with Open to decide and
   Defer.
 - The filters narrow the queue by grade, domain system, days waiting, or
   to the pairs deferred until a later day.
@@ -34,15 +34,15 @@ the records are in, with their identifiers masked.
 
 You decide in the bar at the foot of the page, always with a reason:
 
-- **Link (`l`):** the records are one patient. When they sit in two
+- **Link:** the records are one patient. When they sit in two
   patients, linking merges the second into the first, and the console asks
   first in a dialog that names what moves.
-- **Not a match (`n`):** the records are two patients. The pair stays out
+- **Not a match:** the records are two patients. The pair stays out
   of the queue until a record's demographics change.
-- **Defer (`d`):** decide later. Give the day the pair comes back.
+- **Defer:** decide later. Give the day the pair comes back.
 
-`r` puts the focus in the reason, and `[` and `]` lead to the neighbouring
-pairs. After a decision the next pair opens. If another steward decided the
+Previous and Next lead to the neighbouring pairs. After a decision the next
+pair opens. If another steward decided the
 pair first, or a source changed a record after you opened it, the server
 refuses with `409` and nothing is written: the bar says so and offers the
 next pair or a reload.

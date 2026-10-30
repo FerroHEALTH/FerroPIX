@@ -1,62 +1,44 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The page tree, which the server draws and the browser hydrates whole and
-//! then draws every page after the first, and the shell around it.
+//! The console's pages, each drawn whole on the server as one document,
+//! and the shell around them.
 //!
-//! The document links the library's stylesheet and its FerroPIX theme, which
-//! the server serves from the library's constants, and carries the
+//! The document links FerroUI's stylesheet, its FerroPIX theme and its one
+//! loader script, served under FerroUI's versioned path, and carries the
 //! steward's preferences on `<html>` (`data-theme`, `data-density`,
 //! `data-motion`, `data-hints`) and the locale as `lang`, so a page arrives
-//! in its theme before any script runs. Every page is drawn from its
-//! [`PageContext`]: the server reads it for the first page and the browser
-//! takes it serialized with the page; after a navigation or a post drawn in
-//! the page the browser asks the console's server for the next one
-//! ([`page_now`], [`post_now`]), and the old page stays until it comes, so
-//! a page is never drawn from another page's document. The shell is
-//! FerroUI's, drawn once and following the router (FerroUI
-//! `docs/consoles.md`, "How a console builds"): the top bar with the patient
-//! search, the server's status pill and the steward's menu, the navigation
-//! of `docs/architecture.md` §12.2 as the design groups it, and the footer.
-//! No specification governs the console's pages: our own design.
-#![cfg_attr(
-    target_arch = "wasm32",
-    allow(
-        clippy::unused_async_trait_impl,
-        reason = "the server function macro writes the browser half's call as an async trait method; only that target has it"
-    )
-)]
+//! in its theme before any script runs. Every page is drawn from the
+//! [`Visit`] the server read for its request, and a link or a form loads
+//! the next document (FerroUI `docs/consoles.md`, "How a console builds").
+//! The shell is FerroUI's, drawn by every page: the top bar with the
+//! patient search, the server's status pill and the steward's menu, the
+//! navigation of `docs/architecture.md` §12.2 as the design groups it, and
+//! the footer. No specification governs the console's pages: our own
+//! design.
 
-use ferrohealth_ui::i18n::{Arg, Locale, provide_locale};
-use ferrohealth_ui::island::{FormNavigator, PageAnnouncer, SessionWatch, ShortcutLegend};
+use ferrohealth_ui::html::Html;
+use ferrohealth_ui::i18n::{Arg, Phrase};
+use ferrohealth_ui::serve::Assets;
+use ferrohealth_ui::style::Brand;
 use ferrohealth_ui::theme::Preferences;
 use ferrohealth_ui::view::kbd::{Shortcut, ShortcutGroup};
+use ferrohealth_ui::view::menu::{ThemeChoice, UserMenu, user_menu};
+use ferrohealth_ui::view::nav::{Rail, Sidebar, sidebar};
 use ferrohealth_ui::view::search::{SearchBox, search_box};
-use ferrohealth_ui::view::shell::{Shell, TopBar, shell, topbar};
-use ferrohealth_ui::widget::menu::{ThemeChoice, UserMenu, user_menu};
-use ferrohealth_ui::widget::nav::{Rail, Sidebar, sidebar};
-use ferrohealth_ui::widget::session::Watch;
-use ferrohealth_ui::widget::shortcuts::LegendWords;
-use leptos::prelude::*;
-use leptos_meta::{Title, provide_meta_context};
-use leptos_router::Lazy;
-use leptos_router::components::{Route, Router, Routes};
-use leptos_router::hooks::use_location;
-use leptos_router::path;
+use ferrohealth_ui::view::session::{Watch, session_watch};
+use ferrohealth_ui::view::shell::{Document, Shell, TopBar, centred, document, shell, topbar};
+use ferrohealth_ui::view::shortcuts::shortcut_legend;
+use ferrohealth_ui::view::toast::toast_region;
+use http::StatusCode;
 
 use crate::locale::messages::Msg;
-use crate::locale::{tr, tr_with};
+use crate::markup::{h, t};
 use crate::model::PageContext;
-use follow::follow;
-use in_page::{Posted, listen_posts};
-use keys::listen_keys;
-use routes::{Aside, Patients, Reads, Registry, Work, content, missing};
+use crate::pages::Drawn;
+use crate::visit::Visit;
 use shell::{brand_lockup, footer, navigation, pill};
 
-mod follow;
-pub mod in_page;
-pub mod keys;
-mod routes;
 pub mod shell;
 
 /// The console's version.
@@ -111,204 +93,151 @@ const SIDEBAR_ID: &str = "sidebar";
 /// The id of the top bar's search field.
 const SEARCH_ID: &str = "pix-search";
 
-/// The page context the page is drawn from ([`PageContext`]): the one the
-/// router's current read brought, inside the page tree.
-#[derive(Debug, Clone)]
-pub struct Shown(pub PageContext);
-
-/// The route parameters of the page being drawn, by name.
-#[derive(Debug, Clone, Default)]
-pub struct Params(pub Vec<(String, String)>);
-
-/// The latest page context, which the shell follows.
-#[derive(Debug, Clone, Copy)]
-pub struct Latest(pub RwSignal<PageContext>);
-
-/// The page context the server read of the request; the browser's own
-/// half has none outside the page tree.
-fn requested() -> Option<PageContext> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use_context::<http::request::Parts>()
-            .and_then(|parts| parts.extensions.get::<PageContext>().cloned())
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        None
-    }
+/// The pages, by the address they answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// `/sign-in` and `/sign-in/:state`.
+    SignIn,
+    /// `/`.
+    Dashboard,
+    /// `/queue`.
+    Queue,
+    /// `/queue/:candidate`.
+    Pair,
+    /// `/search` and `/search/demographics`.
+    Search,
+    /// `/patients/:person`.
+    Patient,
+    /// `/patients/:person/merge`.
+    Merge,
+    /// `/patients/:person/unmerge`.
+    Unmerge,
+    /// `/sources`.
+    Sources,
+    /// `/sources/:source`.
+    Source,
+    /// `/domains`.
+    Domains,
+    /// `/domains/:domain`.
+    Domain,
+    /// `/pseudonym-domains`.
+    PseudonymDomains,
+    /// `/configuration`.
+    Configuration,
+    /// `/audit`.
+    Audit,
+    /// `/about`.
+    About,
+    /// `/preferences` and `/preferences/:section`.
+    Preferences,
 }
 
-/// The context of the page being drawn.
+/// The page the address `path` names, with its parameters by name; `None`
+/// for an address no page answers.
 #[must_use]
-pub fn page_context() -> PageContext {
-    use_context::<Shown>()
-        .map(|shown| shown.0)
-        .or_else(|| use_context::<Latest>().map(|latest| latest.0.get_untracked()))
-        .or_else(requested)
-        .unwrap_or_else(|| PageContext::signed_out(String::new()))
-}
-
-/// The path of the page being drawn, without its query.
-#[must_use]
-pub fn current_path() -> String {
-    let path = page_context().path;
-    path.split(['?', '#']).next().unwrap_or_default().to_owned()
-}
-
-/// The query of the page being drawn, without its `?`, empty for none.
-#[must_use]
-pub fn current_query() -> String {
-    let path = page_context().path;
-    path.split_once('?')
-        .map(|(_, query)| query.split('#').next().unwrap_or_default().to_owned())
-        .unwrap_or_default()
-}
-
-/// The route parameter `name` of the page being drawn.
-#[must_use]
-pub fn param(name: &str) -> Option<String> {
-    use_context::<Params>().and_then(|params| {
-        params
-            .0
-            .into_iter()
-            .find(|(each, _)| each == name)
-            .map(|(_, value)| value)
+pub fn route(path: &str) -> Option<(Route, Vec<(String, String)>)> {
+    let path = path.split(['?', '#']).next().unwrap_or_default();
+    let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
+    let one = |name: &str, value: &str| vec![(String::from(name), String::from(value))];
+    Some(match segments.as_slice() {
+        ["sign-in"] => (Route::SignIn, Vec::new()),
+        ["sign-in", state] => (Route::SignIn, one("state", state)),
+        [""] => (Route::Dashboard, Vec::new()),
+        ["queue"] => (Route::Queue, Vec::new()),
+        ["queue", candidate] => (Route::Pair, one("candidate", candidate)),
+        ["search"] | ["search", "demographics"] => (Route::Search, Vec::new()),
+        ["patients", person] => (Route::Patient, one("person", person)),
+        ["patients", person, "merge"] => (Route::Merge, one("person", person)),
+        ["patients", person, "unmerge"] => (Route::Unmerge, one("person", person)),
+        ["sources"] => (Route::Sources, Vec::new()),
+        ["sources", source] => (Route::Source, one("source", source)),
+        ["domains"] => (Route::Domains, Vec::new()),
+        ["domains", domain] => (Route::Domain, one("domain", domain)),
+        ["pseudonym-domains"] => (Route::PseudonymDomains, Vec::new()),
+        ["configuration"] => (Route::Configuration, Vec::new()),
+        ["audit"] => (Route::Audit, Vec::new()),
+        ["about"] => (Route::About, Vec::new()),
+        ["preferences"] => (Route::Preferences, Vec::new()),
+        ["preferences", section] => (Route::Preferences, one("section", section)),
+        _ => return None,
     })
 }
 
-/// The steward's preferences the page's context carries.
+/// The page of `route` drawn from `visit`.
+fn drawn(route: Route, visit: &Visit) -> Drawn {
+    use crate::pages::{about, preferences, screens, search, sign_in};
+    match route {
+        Route::SignIn => sign_in::sign_in_page(visit),
+        Route::Dashboard => screens::dashboard(visit),
+        Route::Queue => screens::queue(visit),
+        Route::Pair => screens::pair(visit),
+        Route::Search => search::search_page(visit),
+        Route::Patient => screens::patient(visit),
+        Route::Merge => screens::merge(visit),
+        Route::Unmerge => screens::unmerge(visit),
+        Route::Sources => screens::sources(visit),
+        Route::Source => screens::source(visit),
+        Route::Domains => screens::domains(visit),
+        Route::Domain => screens::domain(visit),
+        Route::PseudonymDomains => screens::pseudonym_domains(visit),
+        Route::Configuration => screens::configuration(visit),
+        Route::Audit => screens::audit(visit),
+        Route::About => about::about_page(visit),
+        Route::Preferences => preferences::preferences_page(visit),
+    }
+}
+
+/// The whole document of the page `page` is the context of, with the
+/// status it is answered with.
 #[must_use]
-pub fn preferences() -> Preferences {
-    let page = page_context();
-    Preferences::read(&page.preferences, &page.prefix)
-}
-
-/// The locale of the page `page`, English for a tag no catalog names.
-fn locale_of(page: &PageContext) -> Locale {
-    if page.locale == crate::locale::PSEUDO_TAG {
-        return crate::locale::pseudo();
-    }
-    crate::locale::choices()
-        .into_iter()
-        .find(|locale| locale.tag() == page.locale)
-        .unwrap_or_else(Locale::english)
-}
-
-/// The whole HTML document the server renders around [`App`], in the
-/// preferences the request's cookies keep and the locale they choose.
-#[cfg(not(target_arch = "wasm32"))]
-#[must_use]
-pub fn document(options: LeptosOptions) -> impl IntoView {
-    let page = page_context();
-    let chosen = Preferences::read(&page.preferences, &page.prefix);
-    let lang = locale_of(&page).tag();
-    view! {
-        <!DOCTYPE html>
-        <html
-            lang=lang
-            data-theme=chosen.theme.key()
-            data-density=chosen.density.key()
-            data-motion=chosen.motion.key()
-            data-hints=chosen.hints.key()
-        >
-            <head>
-                <meta charset="utf-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <link rel="icon" type="image/svg+xml" href=crate::paths::FAVICON />
-                <link rel="stylesheet" href=crate::paths::STYLESHEET />
-                <link rel="stylesheet" href=crate::paths::THEME />
-                <HydrationScripts options />
-                <leptos_meta::MetaTags />
-            </head>
-            <body>
-                <App />
-            </body>
-        </html>
-    }
-}
-
-/// The root's one title format: a page's words, then the console's name.
-fn title_format(product: String) -> impl Fn(String) -> String + Send + Sync + 'static {
-    move |page| {
-        if page.is_empty() {
-            product.clone()
-        } else {
-            format!("{page} · {product}")
-        }
-    }
-}
-
-/// The page context of the page at `path`, its path and its query, as the
-/// request that asks reads it: what the browser draws after a navigation.
-///
-/// # Errors
-///
-/// When the console's server cannot be reached or the session store read.
-#[server(endpoint = "page")]
-pub async fn page_now(
-    /// The path of the page the browser navigated to.
-    path: String,
-) -> Result<PageContext, ServerFnError> {
-    if let Some(page) = requested().filter(|page| page.path == path) {
-        return Ok(page);
-    }
-    let state = use_context::<crate::server::ConsoleState>()
-        .ok_or_else(|| ServerFnError::new("the console's state is missing"))?;
-    let parts = use_context::<http::request::Parts>()
-        .ok_or_else(|| ServerFnError::new("the request is missing"))?;
-    crate::server::context::page_for(&state, &parts.headers, &path)
-        .await
-        .map_err(|error| ServerFnError::new(error.to_string()))
-}
-
-/// The page context of the page the form `fields`, posted to `path`, draws:
-/// what a search, a trail filter, a reveal or a domain's form draws in the
-/// page once it has hydrated, as the plain post draws it with none.
-///
-/// # Errors
-///
-/// When the console's server cannot be reached or no form posts to `path`.
-#[server(endpoint = "post", input = server_fn::codec::Json)]
-pub async fn post_now(
-    /// The path the form posts to.
-    path: String,
-    /// The form's fields, its submitter's last.
-    fields: Vec<(String, String)>,
-) -> Result<PageContext, ServerFnError> {
-    let state = use_context::<crate::server::ConsoleState>()
-        .ok_or_else(|| ServerFnError::new("the console's state is missing"))?;
-    let parts = use_context::<http::request::Parts>()
-        .ok_or_else(|| ServerFnError::new("the request is missing"))?;
-    match crate::posts::answer(&state, &parts.headers, &path, &fields).await {
-        crate::posts::Answer::Drawn {
-            path,
-            token,
-            steward,
-            document,
-        } => Ok(crate::posts::posted_context(
-            &state,
-            &parts.headers,
-            &path,
-            &token,
-            steward,
-            *document,
+pub fn page(page: PageContext) -> (StatusCode, Html) {
+    let found = route(&page.path);
+    let signed_in = !crate::paths::is_sign_in(&page.path);
+    let mut visit = Visit::new(page);
+    let drawn = if let Some((route, params)) = found {
+        visit = visit.with_params(params);
+        drawn(route, &visit)
+    } else {
+        crate::pages::not_found::not_found(&visit)
+    };
+    let status = drawn.status;
+    let title = if drawn.title.is_empty() {
+        visit.tr(Msg::ConsoleName)
+    } else {
+        format!("{} · {}", drawn.title, visit.tr(Msg::ConsoleName))
+    };
+    let body = if signed_in {
+        framed(&visit, drawn)
+    } else {
+        centred(
+            &visit.locale,
+            drawn.body,
+            toast_region(&visit.locale, Vec::new()),
+            footer(&visit.locale),
         )
-        .await),
-        crate::posts::Answer::Back(path) => Ok(PageContext {
-            path: path.clone(),
-            redirect: Some(path),
-            ..PageContext::signed_out(state.sessions().preference_prefix())
-        }),
-        crate::posts::Answer::Unknown => Err(ServerFnError::new("no form posts to this address")),
-    }
+    };
+    let html = document(Document {
+        locale: visit.locale.clone(),
+        preferences: visit.preferences(),
+        title,
+        assets: Assets::of(Brand::Pix),
+        nonce: None,
+        head: h(format!(
+            "<link rel=\"icon\" type=\"image/svg+xml\" href=\"{}\">",
+            t(crate::paths::FAVICON)
+        )),
+        body,
+    });
+    (status, html)
 }
 
 /// The console's keyboard shortcuts, which the legend lists (FerroPIX
 /// design D21).
-fn shortcut_groups() -> Vec<ShortcutGroup> {
+// TODO(#390): list `o | d` for the focused row's side panel once FerroUI binds them.
+fn shortcut_groups(visit: &Visit) -> Vec<ShortcutGroup> {
     let shortcut = |keys: &str, does: Msg| Shortcut {
         keys: String::from(keys),
-        does: tr(does),
+        does: visit.tr(does),
     };
     let tabs = crate::pages::patient::TABS
         .iter()
@@ -317,208 +246,76 @@ fn shortcut_groups() -> Vec<ShortcutGroup> {
         .collect();
     vec![
         ShortcutGroup {
-            title: tr(Msg::ShortcutsEverywhere),
+            title: visit.tr(Msg::ShortcutsEverywhere),
             shortcuts: vec![
                 shortcut("/", Msg::ShortcutSearch),
                 shortcut("?", Msg::ShortcutLegend),
             ],
         },
         ShortcutGroup {
-            title: tr(Msg::ShortcutsLists),
+            title: visit.tr(Msg::ShortcutsLists),
             shortcuts: vec![
                 shortcut("j | down", Msg::ShortcutNext),
                 shortcut("k | up", Msg::ShortcutPrevious),
                 shortcut("enter", Msg::ShortcutOpen),
-                shortcut("o | d", Msg::ShortcutGlance),
             ],
         },
         ShortcutGroup {
-            title: tr(Msg::ShortcutsPatient),
+            title: visit.tr(Msg::ShortcutsPatient),
             shortcuts: tabs,
         },
     ]
 }
 
-/// The root component: the router, the page tree, and the title.
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn App() -> impl IntoView {
-    provide_meta_context();
-    // NOTE: the Leptos book, `ssr/22_life_cycle`: a value the server decides reaches the
-    // hydrating page serialized, so both halves draw the same page.
-    let initial =
-        SharedValue::new(|| requested().unwrap_or_else(|| PageContext::signed_out(String::new())));
-    let latest = RwSignal::new((*initial).clone());
-    provide_context(Latest(latest));
-    provide_context(Posted(RwSignal::new(None)));
-    provide_locale(locale_of(&initial));
-    view! {
-        <Title formatter=title_format(tr(Msg::ConsoleName)) text=String::new() />
-        <Router>
-            <FormNavigator />
-            <PageAnnouncer />
-            <Root />
-        </Router>
-    }
-}
-
-/// The page tree inside the router: the shell, drawn once and following
-/// the router, around the page the current read draws.
-#[component]
-fn Root() -> impl IntoView {
-    ferrohealth_ui::widget::nav::follow_path();
-    listen_posts();
-    listen_keys();
-    let location = use_location();
-    let latest = use_context::<Latest>();
-    let posted = use_context::<Posted>();
-    let key = move || {
-        (
-            location.pathname.get(),
-            location.search.get(),
-            ferrohealth_ui::widget::submit::posts().get(),
-        )
-    };
-    let read = Resource::new(key, |(path, query, _)| {
-        let path = if query.is_empty() {
-            path
-        } else {
-            format!("{path}?{query}")
-        };
-        page_now(path)
-    });
-    // NOTE: no specification governs this: our own design; a post's answer is shown at its
-    // own address until the steward goes to another one.
-    Effect::watch(
-        move || location.pathname.get(),
-        move |now, _, _| {
-            if let Some(Posted(posted)) = posted
-                && posted
-                    .get_untracked()
-                    .is_some_and(|page| page.path.split('?').next() != Some(now.as_str()))
-            {
-                drop(posted.try_set(None));
-            }
-        },
-        false,
-    );
-    let posted_here = Memo::new(move |_| {
-        let here = location.pathname.get();
-        posted
-            .and_then(|Posted(posted)| posted.get())
-            .filter(|page| page.path.split('?').next() == Some(here.as_str()))
-    });
-    // NOTE: leptos_server 0.8 `Resource::try_read_untracked`: a resource is read inside an
-    // effect or a `Suspense`, never in a memo, so the page is taken from the read here.
-    Effect::new(move |_| {
-        let shown = posted_here
-            .get()
-            .or_else(|| read.get().and_then(Result::ok));
-        if let (Some(page), Some(Latest(latest))) = (shown, latest) {
-            follow(&page);
-            if latest.get_untracked() != page {
-                latest.set(page);
-            }
-        }
-    });
-    provide_context(Reads {
-        read,
-        posted: posted_here,
-    });
-    let signed_in = Memo::new(move |_| !crate::paths::is_sign_in(&location.pathname.get()));
-    move || {
-        // NOTE: leptos_router 0.8 `Routes`: the router writes a navigation's address once a
-        // route has drawn it; each group of pages loads its code from its own chunks.
-        let content = view! {
-            <Routes fallback=|| content(missing)>
-                <Route path=path!("/sign-in") view={Lazy::<Aside>::new()} />
-                <Route path=path!("/sign-in/:state") view={Lazy::<Aside>::new()} />
-                <Route path=path!("/") view={Lazy::<Work>::new()} />
-                <Route path=path!("/queue") view={Lazy::<Work>::new()} />
-                <Route path=path!("/queue/:candidate") view={Lazy::<Work>::new()} />
-                <Route path=path!("/patients/:person/merge") view={Lazy::<Work>::new()} />
-                <Route path=path!("/patients/:person/unmerge") view={Lazy::<Work>::new()} />
-                <Route path=path!("/search") view={Lazy::<Patients>::new()} />
-                <Route path=path!("/search/demographics") view={Lazy::<Patients>::new()} />
-                <Route path=path!("/patients/:person") view={Lazy::<Patients>::new()} />
-                <Route path=path!("/sources") view={Lazy::<Registry>::new()} />
-                <Route path=path!("/sources/:source") view={Lazy::<Registry>::new()} />
-                <Route path=path!("/domains") view={Lazy::<Registry>::new()} />
-                <Route path=path!("/domains/:domain") view={Lazy::<Registry>::new()} />
-                <Route path=path!("/pseudonym-domains") view={Lazy::<Registry>::new()} />
-                <Route path=path!("/configuration") view={Lazy::<Aside>::new()} />
-                <Route path=path!("/audit") view={Lazy::<Registry>::new()} />
-                <Route path=path!("/about") view={Lazy::<Aside>::new()} />
-                <Route path=path!("/preferences") view={Lazy::<Aside>::new()} />
-                <Route path=path!("/preferences/:section") view={Lazy::<Aside>::new()} />
-            </Routes>
-        }
-        .into_any();
-        if signed_in.get() {
-            let legend = view! {
-                <ShortcutLegend groups=shortcut_groups() words=LegendWords::of_page() />
-            };
-            view! {
-                {framed(content)}
-                {legend}
-                {watch()}
-            }
-            .into_any()
-        } else {
-            content
-        }
-    }
-}
 /// FerroUI's watch over the steward's session, from what it had left as the
-/// server drew the first page (FerroUI `docs/consoles.md`, "The session's
-/// end"); nothing on a page drawn with no session.
-fn watch() -> Option<AnyView> {
-    let left = page_context().session?;
-    let watch = Watch::new(crate::paths::SESSION, EXPIRED, SIGN_OUT, left);
-    Some(view! { <SessionWatch watch /> }.into_any())
+/// server drew the page (FerroUI `docs/consoles.md`, "The session's end");
+/// nothing on a page drawn with no session.
+fn watch(visit: &Visit) -> Html {
+    visit.page.session.map_or_else(Html::empty, |left| {
+        session_watch(&Watch::new(
+            &visit.locale,
+            crate::paths::SESSION,
+            EXPIRED,
+            SIGN_OUT,
+            left,
+        ))
+    })
 }
 
-/// The attribute of the root element that counts the pages the browser has
-/// drawn in place, which a journey waits on after a press.
-pub const DRAWS: &str = "data-pix-draws";
-
-/// The latest page context, which the shell's parts follow.
-fn latest() -> PageContext {
-    use_context::<Latest>().map_or_else(page_context, |latest| latest.0.get())
-}
-
-/// Returns `content` in the FerroUI shell, drawn once: the navigation and
-/// the forms that return to a page follow the router, and the status pill
-/// and the steward's menu follow the latest page context.
-fn framed(content: AnyView) -> AnyView {
-    let first = page_context();
-    let nav = sidebar(Sidebar {
-        id: SIDEBAR_ID,
-        label: tr(Msg::NavLabel),
-        groups: navigation(),
-        current: first.path.clone(),
-        rail: Some(Rail {
-            collapsed: crate::preferences::rail_in(&first.preferences, &first.prefix),
-            action: String::from(crate::preferences::SIDEBAR_ROUTE),
-            back: first.path.clone(),
-        }),
-        nest: None,
-    });
-    let menu = move || {
-        let page = latest();
-        let operator = page
-            .operator
-            .clone()
-            .unwrap_or_else(|| tr(Msg::StewardUnnamed));
-        user_menu(UserMenu {
+/// Returns `drawn` in the FerroUI shell: the top bar with the search, the
+/// status pill and the steward's menu, the navigation marked at the page,
+/// the shortcut legend and the session watch.
+fn framed(visit: &Visit, drawn: Drawn) -> Html {
+    let locale = &visit.locale;
+    let page = &visit.page;
+    let here = page.path.clone();
+    let nav = sidebar(
+        locale,
+        Sidebar {
+            id: SIDEBAR_ID,
+            label: visit.tr(Msg::NavLabel),
+            groups: navigation(locale),
+            current: visit.path().to_owned(),
+            rail: Some(Rail {
+                collapsed: crate::preferences::rail_in(&page.preferences, &page.prefix),
+                action: String::from(crate::preferences::SIDEBAR_ROUTE),
+                back: here.clone(),
+            }),
+            nest: None,
+        },
+    );
+    let operator = page
+        .operator
+        .clone()
+        .unwrap_or_else(|| visit.tr(Msg::StewardUnnamed));
+    let menu = user_menu(
+        locale,
+        UserMenu {
             id: "user-menu",
             label: operator.clone(),
             name: Some(operator.clone()),
             who: operator,
-            line: tr_with(
+            line: visit.tr_with(
                 Msg::MenuLine,
                 &[("provider", Arg::from(page.provider.clone()))],
             ),
@@ -526,50 +323,81 @@ fn framed(content: AnyView) -> AnyView {
             theme: ThemeChoice {
                 current: Preferences::read(&page.preferences, &page.prefix).theme,
                 action: String::from(crate::preferences::PREFERENCE_ROUTE),
-                back: page.path.clone(),
+                back: here,
             },
             choices: Vec::new(),
             links: Vec::new(),
             shortcuts: Some(format!("{PREFERENCES}/keyboard")),
             sign_out: Some(String::from(SIGN_OUT)),
-        })
-        .into_any()
-    };
-    let search = search_box(SearchBox {
-        id: String::from(SEARCH_ID),
-        label: tr(Msg::SearchLabel),
-        placeholder: tr(Msg::SearchPlaceholder),
-        action: String::from(SEARCH),
-        submit: tr(Msg::SearchFind).into(),
-        post: true,
-        suggest: Some(String::from(crate::pages::search::SUGGEST)),
-        signed_out: Some(String::from(EXPIRED)),
-        all: Some(ferrohealth_ui::i18n::Phrase::new(tr_with(
-            Msg::SearchPatientsFor,
-            &[("query", ferrohealth_ui::i18n::Phrase::open("query"))],
-        ))),
-        ..SearchBox::default()
-    });
-    let pill = move || {
-        let page = latest();
-        pill(page.probe.as_ref(), &page.base)
-    };
-    let end = view! {
-        {pill}
-        {menu}
+        },
+    );
+    let search = search_box(
+        locale,
+        &SearchBox {
+            id: String::from(SEARCH_ID),
+            label: visit.tr(Msg::SearchLabel),
+            placeholder: visit.tr(Msg::SearchPlaceholder),
+            action: String::from(SEARCH),
+            submit: Some(visit.tr(Msg::SearchFind).into()),
+            post: true,
+            suggest: Some(String::from(crate::pages::search::SUGGEST)),
+            signed_out: Some(String::from(EXPIRED)),
+            all: Some(Phrase::new(visit.tr_with(
+                Msg::SearchPatientsFor,
+                &[("query", Phrase::open("query"))],
+            ))),
+            ..SearchBox::default()
+        },
+    );
+    let end = pill(locale, page.probe.as_ref(), &page.base).then(menu);
+    let framed = shell(
+        locale,
+        Shell {
+            topbar: topbar(
+                locale,
+                TopBar {
+                    sidebar: SIDEBAR_ID,
+                    lockup: brand_lockup(locale),
+                    search: Some(search),
+                    end,
+                },
+            ),
+            banner: None,
+            sidebar: nav,
+            content: drawn.body,
+            dock: drawn.dock,
+            toasts: toast_region(locale, Vec::new()),
+            footer: footer(locale),
+        },
+    );
+    framed
+        .then(shortcut_legend(locale, shortcut_groups(visit)))
+        .then(watch(visit))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Route, route};
+
+    #[test]
+    fn every_page_is_named_by_its_address_and_another_address_by_none() {
+        assert_eq!(Some(Route::Dashboard), route("/").map(|(route, _)| route));
+        assert_eq!(
+            Some((
+                Route::Pair,
+                vec![(String::from("candidate"), String::from("c"))]
+            )),
+            route("/queue/c?x=1")
+        );
+        assert_eq!(
+            Some(Route::Unmerge),
+            route("/patients/p/unmerge").map(|(route, _)| route)
+        );
+        assert_eq!(
+            Some(Route::Search),
+            route("/search/demographics").map(|(route, _)| route)
+        );
+        assert_eq!(None, route("/patients/p/merge/again"));
+        assert_eq!(None, route("/nowhere"));
     }
-    .into_any();
-    shell(Shell {
-        topbar: topbar(TopBar {
-            sidebar: SIDEBAR_ID,
-            lockup: brand_lockup(),
-            search: Some(search),
-            end,
-        }),
-        banner: None,
-        sidebar: nav,
-        content,
-        dock: None,
-        footer: footer(),
-    })
 }

@@ -15,16 +15,16 @@
 //! a source is a short name; anything else is the not-found page, so no
 //! business identifier is ever read from an address.
 
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::view::action::ActionGroup;
 use ferrohealth_ui::view::surface::{Crumb, Header, page_heading};
-use leptos::prelude::*;
 
-use crate::app::{DOMAINS, QUEUE, SEARCH, SOURCES, page_context, param};
+use crate::app::{DOMAINS, QUEUE, SEARCH, SOURCES};
 use crate::locale::messages::Msg;
-use crate::locale::{tr, tr_with};
 use crate::model::{Document, Read};
-use crate::pages::not_found::NotFound;
-use crate::pages::{Needs, server_state, title};
+use crate::pages::not_found::not_found;
+use crate::pages::{Drawn, Needs, server_state};
+use crate::visit::Visit;
 
 /// Whether `id` reads as a UUID in its canonical text form (RFC 9562 §4),
 /// the shape of every person and candidate id FerroPIX mints.
@@ -47,17 +47,10 @@ pub fn is_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
-/// The page drawn from `read` by `draw`, or the refusal of the call that
-/// did not bring the document.
-fn drawn<T>(read: &Read<T>, screen: &Screen, draw: impl FnOnce(&T) -> AnyView) -> AnyView {
-    match read {
-        Ok(document) => draw(document),
-        Err(probe) => server_state(Some(probe), screen.needs, &screen.route),
-    }
-}
-
 /// One page that reads the operator API: its header and its state.
-struct Screen {
+struct Screen<'a> {
+    /// The visit the page is drawn for.
+    visit: &'a Visit,
     /// The title.
     title: String,
     /// The line under the title.
@@ -71,26 +64,31 @@ struct Screen {
     /// The operator API route it reads, as a steward may repeat it.
     route: String,
     /// The page drawn from the server's document, when the server sent it.
-    body: Option<AnyView>,
+    body: Option<Html>,
+    /// The docked decision bar, when the page has one.
+    dock: Option<Html>,
 }
 
-impl Screen {
+impl<'a> Screen<'a> {
     /// The screen titled `title` with `subtitle`, reading `route` for `what`.
-    fn new(title: Msg, subtitle: Msg, what: Msg, route: impl Into<String>) -> Self {
+    fn new(
+        visit: &'a Visit,
+        title: Msg,
+        subtitle: Msg,
+        what: Msg,
+        route: impl Into<String>,
+    ) -> Self {
         Self {
-            title: tr(title),
-            subtitle: tr(subtitle),
+            visit,
+            title: visit.tr(title),
+            subtitle: visit.tr(subtitle),
             crumbs: Vec::new(),
             mono: false,
-            needs: Needs { what, away: false },
+            needs: Needs::of(what),
             route: route.into(),
             body: None,
+            dock: None,
         }
-    }
-
-    /// This screen drawn from `body` in place of its state.
-    fn with(self, body: Option<AnyView>) -> Self {
-        Self { body, ..self }
     }
 
     /// This screen under the ancestors `crumbs`.
@@ -98,10 +96,20 @@ impl Screen {
         Self { crumbs, ..self }
     }
 
+    /// The page drawn from `read` by `draw`, or the refusal of the call
+    /// that did not bring the document.
+    fn drawn<T>(&self, read: &Read<T>, draw: impl FnOnce(&T) -> Html) -> Html {
+        match read {
+            Ok(document) => draw(document),
+            Err(probe) => server_state(self.visit, Some(probe), self.needs, &self.route),
+        }
+    }
+
     /// The page, drawn in the shell.
-    fn view(self) -> AnyView {
-        let probe = page_context().probe;
+    fn view(self) -> Drawn {
+        let visit = self.visit;
         let heading = page_heading(
+            &visit.locale,
             Header {
                 title: self.title.clone().into(),
                 subtitle: Some(self.subtitle.into()),
@@ -112,374 +120,340 @@ impl Screen {
             },
             ActionGroup::none(),
         );
-        let state = self
-            .body
-            .unwrap_or_else(|| server_state(probe.as_ref(), self.needs, &self.route));
-        view! {
-            {title(self.title)}
-            {heading}
-            {state}
+        let state = self.body.unwrap_or_else(|| {
+            server_state(visit, visit.page.probe.as_ref(), self.needs, &self.route)
+        });
+        Drawn {
+            dock: self.dock,
+            ..Drawn::new(self.title, heading.then(state))
         }
-        .into_any()
     }
 }
 
 /// The dashboard at `/` (design 01, 16).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Dashboard() -> impl IntoView {
-    let body = match page_context().document {
-        Some(Document::Dashboard {
-            overview,
-            dependencies,
-        }) => Some(crate::pages::dashboard::dashboard(&overview, &dependencies)),
-        _ => None,
-    };
+#[must_use]
+pub fn dashboard(visit: &Visit) -> Drawn {
     let mut screen = Screen::new(
+        visit,
         Msg::Dashboard,
         Msg::DashboardSub,
         Msg::WhatDashboard,
         "GET /operator/overview",
     );
     screen.needs.away = true;
-    screen.with(body).view()
+    if let Some(Document::Dashboard {
+        overview,
+        dependencies,
+    }) = &visit.page.document
+    {
+        screen.body = Some(crate::pages::dashboard::dashboard(
+            visit,
+            overview,
+            dependencies,
+        ));
+    }
+    screen.view()
 }
 
 /// The review queue at `/queue` (design 02, 02.9).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Queue() -> impl IntoView {
-    let screen = Screen::new(
+#[must_use]
+pub fn queue(visit: &Visit) -> Drawn {
+    let mut screen = Screen::new(
+        visit,
         Msg::Queue,
         Msg::QueueSub,
         Msg::WhatQueue,
         "GET /operator/candidates",
     );
-    let body = match page_context().document {
-        Some(Document::Queue {
-            filter,
-            candidates,
-            deferred,
-        }) => Some(drawn(&candidates, &screen, |candidates| {
-            crate::pages::queue::queue(&filter, candidates, deferred.as_ref())
-        })),
-        _ => None,
-    };
-    screen.with(body).view()
+    if let Some(Document::Queue {
+        filter,
+        candidates,
+        deferred,
+    }) = &visit.page.document
+    {
+        screen.body = Some(screen.drawn(candidates, |candidates| {
+            crate::pages::queue::queue(visit, filter, candidates, deferred.as_ref())
+        }));
+    }
+    screen.view()
 }
 
 /// One pair to compare and decide at `/queue/{candidate}` (design 03).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Pair() -> impl IntoView {
-    let Some(candidate) = param("candidate").filter(|id| is_uuid(id)) else {
-        return view! { <NotFound /> }.into_any();
+#[must_use]
+pub fn pair(visit: &Visit) -> Drawn {
+    let Some(candidate) = visit.param("candidate").filter(|id| is_uuid(id)) else {
+        return not_found(visit);
     };
     let mut screen = Screen::new(
+        visit,
         Msg::Pair,
         Msg::PairSub,
         Msg::WhatPair,
         format!("GET /operator/candidates/{candidate}"),
     )
-    .under(vec![Crumb::new(tr(Msg::Queue), QUEUE)]);
-    screen.body = match page_context().document {
-        Some(Document::Pair { candidate, outcome }) => {
-            Some(drawn(&candidate, &screen, |candidate| {
-                crate::pages::pair::pair(candidate, outcome.as_ref())
-            }))
+    .under(vec![Crumb::new(visit.tr(Msg::Queue), QUEUE)]);
+    if let Some(Document::Pair { candidate, outcome }) = &visit.page.document {
+        match candidate {
+            Ok(candidate) => {
+                let (body, dock) = crate::pages::pair::pair(visit, candidate, outcome.as_ref());
+                screen.body = Some(body);
+                screen.dock = dock;
+            }
+            Err(probe) => {
+                screen.body = Some(server_state(
+                    visit,
+                    Some(probe),
+                    screen.needs,
+                    &screen.route,
+                ));
+            }
         }
+    }
+    screen.view()
+}
+
+/// The page of a patient's merge (`unmerge` false) or unmerge.
+fn merge_screen(visit: &Visit, unmerge: bool) -> Drawn {
+    let Some(person) = visit.param("person").filter(|id| is_uuid(id)) else {
+        return not_found(visit);
+    };
+    let (title, subtitle, what, route) = if unmerge {
+        (
+            Msg::Unmerge,
+            Msg::UnmergeSub,
+            Msg::WhatUnmerge,
+            format!("GET /operator/persons/{person}"),
+        )
+    } else {
+        (
+            Msg::Merge,
+            Msg::MergeSub,
+            Msg::WhatMerge,
+            String::from("GET /operator/merges/preview"),
+        )
+    };
+    let crumbs = vec![
+        Crumb::new(visit.tr(Msg::Search), SEARCH),
+        Crumb::new(
+            visit.tr_with(Msg::PersonId, &[("person", person.clone().into())]),
+            format!("/patients/{person}"),
+        ),
+    ];
+    let mut screen = Screen::new(visit, title, subtitle, what, route).under(crumbs);
+    screen.body = match &visit.page.document {
+        Some(Document::Merge {
+            person: id,
+            preview,
+            refused,
+        }) if !unmerge => Some(crate::pages::merge::merge(
+            visit,
+            id,
+            preview.as_ref(),
+            refused.as_ref(),
+        )),
+        Some(Document::Unmerge {
+            person: id,
+            merge,
+            preview,
+            refused,
+        }) if unmerge => Some(crate::pages::merge::unmerge(
+            visit,
+            id,
+            merge.as_ref(),
+            preview.as_ref(),
+            refused.as_ref(),
+        )),
         _ => None,
     };
     screen.view()
 }
 
-/// The patient page of `person`, or of a merge or unmerge from it.
-fn patient_screen(title: Msg, subtitle: Msg, what: Msg, route: &str, below: bool) -> AnyView {
-    let Some(person) = param("person").filter(|id| is_uuid(id)) else {
-        return view! { <NotFound /> }.into_any();
-    };
-    let patient = format!("/patients/{person}");
-    let mut crumbs = vec![Crumb::new(tr(Msg::Search), SEARCH)];
-    if below {
-        crumbs.push(Crumb::new(
-            tr_with(Msg::PersonId, &[("person", person.clone().into())]),
-            patient,
-        ));
-    }
-    let mut screen =
-        Screen::new(title, subtitle, what, route.replace("{person}", &person)).under(crumbs);
-    if below {
-        screen.body = match page_context().document {
-            Some(Document::Merge {
-                person: id,
-                preview,
-                refused,
-            }) => Some(crate::pages::merge::merge(
-                &id,
-                preview.as_ref(),
-                refused.as_ref(),
-            )),
-            Some(Document::Unmerge {
-                person: id,
-                merge,
-                preview,
-                refused,
-            }) => Some(crate::pages::merge::unmerge(
-                &id,
-                merge.as_ref(),
-                preview.as_ref(),
-                refused.as_ref(),
-            )),
-            _ => None,
-        };
-    }
-    if !below {
-        let tab = crate::app::current_query()
-            .split('&')
-            .find_map(|pair| pair.strip_prefix("tab="))
-            .unwrap_or_default()
-            .to_owned();
-        screen.body = match page_context().document {
-            Some(Document::Person { person, revealed }) => Some(match person {
-                Ok(found) => crate::pages::patient::patient(&found, &tab, revealed.as_ref()),
-                Err(probe) => server_state(Some(&probe), screen.needs, &screen.route),
-            }),
-            _ => None,
-        };
-        screen.title = tr_with(Msg::PersonId, &[("person", person.into())]);
-        screen.mono = true;
-    }
-    screen.view()
-}
-
 /// A patient at `/patients/{person}` (design 05, 05.10).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Patient() -> impl IntoView {
-    patient_screen(
+#[must_use]
+pub fn patient(visit: &Visit) -> Drawn {
+    let Some(person) = visit.param("person").filter(|id| is_uuid(id)) else {
+        return not_found(visit);
+    };
+    let mut screen = Screen::new(
+        visit,
         Msg::Patient,
         Msg::PatientSub,
         Msg::WhatPatient,
-        "GET /operator/persons/{person}",
-        false,
+        format!("GET /operator/persons/{person}"),
     )
+    .under(vec![Crumb::new(visit.tr(Msg::Search), SEARCH)]);
+    let tab = visit.query_word("tab").unwrap_or_default();
+    if let Some(Document::Person { person, revealed }) = &visit.page.document {
+        screen.body = Some(screen.drawn(person, |found| {
+            crate::pages::patient::patient(visit, found, tab, revealed.as_ref())
+        }));
+    }
+    screen.title = visit.tr_with(Msg::PersonId, &[("person", person.into())]);
+    screen.mono = true;
+    screen.view()
 }
 
 /// The merge of a patient at `/patients/{person}/merge` (design 08).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Merge() -> impl IntoView {
-    patient_screen(
-        Msg::Merge,
-        Msg::MergeSub,
-        Msg::WhatMerge,
-        "GET /operator/merges/preview",
-        true,
-    )
+#[must_use]
+pub fn merge(visit: &Visit) -> Drawn {
+    merge_screen(visit, false)
 }
 
 /// The unmerge of a patient at `/patients/{person}/unmerge` (design 05.7).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Unmerge() -> impl IntoView {
-    patient_screen(
-        Msg::Unmerge,
-        Msg::UnmergeSub,
-        Msg::WhatUnmerge,
-        "GET /operator/persons/{person}",
-        true,
-    )
+#[must_use]
+pub fn unmerge(visit: &Visit) -> Drawn {
+    merge_screen(visit, true)
 }
 
 /// The sources at `/sources` (design 33).
-#[component]
-pub fn Sources() -> impl IntoView {
-    let screen = Screen::new(
+#[must_use]
+pub fn sources(visit: &Visit) -> Drawn {
+    let mut screen = Screen::new(
+        visit,
         Msg::Sources,
         Msg::SourcesSub,
         Msg::WhatSources,
         "GET /operator/sources",
     );
-    let body = match page_context().document {
-        Some(Document::Sources(read)) => {
-            Some(drawn(&read, &screen, crate::pages::registry::sources))
-        }
-        _ => None,
-    };
-    screen.with(body).view()
+    if let Some(Document::Sources(read)) = &visit.page.document {
+        screen.body = Some(screen.drawn(read, |sources| {
+            crate::pages::registry::sources(visit, sources)
+        }));
+    }
+    screen.view()
 }
 
 /// One source at `/sources/{source}` (design 33.1).
-#[component]
-pub fn Source() -> impl IntoView {
-    let Some(source) = param("source").filter(|name| is_name(name)) else {
-        return view! { <NotFound /> }.into_any();
+#[must_use]
+pub fn source(visit: &Visit) -> Drawn {
+    let Some(source) = visit.param("source").filter(|name| is_name(name)) else {
+        return not_found(visit);
     };
     let mut screen = Screen::new(
+        visit,
         Msg::Sources,
         Msg::SourceSub,
         Msg::WhatSource,
         format!("GET /operator/sources/{source}"),
     )
-    .under(vec![Crumb::new(tr(Msg::Sources), SOURCES)]);
-    screen.body = match page_context().document {
-        Some(Document::Source(read)) => Some(drawn(&read, &screen, crate::pages::registry::source)),
-        _ => None,
-    };
+    .under(vec![Crumb::new(visit.tr(Msg::Sources), SOURCES)]);
+    if let Some(Document::Source(read)) = &visit.page.document {
+        screen.body = Some(screen.drawn(read, |page| crate::pages::registry::source(visit, page)));
+    }
     screen.title = source;
     screen.mono = true;
     screen.view()
 }
 
 /// The identifier domains at `/domains` (design 10).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Domains() -> impl IntoView {
-    let screen = Screen::new(
+#[must_use]
+pub fn domains(visit: &Visit) -> Drawn {
+    let mut screen = Screen::new(
+        visit,
         Msg::Domains,
         Msg::DomainsSub,
         Msg::WhatDomains,
         "GET /operator/domains",
     );
-    let context = page_context();
-    let admin = context.admin;
-    let body = match context.document {
-        Some(Document::Domains { domains, written }) => Some(drawn(&domains, &screen, |domains| {
-            crate::pages::registry::domains(domains, written.as_ref(), admin)
-        })),
-        _ => None,
-    };
-    screen.with(body).view()
+    if let Some(Document::Domains { domains, written }) = &visit.page.document {
+        screen.body = Some(screen.drawn(domains, |domains| {
+            crate::pages::registry::domains(visit, domains, written.as_ref(), visit.page.admin)
+        }));
+    }
+    screen.view()
 }
 
 /// One identifier domain at `/domains/{domain}` (design 20).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Domain() -> impl IntoView {
-    let Some(domain) = param("domain").filter(|id| is_uuid(id)) else {
-        return view! { <NotFound /> }.into_any();
+#[must_use]
+pub fn domain(visit: &Visit) -> Drawn {
+    let Some(domain) = visit.param("domain").filter(|id| is_uuid(id)) else {
+        return not_found(visit);
     };
     let mut screen = Screen::new(
+        visit,
         Msg::Domains,
         Msg::DomainSub,
         Msg::WhatDomain,
         format!("GET /operator/domains/{domain}"),
     )
-    .under(vec![Crumb::new(tr(Msg::Domains), DOMAINS)]);
+    .under(vec![Crumb::new(visit.tr(Msg::Domains), DOMAINS)]);
     let mut title = domain;
-    let context = page_context();
-    let admin = context.admin;
-    screen.body = match context.document {
-        Some(Document::Domain { page, written }) => {
-            if let Ok(page) = &page {
-                title.clone_from(&page.domain.name);
-            }
-            Some(drawn(&page, &screen, |page| {
-                crate::pages::registry::domain(page, written.as_ref(), admin)
-            }))
+    if let Some(Document::Domain { page, written }) = &visit.page.document {
+        if let Ok(page) = page {
+            title.clone_from(&page.domain.name);
         }
-        _ => None,
-    };
+        screen.body = Some(screen.drawn(page, |page| {
+            crate::pages::registry::domain(visit, page, written.as_ref(), visit.page.admin)
+        }));
+    }
     screen.title = title;
     screen.mono = true;
     screen.view()
 }
 
 /// The pseudonymisation domains at `/pseudonym-domains` (design 11).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn PseudonymDomains() -> impl IntoView {
-    let screen = Screen::new(
+#[must_use]
+pub fn pseudonym_domains(visit: &Visit) -> Drawn {
+    let mut screen = Screen::new(
+        visit,
         Msg::PseudonymDomains,
         Msg::PseudonymDomainsSub,
         Msg::WhatPseudonymDomains,
         "GET /operator/pseudonym-domains",
     );
-    let context = page_context();
-    let admin = context.admin;
-    let body = match context.document {
-        Some(Document::PseudonymDomains {
-            domains,
-            written,
-            resolved,
-        }) => Some(drawn(&domains, &screen, |domains| {
+    if let Some(Document::PseudonymDomains {
+        domains,
+        written,
+        resolved,
+    }) = &visit.page.document
+    {
+        screen.body = Some(screen.drawn(domains, |domains| {
             crate::pages::pseudonyms::pseudonym_domains(
+                visit,
                 domains,
                 written.as_ref(),
                 resolved.as_ref(),
-                admin,
+                visit.page.admin,
             )
-        })),
-        _ => None,
-    };
-    screen.with(body).view()
+        }));
+    }
+    screen.view()
 }
 
 /// The configuration at `/configuration` (design 25).
-#[component]
-pub fn Configuration() -> impl IntoView {
-    let screen = Screen::new(
+#[must_use]
+pub fn configuration(visit: &Visit) -> Drawn {
+    let mut screen = Screen::new(
+        visit,
         Msg::Configuration,
         Msg::ConfigurationSub,
         Msg::WhatConfiguration,
         "GET /operator/configuration",
     );
-    let body = match page_context().document {
-        Some(Document::Configuration(read)) => {
-            Some(drawn(&read, &screen, crate::pages::registry::configuration))
-        }
-        _ => None,
-    };
-    screen.with(body).view()
+    if let Some(Document::Configuration(read)) = &visit.page.document {
+        screen.body = Some(screen.drawn(read, |configuration| {
+            crate::pages::registry::configuration(visit, configuration)
+        }));
+    }
+    screen.view()
 }
 
 /// The audit trail at `/audit` (design 13).
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn Audit() -> impl IntoView {
-    let screen = Screen::new(
+#[must_use]
+pub fn audit(visit: &Visit) -> Drawn {
+    let mut screen = Screen::new(
+        visit,
         Msg::Audit,
         Msg::AuditSub,
         Msg::WhatAudit,
         "GET /operator/actions",
     );
-    let body = match page_context().document {
-        Some(Document::Trail { filter, actions }) => Some(drawn(&actions, &screen, |actions| {
-            crate::pages::trail::trail(&filter, actions)
-        })),
-        _ => None,
-    };
-    screen.with(body).view()
+    if let Some(Document::Trail { filter, actions }) = &visit.page.document {
+        screen.body = Some(screen.drawn(actions, |actions| {
+            crate::pages::trail::trail(visit, filter, actions)
+        }));
+    }
+    screen.view()
 }
 
 #[cfg(test)]

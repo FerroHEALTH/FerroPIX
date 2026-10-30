@@ -15,8 +15,8 @@
 # (scripts/release/milestone.sh).
 #
 # The release is created as a DRAFT, the server and console binaries with
-# their SBOMs and Sigstore bundles, the console's site bundle and the attested
-# .crate files are attached to it, and it is
+# their SBOMs and Sigstore bundles, and the attested .crate files are
+# attached to it, and it is
 # published only once the asset set is complete. Publishing last means a
 # half-assembled release is never visible, and a published release is
 # immutable, so the draft is the only window the uploads have.
@@ -250,11 +250,11 @@ jobs:
       tag: ${{ needs.plan.outputs.tag }}
       version: ${{ needs.plan.outputs.version }}
 
-  # ---- build-console: the operator console's binaries, bundle and image ------
+  # ---- build-console: the operator console's binaries and image -------------
   # A call and nothing else, for the same Build L3 reason. It attaches the
   # console's assets to the draft, so it waits for the draft to exist.
   build-console:
-    name: console (binaries, site bundle, image)
+    name: console (binaries, image)
     needs: [plan, github-release]
     permissions:
       contents: write # attach the console's assets to the draft release
@@ -468,8 +468,7 @@ jobs:
                 || missing="$missing ferropix-${TAG}-${target}${suffix}"
             done
           done < <(printf '%s' "$TARGETS" | jq -r '.include[].target')
-          # Every suffix release-console.yml uploads: per console target, and
-          # once for the architecture-independent site bundle.
+          # Every suffix release-console.yml uploads, per console target.
           while IFS= read -r target; do
             for suffix in \
               ".tar.gz" \
@@ -482,10 +481,6 @@ jobs:
                 || missing="$missing ferropix-console-${TAG}-${target}${suffix}"
             done
           done < <(printf '%s' "$CONSOLE_TARGETS" | jq -r '.include[].target')
-          for suffix in ".tar.gz" ".tar.gz.sha256sum" ".tar.gz.sigstore.json" ".tar.gz.intoto.jsonl"; do
-            printf '%s\n' "$assets" | grep -Fxq "ferropix-console-${TAG}-site${suffix}" \
-              || missing="$missing ferropix-console-${TAG}-site${suffix}"
-          done
           for file in $CRATE_FILES; do
             for suffix in ".crate" ".crate.sha256sum" ".crate.sigstore.json"; do
               printf '%s\n' "$assets" | grep -Fxq "${file}${suffix}" \

@@ -25,8 +25,7 @@ On the branch `release/vX.Y.Z`:
   `scripts/checks/versions.sh` refuses them apart.
 3. **Take the console screenshots again.** The book's screenshots name the
    release they show, so the guard in the testkit fails after the bump until
-   they are taken at the new version: build the site bundle
-   (`scripts/release/console-site.sh --release`), install the browser
+   they are taken at the new version: install the browser
    (`scripts/release/journey-tools.sh target/journey-tools`), and run
    `FERROPIX_SCREENSHOTS=1 cargo nextest run -p ferropix-testkit -E
    'test(the_book_shows_every_console_page)'`. Look at the images before you
@@ -141,7 +140,7 @@ to achieve SLSA v1 Build Level 3").
 |---|---|---|
 | `build-binaries` | `release-build.yml`, once per target (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`), each on a runner of its own architecture | `ferropix-vX.Y.Z-<target>.tar.gz` built with `cargo auditable` and no cache, its `.sha256sum`, a CycloneDX source SBOM and an SPDX build SBOM, and the provenance and both SBOMs attested, attached as `.sigstore.json` bundles and an `.intoto.jsonl` |
 | `build-image` | `release-image.yml` | verifies both musl tarballs against `release-build.yml` before it unpacks them, stages them with `scripts/release/stage-dist.sh tree`, builds `docker/Dockerfile` for `linux/amd64` and `linux/arm64` with no cache, pushes `ghcr.io/ferrohealth/ferropix` by digest with no tag, attests the index and both manifests (SLSA provenance, an SPDX SBOM per manifest) as OCI referrers, and verifies its own output as a consumer would |
-| `build-console` | `release-console.yml` | the operator console: its `binary` job builds the musl binary per architecture with `cargo auditable` and attests the tarball and its SPDX SBOM, its `site` job builds the site bundle with the pinned cargo-leptos, wasm-bindgen CLI and wasm-opt and attests it, both attached to the draft; its `image` job verifies both against `release-console.yml`, builds `docker/console/Dockerfile` for both platforms, pushes `ghcr.io/ferrohealth/ferropix-console` by digest and attests the index and both manifests as `release-image.yml` does |
+| `build-console` | `release-console.yml` | the operator console: its `binary` job builds the musl binary per architecture with `cargo auditable`, FerroUI's stylesheet and script modules inside it, and attests the tarball and its SPDX SBOM, attached to the draft; its `image` job verifies each against `release-console.yml`, builds `docker/console/Dockerfile` for both platforms, pushes `ghcr.io/ferrohealth/ferropix-console` by digest and attests the index and both manifests as `release-image.yml` does |
 | `crate` | `release-crate.yml` | each listed `.crate`, its checksum and its attestation |
 | `vulnerability-record` | in `release.yml` | Trivy over both pushed images (both platforms each) and the server tarballs at every severity, fixed or not; `scripts/checks/vex-coverage.sh` refuses the release while a finding has no OpenVEX judgement under `security/vex/`, and the record (each finding joined with its statement) and the raw reports are attached to the draft |
 | `scan-and-tag` | `scan-and-tag.yml` | the gate of `trivy.yaml` (HIGH and CRITICAL with a fix) on each digest, then the tags `X.Y.Z` and, for a release that is not a pre-release, `X.Y` and `latest`, each verified after it is applied |

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Operator sign-in at an OpenID Provider: the OAuth 2.0 authorization code
-//! grant with PKCE, run by the console's server half through
+//! grant with PKCE, run by the console's server through
 //! `ferrohealth_smart::oidc::RelyingParty`.
 //!
 //! `GET /login` mints the `state`, the `nonce` and the PKCE verifier, keeps

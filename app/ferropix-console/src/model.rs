@@ -1,17 +1,15 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! What a page is drawn from, in both halves: the calls the console made to
-//! the FerroPIX server and how they went, and the operator API documents
-//! they brought back.
+//! What a page is drawn from: the calls the console made to the FerroPIX
+//! server and how they went, and the operator API documents they brought
+//! back.
 //!
-//! The server reads them for the first page and the browser takes them
-//! serialized with it; after a navigation the browser asks the console's
-//! server for the next page's again ([`crate::app::page_now`]), so both
-//! halves draw a page from the same values. No specification governs the
+//! The server reads them for each request before it draws the page, so a
+//! page reads nothing while it is drawn. No specification governs the
 //! console: our own design.
 
-use ferrohealth_ui::widget::session::Left;
+use ferrohealth_ui::view::session::Left;
 use ferropix_operator_api::actions::{ActionFilter, Actions};
 use ferropix_operator_api::candidate::{Candidate, CandidateQuery, Candidates};
 use ferropix_operator_api::configuration::Configuration;

@@ -9,31 +9,22 @@
 //!
 //! Every preference is a plain form post to [`PREFERENCE_ROUTE`], which
 //! keeps it in its cookie and sends the browser back to the page it came
-//! from, so the page works with no WebAssembly. The server bounds a reveal
+//! from, so the page works with no script. The server bounds a reveal
 //! whatever the cookie says. No specification governs the preferences: our
 //! own design.
 
-#[cfg(not(target_arch = "wasm32"))]
 use axum::Extension;
-#[cfg(not(target_arch = "wasm32"))]
 use axum::extract::Form;
-#[cfg(not(target_arch = "wasm32"))]
 use axum::response::{IntoResponse, Redirect, Response};
-#[cfg(not(target_arch = "wasm32"))]
 use ferrohealth_ui::theme::Preferences;
 use ferrohealth_ui::theme::{
     Density, Hints, Language, Motion, Preference as _, Theme, WeekStart, cookie,
 };
-#[cfg(not(target_arch = "wasm32"))]
 use http::header::{CACHE_CONTROL, SET_COOKIE};
-#[cfg(not(target_arch = "wasm32"))]
 use http::{HeaderMap, HeaderValue, StatusCode};
 
-#[cfg(not(target_arch = "wasm32"))]
 use crate::locale::messages::Msg;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::locale::{catalog, negotiated, tr_in};
-#[cfg(not(target_arch = "wasm32"))]
 use crate::server::ConsoleState;
 
 /// The route every preference posts to, its value under its cookie's name.
@@ -141,7 +132,6 @@ pub fn rail_in(cookies: &str, prefix: &str) -> bool {
 /// The preference cookies of `headers` alone, each named `prefix` then a
 /// preference's or the sidebar's name, joined as one `Cookie` header value;
 /// the session's cookie shares the prefix and is never among them.
-#[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn kept_cookies(headers: &HeaderMap, prefix: &str) -> String {
     // NOTE: RFC 9113 §8.2.3: a request may split its cookies over several headers,
@@ -166,14 +156,12 @@ pub fn kept_cookies(headers: &HeaderMap, prefix: &str) -> String {
         .join("; ")
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// The preferences the request with `headers` keeps, read under `prefix`.
 #[must_use]
 pub fn read(headers: &HeaderMap, prefix: &str) -> Preferences {
     Preferences::read(&cookies(headers), prefix)
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// The console's own preference `name` the request with `headers` keeps,
 /// when it keeps one the console offers.
 #[must_use]
@@ -182,14 +170,12 @@ pub fn own(headers: &HeaderMap, prefix: &str, name: &str) -> Option<String> {
     cookie(&cookies, &format!("{prefix}{name}")).and_then(|value| kept_value(name, value))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// Whether the request with `headers` asks for the sidebar's rail.
 #[must_use]
 pub fn rail(headers: &HeaderMap, prefix: &str) -> bool {
     cookie(&cookies(headers), &format!("{prefix}{SIDEBAR}")) == Some("rail")
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// Every `Cookie` header of a request, joined as one header value.
 fn cookies(headers: &HeaderMap) -> String {
     headers
@@ -200,7 +186,6 @@ fn cookies(headers: &HeaderMap) -> String {
         .join("; ")
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// Serves a preference post: keeps the one preference it chose in its
 /// cookie and sends the browser back to the page it came from.
 ///
@@ -237,7 +222,6 @@ pub async fn choose(
     redirect_with(&preference_return(back, name), &[cookie])
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// What Reset to defaults posts.
 #[derive(Debug, serde::Deserialize)]
 pub struct Reset {
@@ -245,7 +229,6 @@ pub struct Reset {
     back: String,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// Serves Reset to defaults: clears every preference cookie, the console's
 /// own among them, and sends the browser back to the page it came from.
 pub async fn reset(
@@ -260,7 +243,6 @@ pub async fn reset(
     redirect_with(return_path(&reset.back), &cleared)
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// What the sidebar's Collapse or Expand posts.
 #[derive(Debug, serde::Deserialize)]
 pub struct SidebarChoice {
@@ -270,7 +252,6 @@ pub struct SidebarChoice {
     back: String,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// Serves the sidebar's Collapse and Expand: keeps the state in its cookie
 /// and sends the browser back to the page it came from.
 pub async fn sidebar(
@@ -287,7 +268,6 @@ pub async fn sidebar(
     redirect_with(return_path(&choice.back), &[cookie])
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 /// The redirect to `location` that sets each of `cookies`.
 fn redirect_with(location: &str, cookies: &[String]) -> Response {
     let mut response = Redirect::to(location).into_response();

@@ -63,12 +63,17 @@ fi
 # Every OTHER document under security/vex/ is hand-authored (they describe
 # inherited container layers, where nothing in this repository resolves the
 # finding). They still have to be well-formed OpenVEX, so a typo does not ship
-# as a document a consumer's parser rejects.
+# as a document a consumer's parser rejects. A hand-authored document holds at
+# least one statement; the generated one holds none while `deny.toml` accepts
+# no advisory, which the generator has already held it to.
 docs=("$VEX_DIR"/*.openvex.json)
 for doc in "${docs[@]}"; do
-  jq -e '
+  generated=false
+  [[ "$doc" != "$OUT" ]] || generated=true
+  jq -e --argjson generated "$generated" '
     (has("@context") and has("@id") and has("author") and has("timestamp")
-     and has("version") and (.statements | type == "array" and length > 0))
+     and has("version")
+     and (.statements | type == "array" and (length > 0 or $generated)))
     and (.statements | all(
       has("vulnerability") and has("products") and has("status")
       and (.status | IN("not_affected", "affected", "fixed", "under_investigation"))

@@ -13,21 +13,20 @@
 use ferrohealth_ui::highlight::Language;
 use ferrohealth_ui::view::surface::{Header, card};
 use ferrohealth_ui::view::template::about::{
-    AboutPage as Page, Link, Manufacturer, SelfDescription, about_page,
+    AboutPage as Page, Link, Manufacturer, SelfDescription, about_page as library_page,
 };
-use leptos::prelude::*;
 use serde::Deserialize;
 
-use crate::app::page_context;
 use crate::app::shell::footer;
 use crate::locale::messages::Msg;
-use crate::locale::tr;
+use crate::markup::t;
 use crate::model::Capability;
-use crate::pages::title;
+use crate::pages::Drawn;
+use crate::visit::Visit;
 
 /// The FerroUI release the console is built on, as `Cargo.toml` pins it
 /// exactly (a test holds the two together).
-pub const FERROUI: &str = "0.5.5";
+pub const FERROUI: &str = "0.6.0";
 
 /// The route Download fetches the `CapabilityStatement` from.
 pub const METADATA_DOWNLOAD: &str = "/about/capability-statement.json";
@@ -59,13 +58,9 @@ struct Software {
 }
 
 /// The About page.
-#[component]
-#[expect(
-    clippy::must_use_candidate,
-    reason = "the #[component] macro drops a #[must_use] from the function it writes"
-)]
-pub fn AboutPage() -> impl IntoView {
-    let capability = page_context().capability;
+#[must_use]
+pub fn about_page(visit: &Visit) -> Drawn {
+    let capability = visit.page.capability.clone();
     let declared = match &capability {
         // NOTE: HL7 FHIR R4, RESTful API: a statement that does not read as one names no
         // version, which About then says is not known; the document is still shown.
@@ -73,26 +68,28 @@ pub fn AboutPage() -> impl IntoView {
         _ => Declared::default(),
     };
     let server = declared.software.map_or_else(
-        || tr(Msg::NotKnown),
+        || visit.tr(Msg::NotKnown),
         |software| match software.version {
             Some(version) => format!("{} {version}", software.name),
             None => software.name,
         },
     );
-    let fhir = declared.fhir_version.unwrap_or_else(|| tr(Msg::NotKnown));
+    let fhir = declared
+        .fhir_version
+        .unwrap_or_else(|| visit.tr(Msg::NotKnown));
     let versions = vec![
-        (tr(Msg::VersionServer), server.into_any()),
-        (tr(Msg::VersionFhir), fhir.into_any()),
+        (visit.tr(Msg::VersionServer), t(server)),
+        (visit.tr(Msg::VersionFhir), t(fhir)),
         (
-            tr(Msg::VersionFerroui),
-            format!("ferrohealth-ui {FERROUI}").into_any(),
+            visit.tr(Msg::VersionFerroui),
+            t(format!("ferrohealth-ui {FERROUI}")),
         ),
     ];
     let (self_description, cards) = match capability {
         Some(Capability::Declared(text)) => (
             Some(SelfDescription {
-                title: tr(Msg::CapabilityTitle),
-                line: tr(Msg::CapabilityLine),
+                title: visit.tr(Msg::CapabilityTitle),
+                line: visit.tr(Msg::CapabilityLine),
                 language: Language::Json,
                 text,
                 copy_id: String::from("capability-copy"),
@@ -102,48 +99,42 @@ pub fn AboutPage() -> impl IntoView {
         ),
         Some(Capability::Missing(probe)) => {
             let missing = crate::pages::server_state(
+                visit,
                 Some(&probe),
-                crate::pages::Needs {
-                    what: Msg::WhatCapability,
-                    away: false,
-                },
+                crate::pages::Needs::of(Msg::WhatCapability),
                 &probe.route,
             );
-            (
-                None,
-                vec![card(tr(Msg::CapabilityTitle), missing).into_any()],
-            )
+            (None, vec![card(visit.tr(Msg::CapabilityTitle), missing)])
         }
         None => (None, Vec::new()),
     };
-    let page = about_page(Page {
-        header: Header {
-            title: tr(Msg::About).into(),
-            subtitle: Some(tr(Msg::AboutSub).into()),
-            ..Header::default()
-        },
-        release: footer().release(),
-        versions,
-        manufacturer: Manufacturer {
-            licence: tr(Msg::Licence),
-            support: Link {
-                label: String::from(SUPPORT),
-                href: format!("mailto:{SUPPORT}"),
+    let page = library_page(
+        &visit.locale,
+        Page {
+            header: Header {
+                title: visit.tr(Msg::About).into(),
+                subtitle: Some(visit.tr(Msg::AboutSub).into()),
+                ..Header::default()
             },
-            documentation: Some(Link {
-                label: tr(Msg::Documentation),
-                href: String::from(BOOK),
-            }),
+            release: footer(&visit.locale).release(),
+            versions,
+            manufacturer: Manufacturer {
+                licence: visit.tr(Msg::Licence),
+                support: Link {
+                    label: String::from(SUPPORT),
+                    href: format!("mailto:{SUPPORT}"),
+                },
+                documentation: Some(Link {
+                    label: visit.tr(Msg::Documentation),
+                    href: String::from(BOOK),
+                }),
+            },
+            cards,
+            self_description,
+            replica: None,
         },
-        cards,
-        self_description,
-        replica: None,
-    });
-    view! {
-        {title(tr(Msg::About))}
-        {page}
-    }
-    .into_any()
+    );
+    Drawn::new(visit.tr(Msg::About), page)
 }
 
 #[cfg(test)]

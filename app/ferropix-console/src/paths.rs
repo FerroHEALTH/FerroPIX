@@ -1,17 +1,11 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The addresses both halves name: the stylesheets and marks the server
-//! serves, and which pages draw for a reader with no session. No
-//! specification governs the console: our own design.
+//! The addresses the console serves beside its pages: the marks, the
+//! sign-in and session routes, and which pages draw for a reader with no
+//! session. No specification governs the console: our own design.
 
 use crate::app::SIGN_IN;
-
-/// The path of the library's stylesheet.
-pub const STYLESHEET: &str = "/ferrohealth-ui.css";
-
-/// The path of the FerroPIX theme, which loads after the stylesheet.
-pub const THEME: &str = "/theme.css";
 
 /// The path of the favicon.
 pub const FAVICON: &str = "/favicon.svg";

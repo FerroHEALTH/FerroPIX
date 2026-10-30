@@ -96,9 +96,16 @@ note() { echo "vex-reachability: $*" >&2; fail=1; }
 # silence as agreement: a document with no `statements` array, or a jq failure
 # inside the process substitution feeding the loop, would run zero iterations
 # and report every statement verified.
-expected="$(jq -r '.statements | length' "$DOC")"
+# A document whose statements are an empty array is the generator's answer to
+# a deny.toml that accepts no advisory (scripts/checks/vex-advisories.sh holds
+# the two together), so it has nothing to verify; any other shape is refused.
+expected="$(jq -r 'if (.statements | type) == "array" then .statements | length else "none" end' "$DOC")"
+if [[ "$expected" == "0" ]]; then
+  echo "ok: $DOC declares no statements, and deny.toml accepts no advisory"
+  exit 0
+fi
 [[ "$expected" -gt 0 ]] 2>/dev/null || {
-  echo "error: $DOC declares no statements, so nothing would be verified" >&2
+  echo "error: $DOC declares no statements array, so nothing would be verified" >&2
   exit 1
 }
 

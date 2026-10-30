@@ -816,7 +816,7 @@ queue-glance = At a glance
 # The range of the queue's page.
 queue-range = { $first }–{ $last } of { $total }
 # The queue's key hint.
-queue-keys = j and k move, Enter opens, o opens at a glance
+queue-keys = j and k move, Enter opens
 # The two names of a pair.
 pair-names = { $a } and { $b }
 # Before the date a deferred pair comes back.

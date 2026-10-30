@@ -235,10 +235,7 @@ pub async fn suggest(Extension(state): Extension<ConsoleState>, request: Request
         &parts.headers,
         state.settings().locale.clone(),
     );
-    let answer = leptos::prelude::Owner::new().with(|| {
-        ferrohealth_ui::i18n::provide_locale(locale);
-        crate::pages::search::suggestions(&words, domains.as_ref())
-    });
+    let answer = crate::pages::search::suggestions(&locale, &words, domains.as_ref());
     ([(CACHE_CONTROL, "no-store")], axum::Json(answer)).into_response()
 }
 
@@ -263,7 +260,7 @@ pub async fn post(Extension(state): Extension<ConsoleState>, request: Request) -
                 parts.uri = uri;
             }
             parts.extensions.insert(page);
-            crate::server::render(state, parts).await
+            crate::server::render(&parts)
         }
         Answer::Back(path) => Redirect::to(&path).into_response(),
         Answer::Unknown => StatusCode::NOT_FOUND.into_response(),

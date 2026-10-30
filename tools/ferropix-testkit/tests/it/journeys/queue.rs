@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The review queue walked from the keyboard: `j` and `k` move the focused
-//! row, `o` opens its side panel and Escape closes it, `d` opens it to
-//! defer, the deferral is posted in place, and Enter opens the pair. No
-//! specification governs the console: our own design.
+//! row, its side panel opens from the row and Escape closes it, the panel
+//! defers the pair, the deferral is posted and drawn on the queue's own
+//! address, and Enter opens the pair. The `o` and `d` of 0.5 come back with
+//! #390. No specification governs the console: our own design.
 
 use thirtyfour::prelude::*;
 
@@ -27,7 +28,7 @@ const DRAWS: &str =
     "return document.querySelector('main').innerText.includes(arguments[0]) ? 'yes' : 'no';";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn j_k_o_d_and_enter_walk_the_queue_defer_a_pair_and_open_one() {
+async fn j_k_the_side_panel_and_enter_walk_the_queue_defer_a_pair_and_open_one() {
     if !journeys_enabled() {
         return;
     }
@@ -53,14 +54,19 @@ async fn j_k_o_d_and_enter_walk_the_queue_defer_a_pair_and_open_one() {
             journey.evaluate(FOCUSED_ROW).await.expect("the row"),
             "k moves back"
         );
-        journey.active().await.send_keys("o").await.expect("o");
+        let opener = By::Css(format!(
+            ".fui-worklist-grid tr[aria-current='true'] button[commandfor='glance-{first}']"
+        ));
+        journey
+            .press(opener.clone(), "the focused row's side panel")
+            .await;
         assert_eq!(
             "true",
             journey
                 .evaluate_with(PANEL_OPEN, first.clone())
                 .await
                 .expect("the panel's state"),
-            "o opens the focused row's side panel"
+            "the focused row opens its side panel"
         );
         journey
             .active()
@@ -77,7 +83,7 @@ async fn j_k_o_d_and_enter_walk_the_queue_defer_a_pair_and_open_one() {
             "Escape closes it"
         );
         journey.evaluate(FIRST_ROW).await.expect("the first row");
-        journey.active().await.send_keys("d").await.expect("d");
+        journey.press(opener, "the side panel, to defer").await;
         let until = journey
             .element(By::Id(format!("until-{first}")), "the deferral's date")
             .await;

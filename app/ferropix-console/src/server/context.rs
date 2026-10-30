@@ -14,27 +14,26 @@ use axum::response::{IntoResponse, Redirect, Response};
 use http::header::CACHE_CONTROL;
 use http::{Method, StatusCode};
 
-use super::{ConsoleState, HEALTH, SERVER_FUNCTIONS};
+use super::{ConsoleState, HEALTH};
 use crate::app::{ABOUT, SIGN_IN};
 use crate::locale::messages::Msg;
 use crate::locale::{catalog, negotiated, tr_in};
 use crate::model::PageContext;
-use crate::paths::{FAVICON, MARK_DARK, MARK_LIGHT, STYLESHEET, THEME, is_sign_in};
+use crate::paths::{FAVICON, MARK_DARK, MARK_LIGHT, is_sign_in};
 use crate::session::COOKIE;
 use crate::session::request::{Held, held};
 
 /// Whether a request for `path` reaches a file or a route that needs no
-/// session: the site bundle, the stylesheets and marks, the health routes
-/// and the sign-in routes.
+/// session: FerroUI's assets, the marks, the health routes and the sign-in
+/// routes.
 #[must_use]
 pub fn is_public(path: &str) -> bool {
-    path.starts_with("/pkg/")
+    path.strip_prefix(ferrohealth_ui::serve::PREFIX)
+        .is_some_and(|rest| rest.starts_with('/'))
         || [
             HEALTH,
             ferrohealth_server::health::LIVENESS,
             ferrohealth_server::health::READINESS,
-            STYLESHEET,
-            THEME,
             FAVICON,
             MARK_LIGHT,
             MARK_DARK,
@@ -74,7 +73,7 @@ pub async fn page_for(
     if is_sign_in(&route) {
         let back = path.split_once('?').and_then(|(_, query)| {
             url::form_urlencoded::parse(query.as_bytes())
-                .find(|(name, _)| name == ferrohealth_ui::widget::session::RETURN)
+                .find(|(name, _)| name == ferrohealth_ui::view::session::RETURN)
                 .and_then(|(_, back)| crate::oidc::return_path(&back).map(str::to_owned))
         });
         return Ok(PageContext { back, ..signed_out });
@@ -186,7 +185,7 @@ pub(super) async fn gate(
     let path = request.uri().path().to_owned();
     // NOTE: no specification governs this: our own design; the session route answers for
     // itself, and a read of it must not count as the steward's activity.
-    if is_public(&path) || path.starts_with(SERVER_FUNCTIONS) || path == crate::paths::SESSION {
+    if is_public(&path) || path == crate::paths::SESSION {
         return next.run(request).await;
     }
     let read = request
@@ -251,9 +250,11 @@ mod tests {
     use super::{is_public, is_sign_in};
 
     #[test]
-    fn only_the_bundle_the_files_and_the_sign_in_routes_need_no_session() {
-        assert!(is_public("/pkg/ferropix-console.wasm"));
-        assert!(is_public("/theme.css"));
+    fn only_the_library_assets_the_files_and_the_sign_in_routes_need_no_session() {
+        assert!(is_public("/ferrohealth-ui/0.6.0/scripts/fui.js"));
+        assert!(is_public("/ferrohealth-ui/0.6.0/themes/pix.css"));
+        assert!(is_public("/favicon.svg"));
+        assert!(!is_public("/ferrohealth-uix"));
         assert!(is_public("/auth/callback"));
         assert!(!is_public("/"));
         assert!(!is_public("/patients/0192a1b2-0000-7000-8000-000000000000"));

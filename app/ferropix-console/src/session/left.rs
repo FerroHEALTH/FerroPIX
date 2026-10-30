@@ -7,7 +7,7 @@
 
 use std::time::{Duration, Instant};
 
-use ferrohealth_ui::widget::session::Left;
+use ferrohealth_ui::view::session::Left;
 
 use super::{SessionError, SessionId, Sessions, live};
 

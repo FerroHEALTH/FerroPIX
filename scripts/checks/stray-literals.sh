@@ -14,7 +14,10 @@
 #      `aria-roledescription`, `aria-valuetext`, `label`) holding a letter;
 #   2. a text node of a `view!`: a literal between two tags (`>"Close"<`)
 #      or alone on its line, holding a letter;
-#   3. any other literal holding words: an upper-case letter, or a space
+#   3. markup a page writes in a literal (one holding a tag, or opening with
+#      an attribute): a letter in a text node between its tags, or in the
+#      value of an attribute of 1., outside its `{}` placeables;
+#   4. any other literal holding words: an upper-case letter, or a space
 #      next to a letter, outside its `{}` placeables, and not a class list.
 #
 # A single lower-case word in code (`=> "fatal"`) reads as a key and is
@@ -91,6 +94,18 @@ self_test() {
   case_ key 0
   fixture classes src/page.rs '    view! { <div class="fui-card fui-card-flat"></div> }'
   case_ classes 0
+  fixture markup src/page.rs '    h(format!("<p class=\"fui-small\"><a href=\"{href}\">{}</a></p>", t(words)));'
+  case_ markup 0
+  fixture markup-text src/page.rs '    h(format!("<p class=\"fui-small\">Last tried {}</p>", t(at)));'
+  case_ markup-text 1
+  fixture markup-attribute src/page.rs '    h(format!("<button aria-label=\"Close\">{}</button>", x));'
+  case_ markup-attribute 1
+  fixture markup-fragment src/page.rs '    let by = format!(" aria-describedby=\"{}\"", id);'
+  case_ markup-fragment 0
+  fixture markup-alone src/page.rs "$(printf '%s\n' '    h(format!(' '        "<select id=\"kind\" class=\"{SELECT}\">{kinds}</select>"' '    ))')"
+  case_ markup-alone 0
+  fixture markup-alone-words src/page.rs "$(printf '%s\n' '    h(format!(' '        "<p class=\"fui-help\">Nothing was searched</p>"' '    ))')"
+  case_ markup-alone-words 1
   fixture lookup src/page.rs '    view! { <h1>{tr(Msg::Patients)}</h1> }'
   case_ lookup 0
   fixture event src/page.rs "$(printf '%s\n' '    tracing::warn!(' '        method = %request.method(),' '        "a request was refused"' '    );')"
@@ -170,6 +185,21 @@ found="$(
       if (bare ~ /[A-Za-z][ \t]/ || bare ~ /[ \t][A-Za-z]/) return 1
       return 0
     }
+    function markup(t,    s, v) {
+      s = t
+      while (match(s, /(aria-label|title|placeholder|alt|data-label|aria-description|aria-roledescription|aria-valuetext|label)=\\"[^"\\]*/)) {
+        v = substr(s, RSTART, RLENGTH)
+        sub(/^[^"]*"/, "", v)
+        gsub(/\{[^{}]*\}/, "", v)
+        if (v ~ /[A-Za-z]/) return 1
+        s = substr(s, RSTART + RLENGTH)
+      }
+      s = t
+      gsub(/<[^<>]*>/, "", s)
+      gsub(/^[ \t]*[a-z-]+=\\"[^"]*\\"/, "", s)
+      gsub(/\{[^{}]*\}/, "", s)
+      return s ~ /[A-Za-z]/
+    }
     function classes(t,    n, i, toks) {
       n = split(t, toks, /[ \t]+/)
       for (i = 1; i <= n; i++) if (toks[i] != "" && toks[i] !~ /^fui-[a-z0-9-]+$/) return 0
@@ -243,6 +273,8 @@ found="$(
           hit = 0
         } else if (pre ~ />[ \t]*$/ && after ~ /^[ \t]*</) {
           hit = lit ~ /[A-Za-z]/
+        } else if (lit ~ /</ || lit ~ /^[ \t]*[a-z-]+=\\"/) {
+          hit = markup(lit)
         } else if (pre ~ /^[ \t]*$/ && after ~ /^[ \t]*$/) {
           hit = lit ~ /[A-Za-z]/ && !classes(lit)
         } else {

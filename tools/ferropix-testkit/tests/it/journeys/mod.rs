@@ -5,18 +5,20 @@
 //! gate (#98).
 //!
 //! Each journey drives headless Chrome over `WebDriver`, through a
-//! chromedriver of its own, against the console run in process over its
-//! release site bundle, the test OpenID Provider and a stand-in for the
-//! FerroPIX server (`stack`). The waits are FerroTERM's (`browser`): every
-//! step waits for the page to hydrate and a press waits for the page it
-//! loads, never a timer. A journey fails on anything severe the browser
-//! logs, and on Leptos's warning of a resource read outside a `Suspense`
-//! on the process's standard error (`stderr`).
+//! chromedriver of its own, against the console run in process, the test
+//! OpenID Provider and a stand-in for the FerroPIX server (`stack`). The
+//! waits are FerroTERM's (`browser`): every step waits for the page to be
+//! ready, FerroUI's loader marking it once its modules run, and a press
+//! waits for the page it loads, never a timer. The journeys run with
+//! FerroUI's modules and, where the floor is the point (`no_script`, the
+//! steward's work), with them withheld. A journey fails on anything severe
+//! the browser logs, and on a panic of the console's server on the
+//! process's standard error (`stderr`).
 //!
 //! Without `FERROPIX_JOURNEYS=1` each journey returns at once, so the
 //! ordinary suite needs no browser; the `journeys` job of
-//! `.github/workflows/ci.yml` sets it, installs the Chrome for Testing
-//! release `docs/VERSIONS.md` pins and builds the bundle. The guard that
+//! `.github/workflows/ci.yml` sets it and installs the Chrome for Testing
+//! release `docs/VERSIONS.md` pins. The guard that
 //! every route of the console is walked runs in the ordinary suite. No
 //! specification governs the journeys: our own design, after FerroBRIDGE's,
 //! FerroFED's and FerroTERM's.
@@ -24,9 +26,10 @@
 mod accessibility;
 mod browser;
 mod chromedriver;
-mod in_place;
 mod keyboard;
 mod merge;
+mod navigation;
+mod no_script;
 mod pair;
 mod preferences;
 mod pseudo_locale;
@@ -55,7 +58,7 @@ const NOT_FOUND: &str = "/patients/123456789";
 const PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 
 /// Every screen a signed-in steward opens, one address per route of the
-/// console's router (`app/ferropix-console/src/app.rs`), each drawing its
+/// console (`app/ferropix-console/src/app/mod.rs`), each drawing its
 /// refused state while the server serves no operator API, and the
 /// not-found page an identifier in an address draws.
 const SCREENS: [&str; 20] = [

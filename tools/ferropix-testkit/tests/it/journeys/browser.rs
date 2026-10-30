@@ -8,10 +8,13 @@
 //! no journey shares a driver with another.
 //!
 //! The waits are FerroTERM's (FerroHEALTH/FerroTERM#834, #840): every wait
-//! starts by waiting for the page in front of the browser to hydrate, which
-//! the console marks with `data-ferroui-hydrated` on `<html>`, and a press tags the
-//! page first, so the wait after it is never satisfied by the page the press
-//! is leaving. Nothing sleeps for a fixed time and hopes. A wait that runs
+//! starts by waiting for the page in front of the browser to be ready, which
+//! FerroUI's loader marks with `data-fui-script` on `<html>` once its modules
+//! run (`ferrohealth_ui::script::MARK`), and a press tags the page first, so
+//! the wait after it is never satisfied by the page the press is leaving. A
+//! session with the modules withheld waits for the document alone, as a
+//! browser that never runs them would. Nothing sleeps for a fixed time and
+//! hopes. A wait that runs
 //! out fails the journey with the address, what the browser logged, a
 //! screenshot and the whole document, written to the failure directory the
 //! `journeys` CI job uploads.
@@ -25,7 +28,7 @@ use thirtyfour::common::keys::TypingData;
 use thirtyfour::prelude::*;
 
 use crate::journeys::chromedriver::{CHROME_ENV, Chromedriver, installed};
-use crate::journeys::stderr::{RESOURCE_OUTSIDE_SUSPENSE, Stderr};
+use crate::journeys::stderr::{SERVER_PANIC, Stderr};
 
 /// The environment variable naming the directory a failure writes its
 /// evidence into, when it is not [`DEFAULT_FAILURES`].
@@ -59,14 +62,19 @@ const MARKUP_IN_A_FAILURE: usize = 20_000;
 /// How many words of a wait's description name its evidence files.
 const SLUG_WORDS: usize = 8;
 
+/// The address pattern of FerroUI's script modules, the loader among them,
+/// which a session withholds to hold every page to its no-script floor.
+pub(crate) const MODULES: &str = "*/ferrohealth-ui/*/scripts/*";
+
 /// Whether the page in front of the browser has finished loading and, when
-/// it loads the console's bundle, has been marked hydrated. A page that is
-/// not the console's (the provider's redirect, a plain-text refusal) loads
-/// no bundle and is not waited on.
-const HYDRATED: &str = r#"
+/// it loads FerroUI's loader and the session lets it run (`arguments[0]`),
+/// has been marked by it. A page that is not the console's (the provider's
+/// redirect, a plain-text refusal) loads no loader and is not waited on.
+const READY: &str = r#"
 return document.readyState === "complete"
-    && (document.documentElement.hasAttribute("data-ferroui-hydrated")
-        || document.querySelector("script[src*='/pkg/'], link[href*='/pkg/']") === null);
+    && (document.documentElement.hasAttribute("data-fui-script")
+        || arguments[0] === true
+        || document.querySelector("script[src*='/ferrohealth-ui/']") === null);
 "#;
 
 /// Tags the page in front of the browser before a press, and records on the
@@ -75,10 +83,8 @@ return document.readyState === "complete"
 /// navigates only in a later task
 /// (<https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm>).
 ///
-/// A navigation in the same document, the router drawing the next page, and
-/// a post the page took itself are drawn in place: the press has then left
-/// once the console counted another drawn page on the root
-/// (`data-pix-draws`).
+/// A navigation in the same document (a tab that names its panel in the
+/// address) and a post a module took itself load nothing.
 const TAG: &str = r#"
 if (window.__journeyPress === undefined) {
   navigation.addEventListener("navigate", (event) => {
@@ -92,15 +98,12 @@ window.__journeyPress = {
   navigating: false,
   inPage: false,
   submits: [],
-  draws: document.documentElement.getAttribute("data-pix-draws"),
 };
 "#;
 
 /// Where the press [`TAG`] watched has left the browser: `loaded` once the
 /// tagged page is gone, `leaving` while it is still in front of the browser
-/// and another page is on its way, `drawing` while the page drawn in place
-/// is on its way and `drawn` once it is, `staying` when the press loads
-/// nothing.
+/// and another page is on its way, `staying` when the press loads nothing.
 const LEFT: &str = r#"
 const press = window.__journeyPress;
 if (press === undefined) { return "loaded"; }
@@ -108,10 +111,6 @@ const method = (event) =>
   (event.submitter?.getAttribute("formmethod") ?? event.target.method).toLowerCase();
 const posted = press.submits.some((event) => !event.defaultPrevented && method(event) !== "dialog");
 if (press.navigating || posted) { return "leaving"; }
-const taken = press.submits.some((event) => event.defaultPrevented && method(event) === "post");
-if (press.inPage || taken) {
-  return document.documentElement.getAttribute("data-pix-draws") !== press.draws ? "drawn" : "drawing";
-}
 return "staying";
 "#;
 
@@ -152,11 +151,37 @@ pub(crate) struct Journey {
     driver: WebDriver,
     /// The chromedriver of this session alone.
     chromedriver: Option<Chromedriver>,
+    /// Whether the session withholds FerroUI's script modules.
+    withheld: bool,
 }
 
 impl Journey {
-    /// Starts a headless Chrome session through a chromedriver of its own.
+    /// Starts a headless Chrome session through a chromedriver of its own,
+    /// with FerroUI's script modules running.
     pub(crate) async fn start() -> Result<Self, Box<dyn Error>> {
+        Self::start_with(false).await
+    }
+
+    /// Starts a headless Chrome session that refuses every one of FerroUI's
+    /// script modules (`Network.setBlockedURLs` of the Chrome `DevTools`
+    /// Protocol), as a browser whose modules never load.
+    pub(crate) async fn start_withheld() -> Result<Self, Box<dyn Error>> {
+        let session = Self::start_with(true).await?;
+        let devtools = session.driver.cdp();
+        devtools
+            .send_raw("Network.enable", serde_json::json!({}))
+            .await?;
+        devtools
+            .send_raw(
+                "Network.setBlockedURLs",
+                serde_json::json!({ "urls": [MODULES] }),
+            )
+            .await?;
+        Ok(session)
+    }
+
+    /// Starts a session, withholding the modules when `withheld`.
+    async fn start_with(withheld: bool) -> Result<Self, Box<dyn Error>> {
         let mut capabilities = DesiredCapabilities::chrome();
         // NOTE: Chrome's headless mode (developer.chrome.com/docs/chromium/headless):
         // a container has neither the kernel sandbox nor a large `/dev/shm`.
@@ -181,6 +206,7 @@ impl Journey {
         Ok(Self {
             driver,
             chromedriver: Some(chromedriver),
+            withheld,
         })
     }
 
@@ -192,28 +218,34 @@ impl Journey {
         Ok(())
     }
 
-    /// Opens `address` as a fresh load and waits for it to hydrate.
+    /// Opens `address` as a fresh load and waits for it to be ready.
     pub(crate) async fn open(&self, address: &str) {
         self.driver
             .goto(address)
             .await
             .unwrap_or_else(|error| panic!("the browser could not open {address}: {error}"));
-        self.hydrated().await;
+        self.ready().await;
+    }
+
+    /// Whether the session withholds FerroUI's script modules.
+    pub(crate) const fn withheld(&self) -> bool {
+        self.withheld
     }
 
     /// Waits until the page in front of the browser has loaded and, when it
-    /// is the console's, hydrated.
+    /// is the console's and the session runs the modules, FerroUI's loader
+    /// has marked it.
     ///
     /// The server sends a whole page, so its controls are on screen before
-    /// their islands answer; a press in between reaches markup with no
-    /// handler. The page is read whole on every poll, so a navigation still
-    /// settling is judged on the page it lands on.
-    pub(crate) async fn hydrated(&self) {
+    /// their modules run; a press in between reaches markup with no
+    /// behaviour yet. The page is read whole on every poll, so a navigation
+    /// still settling is judged on the page it lands on.
+    pub(crate) async fn ready(&self) {
         let started = Instant::now();
         while started.elapsed() <= WAIT {
             let ready = self
                 .driver
-                .execute(HYDRATED, Vec::new())
+                .execute(READY, vec![serde_json::Value::Bool(self.withheld)])
                 .await
                 .is_ok_and(|answer| answer.convert::<bool>().is_ok_and(|ready| ready));
             if ready {
@@ -223,15 +255,15 @@ impl Journey {
         }
         panic!(
             "{}",
-            self.failure("the page to hydrate", "no data-ferroui-hydrated mark")
+            self.failure("the page to be ready", "no data-fui-script mark")
                 .await
         );
     }
 
-    /// The first element matching `selector`, once the page has hydrated and
-    /// drawn it, scrolled into view.
+    /// The first element matching `selector`, once the page is ready and
+    /// shows it, scrolled into view.
     pub(crate) async fn element(&self, selector: By, what: &str) -> WebElement {
-        self.hydrated().await;
+        self.ready().await;
         let element = match self
             .driver
             .query(selector)
@@ -252,14 +284,14 @@ impl Journey {
     }
 
     /// Presses the element matching `selector` and returns once the page the
-    /// press loads, if any, has hydrated.
+    /// press loads, if any, is ready.
     pub(crate) async fn press(&self, selector: By, what: &str) {
         let element = self.element(selector, what).await;
         self.press_on(&element, what).await;
     }
 
     /// Presses `element` and returns once the page the press loads, if any,
-    /// has hydrated.
+    /// is ready.
     pub(crate) async fn press_on(&self, element: &WebElement, what: &str) {
         if let Err(error) = self.acting(what, || element.click()).await {
             panic!("{}", self.failure(what, &error.to_string()).await);
@@ -267,7 +299,7 @@ impl Journey {
     }
 
     /// Sends `key` to `element` and returns once the page it loads, if any,
-    /// has hydrated.
+    /// is ready.
     pub(crate) async fn keys(&self, element: &WebElement, key: impl Into<TypingData>, what: &str) {
         let key = key.into();
         if let Err(error) = self.acting(what, || element.send_keys(key)).await {
@@ -293,10 +325,10 @@ impl Journey {
     }
 
     /// Runs `act`, a press or keys, on a tagged page, and returns once the
-    /// page it loads, if any, has hydrated.
+    /// page it loads, if any, is ready.
     ///
     /// A click can return while the page it leaves is still in front of the
-    /// browser, hydrated, and carrying the controls the next step looks for,
+    /// browser, ready, and carrying the controls the next step looks for,
     /// so every wait after it would pass on a page about to go away. The tag
     /// goes with that page, which is how the new one is told apart.
     async fn acting<F, A>(&self, what: &str, act: F) -> WebDriverResult<()>
@@ -317,9 +349,9 @@ impl Journey {
                 .ok()
                 .and_then(|answer| answer.convert::<String>().ok());
             match left.as_deref() {
-                Some("staying" | "drawn") => return Ok(()),
+                Some("staying") => return Ok(()),
                 Some("loaded") => {
-                    self.hydrated().await;
+                    self.ready().await;
                     return Ok(());
                 }
                 _ => {}
@@ -343,7 +375,7 @@ impl Journey {
     pub(crate) async fn count_becoming(&self, selector: By, wanted: usize, what: &str) {
         let deadline = Instant::now() + WAIT;
         loop {
-            self.hydrated().await;
+            self.ready().await;
             let found = self
                 .driver
                 .find_all(selector.clone())
@@ -371,7 +403,7 @@ impl Journey {
                 .map(|url| url.to_string())
                 .unwrap_or_default();
             if address.contains(needle) {
-                self.hydrated().await;
+                self.ready().await;
                 return address;
             }
             if Instant::now() >= deadline {
@@ -470,10 +502,10 @@ impl Journey {
     }
 
     /// Fails the journey when the browser logged anything severe since the
-    /// last read: a script error, a panic, a refused policy or a failed load.
-    /// An entry naming one of `expected` is the journey working: the
-    /// not-found page answers `404` by design, which the browser logs as a
-    /// failed load.
+    /// last read: a script error, a refused policy or a failed load. An
+    /// entry naming one of `expected` is the journey working: the not-found
+    /// page answers `404` by design, which the browser logs as a failed load,
+    /// and a session that withholds the modules logs each one it refused.
     pub(crate) async fn no_console_errors_but(&self, expected: &[&str]) {
         let console: Vec<String> = self
             .console_errors()
@@ -554,38 +586,61 @@ impl Journey {
     }
 }
 
-/// Runs `journey` in a fresh browser, ends the session whatever the journey
-/// did, and fails on anything severe the browser logged but the not-found
-/// page's own `404`, and on a resource the console's server read outside a
-/// `Suspense`, a `Transition` or an effect, which Leptos warns of on the
-/// process's standard error.
+/// Runs `journey` in a fresh browser with FerroUI's modules running, ends
+/// the session whatever the journey did, and fails on anything severe the
+/// browser logged but the not-found page's own `404`, and on a panic of the
+/// console's server, run in process, on the process's standard error.
 pub(crate) async fn with_journey<F>(journey: F)
 where
     F: AsyncFnOnce(&Journey),
 {
+    run(false, journey).await;
+}
+
+/// Runs `journey` as [`with_journey`] does in a browser that refuses every
+/// one of FerroUI's modules, failing on anything severe the browser logged
+/// but a refused module and the not-found page's `404`.
+pub(crate) async fn with_journey_withheld<F>(journey: F)
+where
+    F: AsyncFnOnce(&Journey),
+{
+    run(true, journey).await;
+}
+
+/// Runs `journey` in a fresh browser, withholding the modules when
+/// `withheld`.
+async fn run<F>(withheld: bool, journey: F)
+where
+    F: AsyncFnOnce(&Journey),
+{
     let stderr = Stderr::copy().await;
-    let session = Journey::start()
-        .await
-        .unwrap_or_else(|error| panic!("no browser session: {error}"));
+    let session = if withheld {
+        Journey::start_withheld().await
+    } else {
+        Journey::start().await
+    }
+    .unwrap_or_else(|error| panic!("no browser session: {error}"));
     journey(&session).await;
-    session
-        .no_console_errors_but(&[crate::journeys::NOT_FOUND])
-        .await;
+    let expected: &[&str] = if withheld {
+        &[crate::journeys::NOT_FOUND, "/ferrohealth-ui/"]
+    } else {
+        &[crate::journeys::NOT_FOUND]
+    };
+    session.no_console_errors_but(expected).await;
     session
         .quit()
         .await
         .unwrap_or_else(|error| panic!("the browser session did not end cleanly: {error}"));
-    let warned: Vec<String> = stderr
+    let panicked: Vec<String> = stderr
         .end()
         .lines()
-        .filter(|line| line.contains(RESOURCE_OUTSIDE_SUSPENSE))
+        .filter(|line| line.contains(SERVER_PANIC))
         .map(str::to_owned)
         .collect();
     assert!(
-        warned.is_empty(),
-        "the console read a resource outside a Suspense, a Transition or an effect, \
-         which risks a hydration mismatch:\n  {}",
-        warned.join("\n  ")
+        panicked.is_empty(),
+        "the console's server panicked while the journey ran:\n  {}",
+        panicked.join("\n  ")
     );
 }
 

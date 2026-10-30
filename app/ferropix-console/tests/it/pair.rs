@@ -68,13 +68,22 @@ async fn an_open_pair_draws_the_compare_the_breakdown_the_persons_and_the_bar()
         !drawn.contains("4711\u{2022}") && !drawn.contains("SYNTH"),
         "identifiers masked"
     );
+    // TODO(#390): hold `n`, `d`, `r` and `]` announced once FerroUI binds a control's key.
+    for key in ["L", "N", "D", "R", "[", "]"] {
+        assert!(
+            !drawn.contains(&format!("aria-keyshortcuts=\"{key}\"")),
+            "{key} is not announced while nothing binds it"
+        );
+    }
     assert!(
-        drawn.contains("aria-keyshortcuts=\"N\""),
-        "Not a match on n"
+        drawn.contains("value=\"not-a-match\"") && drawn.contains("value=\"defer\""),
+        "Not a match and Defer are decisions of the bar"
     );
-    assert!(drawn.contains("aria-keyshortcuts=\"D\""), "Defer on d");
-    assert!(drawn.contains("aria-keyshortcuts=\"R\""), "the reason on r");
-    assert!(drawn.contains("aria-keyshortcuts=\"]\""), "Next on ]");
+    assert!(drawn.contains("id=\"decide-reason\""), "the reason's field");
+    assert!(
+        drawn.contains(&format!("href=\"/queue/{NEXT}\"")),
+        "Next leads to the next pair"
+    );
     assert!(
         drawn.contains("name=\"a_version\" value=\"2\""),
         "the versions read"

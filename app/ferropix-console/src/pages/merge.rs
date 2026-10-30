@@ -16,23 +16,24 @@
 //! `409` and is drawn in place. No specification governs the screens: our
 //! own design; PMIR 1.6.0 §2:3.93.4.1.3 admits the local unmerge policy.
 
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::dialog::{ConfirmForm, Confirmation, danger_form_dialog};
 use ferrohealth_ui::view::form::{Field, INPUT};
+use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
 use ferrohealth_ui::view::notice::{Announce, notice};
-use ferrohealth_ui::view::surface::{card, definitions, or_none, stack};
+use ferrohealth_ui::view::surface::{card, definitions, stack};
 use ferrohealth_ui::view::time::timestamp;
-use ferrohealth_ui::widget::identifier::{Domain, Masked, identifier_list};
 use ferropix_operator_api::candidate::PersonIdentifier;
 use ferropix_operator_api::merge::{Party, Preview};
-use leptos::prelude::*;
 
 use crate::locale::messages::Msg;
-use crate::locale::{tr, tr_with};
+use crate::markup::{h, hidden, t};
 use crate::model::{Probe, Read};
-use crate::pages::{Needs, server_state};
+use crate::pages::{Needs, or_dash, server_state};
+use crate::visit::Visit;
 
 /// The hidden field that names which of the page's forms was posted.
 pub const FORM: &str = "form";
@@ -71,28 +72,31 @@ fn masked(identifiers: &[PersonIdentifier]) -> Vec<Masked> {
 
 /// A party: its name, or its id when it states none, linked to its page,
 /// and when it was made.
-fn party(party: &Party) -> AnyView {
+fn party(visit: &Visit, party: &Party) -> Html {
     let name = party
         .name
         .clone()
-        .unwrap_or_else(|| tr_with(Msg::PersonId, &[("person", party.id.clone().into())]));
-    view! {
-        <a href=format!("/patients/{}", party.id)>{name}</a>
-        <p class="fui-small fui-muted">{tr(Msg::MergeMade)} " " {timestamp(&party.created_at)}</p>
-    }
-    .into_any()
+        .unwrap_or_else(|| visit.tr_with(Msg::PersonId, &[("person", party.id.clone().into())]));
+    h(format!(
+        "<a href=\"{}\">{}</a><p class=\"fui-small fui-muted\">{} {}</p>",
+        t(format!("/patients/{}", party.id)),
+        t(name),
+        t(visit.tr(Msg::MergeMade)),
+        timestamp(&visit.locale, &party.created_at),
+    ))
 }
 
 /// The effect a preview names: what moves, what resolves elsewhere, who is
 /// told and what closes.
-fn effect(preview: &Preview) -> AnyView {
+fn effect(visit: &Visit, preview: &Preview) -> Html {
+    let locale = &visit.locale;
     let identifiers = if preview.identifiers.is_empty() {
-        or_none(String::new())
+        or_dash(locale, None)
     } else {
-        identifier_list(&masked(&preview.identifiers))
+        identifier_list(locale, &masked(&preview.identifiers))
     };
     let pseudonyms = if preview.pseudonyms.is_empty() {
-        or_none(String::new())
+        or_dash(locale, None)
     } else {
         let shown: Vec<Masked> = preview
             .pseudonyms
@@ -107,21 +111,23 @@ fn effect(preview: &Preview) -> AnyView {
                     .to_owned(),
             })
             .collect();
-        identifier_list(&shown)
+        identifier_list(locale, &shown)
     };
     definitions(vec![
-        (tr(Msg::MergeIdentifiers), identifiers),
+        (visit.tr(Msg::MergeIdentifiers), identifiers),
         (
-            tr(Msg::MergePseudonyms),
-            view! { <ul class="fui-identifier-list">{pseudonyms}</ul> }.into_any(),
+            visit.tr(Msg::MergePseudonyms),
+            h(format!(
+                "<ul class=\"fui-identifier-list\">{pseudonyms}</ul>"
+            )),
         ),
         (
-            tr(Msg::MergeSubscriptions),
-            tr_with(Msg::Count, &[("count", preview.subscriptions.into())]).into_any(),
+            visit.tr(Msg::MergeSubscriptions),
+            t(visit.tr_with(Msg::Count, &[("count", preview.subscriptions.into())])),
         ),
         (
-            tr(Msg::MergeCandidates),
-            tr_with(
+            visit.tr(Msg::MergeCandidates),
+            t(visit.tr_with(
                 Msg::Count,
                 &[(
                     "count",
@@ -129,50 +135,65 @@ fn effect(preview: &Preview) -> AnyView {
                         .unwrap_or(u64::MAX)
                         .into(),
                 )],
-            )
-            .into_any(),
+            )),
         ),
     ])
-    .into_any()
 }
 
 /// A refused merge or revert, drawn above the page: a `409` says the
 /// preview went stale, any other refusal is the call's state.
-fn refused_notice(refused: Option<&Probe>, route: &str) -> Option<AnyView> {
-    refused.map(|probe| {
+fn refused_notice(visit: &Visit, refused: Option<&Probe>, route: &str) -> Html {
+    refused.map_or_else(Html::empty, |probe| {
         if probe.reach == crate::model::Reach::Refused(http::StatusCode::CONFLICT) {
             notice(
                 Tone::Warn,
                 Announce::Alert,
                 None,
-                view! { <p>{tr(Msg::MergeStale)}</p> },
+                h(format!("<p>{}</p>", t(visit.tr(Msg::MergeStale)))),
             )
-            .into_any()
         } else {
-            server_state(
-                Some(probe),
-                Needs {
-                    what: Msg::WhatMergeWrite,
-                    away: false,
-                },
-                route,
-            )
+            server_state(visit, Some(probe), Needs::of(Msg::WhatMergeWrite), route)
         }
     })
 }
 
 /// The required reason of a danger dialog.
-fn reason_field(id: &'static str) -> AnyView {
-    Field::new(id, tr(Msg::RevealReason)).view(view! {
-        <input id=id name="reason" type="text" class=INPUT required maxlength="500" autocomplete="off" />
-    })
+fn reason_field(visit: &Visit, id: &'static str) -> Html {
+    Field::new(id, visit.tr(Msg::RevealReason)).view(h(format!(
+        "<input id=\"{id}\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">"
+    )))
+}
+
+/// A danger button that opens the dialog `dialog`, showing `glyph` and
+/// `words`.
+fn asks(dialog: &str, glyph: Glyph, words: &str) -> Html {
+    h(format!(
+        "<button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{}\" aria-haspopup=\"dialog\">{}</button>",
+        Variant::Destructive.class(),
+        t(dialog),
+        label(Some(glyph), words)
+    ))
+}
+
+/// The submit of a danger dialog, showing `glyph` and `words`.
+fn confirms(glyph: Glyph, words: &str) -> Html {
+    h(format!(
+        "<button type=\"submit\" class=\"{}\">{}</button>",
+        Variant::Destructive.class(),
+        label(Some(glyph), words)
+    ))
 }
 
 /// The merge page of `person`: the form that names the other patient, and
 /// once previewed, the two patients, the choice of survivor, the effect and
 /// the dialog that merges.
 #[must_use]
-pub fn merge(person: &str, preview: Option<&Read<Preview>>, refused: Option<&Probe>) -> AnyView {
+pub fn merge(
+    visit: &Visit,
+    person: &str,
+    preview: Option<&Read<Preview>>,
+    refused: Option<&Probe>,
+) -> Html {
     let action = format!("/patients/{person}/merge");
     let other = preview
         .and_then(|read| read.as_ref().ok())
@@ -184,95 +205,98 @@ pub fn merge(person: &str, preview: Option<&Read<Preview>>, refused: Option<&Pro
             }
         })
         .unwrap_or_default();
+    let other_field = Field::new("merge-other", visit.tr(Msg::MergeOtherField)).view(h(format!(
+        "<input id=\"merge-other\" name=\"other\" type=\"text\" class=\"{INPUT}\" required autocomplete=\"off\" spellcheck=\"false\" value=\"{}\">",
+        t(&other)
+    )));
     let pick = card(
-        tr(Msg::MergeOther),
-        view! {
-            <form method="post" action=action.clone() class="fui-form">
-                <input type="hidden" name=FORM value=PREVIEW />
-                <p class="fui-help">{tr(Msg::MergeOtherNote)}</p>
-                <div class="fui-form-grid">
-                    {Field::new("merge-other", tr(Msg::MergeOtherField)).view(view! {
-                        <input id="merge-other" name="other" type="text" class=INPUT required autocomplete="off" spellcheck="false" value=other.clone() />
-                    })}
-                </div>
-                <div class="fui-form-foot">
-                    <button type="submit" class=Variant::Secondary.class()>{label(Some(Glyph::EYE), tr(Msg::MergePreview))}</button>
-                </div>
-            </form>
-        },
+        visit.tr(Msg::MergeOther),
+        h(format!(
+            "<form method=\"post\" action=\"{}\" class=\"fui-form\">{}<p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{other_field}</div><div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button></div></form>",
+            t(&action),
+            hidden(FORM, PREVIEW),
+            t(visit.tr(Msg::MergeOtherNote)),
+            Variant::Secondary.class(),
+            label(Some(Glyph::EYE), visit.tr(Msg::MergePreview)),
+        )),
     );
-    let shown = preview.map(|read| match read {
-        Ok(preview) => previewed(person, &action, preview),
+    let shown = preview.map_or_else(Html::empty, |read| match read {
+        Ok(preview) => previewed(visit, person, &action, preview),
         Err(probe) => server_state(
+            visit,
             Some(probe),
-            Needs {
-                what: Msg::WhatMergePreview,
-                away: false,
-            },
+            Needs::of(Msg::WhatMergePreview),
             "GET /operator/merges/preview",
         ),
     });
-    stack(view! {
-        {refused_notice(refused, "POST /operator/merges")}
-        {pick}
-        {shown}
-    })
-    .into_any()
+    stack(Html::join([
+        refused_notice(visit, refused, "POST /operator/merges"),
+        pick,
+        shown,
+    ]))
 }
 
 /// A merge's preview: the survivor choice, the effect, and the dialog that
 /// merges with the reason and both versions.
-fn previewed(person: &str, action: &str, preview: &Preview) -> AnyView {
+fn previewed(visit: &Visit, person: &str, action: &str, preview: &Preview) -> Html {
     let survivor = &preview.survivor;
     let merged = &preview.merged;
-    let swap = view! {
-        <form method="post" action=action.to_owned() class="fui-inline-form">
-            <input type="hidden" name=FORM value=PREVIEW />
-            <input type="hidden" name="other" value=if survivor.id == person { merged.id.clone() } else { survivor.id.clone() } />
-            <input type="hidden" name="survivor" value=merged.id.clone() />
-            <button type="submit" class=Variant::Secondary.small()>{label(Some(Glyph::ARROW_LEFT_RIGHT), tr(Msg::MergeSwap))}</button>
-        </form>
+    let other = if survivor.id == person {
+        &merged.id
+    } else {
+        &survivor.id
     };
+    let swap = h(format!(
+        "<form method=\"post\" action=\"{}\" class=\"fui-inline-form\">{}{}{}<button type=\"submit\" class=\"{}\">{}</button></form>",
+        t(action),
+        hidden(FORM, PREVIEW),
+        hidden("other", other),
+        hidden("survivor", &merged.id),
+        Variant::Secondary.small(),
+        label(Some(Glyph::ARROW_LEFT_RIGHT), visit.tr(Msg::MergeSwap)),
+    ));
     let moved = u64::try_from(preview.identifiers.len()).unwrap_or(u64::MAX);
-    let fields = view! {
-        <input type="hidden" name=FORM value=MERGE />
-        <input type="hidden" name="survivor" value=survivor.id.clone() />
-        <input type="hidden" name="survivor_version" value=survivor.version.clone() />
-        <input type="hidden" name="merged" value=merged.id.clone() />
-        <input type="hidden" name="merged_version" value=merged.version.clone() />
-        {reason_field("merge-reason")}
-    }
-    .into_any();
+    let fields = Html::join([
+        hidden(FORM, MERGE),
+        hidden("survivor", &survivor.id),
+        hidden("survivor_version", &survivor.version),
+        hidden("merged", &merged.id),
+        hidden("merged_version", &merged.version),
+        reason_field(visit, "merge-reason"),
+    ]);
     let dialog = danger_form_dialog(
+        &visit.locale,
         Confirmation {
             id: MERGE_DIALOG.into(),
-            title: tr(Msg::MergeConfirmTitle).into(),
-            message: tr_with(Msg::MergeConfirmMessage, &[("count", moved.into())]).into(),
+            title: visit.tr(Msg::MergeConfirmTitle).into(),
+            message: visit
+                .tr_with(Msg::MergeConfirmMessage, &[("count", moved.into())])
+                .into(),
         },
         ConfirmForm {
             action: action.to_owned(),
             fields,
         },
-        view! { <button type="submit" class=Variant::Destructive.class()>{label(Some(Glyph::GIT_COMPARE), tr(Msg::Merge))}</button> },
+        confirms(Glyph::GIT_COMPARE, &visit.tr(Msg::Merge)),
     );
     let parties = definitions(vec![
-        (tr(Msg::MergeSurvivor), party(survivor)),
-        (tr(Msg::MergeMerged), party(merged)),
+        (visit.tr(Msg::MergeSurvivor), party(visit, survivor)),
+        (visit.tr(Msg::MergeMerged), party(visit, merged)),
     ]);
     card(
-        tr(Msg::MergeEffect),
-        view! {
-            {parties}
-            {swap}
-            {effect(preview)}
-            <p class="fui-help">{tr(Msg::MergeReversible)}</p>
-            <button type="button" class=Variant::Destructive.class() command="show-modal" commandfor=MERGE_DIALOG aria-haspopup="dialog">
-                {label(Some(Glyph::GIT_COMPARE), tr(Msg::MergeAsk))}
-            </button>
-            {dialog}
-        },
+        visit.tr(Msg::MergeEffect),
+        Html::join([
+            parties,
+            swap,
+            effect(visit, preview),
+            h(format!(
+                "<p class=\"fui-help\">{}</p>",
+                t(visit.tr(Msg::MergeReversible))
+            )),
+            asks(MERGE_DIALOG, Glyph::GIT_COMPARE, &visit.tr(Msg::MergeAsk)),
+            dialog,
+        ]),
     )
-    .into_any()
 }
 
 /// The unmerge page of `person`.
@@ -282,97 +306,93 @@ fn previewed(person: &str, action: &str, preview: &Preview) -> AnyView {
 /// this one is not the latest; or the note that there is nothing to revert.
 #[must_use]
 pub fn unmerge(
+    visit: &Visit,
     person: &str,
     merge: Option<&String>,
     preview: Option<&Read<Preview>>,
     refused: Option<&Probe>,
-) -> AnyView {
+) -> Html {
     let action = format!("/patients/{person}/unmerge");
     let body = match (merge, preview) {
-        (Some(merge), Some(Ok(preview))) => reverted(&action, merge, preview),
+        (Some(merge), Some(Ok(preview))) => reverted(visit, &action, merge, preview),
         (_, Some(Err(probe))) => server_state(
+            visit,
             Some(probe),
-            Needs {
-                what: Msg::WhatMergePreview,
-                away: false,
-            },
+            Needs::of(Msg::WhatMergePreview),
             "GET /operator/merges/preview",
         ),
         _ => notice(
             Tone::Info,
             Announce::Status,
             None,
-            view! { <p>{tr(Msg::UnmergeNone)}</p> },
-        )
-        .into_any(),
+            h(format!("<p>{}</p>", t(visit.tr(Msg::UnmergeNone)))),
+        ),
     };
-    stack(view! {
-        {refused_notice(refused, "POST /operator/merges/{id}/revert")}
-        {body}
-    })
-    .into_any()
+    stack(refused_notice(visit, refused, "POST /operator/merges/{id}/revert").then(body))
 }
 
 /// A revert's preview: the merge with its reason, what moves back, and the
 /// dialog that reverts it, or the merge to revert first.
-fn reverted(action: &str, merge: &str, preview: &Preview) -> AnyView {
-    let first = preview.first_revert.as_ref().map(|first| {
-        notice(
-            Tone::Warn,
-            Announce::Status,
-            None,
-            view! { <p>{tr_with(Msg::UnmergeFirst, &[("merge", first.clone().into())])}</p> },
-        )
-    });
+fn reverted(visit: &Visit, action: &str, merge: &str, preview: &Preview) -> Html {
+    let first = preview
+        .first_revert
+        .as_ref()
+        .map_or_else(Html::empty, |first| {
+            notice(
+                Tone::Warn,
+                Announce::Status,
+                None,
+                h(format!(
+                    "<p>{}</p>",
+                    t(visit.tr_with(Msg::UnmergeFirst, &[("merge", first.clone().into())]))
+                )),
+            )
+        });
     let facts = definitions(vec![
-        (tr(Msg::MergeSurvivor), party(&preview.survivor)),
-        (tr(Msg::UnmergeRestored), party(&preview.merged)),
         (
-            tr(Msg::ColReason),
-            preview
-                .reason
-                .clone()
-                .map_or_else(|| or_none(String::new()), IntoAny::into_any),
+            visit.tr(Msg::MergeSurvivor),
+            party(visit, &preview.survivor),
+        ),
+        (
+            visit.tr(Msg::UnmergeRestored),
+            party(visit, &preview.merged),
+        ),
+        (
+            visit.tr(Msg::ColReason),
+            or_dash(&visit.locale, preview.reason.clone()),
         ),
     ]);
-    let ask = preview.first_revert.is_none().then(|| {
+    let ask = if preview.first_revert.is_none() {
         let moved = u64::try_from(preview.identifiers.len()).unwrap_or(u64::MAX);
-        let fields = view! {
-            <input type="hidden" name=FORM value=REVERT />
-            <input type="hidden" name="merge" value=merge.to_owned() />
-            <input type="hidden" name="survivor_version" value=preview.survivor.version.clone() />
-            {reason_field("revert-reason")}
-        }
-        .into_any();
+        let fields = Html::join([
+            hidden(FORM, REVERT),
+            hidden("merge", merge),
+            hidden("survivor_version", &preview.survivor.version),
+            reason_field(visit, "revert-reason"),
+        ]);
         let dialog = danger_form_dialog(
+            &visit.locale,
             Confirmation {
                 id: REVERT_DIALOG.into(),
-                title: tr(Msg::UnmergeConfirmTitle).into(),
-                message: tr_with(Msg::UnmergeConfirmMessage, &[("count", moved.into())]).into(),
+                title: visit.tr(Msg::UnmergeConfirmTitle).into(),
+                message: visit
+                    .tr_with(Msg::UnmergeConfirmMessage, &[("count", moved.into())])
+                    .into(),
             },
             ConfirmForm {
                 action: action.to_owned(),
                 fields,
             },
-            view! { <button type="submit" class=Variant::Destructive.class()>{label(Some(Glyph::UNDO), tr(Msg::Unmerge))}</button> },
+            confirms(Glyph::UNDO, &visit.tr(Msg::Unmerge)),
         );
-        view! {
-            <button type="button" class=Variant::Destructive.class() command="show-modal" commandfor=REVERT_DIALOG aria-haspopup="dialog">
-                {label(Some(Glyph::UNDO), tr(Msg::UnmergeAsk))}
-            </button>
-            {dialog}
-        }
-    });
+        asks(REVERT_DIALOG, Glyph::UNDO, &visit.tr(Msg::UnmergeAsk)).then(dialog)
+    } else {
+        Html::empty()
+    };
     card(
-        tr(Msg::UnmergeEffect),
-        view! {
-            {first}
-            {facts}
-            {effect(preview)}
-            {ask}
-        },
+        visit.tr(Msg::UnmergeEffect),
+        Html::join([first, facts, effect(visit, preview), ask]),
     )
-    .into_any()
 }
 
 /// The newest merge into `person` that no revert in its history undid.

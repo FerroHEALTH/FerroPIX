@@ -8,14 +8,15 @@
 //! rows first; the score breakdown with each field's weight, the total and
 //! the thresholds on one scale; the blocking key and any hard conflict;
 //! each record's person with its identifiers, masked; and FerroUI's docked
-//! decision bar with Link (`l`), Not a match (`n`), Defer (`d`), the reason
-//! (`r`) and the date a deferral comes back. A link that merges two persons
-//! asks first in FerroUI's danger dialog, which names the effect. A
-//! decision posts the record versions the page was drawn from, so one
-//! made on a stale page comes back as `409`, drawn in the bar with the ways
-//! on. Previous (`[`) and Next (`]`) lead to the neighbouring pairs. No
-//! specification governs the screen: our own design.
+//! decision bar with Link, Not a match, Defer, the reason and the date a
+//! deferral comes back. A link that merges two persons asks first in
+//! FerroUI's danger dialog, which names the effect. A decision posts the
+//! record versions the page was drawn from, so one made on a stale page
+//! comes back as `409`, drawn in the bar with the ways on. Previous and Next
+//! lead to the neighbouring pairs. No specification governs the screen: our
+//! own design.
 
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
@@ -25,24 +26,23 @@ use ferrohealth_ui::view::dock::{
     Decision, DecisionBar, DockField, DockForm, DockLine, DockLink, decision_bar,
 };
 use ferrohealth_ui::view::form::{Field, INPUT};
-use ferrohealth_ui::view::kbd::aria_keys;
+use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::score::{Contribution, Score, Threshold, score_breakdown};
 use ferrohealth_ui::view::surface::{card, definitions, stack};
 use ferrohealth_ui::view::time::timestamp;
-use ferrohealth_ui::widget::identifier::{Domain, Masked, identifier_list};
 use ferropix_operator_api::candidate::{
     Agreement, Candidate, CandidateRecord, FieldEvidence, Status,
 };
-use leptos::prelude::*;
 
 use crate::app::QUEUE;
 use crate::locale::messages::Msg;
-use crate::locale::{tr, tr_with};
+use crate::markup::{h, hidden, t};
 use crate::model::{DecisionOutcome, Probe, Reach};
 use crate::pages::patient::{FIELDS, compare_record, value_of};
 use crate::pages::queue::grade_words;
 use crate::pages::{Needs, server_state};
+use crate::visit::Visit;
 
 /// The id of the decision bar; its hidden form is this and `-form`.
 pub const BAR: &str = "decide";
@@ -50,39 +50,60 @@ pub const BAR: &str = "decide";
 /// The id of the dialog a link that merges asks in.
 const MERGE_DIALOG: &str = "link-merges";
 
-/// The pair page: the compare, the breakdown, the persons and the bar.
+/// The pair page, the compare, the breakdown and the persons, and the
+/// docked decision bar while the pair is undecided.
 #[must_use]
-pub fn pair(candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> AnyView {
+pub fn pair(
+    visit: &Visit,
+    candidate: &Candidate,
+    outcome: Option<&DecisionOutcome>,
+) -> (Html, Option<Html>) {
     let changed = [&candidate.a, &candidate.b]
         .iter()
         .any(|record| record.head_version != record.version);
     let decided = candidate.status != Status::Open && candidate.status != Status::Deferred;
-    let refused = outcome.and_then(|outcome| match outcome {
-        DecisionOutcome::Refused(probe) if !is_conflict(probe) => Some(server_state(
+    let refused = match outcome {
+        Some(DecisionOutcome::Refused(probe)) if !is_conflict(probe) => server_state(
+            visit,
             Some(probe),
-            Needs {
-                what: Msg::WhatDecision,
-                away: false,
-            },
+            Needs::of(Msg::WhatDecision),
             &format!("POST /operator/candidates/{}/decide", candidate.id),
-        )),
-        _ => None,
-    });
-    view! {
-        {neighbours(candidate)}
-        {stack(view! {
-            {decided.then(|| decided_notice(candidate))}
-            {changed.then(|| notice(Tone::Warn, Announce::Status, None, view! { <p>{tr(Msg::PairChanged)}</p> }).into_any())}
-            {refused}
-            {card(tr(Msg::PairCompare), records(candidate))}
-            {card(tr(Msg::PairBreakdown), breakdown(candidate))}
-            {card(tr(Msg::PairPersons), persons(candidate))}
-            {(!decided && candidate.merges).then(|| merge_card(candidate))}
-            {(!decided).then(|| versions(candidate))}
-        })}
-        {(!decided).then(|| bar(candidate, outcome))}
-    }
-    .into_any()
+        ),
+        _ => Html::empty(),
+    };
+    let when = |shown: bool, part: Html| if shown { part } else { Html::empty() };
+    let body = neighbours(visit, candidate).then(stack(Html::join([
+        if decided {
+            decided_notice(visit, candidate)
+        } else {
+            Html::empty()
+        },
+        when(
+            changed,
+            notice(
+                Tone::Warn,
+                Announce::Status,
+                None,
+                h(format!("<p>{}</p>", t(visit.tr(Msg::PairChanged)))),
+            ),
+        ),
+        refused,
+        card(visit.tr(Msg::PairCompare), records(visit, candidate)),
+        card(visit.tr(Msg::PairBreakdown), breakdown(visit, candidate)),
+        card(visit.tr(Msg::PairPersons), persons(visit, candidate)),
+        if !decided && candidate.merges {
+            merge_card(visit, candidate)
+        } else {
+            Html::empty()
+        },
+        if decided {
+            Html::empty()
+        } else {
+            versions(candidate)
+        },
+    ])));
+    let dock = (!decided).then(|| bar(visit, candidate, outcome));
+    (body, dock)
 }
 
 /// Whether `probe` is the server's `409`: the pair changed under the page.
@@ -90,30 +111,34 @@ fn is_conflict(probe: &Probe) -> bool {
     probe.reach == Reach::Refused(http::StatusCode::CONFLICT)
 }
 
-/// Previous (`[`) and Next (`]`), the neighbouring pairs in the queue's
-/// order, and the queue.
-fn neighbours(candidate: &Candidate) -> AnyView {
-    let link = |id: &Option<String>, words: Msg, key: &str, glyph: Glyph| {
-        id.as_ref().map(|id| {
-            view! {
-                <a href=format!("{QUEUE}/{id}") class=Variant::Secondary.small() aria-keyshortcuts=aria_keys(key)>
-                    {label(Some(glyph), tr(words))}
-                </a>
-            }
+/// Previous and Next, the neighbouring pairs in the queue's order.
+// TODO(#390): announce `[` and `]` again once a FerroUI module binds a control's key.
+fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
+    let link = |id: Option<&String>, words: Msg, glyph: Glyph| {
+        id.map_or_else(Html::empty, |id| {
+            h(format!(
+                "<a href=\"{}\" class=\"{}\">{}</a>",
+                t(format!("{QUEUE}/{id}")),
+                Variant::Secondary.small(),
+                label(Some(glyph), visit.tr(words)),
+            ))
         })
     };
-    view! {
-        <nav class="fui-actions" aria-label=tr(Msg::PairNeighbours)>
-            {link(&candidate.previous, Msg::PairPrevious, "[", Glyph::CHEVRON_LEFT)}
-            {link(&candidate.next, Msg::PairNext, "]", Glyph::CHEVRON_RIGHT)}
-        </nav>
-    }
-    .into_any()
+    h(format!(
+        "<nav class=\"fui-actions\" aria-label=\"{}\">{}{}</nav>",
+        t(visit.tr(Msg::PairNeighbours)),
+        link(
+            candidate.previous.as_ref(),
+            Msg::PairPrevious,
+            Glyph::CHEVRON_LEFT
+        ),
+        link(candidate.next.as_ref(), Msg::PairNext, Glyph::CHEVRON_RIGHT),
+    ))
 }
 
 /// Who decided the pair, when and how, for a pair someone already decided.
-fn decided_notice(candidate: &Candidate) -> AnyView {
-    let how = tr(match candidate.status {
+fn decided_notice(visit: &Visit, candidate: &Candidate) -> Html {
+    let how = visit.tr(match candidate.status {
         Status::Linked => Msg::PairLinked,
         _ => Msg::PairNotAMatch,
     });
@@ -122,51 +147,65 @@ fn decided_notice(candidate: &Candidate) -> AnyView {
         Tone::Info,
         Announce::Status,
         None,
-        view! {
-            <p>{tr_with(Msg::PairDecided, &[("how", how.into()), ("who", who.into())])}</p>
-            {candidate.decided_at.as_ref().map(|at| view! { <p class="fui-small fui-muted">{timestamp(at)}</p> })}
-            {candidate.reason.clone().map(|reason| view! { <p class="fui-small">{reason}</p> })}
-        },
+        h(format!(
+            "<p>{}</p>{}{}",
+            t(visit.tr_with(
+                Msg::PairDecided,
+                &[("how", how.into()), ("who", who.into())]
+            )),
+            candidate
+                .decided_at
+                .as_ref()
+                .map_or_else(Html::empty, |at| h(format!(
+                    "<p class=\"fui-small fui-muted\">{}</p>",
+                    timestamp(&visit.locale, at)
+                ))),
+            candidate
+                .reason
+                .as_ref()
+                .map_or_else(Html::empty, |reason| h(format!(
+                    "<p class=\"fui-small\">{}</p>",
+                    t(reason)
+                ))),
+        )),
     )
-    .into_any()
 }
 
 /// The record's title: its domain, and its version on a quiet line.
-fn record(key: &str, record: &CandidateRecord) -> CompareRecord {
+fn record(visit: &Visit, key: &str, record: &CandidateRecord) -> CompareRecord {
     compare_record(
+        visit,
         String::from(key),
         record.domain.name.clone(),
-        Some(tr_with(
-            Msg::PairVersion,
-            &[("version", record.version.into())],
-        )),
+        Some(visit.tr_with(Msg::PairVersion, &[("version", record.version.into())])),
         &record.demographics,
     )
 }
 
 /// The two records side by side, the second marked against the first.
-fn records(candidate: &Candidate) -> AnyView {
+fn records(visit: &Visit, candidate: &Candidate) -> Html {
     let fields: Vec<CompareField> = FIELDS
         .iter()
         .map(|(key, words)| CompareField {
             key: (*key).to_owned(),
-            label: tr(*words),
+            label: visit.tr(*words),
         })
         .collect();
-    let leading = record("a", &candidate.a);
-    let others = vec![record("b", &candidate.b)];
-    let (a, b) = (
-        candidate.a.demographics.clone(),
-        candidate.b.demographics.clone(),
-    );
-    let verdict = move |field: &str, _: usize| match (value_of(&a, field), value_of(&b, field)) {
+    let leading = record(visit, "a", &candidate.a);
+    let others = vec![record(visit, "b", &candidate.b)];
+    let (a, b) = (&candidate.a.demographics, &candidate.b.demographics);
+    let verdict = |field: &str, _: usize| match (
+        value_of(&visit.locale, a, field),
+        value_of(&visit.locale, b, field),
+    ) {
         (Some(lead), Some(theirs)) if lead.eq_ignore_ascii_case(&theirs) => Verdict::Agree,
         (Some(_), Some(_)) => Verdict::Differ,
         (Some(_), None) => Verdict::Absent,
         (None, _) => Verdict::Unmarked,
     };
-    let caption = tr(Msg::PairCompare);
+    let caption = visit.tr(Msg::PairCompare);
     compare_pair(
+        &visit.locale,
         Compare {
             id: "pair",
             caption: &caption,
@@ -181,8 +220,8 @@ fn records(candidate: &Candidate) -> AnyView {
 }
 
 /// The words of a field's agreement.
-fn agreement(agreement: Agreement) -> String {
-    tr(match agreement {
+fn agreement(visit: &Visit, agreement: Agreement) -> String {
+    visit.tr(match agreement {
         Agreement::Agree => Msg::AgreementAgree,
         Agreement::Partial => Msg::AgreementPartial,
         Agreement::Disagree => Msg::AgreementDisagree,
@@ -191,13 +230,13 @@ fn agreement(agreement: Agreement) -> String {
 }
 
 /// One field's contribution, its words first and its comparator after.
-fn contribution(field: &FieldEvidence) -> Contribution {
+fn contribution(visit: &Visit, field: &FieldEvidence) -> Contribution {
     Contribution {
-        label: tr_with(
+        label: visit.tr_with(
             Msg::PairContribution,
             &[
                 ("field", field.field.clone().into()),
-                ("agreement", agreement(field.agreement).into()),
+                ("agreement", agreement(visit, field.agreement).into()),
             ],
         ),
         reading: Some(match field.reading {
@@ -209,24 +248,28 @@ fn contribution(field: &FieldEvidence) -> Contribution {
 }
 
 /// The score breakdown, the blocking key and the hard conflicts.
-fn breakdown(candidate: &Candidate) -> AnyView {
+fn breakdown(visit: &Visit, candidate: &Candidate) -> Html {
     let evidence = &candidate.evidence;
     let score = Score {
         total: evidence.total,
         value: evidence.score,
-        grade: grade_words(evidence.grade),
-        contributions: evidence.fields.iter().map(contribution).collect(),
+        grade: grade_words(visit, evidence.grade),
+        contributions: evidence
+            .fields
+            .iter()
+            .map(|field| contribution(visit, field))
+            .collect(),
         thresholds: vec![
             Threshold {
-                label: tr(Msg::GradePossible),
+                label: visit.tr(Msg::GradePossible),
                 at: candidate.thresholds.possible,
             },
             Threshold {
-                label: tr(Msg::GradeProbable),
+                label: visit.tr(Msg::GradeProbable),
                 at: candidate.thresholds.probable,
             },
             Threshold {
-                label: tr(Msg::GradeCertain),
+                label: visit.tr(Msg::GradeCertain),
                 at: candidate.thresholds.certain,
             },
         ],
@@ -234,25 +277,33 @@ fn breakdown(candidate: &Candidate) -> AnyView {
     let key = evidence
         .blocking_key
         .clone()
-        .unwrap_or_else(|| tr(Msg::PairNoBlockingKey));
-    let conflicts = (!evidence.conflicts.is_empty()).then(|| {
+        .unwrap_or_else(|| visit.tr(Msg::PairNoBlockingKey));
+    let conflicts = if evidence.conflicts.is_empty() {
+        Html::empty()
+    } else {
         notice(
             Tone::Warn,
             Announce::Status,
             None,
-            view! { <p>{tr_with(Msg::PairConflicts, &[("conflicts", evidence.conflicts.join(", ").into())])}</p> },
+            h(format!(
+                "<p>{}</p>",
+                t(visit.tr_with(
+                    Msg::PairConflicts,
+                    &[("conflicts", evidence.conflicts.join(", ").into())]
+                ))
+            )),
         )
-    });
-    view! {
-        <p class="fui-small">{tr(Msg::PairBlockingKey)} " " <code>{key}</code></p>
-        {conflicts}
-        {score_breakdown(&score)}
-    }
-    .into_any()
+    };
+    h(format!(
+        "<p class=\"fui-small\">{} <code>{}</code></p>{conflicts}{}",
+        t(visit.tr(Msg::PairBlockingKey)),
+        t(key),
+        score_breakdown(&visit.locale, &score),
+    ))
 }
 
 /// Each record's person, linked, with its identifiers masked.
-fn persons(candidate: &Candidate) -> AnyView {
+fn persons(visit: &Visit, candidate: &Candidate) -> Html {
     let one = |record: &CandidateRecord| {
         let identifiers: Vec<Masked> = record
             .identifiers
@@ -270,96 +321,94 @@ fn persons(candidate: &Candidate) -> AnyView {
             .collect();
         (
             record.domain.name.clone(),
-            view! {
-                <p>
-                    <a href=format!("/patients/{}", record.person)>
-                        <code>{tr_with(Msg::PersonId, &[("person", record.person.clone().into())])}</code>
-                    </a>
-                </p>
-                {identifier_list(&identifiers)}
-            }
-            .into_any(),
+            h(format!(
+                "<p><a href=\"{}\"><code>{}</code></a></p>{}",
+                t(format!("/patients/{}", record.person)),
+                t(visit.tr_with(Msg::PersonId, &[("person", record.person.clone().into())])),
+                identifier_list(&visit.locale, &identifiers),
+            )),
         )
     };
-    definitions(vec![one(&candidate.a), one(&candidate.b)]).into_any()
+    definitions(vec![one(&candidate.a), one(&candidate.b)])
 }
 
 /// The hidden fields that carry the versions the page was drawn from with
 /// the bar's form.
-fn versions(candidate: &Candidate) -> AnyView {
+fn versions(candidate: &Candidate) -> Html {
     let form = format!("{BAR}-form");
-    view! {
-        <input type="hidden" form=form.clone() name="a_version" value=candidate.a.version.to_string() />
-        <input type="hidden" form=form name="b_version" value=candidate.b.version.to_string() />
-    }
-    .into_any()
+    h(format!(
+        "<input type=\"hidden\" form=\"{form}\" name=\"a_version\" value=\"{}\"><input type=\"hidden\" form=\"{form}\" name=\"b_version\" value=\"{}\">",
+        candidate.a.version, candidate.b.version
+    ))
 }
 
-/// The card that says a link merges two persons, with Link… (`l`), which
-/// asks in the danger dialog naming the effect before it posts.
-fn merge_card(candidate: &Candidate) -> AnyView {
+/// The card that says a link merges two persons, with Link…, which asks in
+/// the danger dialog naming the effect before it posts.
+fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
     let action = format!("{QUEUE}/{}", candidate.id);
-    let fields = view! {
-        <input type="hidden" name="decision" value="link" />
-        <input type="hidden" name="a_version" value=candidate.a.version.to_string() />
-        <input type="hidden" name="b_version" value=candidate.b.version.to_string() />
-        {Field::new("merge-reason", tr(Msg::RevealReason)).view(view! {
-            <input id="merge-reason" name="reason" type="text" class=INPUT required maxlength="500" autocomplete="off" />
-        })}
-    }
-    .into_any();
-    let confirm = view! {
-        <button type="submit" class=Variant::Destructive.class()>{label(Some(Glyph::LINK), tr(Msg::PairLinkMerge))}</button>
-    };
+    let fields = Html::join([
+        hidden("decision", "link"),
+        hidden("a_version", &candidate.a.version.to_string()),
+        hidden("b_version", &candidate.b.version.to_string()),
+        Field::new("merge-reason", visit.tr(Msg::RevealReason)).view(h(format!(
+            "<input id=\"merge-reason\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">"
+        ))),
+    ]);
+    let confirm = h(format!(
+        "<button type=\"submit\" class=\"{}\">{}</button>",
+        Variant::Destructive.class(),
+        label(Some(Glyph::LINK), visit.tr(Msg::PairLinkMerge))
+    ));
     let dialog = danger_form_dialog(
+        &visit.locale,
         Confirmation {
             id: MERGE_DIALOG.into(),
-            title: tr(Msg::PairMergeTitle).into(),
-            message: tr_with(
-                Msg::PairMergeMessage,
-                &[
-                    ("a", candidate.a.person.clone().into()),
-                    ("b", candidate.b.person.clone().into()),
-                ],
-            )
-            .into(),
+            title: visit.tr(Msg::PairMergeTitle).into(),
+            message: visit
+                .tr_with(
+                    Msg::PairMergeMessage,
+                    &[
+                        ("a", candidate.a.person.clone().into()),
+                        ("b", candidate.b.person.clone().into()),
+                    ],
+                )
+                .into(),
         },
         ConfirmForm { action, fields },
         confirm,
     );
     card(
-        tr(Msg::PairMerges),
-        view! {
-            <p>{tr(Msg::PairMergesNote)}</p>
-            <button type="button" class=Variant::Primary.class() command="show-modal" commandfor=MERGE_DIALOG aria-haspopup="dialog" aria-keyshortcuts=aria_keys("l")>
-                {label(Some(Glyph::LINK), tr(Msg::PairLinkAsk))}
-            </button>
-            {dialog}
-        },
+        visit.tr(Msg::PairMerges),
+        h(format!(
+            "<p>{}</p><button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{MERGE_DIALOG}\" aria-haspopup=\"dialog\">{}</button>{dialog}",
+            t(visit.tr(Msg::PairMergesNote)),
+            Variant::Primary.class(),
+            label(Some(Glyph::LINK), visit.tr(Msg::PairLinkAsk)),
+        )),
     )
-    .into_any()
 }
 
 /// The docked decision bar: the reason, the deferral's date, and Link (when
 /// it merges nothing), Not a match and Defer.
-fn bar(candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> AnyView {
+// TODO(#390): announce `l`, `n`, `d` and `r` again once a FerroUI module binds them.
+fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> Html {
     let line = match outcome {
         Some(DecisionOutcome::Refused(probe)) if is_conflict(probe) => {
             let mut ways = Vec::new();
             if let Some(next) = &candidate.next {
                 ways.push(DockLink {
                     href: format!("{QUEUE}/{next}"),
-                    words: tr(Msg::PairNext),
+                    words: visit.tr(Msg::PairNext),
                     variant: Variant::Primary,
                 });
             }
             ways.push(DockLink {
                 href: format!("{QUEUE}/{}", candidate.id),
-                words: tr(Msg::PairReload),
+                words: visit.tr(Msg::PairReload),
                 variant: Variant::Secondary,
             });
             Some(DockLine::Stale {
-                said: tr(Msg::PairStale),
+                said: visit.tr(Msg::PairStale),
                 ways,
             })
         }
@@ -370,48 +419,44 @@ fn bar(candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> AnyView {
     if !candidate.merges {
         decisions.push(Decision {
             value: String::from("link"),
-            label: tr(Msg::PairLink),
+            label: visit.tr(Msg::PairLink),
             variant: Variant::Primary,
             glyph: Some(Glyph::LINK),
-            shortcut: Some(String::from("l")),
             ..Decision::default()
         });
     }
     decisions.push(Decision {
         value: String::from("not-a-match"),
-        label: tr(Msg::PairNotAMatchAction),
+        label: visit.tr(Msg::PairNotAMatchAction),
         glyph: Some(Glyph::X),
-        shortcut: Some(String::from("n")),
         ..Decision::default()
     });
     decisions.push(Decision {
         value: String::from("defer"),
-        label: tr(Msg::Defer),
+        label: visit.tr(Msg::Defer),
         glyph: Some(Glyph::CLOCK),
-        shortcut: Some(String::from("d")),
         ..Decision::default()
     });
     decision_bar(DecisionBar {
         id: String::from(BAR),
-        label: tr(Msg::PairDecision),
+        label: visit.tr(Msg::PairDecision),
         form: DockForm::Own(format!("{QUEUE}/{}", candidate.id)),
         fields: vec![
             DockField {
                 id: String::from("decide-reason"),
                 name: String::from("reason"),
-                label: tr(Msg::RevealReason),
-                placeholder: tr(Msg::PairReasonHint),
-                shortcut: Some(String::from("r")),
-                error: no_reason.then(|| tr(Msg::PairReasonMissing)),
+                label: visit.tr(Msg::RevealReason),
+                placeholder: visit.tr(Msg::PairReasonHint),
+                error: no_reason.then(|| visit.tr(Msg::PairReasonMissing)),
                 focus: no_reason,
                 ..DockField::default()
             },
             DockField {
                 id: String::from("decide-until"),
                 name: String::from("until"),
-                label: tr(Msg::DeferUntil),
-                placeholder: tr(Msg::DateHint),
-                help: Some(tr(Msg::PairUntilHelp)),
+                label: visit.tr(Msg::DeferUntil),
+                placeholder: visit.tr(Msg::DateHint),
+                help: Some(visit.tr(Msg::PairUntilHelp)),
                 ..DockField::default()
             },
         ],

@@ -85,6 +85,29 @@ async fn the_queue_draws_its_rows_its_empty_states_and_its_refusal() -> Result<(
     Ok(())
 }
 
+// NOTE: no specification governs this: our own design; `o` and `d` reach the side panel
+// opener of the focused row of the work-list, which the server draws and marks.
+#[tokio::test]
+async fn the_focused_row_holds_the_side_panel_opener_the_glance_keys_reach()
+-> Result<(), Box<dyn Error>> {
+    let filled = server(&[("GET", "/operator/candidates", candidates(None))]).await;
+    let drawn = page(&filled, "/queue").await?;
+    let grid = drawn
+        .split_once("class=\"fui-worklist-grid\"")
+        .map(|(_, rest)| rest)
+        .expect("the work-list's grid");
+    let focused = grid
+        .split("<tr ")
+        .find(|row| row.contains("aria-current=\"true\""))
+        .expect("a focused row");
+    assert!(
+        focused.contains("command=\"show-modal\"")
+            && focused.contains(&format!("commandfor=\"glance-{CANDIDATE}\"")),
+        "the focused row holds its side panel's opener: {focused}"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn the_filters_post_their_fields_to_the_server_and_keep_them_out_of_the_address()
 -> Result<(), Box<dyn Error>> {

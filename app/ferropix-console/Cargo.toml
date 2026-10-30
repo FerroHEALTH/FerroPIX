@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ferropix-console"
-description = "The FerroPIX Console, the data steward's operator console: a Leptos app the server draws and the browser hydrates whole, with a backend-for-frontend over the FerroPIX server"
+description = "The FerroPIX Console, the data steward's operator console: every page drawn on the server with FerroUI, with a backend-for-frontend over the FerroPIX server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,12 +13,7 @@ authors.workspace = true
 # The application is never published.
 publish = false
 
-# One crate, two halves (the Leptos book, "Hydration"): the rlib feeds the
-# server binary and the cdylib is the WebAssembly bundle the browser hydrates
-# the whole page with. The target chooses the half, never a Cargo
-# feature, so `--all-features` over the workspace never turns both on.
 [lib]
-crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [[bin]]
@@ -26,14 +21,10 @@ name = "ferropix-console"
 path = "src/main.rs"
 
 [dependencies]
-# The console hydrates the whole page and draws every page after the first
-# in the browser (FerroUI `docs/consoles.md`, "How a console builds"), so
-# both halves link the page tree: FerroUI, the router, the console's string
-# catalog and the operator API's documents the pages draw.
+# The pages are FerroUI's components drawn on the server, and FerroUI's
+# router serves its stylesheet, its themes and its script modules
+# (FerroUI `docs/consoles.md`, "How a console builds").
 ferrohealth-ui.workspace = true
-leptos.workspace = true
-leptos_meta.workspace = true
-leptos_router.workspace = true
 fluent-templates.workspace = true
 http.workspace = true
 serde.workspace = true
@@ -41,24 +32,9 @@ serde.workspace = true
 serde_json.workspace = true
 # The operator API's documents, as the server writes them.
 ferropix-operator-api = { path = "../ferropix-operator-api" }
-# The readiness document's states the dashboard draws.
-ferrohealth-health.workspace = true
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-leptos = { workspace = true, features = ["hydrate"] }
-leptos_router.workspace = true
-wasm-bindgen.workspace = true
-console_error_panic_hook.workspace = true
-web-sys = { workspace = true, features = ["Document", "Element", "Window", "Location", "FormData", "HtmlFormElement", "SubmitEvent", "HtmlElement", "HtmlDialogElement"] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# The per-request script nonce of the Content-Security-Policy rides `nonce`.
-leptos = { workspace = true, features = ["ssr", "nonce"] }
-leptos_axum.workspace = true
-# The executor the server render runs its resources on.
-any_spawner.workspace = true
-leptos_meta = { workspace = true, features = ["ssr"] }
-leptos_router = { workspace = true, features = ["ssr"] }
+# The readiness document's states the dashboard draws, and the health
+# routes' registry and lifecycle.
+ferrohealth-health = { workspace = true, features = ["registry"] }
 # The random session ids.
 aws-lc-rs.workspace = true
 axum.workspace = true
@@ -81,23 +57,20 @@ ferrohealth-server = { workspace = true, features = ["console"] }
 # The `[telemetry]` section, the console log and the panic hook the family
 # shares.
 ferrohealth-telemetry.workspace = true
-# The health routes' registry and lifecycle, and the readiness document the
-# dependency report carries.
-ferrohealth-health = { workspace = true, features = ["registry"] }
 # The calls to the FerroPIX server and to the OpenID Provider.
 reqwest = { workspace = true, features = ["rustls", "json"] }
 secrecy = { workspace = true, features = ["serde"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
-# The site bundle is served brotli- or gzip-compressed, as the request's
-# Accept-Encoding chooses.
+# FerroUI's stylesheet and script modules are served brotli- or
+# gzip-compressed, as the request's Accept-Encoding chooses.
 tower-http = { workspace = true, features = ["compression-br", "compression-gzip"] }
 tracing.workspace = true
 url.workspace = true
 # The request id the console sends with each call to the server.
 uuid.workspace = true
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+[dev-dependencies]
 # The test OpenID Provider the sign-in, refresh and sign-out tests sign in at.
 ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 jiff.workspace = true
@@ -111,18 +84,3 @@ wiremock.workspace = true
 
 [lints]
 workspace = true
-
-# cargo-leptos: the site bundle (the WebAssembly and its JavaScript glue)
-# under target/site. The console has no stylesheet of its own: it serves the
-# library's stylesheet and the FerroPIX theme from the library's constants.
-[package.metadata.leptos]
-output-name = "ferropix-console"
-site-root = "target/site"
-site-pkg-dir = "pkg"
-site-addr = "127.0.0.1:3000"
-reload-port = 3001
-lib-profile-release = "wasm-release"
-lib-profile-dev = "wasm-dev"
-# A dev build keeps its component types, as the server half does, so the
-# bundle hydrates the page the server rendered.
-disable-erase-components = true

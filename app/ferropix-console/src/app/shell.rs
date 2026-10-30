@@ -8,12 +8,12 @@
 //! status pill. No specification governs the shell: our own design, on
 //! FerroUI's.
 
-use ferrohealth_ui::i18n::Arg;
+use ferrohealth_ui::html::Html;
+use ferrohealth_ui::i18n::{Arg, Locale};
 use ferrohealth_ui::icon::Glyph;
+use ferrohealth_ui::view::nav::{Count, Entry, Group};
 use ferrohealth_ui::view::shell::{Footer, brand_mark, lockup};
 use ferrohealth_ui::view::status::{Reach as PillReach, StatusPill, status_pill};
-use ferrohealth_ui::widget::nav::{Count, Entry, Group};
-use leptos::prelude::*;
 
 use super::{
     ABOUT, AUDIT, CONFIGURATION, DASHBOARD, DOMAINS, PSEUDONYM_DOMAINS, QUEUE, SEARCH, SOURCES,
@@ -26,31 +26,31 @@ use crate::paths::{MARK_DARK, MARK_LIGHT};
 
 /// The footer every page carries.
 #[must_use]
-pub fn footer() -> Footer {
+pub fn footer(locale: &Locale) -> Footer {
     Footer {
-        product: tr(Msg::ConsoleName).into(),
+        product: tr(locale, Msg::ConsoleName).into(),
         version: VERSION.into(),
         about: ABOUT.into(),
     }
 }
 
-/// The FerroPIX lockup, its marks in both themes, leading to `href`.
+/// The FerroPIX lockup, its marks in both themes, leading to the
+/// dashboard.
 #[must_use]
-pub fn brand_lockup() -> AnyView {
+pub fn brand_lockup(locale: &Locale) -> Html {
     lockup(
         DASHBOARD,
         brand_mark(MARK_LIGHT, MARK_DARK),
-        tr(Msg::Product),
-        tr(Msg::ConsoleWord),
+        tr(locale, Msg::Product),
+        tr(locale, Msg::ConsoleWord),
     )
-    .into_any()
 }
 
 /// One entry of the navigation.
-fn entry(href: &'static str, label: Msg, glyph: Glyph, exact: bool) -> Entry {
+fn entry(locale: &Locale, href: &'static str, label: Msg, glyph: Glyph, exact: bool) -> Entry {
     Entry {
         href: href.into(),
-        label: tr(label).into(),
+        label: tr(locale, label).into(),
         glyph,
         exact,
         count: None,
@@ -58,36 +58,49 @@ fn entry(href: &'static str, label: Msg, glyph: Glyph, exact: bool) -> Entry {
 }
 
 /// The navigation's groups, as the design draws them.
-pub(super) fn navigation() -> Vec<Group> {
+pub(super) fn navigation(locale: &Locale) -> Vec<Group> {
     // NOTE: FerroUI COMPONENTS.md R12: a count the console does not know is a muted
     // dash with its reason, never a zero; the queue's depth is the operator API's.
     let queue = Entry {
         count: Some(Count::Unknown {
-            why: tr(Msg::QueueDepthUnknown),
+            why: tr(locale, Msg::QueueDepthUnknown),
         }),
-        ..entry(QUEUE, Msg::Queue, Glyph::LIST_CHECKS, false)
+        ..entry(locale, QUEUE, Msg::Queue, Glyph::LIST_CHECKS, false)
     };
     vec![
         Group {
             id: "nav-work",
-            title: tr(Msg::NavWork).into(),
+            title: tr(locale, Msg::NavWork).into(),
             entries: vec![
-                entry(DASHBOARD, Msg::Dashboard, Glyph::LAYOUT_DASHBOARD, true),
+                entry(
+                    locale,
+                    DASHBOARD,
+                    Msg::Dashboard,
+                    Glyph::LAYOUT_DASHBOARD,
+                    true,
+                ),
                 queue,
             ],
         },
         Group {
             id: "nav-patients",
-            title: tr(Msg::NavPatients).into(),
-            entries: vec![entry(SEARCH, Msg::Search, Glyph::USER_ROUND_SEARCH, false)],
+            title: tr(locale, Msg::NavPatients).into(),
+            entries: vec![entry(
+                locale,
+                SEARCH,
+                Msg::Search,
+                Glyph::USER_ROUND_SEARCH,
+                false,
+            )],
         },
         Group {
             id: "nav-registry",
-            title: tr(Msg::NavRegistry).into(),
+            title: tr(locale, Msg::NavRegistry).into(),
             entries: vec![
-                entry(SOURCES, Msg::Sources, Glyph::RADIO_TOWER, false),
-                entry(DOMAINS, Msg::Domains, Glyph::TAGS, false),
+                entry(locale, SOURCES, Msg::Sources, Glyph::RADIO_TOWER, false),
+                entry(locale, DOMAINS, Msg::Domains, Glyph::TAGS, false),
                 entry(
+                    locale,
                     PSEUDONYM_DOMAINS,
                     Msg::PseudonymDomains,
                     Glyph::SHIELD_CHECK,
@@ -97,15 +110,21 @@ pub(super) fn navigation() -> Vec<Group> {
         },
         Group {
             id: "nav-trail",
-            title: tr(Msg::NavTrail).into(),
-            entries: vec![entry(AUDIT, Msg::Audit, Glyph::FILE_CLOCK, false)],
+            title: tr(locale, Msg::NavTrail).into(),
+            entries: vec![entry(locale, AUDIT, Msg::Audit, Glyph::FILE_CLOCK, false)],
         },
         Group {
             id: "nav-console",
-            title: tr(Msg::NavConsole).into(),
+            title: tr(locale, Msg::NavConsole).into(),
             entries: vec![
-                entry(CONFIGURATION, Msg::Configuration, Glyph::FILE_TEXT, false),
-                entry(ABOUT, Msg::About, Glyph::INFO, true),
+                entry(
+                    locale,
+                    CONFIGURATION,
+                    Msg::Configuration,
+                    Glyph::FILE_TEXT,
+                    false,
+                ),
+                entry(locale, ABOUT, Msg::About, Glyph::INFO, true),
             ],
         },
     ]
@@ -113,9 +132,9 @@ pub(super) fn navigation() -> Vec<Group> {
 
 /// The top bar's status pill for the call `probe` to the server's liveness
 /// route.
-pub(super) fn pill(probe: Option<&Probe>, base: &str) -> AnyView {
+pub(super) fn pill(locale: &Locale, probe: Option<&Probe>, base: &str) -> Html {
     let (reach, words) = match probe.map(|probe| &probe.reach) {
-        Some(Reach::Up) => (PillReach::Up, tr(Msg::PillUp)),
+        Some(Reach::Up) => (PillReach::Up, tr(locale, Msg::PillUp)),
         Some(Reach::Refused(status))
             if *status == http::StatusCode::UNAUTHORIZED
                 || *status == http::StatusCode::FORBIDDEN =>
@@ -123,6 +142,7 @@ pub(super) fn pill(probe: Option<&Probe>, base: &str) -> AnyView {
             (
                 PillReach::Refused,
                 tr_with(
+                    locale,
                     Msg::PillRefused,
                     &[("status", Arg::from(status.as_u16().to_string()))],
                 ),
@@ -131,19 +151,22 @@ pub(super) fn pill(probe: Option<&Probe>, base: &str) -> AnyView {
         Some(Reach::Refused(status)) => (
             PillReach::Degraded,
             tr_with(
+                locale,
                 Msg::PillDegraded,
                 &[("status", Arg::from(status.as_u16().to_string()))],
             ),
         ),
-        Some(Reach::Unreachable(_)) | None => (PillReach::Unreachable, tr(Msg::PillUnreachable)),
+        Some(Reach::Unreachable(_)) | None => {
+            (PillReach::Unreachable, tr(locale, Msg::PillUnreachable))
+        }
     };
     status_pill(StatusPill {
         reach,
         words,
         detail: Some(tr_with(
+            locale,
             Msg::PillDetail,
             &[("base", Arg::from(base.to_owned()))],
         )),
     })
-    .into_any()
 }

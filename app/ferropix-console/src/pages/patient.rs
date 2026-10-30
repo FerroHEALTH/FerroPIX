@@ -15,6 +15,8 @@
 //! our own design (decision D9: the person id is the one identifier an
 //! address carries).
 
+use ferrohealth_ui::html::Html;
+use ferrohealth_ui::i18n::Locale;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::table::view::{
     Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
@@ -22,28 +24,28 @@ use ferrohealth_ui::table::view::{
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::compare::{Compare, CompareField, CompareRecord, Verdict, compare};
+use ferrohealth_ui::view::countdown::{Countdown, countdown};
 use ferrohealth_ui::view::form::{Field, INPUT};
+use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_static};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, definitions, or_none, stack};
+use ferrohealth_ui::view::surface::{card, definitions, stack};
 use ferrohealth_ui::view::tabs::{Tab, binder};
 use ferrohealth_ui::view::template::list::list_empty;
 use ferrohealth_ui::view::time::timestamp;
 use ferrohealth_ui::view::timeline::{Event, timeline};
-use ferrohealth_ui::widget::countdown::{Countdown, countdown};
-use ferrohealth_ui::widget::identifier::{Domain, Masked, identifier_static};
 use ferropix_operator_api::patient::{Demographics, PersonStatus};
 use ferropix_operator_api::person::{
     HistoryEvent, IdentifierHandle, LinkKind, Person, RecordState,
 };
 use ferropix_operator_api::reveal::Revealed;
-use leptos::prelude::*;
 
 use crate::locale::messages::Msg;
-use crate::locale::{tr, tr_with};
+use crate::markup::{h, hidden, t};
 use crate::model::Read;
 use crate::pages::registry::channel;
-use crate::pages::{Needs, server_state};
+use crate::pages::{Needs, or_dash, server_state};
+use crate::visit::Visit;
 
 /// The tabs of the patient record, each its key and its words.
 pub const TABS: [(&str, Msg); 4] = [
@@ -68,7 +70,12 @@ pub fn full_name(demographics: &Demographics) -> Option<String> {
 
 /// The patient record, on the tab `tab`, with a reveal just answered.
 #[must_use]
-pub fn patient(person: &Person, tab: &str, revealed: Option<&Read<Revealed>>) -> AnyView {
+pub fn patient(
+    visit: &Visit,
+    person: &Person,
+    tab: &str,
+    revealed: Option<&Read<Revealed>>,
+) -> Html {
     let current = TABS
         .iter()
         .find(|(key, _)| *key == tab)
@@ -82,108 +89,119 @@ pub fn patient(person: &Person, tab: &str, revealed: Option<&Read<Revealed>>) ->
             } else {
                 format!("{base}?tab={key}")
             };
-            Tab::new(*key, href, tr(*words))
+            Tab::new(*key, href, visit.tr(*words))
         })
         .collect();
     let panel = match current {
-        "records" => records(person),
-        "history" => history(person),
-        "pseudonyms" => pseudonyms(person),
-        _ => identifiers(person),
+        "records" => records(visit, person),
+        "history" => history(visit, person),
+        "pseudonyms" => pseudonyms(visit, person),
+        _ => identifiers(visit, person),
     };
-    let unmerge = crate::pages::merge::latest_merge(person).map(|_| {
-        view! {
-            <a href=format!("{base}/unmerge") class=Variant::Secondary.class()>
-                {label(Some(Glyph::UNDO), tr(Msg::PatientUnmerge))}
-            </a>
-        }
+    let unmerge = crate::pages::merge::latest_merge(person).map_or_else(Html::empty, |_| {
+        h(format!(
+            "<a href=\"{}\" class=\"{}\">{}</a>",
+            t(format!("{base}/unmerge")),
+            Variant::Secondary.class(),
+            label(Some(Glyph::UNDO), visit.tr(Msg::PatientUnmerge))
+        ))
     });
-    let actions = view! {
-        <div class="fui-actions">
-            <a href=format!("{base}/merge") class=Variant::Secondary.class()>
-                {label(Some(Glyph::GIT_COMPARE), tr(Msg::PatientMergeInto))}
-            </a>
-            {unmerge}
-        </div>
-    };
-    stack(view! {
-        {actions}
-        {summary(person)}
-        {revealed.map(reveal_answer)}
-        {binder(tr(Msg::PatientTabs), tabs, current, panel)}
-    })
-    .into_any()
+    let actions = h(format!(
+        "<div class=\"fui-actions\"><a href=\"{}\" class=\"{}\">{}</a>{unmerge}</div>",
+        t(format!("{base}/merge")),
+        Variant::Secondary.class(),
+        label(Some(Glyph::GIT_COMPARE), visit.tr(Msg::PatientMergeInto))
+    ));
+    stack(Html::join([
+        actions,
+        summary(visit, person),
+        revealed.map_or_else(Html::empty, |revealed| reveal_answer(visit, revealed)),
+        binder(
+            &visit.locale,
+            visit.tr(Msg::PatientTabs),
+            tabs,
+            current,
+            panel,
+        ),
+    ]))
 }
 
 /// The leading demographics and the person's state.
-fn summary(person: &Person) -> AnyView {
+fn summary(visit: &Visit, person: &Person) -> Html {
+    let locale = &visit.locale;
     let leading = person.leading.clone().unwrap_or_default();
     let status = match person.status {
-        PersonStatus::Active => badge(Tone::Ok, tr(Msg::StateActive)).into_any(),
-        PersonStatus::Merged => badge(Tone::Neutral, tr(Msg::Merged)).into_any(),
+        PersonStatus::Active => badge(Tone::Ok, visit.tr(Msg::StateActive)),
+        PersonStatus::Merged => badge(Tone::Neutral, visit.tr(Msg::Merged)),
     };
-    let merged_into = person.merged_into.clone().map(|survivor| {
-        (
-            tr(Msg::MergedInto),
-            view! { <a href=format!("/patients/{survivor}")><code>{survivor.clone()}</code></a> }
-                .into_any(),
-        )
-    });
     let mut rows = vec![
         (
-            tr(Msg::FullName),
-            full_name(&leading).map_or_else(|| or_none(String::new()), IntoAny::into_any),
+            visit.tr(Msg::FullName),
+            or_dash(locale, full_name(&leading)),
         ),
         (
-            tr(Msg::BirthDate),
-            leading
-                .birth_date
-                .clone()
-                .map_or_else(|| or_none(String::new()), IntoAny::into_any),
+            visit.tr(Msg::BirthDate),
+            or_dash(locale, leading.birth_date.clone()),
         ),
         (
-            tr(Msg::Gender),
-            leading.gender.as_deref().map_or_else(
-                || or_none(String::new()),
-                |code| crate::pages::gender_words(code).into_any(),
+            visit.tr(Msg::Gender),
+            or_dash(
+                locale,
+                leading
+                    .gender
+                    .as_deref()
+                    .map(|code| crate::pages::gender_words(locale, code)),
             ),
         ),
-        (tr(Msg::ColState), status),
+        (visit.tr(Msg::ColState), status),
         (
-            tr(Msg::ColCreated),
-            timestamp(&person.created_at).into_any(),
+            visit.tr(Msg::ColCreated),
+            timestamp(locale, &person.created_at),
         ),
     ];
-    rows.extend(merged_into);
-    card(tr(Msg::LeadingDemographics), definitions(rows)).into_any()
+    if let Some(survivor) = &person.merged_into {
+        rows.push((
+            visit.tr(Msg::MergedInto),
+            h(format!(
+                "<a href=\"{}\"><code>{}</code></a>",
+                t(format!("/patients/{survivor}")),
+                t(survivor)
+            )),
+        ));
+    }
+    card(visit.tr(Msg::LeadingDemographics), definitions(rows))
 }
 
 /// The answer of the reveal just posted: the value with its countdown, or
 /// the refusal.
-fn reveal_answer(revealed: &Read<Revealed>) -> AnyView {
+fn reveal_answer(visit: &Visit, revealed: &Read<Revealed>) -> Html {
     match revealed {
         Ok(revealed) => notice(
             Tone::Warn,
             Announce::Alert,
             None,
-            view! {
-                <p><strong>{tr(Msg::Revealed)}</strong></p>
-                <p>
-                    <code class="fui-wrap">{revealed.system.clone()}</code>
-                    " "
-                    <strong><code>{revealed.value.0.clone()}</code></strong>
-                </p>
-                {countdown(Countdown::new("reveal-countdown", revealed.seconds, revealed.seconds, &tr(Msg::RevealHidden)))}
-                <p class="fui-small fui-muted">{tr_with(Msg::RevealRecorded, &[("action", revealed.action.clone().into())])}</p>
-            },
-        )
-        .into_any(),
+            h(format!(
+                "<p><strong>{}</strong></p><p><code class=\"fui-wrap\">{}</code> <strong><code>{}</code></strong></p>{}<p class=\"fui-small fui-muted\">{}</p>",
+                t(visit.tr(Msg::Revealed)),
+                t(&revealed.system),
+                t(&revealed.value.0),
+                countdown(Countdown::new(
+                    &visit.locale,
+                    "reveal-countdown",
+                    revealed.seconds,
+                    revealed.seconds,
+                    &visit.tr(Msg::RevealHidden),
+                )),
+                t(visit.tr_with(
+                    Msg::RevealRecorded,
+                    &[("action", revealed.action.clone().into())]
+                )),
+            )),
+        ),
         Err(probe) => server_state(
+            visit,
             Some(probe),
-            Needs {
-                what: Msg::WhatReveal,
-                away: false,
-            },
+            Needs::of(Msg::WhatReveal),
             "POST /operator/persons/{id}/reveal",
         ),
     }
@@ -191,27 +209,27 @@ fn reveal_answer(revealed: &Read<Revealed>) -> AnyView {
 
 /// The reveal form of one identifier or pseudonym: the target, the reason,
 /// and the submit.
-fn reveal_form(person: &str, kind: &'static str, id: &str, row: usize) -> AnyView {
+fn reveal_form(visit: &Visit, person: &str, kind: &'static str, id: &str, row: usize) -> Html {
     let field_id = format!("reason-{row}");
-    view! {
-        <form method="post" action=format!("/patients/{person}/{REVEAL}") class="fui-form fui-inline-form">
-            <input type="hidden" name="target" value=kind />
-            <input type="hidden" name="id" value=id.to_owned() />
-            {Field::new(field_id.clone(), tr(Msg::RevealReason)).view(view! {
-                <input id=field_id.clone() name="reason" type="text" class=INPUT required maxlength="500" autocomplete="off" />
-            })}
-            <button type="submit" class=Variant::Secondary.class()>
-                {label(Some(Glyph::EYE), tr(Msg::Reveal))}
-            </button>
-        </form>
-    }
-    .into_any()
+    let reason = Field::new(field_id.clone(), visit.tr(Msg::RevealReason)).view(h(format!(
+        "<input id=\"{}\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">",
+        t(&field_id)
+    )));
+    h(format!(
+        "<form method=\"post\" action=\"{}\" class=\"fui-form fui-inline-form\">{}{}{reason}<button type=\"submit\" class=\"{}\">{}</button></form>",
+        t(format!("/patients/{person}/{REVEAL}")),
+        hidden("target", kind),
+        hidden("id", id),
+        Variant::Secondary.class(),
+        label(Some(Glyph::EYE), visit.tr(Msg::Reveal)),
+    ))
 }
 
 /// The masked form of `masked` in `domain`.
-fn masked(domain: &str, system: &str, masked: &str) -> AnyView {
+fn masked(locale: &Locale, domain: &str, system: &str, masked: &str) -> Html {
     let tail = masked.trim_start_matches('•').trim().to_owned();
     identifier_static(
+        locale,
         &Masked {
             domain: Domain::new(domain).system(system),
             tail,
@@ -221,17 +239,17 @@ fn masked(domain: &str, system: &str, masked: &str) -> AnyView {
 }
 
 /// The words of a record's state.
-fn record_state(state: RecordState) -> AnyView {
+fn record_state(visit: &Visit, state: RecordState) -> Html {
     match state {
-        RecordState::Active => badge(Tone::Ok, tr(Msg::StateActive)).into_any(),
-        RecordState::Subsumed => badge(Tone::Neutral, tr(Msg::Subsumed)).into_any(),
-        RecordState::Removed => badge(Tone::Bad, tr(Msg::Removed)).into_any(),
+        RecordState::Active => badge(Tone::Ok, visit.tr(Msg::StateActive)),
+        RecordState::Subsumed => badge(Tone::Neutral, visit.tr(Msg::Subsumed)),
+        RecordState::Removed => badge(Tone::Bad, visit.tr(Msg::Removed)),
     }
 }
 
 /// The words of a link's kind.
-fn link_kind(kind: LinkKind) -> String {
-    tr(match kind {
+fn link_kind(visit: &Visit, kind: LinkKind) -> String {
+    visit.tr(match kind {
         LinkKind::Feed => Msg::LinkFeed,
         LinkKind::Deterministic => Msg::LinkDeterministic,
         LinkKind::Probabilistic => Msg::LinkProbabilistic,
@@ -242,56 +260,66 @@ fn link_kind(kind: LinkKind) -> String {
 }
 
 /// The Identifiers tab: one row per identifier, masked, with its reveal.
-fn identifiers(person: &Person) -> AnyView {
+fn identifiers(visit: &Visit, person: &Person) -> Html {
+    let locale = &visit.locale;
     if person.identifiers.is_empty() {
-        return list_empty(tr(Msg::IdentifiersEmpty), None);
+        return list_empty(visit.tr(Msg::IdentifiersEmpty), None);
     }
     let columns = [
-        Column::text("domain", tr(Msg::ColDomain)).role(Role::Title),
-        Column::text("value", tr(Msg::ColValue)),
-        Column::text("state", tr(Msg::ColState)),
-        Column::text("link", tr(Msg::ColLink)).role(Role::Sub),
-        Column::text("fed", tr(Msg::ColLastFed)).role(Role::Quiet),
-        Column::text("reveal", tr(Msg::Reveal)).role(Role::Wide),
+        Column::text("domain", visit.tr(Msg::ColDomain)).role(Role::Title),
+        Column::text("value", visit.tr(Msg::ColValue)),
+        Column::text("state", visit.tr(Msg::ColState)),
+        Column::text("link", visit.tr(Msg::ColLink)).role(Role::Sub),
+        Column::text("fed", visit.tr(Msg::ColLastFed)).role(Role::Quiet),
+        Column::text("reveal", visit.tr(Msg::Reveal)).role(Role::Wide),
     ];
     let [_, value, state, link, fed, reveal] = &columns;
-    let rows = person
+    let rows: Html = person
         .identifiers
         .iter()
         .enumerate()
         .map(|(row, identifier)| {
             let (kind, id) = match &identifier.handle {
-                IdentifierHandle::Record(id) => ("record", id.clone()),
-                IdentifierHandle::Carried(id) => ("carried", id.clone()),
+                IdentifierHandle::Record(id) => ("record", id.as_str()),
+                IdentifierHandle::Carried(id) => ("carried", id.as_str()),
             };
-            let linked = identifier.link.as_ref().map_or_else(
-                || or_none(String::new()),
-                |link| link_kind(link.kind).into_any(),
+            let linked = or_dash(
+                locale,
+                identifier
+                    .link
+                    .as_ref()
+                    .map(|link| link_kind(visit, link.kind)),
             );
-            let fed_at = identifier.last_fed.as_ref().map_or_else(
-                || or_none(String::new()),
-                |at| timestamp(at).into_any(),
-            );
-            view! {
-                <tr>
-                    {title_cell(None, identifier.domain.name.clone(), None)}
-                    {cell(value, masked(&identifier.domain.name, &identifier.domain.system, &identifier.masked.0))}
-                    {cell(state, record_state(identifier.state))}
-                    {cell(link, linked)}
-                    {cell(fed, fed_at)}
-                    {cell(reveal, reveal_form(&person.id, kind, &id, row))}
-                </tr>
-            }
+            let fed_at = identifier
+                .last_fed
+                .as_ref()
+                .map_or_else(|| or_dash(locale, None), |at| timestamp(locale, at));
+            h(format!(
+                "<tr>{}{}{}{}{}{}</tr>",
+                title_cell(None, t(&identifier.domain.name), None),
+                cell(
+                    value,
+                    masked(
+                        locale,
+                        &identifier.domain.name,
+                        &identifier.domain.system,
+                        &identifier.masked.0
+                    )
+                ),
+                cell(state, record_state(visit, identifier.state)),
+                cell(link, linked),
+                cell(fed, fed_at),
+                cell(reveal, reveal_form(visit, &person.id, kind, id, row)),
+            ))
         })
-        .collect_view()
-        .into_any();
+        .collect();
+    let caption = visit.tr(Msg::TabIdentifiers);
     data_table(DataTable {
-        caption: &tr(Msg::TabIdentifiers),
+        caption: &caption,
         columns: &columns,
         sorting: Sorting::default(),
         body: Body::Rows(rows),
     })
-    .into_any()
 }
 
 /// The compared fields of a record: name, birth date, gender, address and
@@ -304,15 +332,15 @@ pub(crate) const FIELDS: [(&str, Msg); 5] = [
     ("telecom", Msg::Telecom),
 ];
 
-/// The value of the field `key` of `demographics`, as text.
-pub(crate) fn value_of(demographics: &Demographics, key: &str) -> Option<String> {
+/// The value of the field `key` of `demographics`, as text in `locale`.
+pub(crate) fn value_of(locale: &Locale, demographics: &Demographics, key: &str) -> Option<String> {
     match key {
         "name" => full_name(demographics),
         "birth" => demographics.birth_date.clone(),
         "gender" => demographics
             .gender
             .as_deref()
-            .map(crate::pages::gender_words),
+            .map(|code| crate::pages::gender_words(locale, code)),
         "address" => demographics.addresses.first().map(|address| {
             let mut parts = address.lines.clone();
             parts.extend(address.postal_code.clone());
@@ -330,6 +358,7 @@ pub(crate) fn value_of(demographics: &Demographics, key: &str) -> Option<String>
 
 /// One record of the compare.
 pub(crate) fn compare_record(
+    visit: &Visit,
     key: String,
     title: String,
     sub: Option<String>,
@@ -341,31 +370,30 @@ pub(crate) fn compare_record(
         sub,
         values: FIELDS
             .iter()
-            .map(|(field, _)| {
-                value_of(demographics, field)
-                    .map(|value| ViewFn::from(move || value.clone().into_any()))
-            })
+            .map(|(field, _)| value_of(&visit.locale, demographics, field).map(t))
             .collect(),
     }
 }
 
 /// The Records tab: the source records side by side, each field marked
 /// against the leading demographics.
-fn records(person: &Person) -> AnyView {
+fn records(visit: &Visit, person: &Person) -> Html {
+    let locale = &visit.locale;
     if person.records.is_empty() {
-        return list_empty(tr(Msg::RecordsEmpty), None);
+        return list_empty(visit.tr(Msg::RecordsEmpty), None);
     }
     let leading_demographics = person.leading.clone().unwrap_or_default();
     let fields: Vec<CompareField> = FIELDS
         .iter()
         .map(|(key, words)| CompareField {
             key: (*key).to_owned(),
-            label: tr(*words),
+            label: visit.tr(*words),
         })
         .collect();
     let leading = compare_record(
+        visit,
         String::from("leading"),
-        tr(Msg::LeadingDemographics),
+        visit.tr(Msg::LeadingDemographics),
         None,
         &leading_demographics,
     );
@@ -374,27 +402,26 @@ fn records(person: &Person) -> AnyView {
         .iter()
         .map(|record| {
             compare_record(
+                visit,
                 record.id.clone(),
                 record.domain.name.clone(),
-                Some(tr_with(
+                Some(visit.tr_with(
                     Msg::RecordLine,
                     &[
                         ("version", record.version.into()),
-                        ("channel", channel(record.channel).into()),
+                        ("channel", channel(visit, record.channel).into()),
                     ],
                 )),
                 &record.demographics,
             )
         })
         .collect();
-    let demographics: Vec<Demographics> = person
-        .records
-        .iter()
-        .map(|record| record.demographics.clone())
-        .collect();
-    let verdict = move |field: &str, index: usize| {
-        let lead = value_of(&leading_demographics, field);
-        let theirs = demographics.get(index).and_then(|d| value_of(d, field));
+    let verdict = |field: &str, index: usize| {
+        let lead = value_of(locale, &leading_demographics, field);
+        let theirs = person
+            .records
+            .get(index)
+            .and_then(|record| value_of(locale, &record.demographics, field));
         match (lead, theirs) {
             (Some(lead), Some(theirs)) if lead.eq_ignore_ascii_case(&theirs) => Verdict::Agree,
             (Some(_), Some(_)) => Verdict::Differ,
@@ -402,23 +429,26 @@ fn records(person: &Person) -> AnyView {
             (None, _) => Verdict::Unmarked,
         }
     };
-    let caption = tr(Msg::TabRecords);
-    compare(Compare {
-        id: "records",
-        caption: &caption,
-        fields: &fields,
-        leading: &leading,
-        others: &others,
-        verdict: &verdict,
-        differ_first: false,
-    })
+    let caption = visit.tr(Msg::TabRecords);
+    compare(
+        locale,
+        Compare {
+            id: "records",
+            caption: &caption,
+            fields: &fields,
+            leading: &leading,
+            others: &others,
+            verdict: &verdict,
+            differ_first: false,
+        },
+    )
 }
 
 /// The History tab: the person's versions, links, merges and actions on a
 /// timeline.
-fn history(person: &Person) -> AnyView {
+fn history(visit: &Visit, person: &Person) -> Html {
     if person.history.is_empty() {
-        return list_empty(tr(Msg::HistoryEmpty), None);
+        return list_empty(visit.tr(Msg::HistoryEmpty), None);
     }
     let events: Vec<Event> = person
         .history
@@ -431,34 +461,36 @@ fn history(person: &Person) -> AnyView {
                     channel: arrived,
                     ..
                 } => (
-                    tr(Msg::EventVersion),
+                    visit.tr(Msg::EventVersion),
                     Tone::Neutral,
-                    tr_with(
+                    visit.tr_with(
                         Msg::RecordLine,
                         &[
                             ("version", (*version).into()),
-                            ("channel", channel(*arrived).into()),
+                            ("channel", channel(visit, *arrived).into()),
                         ],
                     ),
                 ),
-                HistoryEvent::Linked { kind, .. } => {
-                    (tr(Msg::EventLinked), Tone::Ok, link_kind(*kind))
-                }
+                HistoryEvent::Linked { kind, .. } => (
+                    visit.tr(Msg::EventLinked),
+                    Tone::Ok,
+                    link_kind(visit, *kind),
+                ),
                 HistoryEvent::Unlinked { .. } => {
-                    (tr(Msg::EventUnlinked), Tone::Warn, String::new())
+                    (visit.tr(Msg::EventUnlinked), Tone::Warn, String::new())
                 }
                 HistoryEvent::Merged { survivor, .. } => (
-                    tr(Msg::EventMerged),
+                    visit.tr(Msg::EventMerged),
                     Tone::Info,
-                    tr_with(Msg::MergedIntoLine, &[("person", survivor.clone().into())]),
+                    visit.tr_with(Msg::MergedIntoLine, &[("person", survivor.clone().into())]),
                 ),
                 HistoryEvent::Unmerged { merged, .. } => (
-                    tr(Msg::EventUnmerged),
+                    visit.tr(Msg::EventUnmerged),
                     Tone::Info,
-                    tr_with(Msg::RestoredLine, &[("person", merged.clone().into())]),
+                    visit.tr_with(Msg::RestoredLine, &[("person", merged.clone().into())]),
                 ),
                 HistoryEvent::Action { kind } => {
-                    (tr(Msg::EventAction), Tone::Neutral, kind.clone())
+                    (visit.tr(Msg::EventAction), Tone::Neutral, kind.clone())
                 }
             };
             Event {
@@ -475,65 +507,76 @@ fn history(person: &Person) -> AnyView {
             }
         })
         .collect();
-    let truncated = person.history_truncated.then(|| {
-        view! { <p class="fui-small fui-muted">{tr(Msg::HistoryTruncated)}</p> }
-    });
-    view! {
-        {timeline(tr(Msg::TabHistory), &events)}
-        {truncated}
-    }
-    .into_any()
+    let truncated = if person.history_truncated {
+        h(format!(
+            "<p class=\"fui-small fui-muted\">{}</p>",
+            t(visit.tr(Msg::HistoryTruncated))
+        ))
+    } else {
+        Html::empty()
+    };
+    timeline(&visit.locale, visit.tr(Msg::TabHistory), &events).then(truncated)
 }
 
 /// The Pseudonyms tab: each pseudonymisation domain and whether the person
 /// has a pseudonym in it, masked, with its reveal, and the link to the one
 /// place a pseudonym is resolved.
-fn pseudonyms(person: &Person) -> AnyView {
+fn pseudonyms(visit: &Visit, person: &Person) -> Html {
+    let locale = &visit.locale;
     if person.pseudonyms.is_empty() {
-        return list_empty(tr(Msg::PseudonymsEmpty), None);
+        return list_empty(visit.tr(Msg::PseudonymsEmpty), None);
     }
     let columns = [
-        Column::text("name", tr(Msg::ColName)).role(Role::Title),
-        Column::text("namespace", tr(Msg::ColNamespace)).role(Role::Sub),
-        Column::text("value", tr(Msg::ColValue)),
-        Column::text("reveal", tr(Msg::Reveal)).role(Role::Wide),
+        Column::text("name", visit.tr(Msg::ColName)).role(Role::Title),
+        Column::text("namespace", visit.tr(Msg::ColNamespace)).role(Role::Sub),
+        Column::text("value", visit.tr(Msg::ColValue)),
+        Column::text("reveal", visit.tr(Msg::Reveal)).role(Role::Wide),
     ];
     let [_, namespace, value, reveal] = &columns;
     let offset = person.identifiers.len();
-    let rows = person
+    let rows: Html = person
         .pseudonyms
         .iter()
         .enumerate()
         .map(|(row, pseudonym)| {
             let shown = pseudonym.masked.as_ref().map_or_else(
-                || tr(Msg::NoPseudonym).into_any(),
-                |held| masked(&pseudonym.name, &pseudonym.namespace, &held.0),
+                || t(visit.tr(Msg::NoPseudonym)),
+                |held| masked(locale, &pseudonym.name, &pseudonym.namespace, &held.0),
             );
-            let form = pseudonym.masked.as_ref().map(|_| {
-                reveal_form(&person.id, "pseudonym", &pseudonym.domain, offset.saturating_add(row))
+            let form = pseudonym.masked.as_ref().map_or_else(Html::empty, |_| {
+                reveal_form(
+                    visit,
+                    &person.id,
+                    "pseudonym",
+                    &pseudonym.domain,
+                    offset.saturating_add(row),
+                )
             });
-            view! {
-                <tr>
-                    {title_cell(None, pseudonym.name.clone(), None)}
-                    {cell(namespace, view! { <code class="fui-wrap">{pseudonym.namespace.clone()}</code> })}
-                    {cell(value, shown)}
-                    {cell(reveal, form)}
-                </tr>
-            }
+            h(format!(
+                "<tr>{}{}{}{}</tr>",
+                title_cell(None, t(&pseudonym.name), None),
+                cell(
+                    namespace,
+                    h(format!(
+                        "<code class=\"fui-wrap\">{}</code>",
+                        t(&pseudonym.namespace)
+                    ))
+                ),
+                cell(value, shown),
+                cell(reveal, form),
+            ))
         })
-        .collect_view()
-        .into_any();
+        .collect();
+    let caption = visit.tr(Msg::TabPseudonyms);
     let table = data_table(DataTable {
-        caption: &tr(Msg::TabPseudonyms),
+        caption: &caption,
         columns: &columns,
         sorting: Sorting::default(),
         body: Body::Rows(rows),
     });
-    view! {
-        {table}
-        <p class="fui-small">
-            <a href=crate::app::PSEUDONYM_DOMAINS>{tr(Msg::ResolveTitle)}</a>
-        </p>
-    }
-    .into_any()
+    table.then(h(format!(
+        "<p class=\"fui-small\"><a href=\"{}\">{}</a></p>",
+        crate::app::PSEUDONYM_DOMAINS,
+        t(visit.tr(Msg::ResolveTitle))
+    )))
 }

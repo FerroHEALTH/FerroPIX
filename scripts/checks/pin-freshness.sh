@@ -14,8 +14,8 @@
 #   scripts/checks/pin-freshness.sh
 #
 # The lint and install pins of .github/workflows/ci.yml (zizmor, shellcheck,
-# the actionlint and hadolint images, yq, cargo-leptos), the documentation
-# toolchain, the console's Binaryen, the fuzz lane's cargo-fuzz and the
+# the actionlint and hadolint images, yq), the documentation toolchain, the
+# fuzz lane's cargo-fuzz and the
 # release lanes' Trivy, cargo-auditable, cargo-cyclonedx and syft of
 # docs/VERSIONS.md are read against the upstream project's newest GitHub
 # release (a release tagged under a prefix against the newest release of
@@ -61,15 +61,12 @@ readonly CI=.github/workflows/ci.yml
 readonly REGISTRY_UA=ferropix-pin-check
 # One "tool<TAB>upstream repository" record per line: a CI tool ci.yml pins
 # by version, read against the newest GitHub release of its project.
-# The wasm-bindgen CLI is not here: it equals the `wasm-bindgen` crate of
-# the root Cargo.toml, which Dependabot's cargo ecosystem watches.
 readonly CI_TOOLS="\
 zizmor	zizmorcore/zizmor
 shellcheck	koalaman/shellcheck
 actionlint	rhysd/actionlint
 hadolint	hadolint/hadolint
-yq	mikefarah/yq
-cargo-leptos	leptos-rs/cargo-leptos"
+yq	mikefarah/yq"
 # The most pages of one tag list the read follows before it gives up.
 readonly MAX_TAG_PAGES=200
 
@@ -553,11 +550,11 @@ self_test() {
     '            hadolint/hadolint:v2.3.4@sha256:00 hadolint' \
     '          YQ_VERSION: v4.5.6' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f1,3 | tr '\t' ' ' | paste -sd ';' -)"
-  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;hadolint 2.3.4;yq 4.5.6;cargo-leptos " "$got" "the tool pins of a workflow"
+  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;hadolint 2.3.4;yq 4.5.6" "$got" "the tool pins of a workflow"
   printf '%s\n' '          tool: cargo-nextest' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f3 | paste -sd ';' -)"
   rm "$work/ci.yml"
-  expect ";;;;;" "$got" "a workflow with no tool pin"
+  expect ";;;;" "$got" "a workflow with no tool pin"
   got="$(ci_tools | awk -F'\t' '$3 == "" { print $1 }' | paste -sd ';' -)"
   expect "" "$got" "the tools of $CI with no pin found"
 
@@ -688,7 +685,6 @@ matrix_pin() {
 # read against its newest release of the prefix (`-` for none). A held tool
 # is pinned at the release another pin binds (the hold says which).
 readonly WATCHED_TOOLS="\
-Binaryen	WebAssembly/binaryen	-	-
 cargo-fuzz	rust-fuzz/cargo-fuzz	-	-
 Trivy	aquasecurity/trivy	-	-
 cargo-auditable	rust-secure-code/cargo-auditable	-	the newest release the pinned taiki-e/install-action manifest carries
@@ -766,7 +762,7 @@ while IFS=$'\t' read -r label repo pinned hold prefix; do
     continue
   else
     # A tag may lead with the repository's name: lychee tags its releases
-    # lychee-vX.Y.Z. A `v` is dropped only before a digit, so Binaryen's
+    # lychee-vX.Y.Z. A `v` is dropped only before a digit, so a tag such as
     # version_133 stays whole.
     latest="${tag#"${repo##*/}"-}"
     [[ ! "$latest" =~ ^v[0-9] ]] || latest="${latest#v}"

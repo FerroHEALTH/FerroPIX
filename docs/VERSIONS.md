@@ -41,33 +41,15 @@ pins, so every book in the family builds with the same tools.
 
 The operator console draws with FerroUI, pinned exactly and moved in
 lockstep with every FerroHEALTH console on each release
-(`.claude/rules/leptos-ui.md`). `scripts/checks/versions.sh` holds the root
+(`.claude/rules/console-ui.md`). The console's binary serves FerroUI's
+stylesheet and script modules, so the console has no build tool of its own
+beside cargo. `scripts/checks/versions.sh` holds the root
 `Cargo.toml` pin to this row and the tag the FerroUI documents are read at
 to `v` plus the pinned version.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| FerroUI (`ferrohealth-ui`) | `=0.5.5` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.5.5` |
-
-## The console's build tools
-
-The `console-wasm` job of `.github/workflows/ci.yml` builds the operator
-console's site bundle with three tools and holds it to the budget of
-`.claude/rules/leptos-ui.md` §4. cargo-leptos and the wasm-bindgen CLI are
-fetched by the digest-pinned `taiki-e/install-action`; the wasm-bindgen CLI
-equals the `wasm-bindgen` crate of the root `Cargo.toml`, because the CLI
-and the crate must agree on the bindings they write. Binaryen's `wasm-opt`
-is installed by `scripts/release/console-tools.sh`, checked against its
-SHA-256. They are the versions FerroBRIDGE's console builds with.
-
-| Item | Pin | Repeated in |
-|---|---|---|
-| cargo-leptos | `0.3.11` | `.github/workflows/ci.yml`, `.github/workflows/release-console.yml` |
-| wasm-bindgen | `0.2.129` | `.github/workflows/ci.yml`, `.github/workflows/release-console.yml`, `Cargo.toml` |
-| Binaryen | `version_133` | `scripts/release/console-tools.sh` |
-
-`scripts/checks/versions.sh` reads each pin back from the files its row
-names.
+| FerroUI (`ferrohealth-ui`) | `=0.6.0` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.6.0` |
 
 ## The console's browser journeys
 

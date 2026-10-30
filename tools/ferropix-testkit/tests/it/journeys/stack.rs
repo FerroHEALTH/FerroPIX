@@ -3,9 +3,8 @@
 
 //! The stack a journey runs against, each part on loopback: the test OpenID
 //! Provider of `ferropix_testkit::oidc`, which signs a real browser in, a
-//! stand-in for the FerroPIX server, and the console itself, run in process
-//! over its release site bundle so the browser hydrates the pages its server
-//! drew.
+//! stand-in for the FerroPIX server, and the console itself, run in process,
+//! which draws every page and serves FerroUI's assets.
 //!
 //! The stand-in answers the liveness route the console probes. Started with
 //! [`Server::Refusing`] it refuses every other route with `404`, so every
@@ -15,18 +14,11 @@
 //! specification governs the stack: our own design, after FerroBRIDGE's.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use ferropix_testkit::oidc::Provider;
 use tokio::net::TcpListener;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-use crate::journeys::browser::workspace;
-
-/// The environment variable naming the site bundle's directory, when it is
-/// not the workspace's `target/site`.
-const SITE_ENV: &str = "FERROPIX_JOURNEYS_SITE";
 
 /// The console's client id at the provider.
 const CLIENT_ID: &str = "ferropix-console";
@@ -39,7 +31,7 @@ const ACCESS_TOKEN: &str = "synthetic-journey-access-token";
 pub(crate) const STEWARD: &str = "Synthetic Operator";
 
 /// The prefix of every preference cookie the console sets over plain HTTP
-/// (`.claude/rules/leptos-ui.md` §4).
+/// (`.claude/rules/console-ui.md` §4).
 pub(crate) const PREFERENCE_PREFIX: &str = "ferropix_console_";
 
 /// The directory of the synthetic operator API documents.
@@ -147,7 +139,6 @@ impl Stack {
     /// Starts the provider, a stand-in answering as `answers` says and the
     /// console, with the TOML lines `session` added to its `[session]`.
     async fn start_session(answers: Server, session: &str) -> Self {
-        let site = site_root();
         let provider = Provider::start()
             .await
             .unwrap_or_else(|error| panic!("the test provider did not start: {error}"));
@@ -177,14 +168,13 @@ impl Stack {
         let address = listener.local_addr().expect("the console's address");
         let console = format!("http://{address}");
         let text = format!(
-            "[server]\nlisten = \"{address}\"\nsite_root = {site}\n\n\
+            "[server]\nlisten = \"{address}\"\n\n\
              [pix]\nbase_url = \"{server}/\"\ntimeout_ms = 2000\n\n\
              [session]\nsecure_cookie = false\n{session}\n\
              [oidc]\nissuer = \"{issuer}\"\nauthorization_endpoint = \"{authorization}\"\n\
              token_endpoint = \"{token}\"\njwks_uri = \"{jwks}\"\nclient_id = \"{CLIENT_ID}\"\n\
              redirect_uri = \"{console}/auth/callback\"\nscopes = [\"openid\", \"__ferropix.admin\"]\n\
              end_session_endpoint = \"{end_session}\"\npost_logout_redirect_uri = \"{console}/sign-in/signed-out\"\n",
-            site = toml_string(&site.display().to_string()),
             server = server.uri(),
             issuer = provider.issuer(),
             authorization = provider.authorization_endpoint(),
@@ -216,77 +206,5 @@ impl Stack {
     /// The URL of `path` on the console.
     pub(crate) fn url(&self, path: &str) -> String {
         format!("{}{path}", self.console)
-    }
-}
-
-/// `text` as a TOML basic string.
-fn toml_string(text: &str) -> String {
-    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
-}
-
-/// The site bundle's directory: [`SITE_ENV`], or the workspace's
-/// `target/site`, which must hold the WebAssembly cargo-leptos wrote.
-fn site_root() -> PathBuf {
-    let site =
-        std::env::var_os(SITE_ENV).map_or_else(|| workspace().join("target/site"), PathBuf::from);
-    let bundle = site.join("pkg/ferropix-console.wasm");
-    assert!(
-        bundle.is_file(),
-        "{} holds no site bundle: build it with scripts/release/console-site.sh --release, or name its directory in {SITE_ENV}",
-        site.display()
-    );
-    site
-}
-
-#[cfg(test)]
-mod tests {
-    use ferropix_operator_api::actions::Actions;
-    use ferropix_operator_api::candidate::{Candidate, Candidates, Decided};
-    use ferropix_operator_api::configuration::Configuration;
-    use ferropix_operator_api::domain::{DomainPage, Domains};
-    use ferropix_operator_api::health::Dependencies;
-    use ferropix_operator_api::merge::{Outcome, Preview};
-    use ferropix_operator_api::overview::Overview;
-    use ferropix_operator_api::person::Person;
-    use ferropix_operator_api::pseudonym::{PseudonymDomains, Resolution};
-    use ferropix_operator_api::reveal::Revealed;
-    use ferropix_operator_api::search::Results;
-    use ferropix_operator_api::source::{SourcePage, Sources};
-    use serde::de::DeserializeOwned;
-
-    use super::{FILLED, document};
-
-    /// Whether the document `name` reads as a `T`.
-    fn reads<T: DeserializeOwned>(name: &str) -> bool {
-        serde_json::from_str::<T>(&document(name)).is_ok()
-    }
-
-    #[test]
-    fn every_filled_document_reads_as_the_operator_api_type_its_route_answers() {
-        for (_, route, name) in FILLED {
-            let read = match name {
-                "overview" => reads::<Overview>(name),
-                "dependencies" => reads::<Dependencies>(name),
-                "person" => reads::<Person>(name),
-                "sources" => reads::<Sources>(name),
-                "source-page" => reads::<SourcePage>(name),
-                "domains" => reads::<Domains>(name),
-                "domain-page" => reads::<DomainPage>(name),
-                "configuration" => reads::<Configuration>(name),
-                "actions" => reads::<Actions>(name),
-                "results" => reads::<Results>(name),
-                "revealed" => reads::<Revealed>(name),
-                "merge-preview" | "revert-preview" => reads::<Preview>(name),
-                "merge-outcome" => reads::<Outcome>(name),
-                "pseudonym-domains" => reads::<PseudonymDomains>(name),
-                "resolution" => reads::<Resolution>(name),
-                "candidates" => reads::<Candidates>(name),
-                "candidate" => reads::<Candidate>(name),
-                "decided" => reads::<Decided>(name),
-                other => panic!("{other} names no operator API type"),
-            };
-            assert!(read, "{name}.json does not read as the answer of {route}");
-        }
     }
 }

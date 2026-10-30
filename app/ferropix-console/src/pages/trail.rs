@@ -11,6 +11,7 @@
 //! governs the console: our own design (decision D8: the trail reads the
 //! server's own `steward_action` table).
 
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::table::view::{
     Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
@@ -19,18 +20,25 @@ use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, definitions, disclosure, or_none, stack};
+use ferrohealth_ui::view::surface::{card, definitions, disclosure, stack};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::actions::{Action, ActionFilter, Actions};
-use leptos::prelude::*;
 
 use crate::app::AUDIT;
 use crate::locale::messages::Msg;
-use crate::locale::tr;
+use crate::markup::{h, hidden, t};
+use crate::pages::or_dash;
+use crate::visit::Visit;
 
 /// The route the export posts to.
 pub const EXPORT: &str = "/audit/export";
+
+/// The input type of a text filter.
+const TEXT: &str = "text";
+
+/// The input type of a date filter.
+const DATE: &str = "date";
 
 /// The tone of an action's kind.
 fn tone(kind: &str) -> Tone {
@@ -44,144 +52,149 @@ fn tone(kind: &str) -> Tone {
 
 /// A text field of the filter form, holding `value`.
 fn filter_field(
+    visit: &Visit,
     id: &'static str,
     words: Msg,
     value: Option<&String>,
     kind: &'static str,
-) -> AnyView {
-    Field::new(id, tr(words)).view(view! {
-        <input id=id name=id type=kind class=INPUT autocomplete="off" value=value.cloned().unwrap_or_default() />
-    })
+) -> Html {
+    Field::new(id, visit.tr(words)).view(h(format!(
+        "<input id=\"{id}\" name=\"{id}\" type=\"{kind}\" class=\"{INPUT}\" autocomplete=\"off\" value=\"{}\">",
+        t(value.cloned().unwrap_or_default())
+    )))
 }
 
 /// The filter form, its fields holding `filter`.
-fn filters(filter: &ActionFilter) -> AnyView {
-    view! {
-        <form method="post" action=AUDIT class="fui-form">
-            <div class="fui-form-grid">
-                {filter_field("actor", Msg::ColActor, filter.actor.as_ref(), "text")}
-                {filter_field("kind", Msg::ColKind, filter.kind.as_ref(), "text")}
-                {filter_field("person", Msg::ColPerson, filter.person.as_ref(), "text")}
-                {filter_field("from", Msg::FilterFrom, filter.from.as_ref(), "date")}
-                {filter_field("to", Msg::FilterTo, filter.to.as_ref(), "date")}
-            </div>
-            <div class="fui-form-foot">
-                <button type="submit" class=Variant::Primary.class()>
-                    {label(Some(Glyph::LIST_FILTER), tr(Msg::ApplyFilters))}
-                </button>
-                <button type="submit" formaction=EXPORT class=Variant::Secondary.class()>
-                    {label(Some(Glyph::DOWNLOAD), tr(Msg::ExportCsv))}
-                </button>
-            </div>
-        </form>
-    }
-    .into_any()
+fn filters(visit: &Visit, filter: &ActionFilter) -> Html {
+    h(format!(
+        "<form method=\"post\" action=\"{AUDIT}\" class=\"fui-form\"><div class=\"fui-form-grid\">{}{}{}{}{}</div><div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button><button type=\"submit\" formaction=\"{EXPORT}\" class=\"{}\">{}</button></div></form>",
+        filter_field(visit, "actor", Msg::ColActor, filter.actor.as_ref(), TEXT),
+        filter_field(visit, "kind", Msg::ColKind, filter.kind.as_ref(), TEXT),
+        filter_field(
+            visit,
+            "person",
+            Msg::ColPerson,
+            filter.person.as_ref(),
+            TEXT
+        ),
+        filter_field(visit, "from", Msg::FilterFrom, filter.from.as_ref(), DATE),
+        filter_field(visit, "to", Msg::FilterTo, filter.to.as_ref(), DATE),
+        Variant::Primary.class(),
+        label(Some(Glyph::LIST_FILTER), visit.tr(Msg::ApplyFilters)),
+        Variant::Secondary.class(),
+        label(Some(Glyph::DOWNLOAD), visit.tr(Msg::ExportCsv)),
+    ))
 }
 
 /// The trail: its filters, then its page of actions.
 #[must_use]
-pub fn trail(filter: &ActionFilter, actions: &Actions) -> AnyView {
-    stack(view! {
-        {card(tr(Msg::Filters), filters(filter))}
-        {table(filter, actions)}
-    })
-    .into_any()
+pub fn trail(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
+    stack(card(visit.tr(Msg::Filters), filters(visit, filter)).then(table(visit, filter, actions)))
 }
 
 /// The page of actions, with the next page's post when one follows.
-fn table(filter: &ActionFilter, actions: &Actions) -> AnyView {
+fn table(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
+    let locale = &visit.locale;
     if actions.actions.is_empty() {
-        return list_card(ListCard {
-            title: tr(Msg::Audit),
+        return list_card(
+            locale,
+            ListCard {
+                title: visit.tr(Msg::Audit),
+                count: None,
+                order: None,
+                tabs: None,
+                actions: None,
+                body: list_empty(visit.tr(Msg::TrailEmpty), None),
+                pager: None,
+            },
+        );
+    }
+    let columns = [
+        Column::text("at", visit.tr(Msg::ColTime)).role(Role::Title),
+        Column::text("actor", visit.tr(Msg::ColActor)).role(Role::Sub),
+        Column::text("kind", visit.tr(Msg::ColKind)),
+        Column::text("person", visit.tr(Msg::ColPerson)).role(Role::Wide),
+        Column::text("reason", visit.tr(Msg::ColReason)).role(Role::Wide),
+        Column::text("detail", visit.tr(Msg::ColDetail)).role(Role::Wide),
+    ];
+    let [_, actor, kind, person, reason, detail] = &columns;
+    let rows: Html = actions
+        .actions
+        .iter()
+        .map(|action| {
+            h(format!(
+                "<tr>{}{}{}{}{}{}</tr>",
+                title_cell(None, timestamp(locale, &action.at), None),
+                cell(actor, t(&action.actor)),
+                cell(
+                    kind,
+                    badge(
+                        tone(&action.kind),
+                        crate::pages::action_words(locale, &action.kind)
+                    )
+                ),
+                cell(person, person_link(visit, action)),
+                cell(reason, t(action.reason.clone().unwrap_or_default())),
+                cell(detail, details(visit, action)),
+            ))
+        })
+        .collect();
+    let pager = actions.next.as_ref().map(|next| {
+        let kept: Html = [
+            ("actor", filter.actor.as_ref()),
+            ("kind", filter.kind.as_ref()),
+            ("person", filter.person.as_ref()),
+            ("from", filter.from.as_ref()),
+            ("to", filter.to.as_ref()),
+            ("after", Some(next)),
+        ]
+        .into_iter()
+        .filter_map(|(name, value)| value.map(|value| hidden(name, value)))
+        .collect();
+        h(format!(
+            "<form method=\"post\" action=\"{AUDIT}\">{kept}<button type=\"submit\" class=\"{}\">{}</button></form>",
+            Variant::Secondary.class(),
+            label(Some(Glyph::CHEVRON_RIGHT), visit.tr(Msg::OlderActions)),
+        ))
+    });
+    let caption = visit.tr(Msg::Audit);
+    list_card(
+        locale,
+        ListCard {
+            title: visit.tr(Msg::Audit),
             count: None,
             order: None,
             tabs: None,
             actions: None,
-            body: list_empty(tr(Msg::TrailEmpty), None),
-            pager: None,
-        });
-    }
-    let columns = [
-        Column::text("at", tr(Msg::ColTime)).role(Role::Title),
-        Column::text("actor", tr(Msg::ColActor)).role(Role::Sub),
-        Column::text("kind", tr(Msg::ColKind)),
-        Column::text("person", tr(Msg::ColPerson)).role(Role::Wide),
-        Column::text("reason", tr(Msg::ColReason)).role(Role::Wide),
-        Column::text("detail", tr(Msg::ColDetail)).role(Role::Wide),
-    ];
-    let [_, actor, kind, person, reason, detail] = &columns;
-    let rows = actions
-        .actions
-        .iter()
-        .map(|action| {
-            view! {
-                <tr>
-                    {title_cell(None, timestamp(&action.at), None)}
-                    {cell(actor, action.actor.clone())}
-                    {cell(kind, badge(tone(&action.kind), crate::pages::action_words(&action.kind)))}
-                    {cell(person, person_link(action))}
-                    {cell(reason, action.reason.clone().unwrap_or_default())}
-                    {cell(detail, details(action))}
-                </tr>
-            }
-        })
-        .collect_view()
-        .into_any();
-    let pager = actions.next.clone().map(|next| {
-        let hidden = [
-            ("actor", filter.actor.clone()),
-            ("kind", filter.kind.clone()),
-            ("person", filter.person.clone()),
-            ("from", filter.from.clone()),
-            ("to", filter.to.clone()),
-            ("after", Some(next)),
-        ]
-        .into_iter()
-        .filter_map(|(name, value)| {
-            value.map(|value| view! { <input type="hidden" name=name value=value /> })
-        })
-        .collect_view();
-        view! {
-            <form method="post" action=AUDIT>
-                {hidden}
-                <button type="submit" class=Variant::Secondary.class()>
-                    {label(Some(Glyph::CHEVRON_RIGHT), tr(Msg::OlderActions))}
-                </button>
-            </form>
-        }
-        .into_any()
-    });
-    list_card(ListCard {
-        title: tr(Msg::Audit),
-        count: None,
-        order: None,
-        tabs: None,
-        actions: None,
-        body: data_table(DataTable {
-            caption: &tr(Msg::Audit),
-            columns: &columns,
-            sorting: Sorting::default(),
-            body: Body::Rows(rows),
-        })
-        .into_any(),
-        pager,
-    })
+            body: data_table(DataTable {
+                caption: &caption,
+                columns: &columns,
+                sorting: Sorting::default(),
+                body: Body::Rows(rows),
+            }),
+            pager,
+        },
+    )
 }
 
 /// The person an action concerns, as a link to the patient.
-fn person_link(action: &Action) -> AnyView {
-    action.person.clone().map_or_else(
-        || or_none(String::new()),
+fn person_link(visit: &Visit, action: &Action) -> Html {
+    action.person.as_ref().map_or_else(
+        || or_dash(&visit.locale, None),
         |person| {
-            view! { <a href=format!("/patients/{person}")><code>{person.clone()}</code></a> }
-                .into_any()
+            h(format!(
+                "<a href=\"{}\"><code>{}</code></a>",
+                t(format!("/patients/{person}")),
+                t(person)
+            ))
         },
     )
 }
 
 /// The disclosure of an action's other references.
-fn details(action: &Action) -> AnyView {
-    let mut rows: Vec<(String, AnyView)> = Vec::new();
+fn details(visit: &Visit, action: &Action) -> Html {
+    let code = |value: &str| h(format!("<code>{}</code>", t(value)));
+    let mut rows: Vec<(String, Html)> = Vec::new();
     for (words, value) in [
         (Msg::DetailRecord, &action.record),
         (Msg::DetailCandidate, &action.candidate),
@@ -191,12 +204,9 @@ fn details(action: &Action) -> AnyView {
         (Msg::DetailRequestId, &action.request_id),
     ] {
         if let Some(value) = value {
-            rows.push((tr(words), view! { <code>{value.clone()}</code> }.into_any()));
+            rows.push((visit.tr(words), code(value)));
         }
     }
-    rows.push((
-        tr(Msg::DetailAction),
-        view! { <code>{action.id.clone()}</code> }.into_any(),
-    ));
-    disclosure(tr(Msg::ActionDetail), definitions(rows)).into_any()
+    rows.push((visit.tr(Msg::DetailAction), code(&action.id)));
+    disclosure(visit.tr(Msg::ActionDetail), definitions(rows))
 }

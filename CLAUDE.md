@@ -51,11 +51,13 @@ names), and FerroUI leads its UI: the FerroUI repository holds the
 components, the design (`design/`, the only design source, with this
 console's pages under `design/consoles/ferropix/`) and the component rules,
 and its consumer guide `docs/consoles.md`, read at the tag of the pin, says
-how a console uses them. The server draws the first page and the browser
-hydrates the whole page and draws every page after it. `.claude/rules/leptos-ui.md` points at them
+how a console uses them. The server draws every page whole as one document,
+with FerroUI's small script modules adding behaviour on top and every page
+working without them; there is no Leptos and no WebAssembly (FerroUI 0.6,
+FerroHEALTH/FerroUI#510). `.claude/rules/console-ui.md` points at them
 and keeps only what is particular to this console: its routes, its session
 and server boundary, its client of the FerroPIX server, its configuration
-and headers, its bundle budget, its captures and its words.
+and headers, its journeys, its captures and its words.
 
 ## The design is recorded in `docs/architecture.md`
 
@@ -145,8 +147,9 @@ The build order is the milestones:
   types (#64), which the server writes and the console reads, `publish =
   false`.
 - `app/ferropix-console`: the operator console (#119), its own binary
-  `ferropix-console`, `publish = false`: a Leptos app rendered on the server,
-  hydrated whole in the browser with its pages in lazy route groups, and drawn with `ferrohealth-ui` in its FerroPIX brand, the OIDC
+  `ferropix-console`, `publish = false`: every page an axum handler draws
+  whole on the server with `ferrohealth-ui` in its FerroPIX brand, FerroUI's
+  stylesheet and script modules served from its own router, the OIDC
   sign-in and the server-side session, the `FERROPIX_CONSOLE__`
   configuration with `_file` secrets, the browser security headers and the
   same-origin check of `ferrohealth-server`'s `console`, the client of
@@ -209,8 +212,7 @@ The build order is the milestones:
   static pinned by digest, copying the musl binary and the state tree the
   release lane stages under `dist/` (`scripts/release/stage-dist.sh`); it
   compiles nothing. `docker/console/Dockerfile`: the console image (#99),
-  the same base, copying the binary and the site bundle staged under
-  `dist/console/`. `compose.yaml`: the quickstart, the published image
+  the same base, copying the binary staged under `dist/console/`. `compose.yaml`: the quickstart, the published image
   beside PostgreSQL (its role made by `docker/postgres/`) and the
   development issuer whose network namespace the server joins, with file
   secrets and the hardening set, and the console under the `console`
@@ -347,7 +349,7 @@ beside each tree.
 - Rules: `writing-style`, `rust-style`, `reliability`, `comments`, `testing`,
   `spec-adherence`, `vendored-inputs`, `codegen`, `ci-cd`,
   `ai-code-review`, `crates-publishing`, `issue-workflow`, `issue-relationships`,
-  `project-board`, `docs-website` (path-scoped to the site), `leptos-ui`
+  `project-board`, `docs-website` (path-scoped to the site), `console-ui`
   (path-scoped to the console, leading with FerroUI).
 - Agents: `spec-researcher`, `implementer` (both on Opus 5).
 - Skills: `/spec-lookup`, `/next-task`, `/phase-done`, `/phase-status`.

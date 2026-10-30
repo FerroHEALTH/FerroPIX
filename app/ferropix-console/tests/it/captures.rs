@@ -36,14 +36,20 @@ const PAGES: [(&str, &str); 16] = [
     ("sign-in", "/sign-in"),
 ];
 
-/// The files a captured page links, each written beside it.
-const FILES: [&str; 5] = [
-    "/ferrohealth-ui.css",
-    "/theme.css",
-    "/favicon.svg",
-    "/ferropix-icon.svg",
-    "/ferropix-icon-dark.svg",
-];
+/// The files a captured page links, each written beside it under its own
+/// path: FerroUI's stylesheet, theme and loader at the pinned release, and
+/// the marks.
+fn files() -> Vec<String> {
+    let assets = ferrohealth_ui::serve::Assets::of(ferrohealth_ui::style::Brand::Pix);
+    vec![
+        assets.stylesheet(),
+        assets.theme(),
+        assets.loader(),
+        String::from("/favicon.svg"),
+        String::from("/ferropix-icon.svg"),
+        String::from("/ferropix-icon-dark.svg"),
+    ]
+}
 
 #[tokio::test]
 async fn every_page_is_written_out_for_a_capture_when_asked() -> Result<(), Box<dyn Error>> {
@@ -53,15 +59,20 @@ async fn every_page_is_written_out_for_a_capture_when_asked() -> Result<(), Box<
     std::fs::create_dir_all(&folder)?;
     let (state, service) = console(&offline("http://127.0.0.1:9/"))?;
     let session = steward_session(&state);
-    for file in FILES {
+    let files = files();
+    for file in &files {
         let (_, body) = send(&service, get(file)?).await?;
-        std::fs::write(folder.join(file.trim_start_matches('/')), body)?;
+        let path = folder.join(file.trim_start_matches('/'));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, body)?;
     }
     for theme in ["light", "dark"] {
         let cookie = format!("{session}; ferropix_console_theme={theme}");
         for (name, route) in PAGES {
             let (_, page) = send(&service, get_with(route, &cookie)?).await?;
-            let page = FILES.iter().fold(page, |page, file| {
+            let page = files.iter().fold(page, |page, file| {
                 page.replace(
                     &format!("\"{file}\""),
                     &format!("\"{}\"", file.trim_start_matches('/')),

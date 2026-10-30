@@ -26,7 +26,8 @@ pub mod search;
 pub mod sign_in;
 pub mod trail;
 
-use ferrohealth_ui::i18n::Arg;
+use ferrohealth_ui::html::Html;
+use ferrohealth_ui::i18n::{Arg, Locale};
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, link_button};
@@ -34,52 +35,77 @@ use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::refusal::{Issue, Refusal, Severity, refusal};
 use ferrohealth_ui::view::surface::{card, cluster, definitions, disclosure, stack};
 use ferrohealth_ui::view::time::timestamp;
-use leptos::prelude::*;
-use leptos_meta::Title;
+use http::StatusCode;
 
-use crate::app::current_path;
 use crate::locale::messages::Msg;
 use crate::locale::{tr, tr_with};
+use crate::markup::{h, t};
 use crate::model::{Failure, Probe, Reach};
+use crate::visit::Visit;
 
-/// The document title of the page `name`, which the root's title format
-/// completes with the console's name.
-#[must_use]
-pub fn title(name: impl Into<String>) -> impl IntoView {
-    view! { <Title text=name.into() /> }
+/// A page drawn from its visit: its title, its body, the docked decision
+/// bar it may have, and the status it is answered with.
+#[derive(Debug)]
+pub struct Drawn {
+    /// The page's words in the document title, which the console's name
+    /// completes; empty for the console's name alone.
+    pub title: String,
+    /// The page, drawn in the shell's main area.
+    pub body: Html,
+    /// The docked decision bar at the foot of the main area (R4), if any.
+    pub dock: Option<Html>,
+    /// The status the page is answered with.
+    pub status: StatusCode,
+}
+
+impl Drawn {
+    /// The page titled `title` drawn as `body`, answered `200`.
+    #[must_use]
+    pub fn new(title: impl Into<String>, body: Html) -> Self {
+        Self {
+            title: title.into(),
+            body,
+            dock: None,
+            status: StatusCode::OK,
+        }
+    }
 }
 
 /// The words of `failure`, as the technical detail names it.
-fn failure_words(reach: &Reach) -> String {
+fn failure_words(locale: &Locale, reach: &Reach) -> String {
     match reach {
         Reach::Up => String::new(),
         Reach::Refused(status) => tr_with(
+            locale,
             Msg::FailureStatus,
             &[("status", Arg::from(status.as_u16().to_string()))],
         ),
-        Reach::Unreachable(Failure::Connect) => tr(Msg::FailureConnect),
-        Reach::Unreachable(Failure::Timeout) => tr(Msg::FailureTimeout),
-        Reach::Unreachable(Failure::Other) => tr(Msg::FailureOther),
+        Reach::Unreachable(Failure::Connect) => tr(locale, Msg::FailureConnect),
+        Reach::Unreachable(Failure::Timeout) => tr(locale, Msg::FailureTimeout),
+        Reach::Unreachable(Failure::Other) => tr(locale, Msg::FailureOther),
     }
 }
 
 /// The refusal of the call `probe`, which `what` cannot be shown without.
-fn probe_refusal(probe: &Probe, what: &str) -> Refusal {
+fn probe_refusal(locale: &Locale, probe: &Probe, what: &str) -> Refusal {
     let what = Arg::from(what.to_owned());
     let (status, summary) = match &probe.reach {
         Reach::Refused(status) => (
             Some(status.as_u16()),
-            tr_with(Msg::RefusedCall, &[("what", what)]),
+            tr_with(locale, Msg::RefusedCall, &[("what", what)]),
         ),
-        Reach::Unreachable(Failure::Connect) => {
-            (None, tr_with(Msg::UnreachableConnect, &[("what", what)]))
-        }
-        Reach::Unreachable(Failure::Timeout) => {
-            (None, tr_with(Msg::UnreachableTimeout, &[("what", what)]))
-        }
-        Reach::Unreachable(Failure::Other) | Reach::Up => {
-            (None, tr_with(Msg::UnreachableOther, &[("what", what)]))
-        }
+        Reach::Unreachable(Failure::Connect) => (
+            None,
+            tr_with(locale, Msg::UnreachableConnect, &[("what", what)]),
+        ),
+        Reach::Unreachable(Failure::Timeout) => (
+            None,
+            tr_with(locale, Msg::UnreachableTimeout, &[("what", what)]),
+        ),
+        Reach::Unreachable(Failure::Other) | Reach::Up => (
+            None,
+            tr_with(locale, Msg::UnreachableOther, &[("what", what)]),
+        ),
     };
     let problem = probe.problem.iter().map(|problem| {
         let named = problem
@@ -118,35 +144,43 @@ fn probe_refusal(probe: &Probe, what: &str) -> Refusal {
 
 /// Try again, a link to the page itself, beside when the console last
 /// called the server.
-fn try_again(probe: &Probe) -> AnyView {
-    cluster(view! {
-        {link_button(current_path(), Variant::Secondary, Some(Glyph::REFRESH_CW), tr(Msg::TryAgain))}
-        <span class="fui-small fui-muted">{tr(Msg::LastTried)} " " {timestamp(&probe.at)}</span>
-    })
-    .into_any()
+fn try_again(visit: &Visit, probe: &Probe) -> Html {
+    let locale = &visit.locale;
+    cluster(
+        link_button(
+            visit.path().to_owned(),
+            Variant::Secondary,
+            Some(Glyph::REFRESH_CW),
+            visit.tr(Msg::TryAgain),
+        )
+        .then(h(format!(
+            "<span class=\"fui-small fui-muted\">{} {}</span>",
+            t(visit.tr(Msg::LastTried)),
+            timestamp(locale, &probe.at)
+        ))),
+    )
 }
 
 /// The technical detail of the call `probe`, folded away.
-fn technical_detail(probe: &Probe) -> AnyView {
+fn technical_detail(locale: &Locale, probe: &Probe) -> Html {
     disclosure(
-        tr(Msg::TechnicalDetail),
+        tr(locale, Msg::TechnicalDetail),
         definitions(vec![
             (
-                tr(Msg::DetailFailure),
-                failure_words(&probe.reach).into_any(),
+                tr(locale, Msg::DetailFailure),
+                t(failure_words(locale, &probe.reach)),
             ),
             (
-                tr(Msg::DetailRoute),
-                view! { <code>{probe.route.clone()}</code> }.into_any(),
+                tr(locale, Msg::DetailRoute),
+                h(format!("<code>{}</code>", t(&probe.route))),
             ),
             (
-                tr(Msg::DetailRequestId),
-                view! { <code>{probe.request_id.clone()}</code> }.into_any(),
+                tr(locale, Msg::DetailRequestId),
+                h(format!("<code>{}</code>", t(&probe.request_id))),
             ),
-            (tr(Msg::DetailTime), timestamp(&probe.at).into_any()),
+            (tr(locale, Msg::DetailTime), timestamp(locale, &probe.at)),
         ]),
     )
-    .into_any()
 }
 
 /// What a page shows while the server cannot give it what it reads.
@@ -159,47 +193,67 @@ pub struct Needs {
     pub away: bool,
 }
 
+impl Needs {
+    /// What a page needs to show `what`, saying nothing of what the
+    /// console keeps.
+    #[must_use]
+    pub const fn of(what: Msg) -> Self {
+        Self { what, away: false }
+    }
+}
+
 /// The state of a page that reads the operator API `route`.
 ///
 /// It is drawn from the call `probe` to the server's liveness route: the
 /// refusal with Try again and the technical detail when the server did not
 /// answer or refused, and the notice naming the route when it answers.
 #[must_use]
-pub fn server_state(probe: Option<&Probe>, needs: Needs, route: &str) -> AnyView {
-    let what = tr(needs.what);
+pub fn server_state(visit: &Visit, probe: Option<&Probe>, needs: Needs, route: &str) -> Html {
+    let locale = &visit.locale;
+    let what = tr(locale, needs.what);
     let Some(probe) = probe else {
-        return ().into_any();
+        return Html::empty();
     };
     if probe.is_up() {
         return notice(
             Tone::Info,
             Announce::Status,
             None,
-            view! {
-                <p>{tr_with(Msg::NotServed, &[("what", Arg::from(what))])}</p>
-                <p class="fui-small fui-muted">
-                    {tr_with(Msg::NotServedRoute, &[("route", Arg::from(route.to_owned()))])}
-                </p>
-            },
-        )
-        .into_any();
+            h(format!(
+                "<p>{}</p><p class=\"fui-small fui-muted\">{}</p>",
+                t(tr_with(
+                    locale,
+                    Msg::NotServed,
+                    &[("what", Arg::from(what))]
+                )),
+                t(tr_with(
+                    locale,
+                    Msg::NotServedRoute,
+                    &[("route", Arg::from(route.to_owned()))]
+                ))
+            )),
+        );
     }
-    let away = needs
-        .away
-        .then(|| card(tr(Msg::AwayTitle), view! { <p>{tr(Msg::AwayBody)}</p> }));
-    stack(view! {
-        {refusal(&probe_refusal(probe, &what))}
-        {try_again(probe)}
-        {away}
-        {technical_detail(probe)}
-    })
-    .into_any()
+    let away = if needs.away {
+        card(
+            tr(locale, Msg::AwayTitle),
+            h(format!("<p>{}</p>", t(tr(locale, Msg::AwayBody)))),
+        )
+    } else {
+        Html::empty()
+    };
+    stack(Html::join([
+        refusal(locale, &probe_refusal(locale, probe, &what)),
+        try_again(visit, probe),
+        away,
+        technical_detail(locale, probe),
+    ]))
 }
 
 /// The words of a steward action's or a source message's kind as the server
 /// names it, or the name itself for a kind the console does not know.
 #[must_use]
-pub fn action_words(kind: &str) -> String {
+pub fn action_words(locale: &Locale, kind: &str) -> String {
     let words = match kind {
         "view" => Msg::ActionView,
         "export" => Msg::ActionExport,
@@ -215,13 +269,13 @@ pub fn action_words(kind: &str) -> String {
         "message" => Msg::ActionMessage,
         other => return other.to_owned(),
     };
-    tr(words)
+    tr(locale, words)
 }
 
 /// The words of an administrative gender code (the FHIR R4 `ValueSet`
 /// `administrative-gender`), or the code itself for one outside it.
 #[must_use]
-pub fn gender_words(code: &str) -> String {
+pub fn gender_words(locale: &Locale, code: &str) -> String {
     let words = match code {
         "female" => Msg::GenderFemale,
         "male" => Msg::GenderMale,
@@ -229,5 +283,14 @@ pub fn gender_words(code: &str) -> String {
         "unknown" => Msg::GenderUnknown,
         other => return other.to_owned(),
     };
-    tr(words)
+    tr(locale, words)
+}
+
+/// `value` as text, or FerroUI's muted dash for none.
+#[must_use]
+pub fn or_dash(locale: &Locale, value: Option<String>) -> Html {
+    value.map_or_else(
+        || ferrohealth_ui::view::surface::or_none(locale, String::new()),
+        t,
+    )
 }

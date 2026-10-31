@@ -1106,8 +1106,7 @@ for the console against `release-console.yml`.
 `ci.yml` keeps its workflow tier and its Rust tier under the single
 required `conclusion` check. It runs on `opened`, `synchronize` and
 `reopened` only, so a commit gets one run; `pr-guards.yml` re-runs the guard
-a changed label (`no-changelog`, `no-crate-bump`, `no-book`) or description
-affects in the head commit's run once that run completes. Beside FerroFED,
+a changed label (`no-changelog`, `no-crate-bump`, `no-book`) affects in the head commit's run once that run completes. Beside FerroFED,
 FerroPIX lacks these lanes, each added as its own issue (section 14):
 
 | Lane | What it does | Why FerroPIX needs it |
@@ -1115,7 +1114,6 @@ FerroPIX lacks these lanes, each added as its own issue (section 14):
 | `sonar.yml` | SonarQube Cloud over the Rust tier and the shell, YAML and JSON the Rust gates never read; advisory, gates no merge | the second opinion the family runs; `sonar-project.properties` scopes it |
 | `fuzz.yml` | `cargo fuzz` for a bounded time, weekly and on a pull request that touches a target's input | the server parses untrusted input on every request: the `Parameters` and `Patient` bodies, the search parameters, the MLLP frame and the v2 message; a panic is a defect, an `Err` is the parser's job |
 | `pin-freshness.yml` | reads the newest upstream release of every pin no Dependabot ecosystem watches (the FHIR packages, the IHE pages' digests, the container images, the distroless digest, Chrome for Testing) and opens one issue when one is behind | the corpora and the images are pinned by digest and nothing else watches them |
-| `contribution-licence.yml` | the licence box of the pull request body as a required check of its own, re-run on `edited`, skipped for a bot | `pr-guards.yml` re-runs the `ci.yml` job on an edited body, inside `conclusion`; a workflow of its own reports the box without waiting for the CI run |
 | `journeys` (in `ci.yml`) | the console's browser journeys and the painted-contrast battery behind `FERROPIX_JOURNEYS`, with FerroUI's script modules running and withheld | section 12.5 |
 
 ## 12. The operator console

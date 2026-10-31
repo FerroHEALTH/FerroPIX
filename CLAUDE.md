@@ -178,7 +178,7 @@ The build order is the milestones:
   `watch-prs.sh`, `changelog-merge.sh`, and `project.sh`, a stub: there is no
   roadmap board). `scripts/checks/`: the guards (comment style, versions and
   licence headers, file length, `TODO` pointers, the crate version, the
-  changelog, the contribution licence, `ihe-citations.sh`, every IHE
+  changelog, `ihe-citations.sh`, every IHE
   section the tree cites held to the vendored text, and the documentation
   guards `site-links.sh`, `docs-claims.sh`, `book-guard.sh` and
   `writing-style.sh`, `pin-freshness.sh`, every unwatched pin against
@@ -218,9 +218,8 @@ The build order is the milestones:
   secrets and the hardening set, and the console under the `console`
   profile.
 - `.github/`: CI with the single required `conclusion` check,
-  `pr-guards.yml` (re-runs the contribution-licence, changelog and
-  crate-version guards in the head commit's CI run when a label or the
-  description changes), CodeQL, Scorecard, `sonar.yml` (SonarQube Cloud
+  `pr-guards.yml` (re-runs the changelog, crate-version and book guards in
+  the head commit's CI run when their label changes), CodeQL, Scorecard, `sonar.yml` (SonarQube Cloud
   with the coverage of the offline and `FERROPIX_E2E` suites, advisory),
   `pin-freshness.yml` (weekly, files an issue for each pin behind its
   newest upstream release), `fuzz.yml` (weekly and on a pull request that
@@ -339,8 +338,8 @@ License Apache 2.0 four years after each version. Every first-party file
 carries `SPDX-FileCopyrightText: Cadasto B.V.` and
 `SPDX-License-Identifier: BUSL-1.1` in its header, held by
 `scripts/checks/versions.sh`. A contribution is licensed under the same
-terms (CONTRIBUTING.md § Licensing of contributions); the pull request
-checkbox records it and the `contribution-licence` job enforces it. Vendored
+terms (CONTRIBUTING.md § Licensing of contributions), accepted by opening
+the pull request. Vendored
 specifications keep their upstream terms, recorded in a `PROVENANCE.md`
 beside each tree.
 

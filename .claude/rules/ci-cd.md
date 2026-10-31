@@ -18,8 +18,8 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
   and push to `main`. The workflow tier (zizmor, actionlint, shellcheck, the
   self-test of every helper and guard, the comment-style guard, the pin and
   licence guard `versions.sh`, the file-length guard, the `TODO(#N)` guard,
-  the released-changelog guard, and on pull requests the changelog guard,
-  the contribution-licence guard and the crate-version guard, and hadolint
+  the released-changelog guard, and on pull requests the changelog guard
+  and the crate-version guard, and hadolint
 over every Dockerfile) and the Rust
   tier once the workspace has a member (`cargo fmt --all --check`; `cargo
   clippy --workspace --all-targets --locked -- -D warnings` with and without
@@ -34,11 +34,10 @@ placeholder tree). The
   `manifest` job reads the root manifest under the pinned toolchain even
   while the workspace is empty. The `conclusion` job is the single required
   status check on `main`.
-- `.github/workflows/pr-guards.yml`: on a label or description event of a
-  pull request, waits for the head commit's CI run and re-runs each guard
-  whose verdict the change may move (the contribution-licence guard on an
-  edited body, the changelog and crate-version guards on their escape
-  labels), so `conclusion` reports again in that run. It decides nothing a
+- `.github/workflows/pr-guards.yml`: on a label event of a pull request,
+  waits for the head commit's CI run and re-runs each guard whose verdict
+  the change may move (the changelog, crate-version and book guards on
+  their escape labels), so `conclusion` reports again in that run. It decides nothing a
   merge depends on by itself.
 - `.github/workflows/codeql.yml`: CodeQL over the `actions` language and Rust.
 - `.github/workflows/scorecard.yml`: OpenSSF Scorecard, published to the

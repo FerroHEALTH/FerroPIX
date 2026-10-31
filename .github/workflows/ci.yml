@@ -24,7 +24,7 @@ on:
     # gets one run: `edited`, `labeled` and `unlabeled` started a second run on
     # the same commit, the concurrency group cancelled the first, and its
     # `conclusion` reported a failure on the head commit (#133). The guards
-    # read their labels and the description from the API when they run, and
+    # read their labels from the API when they run, and
     # pr-guards.yml re-runs the one a change affects once this run completes.
     types: [opened, synchronize, reopened]
   merge_group:
@@ -116,7 +116,7 @@ jobs:
       - name: The guards
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security changelog-structure contribution-licence docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: The release milestone script refuses open items and closes only after every leg
@@ -344,34 +344,6 @@ jobs:
             exit 0
           fi
           bash scripts/checks/changelog-guard.sh "$BASE" "$HEAD"
-
-  # A person's pull request records acceptance of the contribution licensing
-  # terms (CONTRIBUTING.md § Licensing of contributions) through the
-  # template's checkbox. Bots are skipped: a bot cannot accept terms. The
-  # body is read when the step runs, and pr-guards.yml re-runs this job when
-  # the description changes, so ticking the box takes effect (#133).
-  contribution-licence:
-    name: contribution-licence
-    if: github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read # the description when the step runs
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: The pull request body accepts the contribution licensing terms
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          PR_BODY=$(gh api "repos/${GH_REPO}/pulls/${PR}" --jq '.body // ""')
-          export PR_BODY
-          bash scripts/checks/contribution-licence.sh
 
   # The product version and each published crate's own version agree with the
   # lock and the changelog; the guard says so itself while there is no
@@ -1072,7 +1044,6 @@ jobs:
       - todo-issues
       - changelog-released
       - changelog-guard
-      - contribution-licence
       - crate-version-guard
       - detect
       - manifest

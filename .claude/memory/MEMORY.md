@@ -33,8 +33,6 @@
   only signed commits through pull requests and the merge queue
 - [Auto-merge](pr-auto-merge.md): arm every pull request with
   `gh pr merge <n> --auto`
-- [PR licence box](pr-licence-box.md): tick the contribution-licence box in
-  every pull request body; the owner's standing consent
 - [Two version lines](two-version-lines.md): the product version is the
   workspace and the tag; each published crate keeps its own line
 - [Release tag](release-tag.md): signed on the merge commit, pushed from the
@@ -57,4 +55,3 @@
   never types a moving version; owner 2026-10-21
 - [Helm and Kubernetes in Podman](helm-kubernetes-in-podman.md): owner 2026-10-25, test charts locally on kind over Podman; install helm when missing; never build images locally
 - [Reactive console UI](reactive-console-ui.md): superseded 2026-10-29 by FerroUI #510; every console is drawn on the server, a navigation is a document load, an in-page change a FerroUI module, no WebAssembly
-- [Contribution licence attestation](contribution-licence-attestation.md): owner 2026-10-25, always tick the licence checkbox on PRs opened for the owner, never ask

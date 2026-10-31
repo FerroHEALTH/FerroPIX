@@ -9,9 +9,11 @@
 //!
 //! The waits are FerroTERM's (FerroHEALTH/FerroTERM#834, #840): every wait
 //! starts by waiting for the page in front of the browser to be ready, which
-//! FerroUI's loader marks with `data-fui-script` on `<html>` once its modules
-//! run (`ferrohealth_ui::script::MARK`), and a press tags the page first, so
-//! the wait after it is never satisfied by the page the press is leaving. A
+//! FerroUI's loader marks with `data-fui-script` on `<html>`
+//! (`ferrohealth_ui::script::MARK`) and `data-fui-ready` on every element its
+//! modules have enhanced (`ferrohealth_ui::script::READY`), and a press tags
+//! the page first, so the wait after it is never satisfied by the page the
+//! press is leaving. A
 //! session with the modules withheld waits for the document alone, as a
 //! browser that never runs them would. Nothing sleeps for a fixed time and
 //! hopes. A wait that runs
@@ -68,13 +70,17 @@ pub(crate) const MODULES: &str = "*/ferrohealth-ui/*/scripts/*";
 
 /// Whether the page in front of the browser has finished loading and, when
 /// it loads FerroUI's loader and the session lets it run (`arguments[0]`),
-/// has been marked by it. A page that is not the console's (the provider's
-/// redirect, a plain-text refusal) loads no loader and is not waited on.
+/// has been marked by it, `<html>` with `data-fui-script`
+/// (`ferrohealth_ui::script::MARK`) and every element that asks for a module
+/// with `data-fui-ready` (`ferrohealth_ui::script::READY`). A page that is not
+/// the console's (the provider's redirect, a plain-text refusal) loads no
+/// loader and is not waited on.
 const READY: &str = r#"
 return document.readyState === "complete"
-    && (document.documentElement.hasAttribute("data-fui-script")
-        || arguments[0] === true
-        || document.querySelector("script[src*='/ferrohealth-ui/']") === null);
+    && (arguments[0] === true
+        || document.querySelector("script[src*='/ferrohealth-ui/']") === null
+        || (document.documentElement.hasAttribute("data-fui-script")
+            && document.querySelector("[data-fui]:not([data-fui-ready])") === null));
 "#;
 
 /// Tags the page in front of the browser before a press, and records on the
@@ -255,8 +261,11 @@ impl Journey {
         }
         panic!(
             "{}",
-            self.failure("the page to be ready", "no data-fui-script mark")
-                .await
+            self.failure(
+                "the page to be ready",
+                "no data-fui-script or data-fui-ready mark"
+            )
+            .await
         );
     }
 

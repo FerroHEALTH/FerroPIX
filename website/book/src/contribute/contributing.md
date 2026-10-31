@@ -53,4 +53,4 @@ scripts/checks/site-links.sh
 A contribution is licensed under the Business Source License 1.1 with the
 rest of the repository, and grants the Licensor the relicensing right in
 [CONTRIBUTING.md](https://github.com/FerroHEALTH/FerroPIX/blob/main/CONTRIBUTING.md#licensing-of-contributions).
-The pull request template's checkbox records it.
+Opening the pull request is your acceptance.

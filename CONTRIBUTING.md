@@ -81,7 +81,7 @@ submission in full.
 ## Licensing of contributions
 
 FerroPIX's own code is licensed under the Business Source License 1.1
-([`LICENSE`](LICENSE)). By submitting a contribution you:
+([`LICENSE`](LICENSE)). By opening a pull request you:
 
 1. certify that you wrote it, or otherwise have the right to submit it under
    these terms;
@@ -96,10 +96,8 @@ FerroPIX's own code is licensed under the Business Source License 1.1
 You keep your copyright. Point 3 is what lets the Licensed Work stay one work
 with one licensor: a commercial licence, a change of the licence parameters, or a
 transfer of the project can then cover every line, not only the maintainer's own.
-There is no separate agreement to sign: the pull request template carries a
-checkbox recording your acceptance of these terms, and a pull request from a
-person does not merge without it (the `contribution-licence` check, backed by
-`scripts/checks/contribution-licence.sh`).
+There is no separate agreement to sign and no box to tick: opening the pull
+request is your acceptance of these terms.
 
 ## Security
 

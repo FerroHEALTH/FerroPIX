@@ -251,8 +251,8 @@ mod tests {
 
     #[test]
     fn only_the_library_assets_the_files_and_the_sign_in_routes_need_no_session() {
-        assert!(is_public("/ferrohealth-ui/0.6.0/scripts/fui.js"));
-        assert!(is_public("/ferrohealth-ui/0.6.0/themes/pix.css"));
+        assert!(is_public("/ferrohealth-ui/0.6.2/scripts/fui.js"));
+        assert!(is_public("/ferrohealth-ui/0.6.2/themes/pix.css"));
         assert!(is_public("/favicon.svg"));
         assert!(!is_public("/ferrohealth-uix"));
         assert!(is_public("/auth/callback"));

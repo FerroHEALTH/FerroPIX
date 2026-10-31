@@ -13,20 +13,20 @@ FerroUI row of `docs/VERSIONS.md` names, and the FerroUI repository
 (FerroHEALTH/FerroUI) is the source for its components, design, tokens,
 icons, script modules, accessibility bar, interaction contract, words and
 quality control. Read these first, at the git tag that matches the pin (the
-links below are the `v0.6.0` copies; read the tag of the pin when it moves):
+links below are the `v0.6.2` copies; read the tag of the pin when it moves):
 
-- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.0/docs/consoles.md):
+- [`docs/consoles.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.2/docs/consoles.md):
   the consumer guide, what the library owns and what a console owns, how a
   console builds, the top bar's search and the session's end.
-- [`docs/migration-0.6.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.0/docs/migration-0.6.md):
+- [`docs/migration-0.6.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.2/docs/migration-0.6.md):
   what replaced each part of the hydrated 0.5 console.
-- [`.claude/rules/console-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.0/.claude/rules/console-ui.md):
+- [`.claude/rules/console-ui.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.2/.claude/rules/console-ui.md):
   the component rules of every FerroHEALTH console. The section numbers this
-  file cites (FerroUI §N) are those of the `v0.6.0` copy.
-- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.0/crates/ferrohealth-ui/CLAUDE.md):
+  file cites (FerroUI §N) are those of the `v0.6.2` copy.
+- [`crates/ferrohealth-ui/CLAUDE.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.2/crates/ferrohealth-ui/CLAUDE.md):
   the interaction contract and the rendering mode.
-- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.0/design/COMPONENTS.md)
-  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.6.0/design/consoles/ferropix):
+- [`design/COMPONENTS.md`](https://github.com/FerroHEALTH/FerroUI/blob/v0.6.2/design/COMPONENTS.md)
+  and [`design/consoles/ferropix/`](https://github.com/FerroHEALTH/FerroUI/tree/v0.6.2/design/consoles/ferropix):
   every component by its ID, the family rules, and this console's pages as
   reviewed. FerroUI's `design/` is the only design source; a design folder
   anywhere else is stale and is never synced from.
@@ -126,8 +126,8 @@ design (owner rulings of 2026-10-29 on FerroHEALTH/FerroUI#510).
   (`server::context`'s `gate`), else it goes to the sign-in page.
 - **The headers are tested in-process** (`tests/it/server.rs`): the
   Content-Security-Policy with `script-src 'self'` and `style-src 'self'`
-  and no nonce (`server::policy`, written over `ferrohealth-server`'s
-  hydrated policy until #389), `nosniff`, `DENY`, `no-referrer`, `no-store`
+  and no nonce (`ConsoleHeaders::server_rendered` of `ferrohealth-server`
+  0.4.2), `nosniff`, `DENY`, `no-referrer`, `no-store`
   on documents, FerroUI's immutable cache on its assets, and only the
   assets compressed.
 
@@ -188,7 +188,8 @@ design (owner rulings of 2026-10-29 on FerroHEALTH/FerroUI#510).
   holds every screen to its floor (its content, a link or a form behind
   every action, no control that works only with a module, the reflow at
   320 px), as the steward's work runs both ways. Every wait waits for the
-  loader's mark on `<html>` (`ferrohealth_ui::script::MARK`), or, with the
+  loader's mark on `<html>` (`ferrohealth_ui::script::MARK`) and every
+  element's ready mark (`ferrohealth_ui::script::READY`), or, with the
   modules refused, for the document alone, and a press for the page it
   loads. `journeys::SCREENS` names one address per route, held by a guard
   in the ordinary suite. Locally:

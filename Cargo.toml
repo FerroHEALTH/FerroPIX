@@ -37,8 +37,8 @@ toml = { version = "1.1.6", default-features = false, features = ["std", "parse"
 # The console's UI: the FerroUI components, drawn on the server and pinned
 # exactly, moved in lockstep with every console (.claude/rules/console-ui.md),
 # and the console's own Fluent catalog. Verified against crates.io on
-# 2026-10-30.
-ferrohealth-ui = "=0.6.0"
+# 2026-10-31 (0.6.2).
+ferrohealth-ui = "=0.6.2"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
@@ -59,7 +59,7 @@ ferrohealth-smart = { version = "=0.8.6", default-features = false }
 # requires. Verified against crates.io on 2026-10-29.
 ferrohealth-config = "=0.2.6"
 ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.4.1", default-features = false }
+ferrohealth-server = { version = "=0.4.2", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration`, the OTLP
 # export, the Prometheus exposition and the panic hook. Pinned exactly, as a

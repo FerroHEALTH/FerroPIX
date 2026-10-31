@@ -10,8 +10,9 @@
 //! Every response carries the browser security headers of
 //! `ferrohealth-server`'s `console` (`nosniff`, `DENY` framing, no referrer
 //! and a same-origin opener, every document `no-store`) under the strict
-//! policy of FerroUI `docs/consoles.md`: scripts and styles from the
-//! console's own origin alone, with no nonce. Only FerroUI's assets are
+//! policy of a server-rendered console (`ConsoleHeaders::server_rendered`,
+//! FerroUI `docs/consoles.md`): scripts and styles from the console's own
+//! origin alone, with no nonce. Only FerroUI's assets are
 //! compressed. A request that is not a
 //! safe method is taken only from the console's own pages (`same_origin`
 //! of `ferrohealth-server`), a session's access token is refreshed before the
@@ -23,7 +24,6 @@ use std::sync::Arc;
 
 use axum::Extension;
 use axum::extract::Request;
-use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use ferrohealth_health::lifecycle::Lifecycle;
@@ -37,7 +37,7 @@ use ferrohealth_server::serve::Drained;
 use ferrohealth_smart::metadata::{Http, ServerMetadata};
 use ferrohealth_smart::oidc::{OidcError, Provider, RelyingParty};
 use ferrohealth_ui::serve::{PREFIX, axum_router};
-use http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use http::{HeaderValue, Method, StatusCode};
 use tower_http::compression::CompressionLayer;
 
@@ -256,14 +256,11 @@ pub fn router(state: ConsoleState) -> axum::Router {
     // NOTE: FerroUI `docs/consoles.md`, "How a console builds": the library's assets
     // carry their own one-year immutable cache, which the console's headers keep.
     let assets = axum_router::router().layer(asset_compression());
-    let headers = ConsoleHeaders::new(form_action.clone());
+    let headers = ConsoleHeaders::server_rendered(form_action);
     pages
         .nest(PREFIX, assets)
         .layer(axum::middleware::from_fn(move |request, next| {
             console::headers(headers.clone(), request, next)
-        }))
-        .layer(axum::middleware::from_fn(move |request, next| {
-            strict_policy(form_action.clone(), request, next)
         }))
 }
 
@@ -282,52 +279,6 @@ const POSTS: [&str; 11] = [
     "/domains/{domain}",
     "/pseudonym-domains",
 ];
-
-/// The Content-Security-Policy of every response, forms posting to
-/// `form_action`.
-///
-/// Scripts and styles come from the console's own origin alone, with no
-/// nonce and no `'wasm-unsafe-eval'` (FerroUI `docs/consoles.md`, "How a
-/// console builds", step 6; W3C Content Security Policy Level 3).
-#[must_use]
-pub fn policy(form_action: &str) -> String {
-    format!(
-        "default-src 'self'; \
-         script-src 'self'; \
-         style-src 'self'; \
-         img-src 'self' data:; \
-         connect-src 'self'; \
-         object-src 'none'; \
-         base-uri 'self'; \
-         form-action {form_action}; \
-         frame-ancestors 'none'"
-    )
-}
-
-/// Writes [`policy`] over the one `console::headers` sets for a hydrated
-/// console.
-// TODO(#389): take the server-rendered policy from `ferrohealth-server` once
-// FerroHEALTH/FerroSYS#202 ships it, and drop this layer.
-async fn strict_policy(form_action: String, request: Request, next: Next) -> Response {
-    let mut response = next.run(request).await;
-    match HeaderValue::from_str(&policy(&form_action)) {
-        Ok(value) => {
-            response
-                .headers_mut()
-                .insert(CONTENT_SECURITY_POLICY, value);
-        }
-        Err(_invalid) => {
-            // NOTE: no specification governs this: our own design; a policy that cannot be a
-            // header falls back to the strictest one, which still blocks scripts.
-            response.headers_mut().insert(
-                CONTENT_SECURITY_POLICY,
-                HeaderValue::from_static("default-src 'none'"),
-            );
-            tracing::error!("the Content-Security-Policy could not be written as a header");
-        }
-    }
-    response
-}
 
 /// The same-origin check of the console's unsafe requests: the console's
 /// origin is that of the OpenID Connect redirect URI, and a refusal is the

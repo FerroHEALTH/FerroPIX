@@ -61,10 +61,11 @@ ferrohealth-config = "=0.2.6"
 ferrohealth-secret = "=0.2.0"
 ferrohealth-server = { version = "=0.4.2", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
-# console, the request log with `http.server.request.duration`, the OTLP
-# export, the Prometheus exposition and the panic hook. Pinned exactly, as a
-# product pins every family crate. Verified against crates.io on 2026-10-27.
-ferrohealth-telemetry = { version = "=0.2.2", default-features = false }
+# console, the request log with `http.server.request.duration` and
+# `http.server.active_requests`, the OTLP export, the Prometheus exposition
+# and the panic hook. Pinned exactly, as a product pins every family crate.
+# Verified against crates.io on 2026-11-01.
+ferrohealth-telemetry = { version = "=0.2.3", default-features = false }
 # The health family of FerroHEALTH/FerroSYS: the readiness document, which
 # the operator console's browser half reads too, and with `registry` the
 # indicators and the lifecycle the server runs. Pinned exactly at the version

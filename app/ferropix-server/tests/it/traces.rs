@@ -22,6 +22,8 @@ use ferropix_testkit::synthetic::HOSPITAL_DOMAIN;
 use http::{Request, StatusCode};
 use opentelemetry_proto::tonic::common::v1::any_value::Value;
 use opentelemetry_proto::tonic::trace::v1::Span;
+use opentelemetry_proto::tonic::trace::v1::span::SpanKind;
+use opentelemetry_proto::tonic::trace::v1::status::StatusCode as SpanStatus;
 use tower::ServiceExt as _;
 use tracing_subscriber::layer::SubscriberExt as _;
 
@@ -176,22 +178,46 @@ async fn the_request_spans_reach_the_collector_and_carry_no_identifier_demograph
             )
         })
         .collect();
+    // NOTE: OpenTelemetry semantic conventions v1.44.0, HTTP spans, Name: a
+    // server span is `{method} {route}`, and the method alone without a route.
     assert_eq!(
         routes,
         [
             (
-                String::from("request"),
+                String::from("GET /fhir/Patient/$ihe-pix"),
                 Some(String::from("/fhir/Patient/$ihe-pix")),
                 Some(String::from("404")),
             ),
             (
-                String::from("request"),
+                String::from("GET"),
                 Some(String::from("<unmatched>")),
                 Some(String::from("404")),
             ),
         ],
         "one request span per request, under its route template"
     );
+    // NOTE: OpenTelemetry semantic conventions v1.44.0, HTTP spans, Status: a
+    // server span answering a 4xx leaves its status unset.
+    for span in &spans {
+        assert_eq!(
+            Ok(SpanKind::Server),
+            SpanKind::try_from(span.kind),
+            "{} is a server span",
+            span.name
+        );
+        let status = span
+            .status
+            .as_ref()
+            .map_or(Ok(SpanStatus::Unset), |status| {
+                SpanStatus::try_from(status.code)
+            });
+        assert_eq!(
+            Ok(SpanStatus::Unset),
+            status,
+            "{} answered a 4xx and is no error",
+            span.name
+        );
+    }
     for span in &spans {
         for pair in &span.attributes {
             assert!(

@@ -156,7 +156,7 @@ The server routes, under `server.base_path`:
 | `GET {base}/health/liveness` | `200` while the process serves. |
 | `GET {base}/health/readiness` | `200` while the server serves and no readiness indicator is down, the `database` indicator of the store among them, and `503` otherwise ([Operations](operations.md)). |
 | `GET {base}/health` | The status of readiness, with `{"state":…}` alone. |
-| `GET {base}/metrics` | Every metric in the Prometheus text format, among them `http_server_request_duration_seconds` by method, route template and status. It needs no token, so keep it off the public side of your proxy. |
+| `GET {base}/metrics` | Every metric in the Prometheus text format, among them `http_server_request_duration_seconds` by method, route template and status, and `http_server_active_requests`, the requests in flight by method and scheme. It needs no token, so keep it off the public side of your proxy. |
 
 The server mints its own UUID for every request, which the request log and
 the steward trail of `GET {base}/operator/actions` carry. Every answer carries `x-request-id`:
@@ -176,11 +176,11 @@ reads.
 | `telemetry.logged_query_parameters` | `[]` | The query parameters whose values the request line carries in its `query` field. Name only parameters that hold no identifier or free text; the ITI-83 and ITI-78 parameters carry identifiers and demographics. |
 | `telemetry.environment` | none | The deployment environment the exported spans and metrics name (`deployment.environment.name`), such as `production`. |
 | `telemetry.otlp.endpoint` | none | The collector's OTLP/gRPC endpoint; `https://` speaks TLS. It may carry a credential, so `config check` shows it masked. A `[telemetry.otlp]` table without it refuses the start. |
-| `telemetry.otlp.traces` | `true` | Whether the spans are exported: one `request` span per request, with the method, the matched route template, the status and the server's request id. No raw path, query string, body, header value, identifier or token, and no log event. |
+| `telemetry.otlp.traces` | `true` | Whether the spans are exported: one server span per request, named `{method} {route}` such as `GET /fhir/Patient/$ihe-pix`, with the method, the matched route template, the status and the server's request id, and an error status on a 5xx. No raw path, query string, body, header value, identifier or token, and no log event. |
 | `telemetry.otlp.metrics` | `true` | Whether the metrics are pushed. |
 | `telemetry.otlp.sample_ratio` | `1.0` | The share of the traces that are sampled, from `0.0` to `1.0`. |
-| `telemetry.otlp.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. |
-| `telemetry.otlp.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. |
+| `telemetry.otlp.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. The server refuses to start when the endpoint is not `https://` or the file holds no PEM certificate. |
+| `telemetry.otlp.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. The server refuses to start when the endpoint is not `https://` or the file lacks a PEM certificate or a PEM private key. |
 
 Without a `[telemetry.otlp]` table nothing is exported.
 

@@ -21,4 +21,5 @@ allow ^A[AER]$                              # an HL7 v2 acknowledgment code (HL7
 allow ^attachment; filename=                # a Content-Disposition header value
 allow ^default-src                          # the Content-Security-Policy
 allow ^[jk] \| (down|up)$                    # keys as the shortcut legend parses them (FerroUI view::kbd), drawn as key caps
+allow ^o \| d$                               # keys as aria-keyshortcuts and the legend parse them (FerroUI view::kbd), drawn as key caps
 allow ^ (checked|selected|required|disabled)$ # a boolean attribute of a control's markup

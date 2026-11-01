@@ -38,8 +38,12 @@ never in an address.
 `?` opens the list of shortcuts on every screen, and so does Keyboard
 shortcuts in your menu. `/` puts the focus in the search, `j` and `k` (or
 the arrow keys) walk a list and Enter opens the row, and `1` to `4` open the
-patient record's Identifiers, Records, History and Pseudonyms tabs. Shortcuts
-never act while you type in a field, and a phone shows none.
+patient record's Identifiers, Records, History and Pseudonyms tabs. In the
+review queue `o` or `d` opens the focused pair in its side panel, to look at
+it or defer it. On a pair, `l` links (or asks first when the link merges),
+`n` decides Not a match, `d` defers, `r` puts the focus in the reason, and
+`[` and `]` lead to the previous and the next pair. Shortcuts never act
+while you type in a field, and a phone shows none.
 
 ## The pages
 

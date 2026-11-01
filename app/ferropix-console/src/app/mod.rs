@@ -233,7 +233,6 @@ pub fn page(page: PageContext) -> (StatusCode, Html) {
 
 /// The console's keyboard shortcuts, which the legend lists (FerroPIX
 /// design D21).
-// TODO(#390): list `o | d` for the focused row's side panel once FerroUI binds them.
 fn shortcut_groups(visit: &Visit) -> Vec<ShortcutGroup> {
     let shortcut = |keys: &str, does: Msg| Shortcut {
         keys: String::from(keys),
@@ -258,6 +257,7 @@ fn shortcut_groups(visit: &Visit) -> Vec<ShortcutGroup> {
                 shortcut("j | down", Msg::ShortcutNext),
                 shortcut("k | up", Msg::ShortcutPrevious),
                 shortcut("enter", Msg::ShortcutOpen),
+                shortcut(crate::pages::queue::GLANCE_KEYS, Msg::ShortcutGlance),
             ],
         },
         ShortcutGroup {

@@ -8,6 +8,14 @@
 use ferrohealth_health::document::{Readiness, State};
 use serde::{Deserialize, Serialize};
 
+/// The readiness indicator of the HL7 v2 MLLP listener, present only while
+/// the HL7 v2 face runs.
+pub const MLLP_LISTENER: &str = "hl7v2_listener";
+
+/// The readiness indicator of the outbound feed sender: the backlog of the
+/// outbox it sends from.
+pub const FEED_SENDER: &str = "outbox";
+
 /// What an upstream is to FerroPIX.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -189,7 +189,7 @@ pub struct Backlog {
 
 impl Backlog {
     /// The name the indicator answers under in the readiness document.
-    pub const NAME: &'static str = "outbox";
+    pub const NAME: &'static str = ferropix_operator_api::health::FEED_SENDER;
 
     /// Returns the indicator of `store`'s outbox.
     #[must_use]

@@ -25,7 +25,7 @@ use ferrohealth_ui::view::surface::{
 };
 use ferrohealth_ui::view::template::list::list_empty;
 use ferrohealth_ui::view::time::timestamp;
-use ferropix_operator_api::health::Dependencies;
+use ferropix_operator_api::health::{Dependencies, FEED_SENDER, MLLP_LISTENER};
 use ferropix_operator_api::overview::Overview;
 
 use crate::app::QUEUE;
@@ -35,12 +35,6 @@ use crate::model::Read;
 use crate::pages::queue::grade_words;
 use crate::pages::{Needs, server_state};
 use crate::visit::Visit;
-
-/// The readiness indicator of the MLLP listener.
-pub const MLLP_INDICATOR: &str = "hl7v2_listener";
-
-/// The readiness indicator of the outbound feed sender.
-pub const FEED_INDICATOR: &str = "feed_sender";
 
 /// The dashboard over what the server answered.
 #[must_use]
@@ -281,8 +275,8 @@ fn listeners(visit: &Visit, dependencies: &Read<Dependencies>) -> Html {
                     Msg::ListenerHttp,
                     state(Mark::Ok, visit.tr(Msg::ListenerUp), None)
                 ),
-                row(Msg::ListenerMllp, of(MLLP_INDICATOR)),
-                row(Msg::ListenerFeed, of(FEED_INDICATOR)),
+                row(Msg::ListenerMllp, of(MLLP_LISTENER)),
+                row(Msg::ListenerFeed, of(FEED_SENDER)),
             ))
         }
     };

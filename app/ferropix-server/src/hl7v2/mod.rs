@@ -388,7 +388,7 @@ impl Listening {
 
 impl HealthIndicator for Listening {
     fn name(&self) -> &'static str {
-        "hl7v2_listener"
+        ferropix_operator_api::health::MLLP_LISTENER
     }
 
     fn check(&self) -> Check<'_> {

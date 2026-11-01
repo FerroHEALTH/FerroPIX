@@ -27,6 +27,7 @@ use ferrohealth_ui::view::dock::{
 };
 use ferrohealth_ui::view::form::{Field, INPUT};
 use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
+use ferrohealth_ui::view::kbd::aria_keys;
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::score::{Contribution, Score, Threshold, score_breakdown};
 use ferrohealth_ui::view::surface::{card, definitions, stack};
@@ -111,15 +112,16 @@ fn is_conflict(probe: &Probe) -> bool {
     probe.reach == Reach::Refused(http::StatusCode::CONFLICT)
 }
 
-/// Previous and Next, the neighbouring pairs in the queue's order.
-// TODO(#390): announce `[` and `]` again once a FerroUI module binds a control's key.
+/// Previous and Next, the neighbouring pairs in the queue's order, on `[`
+/// and `]`, which FerroUI's `keys` module binds.
 fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
-    let link = |id: Option<&String>, words: Msg, glyph: Glyph| {
+    let link = |id: Option<&String>, words: Msg, key: &str, glyph: Glyph| {
         id.map_or_else(Html::empty, |id| {
             h(format!(
-                "<a href=\"{}\" class=\"{}\">{}</a>",
+                "<a href=\"{}\" class=\"{}\"{}>{}</a>",
                 t(format!("{QUEUE}/{id}")),
                 Variant::Secondary.small(),
+                announced(key),
                 label(Some(glyph), visit.tr(words)),
             ))
         })
@@ -130,10 +132,24 @@ fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
         link(
             candidate.previous.as_ref(),
             Msg::PairPrevious,
+            "[",
             Glyph::CHEVRON_LEFT
         ),
-        link(candidate.next.as_ref(), Msg::PairNext, Glyph::CHEVRON_RIGHT),
+        link(
+            candidate.next.as_ref(),
+            Msg::PairNext,
+            "]",
+            Glyph::CHEVRON_RIGHT
+        ),
     ))
+}
+
+/// The `aria-keyshortcuts` attribute of a control of this page's own that
+/// announces `key` (FerroUI `docs/consoles.md`, "Keyboard shortcuts").
+fn announced(key: &str) -> String {
+    aria_keys(key).map_or_else(String::new, |keys| {
+        format!(" aria-keyshortcuts=\"{}\"", t(keys))
+    })
 }
 
 /// Who decided the pair, when and how, for a pair someone already decided.
@@ -380,17 +396,17 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
     card(
         visit.tr(Msg::PairMerges),
         h(format!(
-            "<p>{}</p><button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{MERGE_DIALOG}\" aria-haspopup=\"dialog\">{}</button>{dialog}",
+            "<p>{}</p><button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{MERGE_DIALOG}\" aria-haspopup=\"dialog\"{}>{}</button>{dialog}",
             t(visit.tr(Msg::PairMergesNote)),
             Variant::Primary.class(),
+            announced("l"),
             label(Some(Glyph::LINK), visit.tr(Msg::PairLinkAsk)),
         )),
     )
 }
 
-/// The docked decision bar: the reason, the deferral's date, and Link (when
-/// it merges nothing), Not a match and Defer.
-// TODO(#390): announce `l`, `n`, `d` and `r` again once a FerroUI module binds them.
+/// The docked decision bar: the reason on `r`, the deferral's date, and Link
+/// on `l` (when it merges nothing), Not a match on `n` and Defer on `d`.
 fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) -> Html {
     let line = match outcome {
         Some(DecisionOutcome::Refused(probe)) if is_conflict(probe) => {
@@ -422,6 +438,7 @@ fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) 
             label: visit.tr(Msg::PairLink),
             variant: Variant::Primary,
             glyph: Some(Glyph::LINK),
+            shortcut: Some(String::from("l")),
             ..Decision::default()
         });
     }
@@ -429,12 +446,14 @@ fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) 
         value: String::from("not-a-match"),
         label: visit.tr(Msg::PairNotAMatchAction),
         glyph: Some(Glyph::X),
+        shortcut: Some(String::from("n")),
         ..Decision::default()
     });
     decisions.push(Decision {
         value: String::from("defer"),
         label: visit.tr(Msg::Defer),
         glyph: Some(Glyph::CLOCK),
+        shortcut: Some(String::from("d")),
         ..Decision::default()
     });
     decision_bar(DecisionBar {
@@ -447,6 +466,7 @@ fn bar(visit: &Visit, candidate: &Candidate, outcome: Option<&DecisionOutcome>) 
                 name: String::from("reason"),
                 label: visit.tr(Msg::RevealReason),
                 placeholder: visit.tr(Msg::PairReasonHint),
+                shortcut: Some(String::from("r")),
                 error: no_reason.then(|| visit.tr(Msg::PairReasonMissing)),
                 focus: no_reason,
                 ..DockField::default()

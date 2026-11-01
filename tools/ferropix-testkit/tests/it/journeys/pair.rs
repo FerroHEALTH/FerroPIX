@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! A pair compared and decided: Link… asks in the danger dialog a link
-//! that merges needs, and Escape gives the focus back to its button; Not a
-//! match with no reason comes back with the reason marked and focused; Not
-//! a match with a reason posts the decision and the next pair opens; Next
-//! leads to it too. The keys of 0.5 (`l`, `n`, `r`, `[` and `]`) come back
-//! with #390. No specification governs the console: our own design.
+//! A pair compared and decided from the keyboard: `l` asks in the danger
+//! dialog a link that merges needs, and Escape gives the focus back to its
+//! button; `r` puts the focus in the reason; `n` with no reason comes back
+//! with the reason marked and focused; `n` with a reason posts the decision
+//! and the next pair opens; `]` leads to it too. FerroUI's `keys` module
+//! binds each key the page announces. No specification governs the
+//! console: our own design.
 
 use thirtyfour::prelude::*;
 
@@ -24,6 +25,24 @@ const MERGE_OPEN: &str = "return String(document.getElementById('link-merges').o
 /// The `commandfor` of the active element, or an empty text.
 const ACTIVE_FOR: &str = "const el = document.activeElement; return el ? (el.getAttribute('commandfor') || el.id || '') : '';";
 
+/// Takes the focus out of any field, onto the page.
+const BLUR: &str = "if (document.activeElement) { document.activeElement.blur(); } return 'done';";
+
+/// Presses `key` on the page's body, outside every field, where a single-key
+/// shortcut acts.
+async fn press_key(journey: &crate::journeys::browser::Journey, key: &str) {
+    journey
+        .evaluate(BLUR)
+        .await
+        .expect("the focus leaves the field");
+    journey
+        .element(By::Css("body"), "the page")
+        .await
+        .send_keys(key)
+        .await
+        .expect("the page takes the key");
+}
+
 /// The focused element's `commandfor` or id, once it is `wanted` or after
 /// five seconds.
 async fn focus_becoming(journey: &crate::journeys::browser::Journey, wanted: &str) -> String {
@@ -39,7 +58,7 @@ async fn focus_becoming(journey: &crate::journeys::browser::Journey, wanted: &st
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_pair_asks_holds_posts_and_walks_to_the_next() {
+async fn the_decision_keys_ask_hold_post_and_walk_the_pairs() {
     if !journeys_enabled() {
         return;
     }
@@ -49,13 +68,11 @@ async fn a_pair_asks_holds_posts_and_walks_to_the_next() {
         journey
             .open(&stack.url(&format!("/queue/{FILLED_CANDIDATE}")))
             .await;
-        journey
-            .press(By::Css("button[commandfor='link-merges']"), "Link…")
-            .await;
+        press_key(journey, "l").await;
         assert_eq!(
             "true",
             journey.evaluate(MERGE_OPEN).await.expect("the dialog"),
-            "Link… asks in the merge dialog"
+            "l asks in the merge dialog"
         );
         journey
             .active()
@@ -73,12 +90,13 @@ async fn a_pair_asks_holds_posts_and_walks_to_the_next() {
             focus_becoming(journey, "link-merges").await,
             "the focus is back on Link…"
         );
-        journey
-            .press(
-                By::Css("button[value='not-a-match']"),
-                "Not a match with no reason",
-            )
-            .await;
+        press_key(journey, "r").await;
+        assert_eq!(
+            "decide-reason",
+            focus_becoming(journey, "decide-reason").await,
+            "r puts the focus in the reason"
+        );
+        press_key(journey, "n").await;
         journey
             .count_becoming(
                 By::Css("#decide-reason[aria-invalid='true']"),
@@ -96,20 +114,16 @@ async fn a_pair_asks_holds_posts_and_walks_to_the_next() {
             .send_keys("Synthetic ward call")
             .await
             .expect("the reason");
-        journey
-            .press(By::Css("button[value='not-a-match']"), "Not a match")
-            .await;
+        press_key(journey, "n").await;
         journey
             .address_carrying(&format!("/queue/{NEXT}"), "the next pair")
             .await;
         journey
             .open(&stack.url(&format!("/queue/{FILLED_CANDIDATE}")))
             .await;
+        press_key(journey, "]").await;
         journey
-            .press(By::Css(format!("a[href='/queue/{NEXT}']")), "Next")
-            .await;
-        journey
-            .address_carrying(&format!("/queue/{NEXT}"), "Next leads to the next pair")
+            .address_carrying(&format!("/queue/{NEXT}"), "] leads to the next pair")
             .await;
     })
     .await;

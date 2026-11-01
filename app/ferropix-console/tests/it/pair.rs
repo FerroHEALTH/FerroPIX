@@ -68,13 +68,24 @@ async fn an_open_pair_draws_the_compare_the_breakdown_the_persons_and_the_bar()
         !drawn.contains("4711\u{2022}") && !drawn.contains("SYNTH"),
         "identifiers masked"
     );
-    // TODO(#390): hold `n`, `d`, `r` and `]` announced once FerroUI binds a control's key.
-    for key in ["L", "N", "D", "R", "[", "]"] {
+    for (key, control) in [
+        ("L", "Link…"),
+        ("N", "Not a match"),
+        ("D", "Defer"),
+        ("R", "the reason"),
+        ("]", "Next"),
+    ] {
         assert!(
-            !drawn.contains(&format!("aria-keyshortcuts=\"{key}\"")),
-            "{key} is not announced while nothing binds it"
+            drawn.contains(&format!("aria-keyshortcuts=\"{key}\"")),
+            "{control} announces {key}"
         );
     }
+    assert!(
+        drawn.contains(
+            "commandfor=\"link-merges\" aria-haspopup=\"dialog\" aria-keyshortcuts=\"L\""
+        ),
+        "Link… announces l on the button that asks first"
+    );
     assert!(
         drawn.contains("value=\"not-a-match\"") && drawn.contains("value=\"defer\""),
         "Not a match and Defer are decisions of the bar"
@@ -105,6 +116,21 @@ async fn an_open_pair_draws_the_compare_the_breakdown_the_persons_and_the_bar()
     assert!(
         drawn.contains("value=\"link\""),
         "Link is a decision of the bar"
+    );
+    assert!(
+        drawn.contains("aria-keyshortcuts=\"L\""),
+        "Link announces l in the bar when nothing merges"
+    );
+    let first = server(&[(
+        "GET",
+        &route(),
+        candidate(|value| value.previous = Some(String::from(NEXT))),
+    )])
+    .await;
+    let drawn = page(&first, &address()).await?;
+    assert!(
+        drawn.contains("aria-keyshortcuts=\"[\""),
+        "Previous announces ["
     );
     Ok(())
 }

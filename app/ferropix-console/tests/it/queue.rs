@@ -105,6 +105,14 @@ async fn the_focused_row_holds_the_side_panel_opener_the_glance_keys_reach()
             && focused.contains(&format!("commandfor=\"glance-{CANDIDATE}\"")),
         "the focused row holds its side panel's opener: {focused}"
     );
+    assert!(
+        focused.contains("aria-keyshortcuts=\"O D\""),
+        "the opener announces o and d: {focused}"
+    );
+    assert!(
+        drawn.contains("o opens at a glance"),
+        "the work-list's hint names o"
+    );
     Ok(())
 }
 

@@ -23,7 +23,9 @@ use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT, SELECT, check_field, help_id};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::score::score_bar;
-use ferrohealth_ui::view::side_panel::{Opener, SidePanel, SidePanelWords, side_panel};
+use ferrohealth_ui::view::side_panel::{
+    Opener, SidePanel, SidePanelWords, side_panel_with_shortcut,
+};
 use ferrohealth_ui::view::status::pill;
 use ferrohealth_ui::view::surface::{card, definitions, stack};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
@@ -49,6 +51,10 @@ pub const FILTER: &str = "filter";
 
 /// The value of [`FORM`] for a deferral from a row's side panel.
 pub const DEFER: &str = "defer";
+
+/// The keys that open the focused row's side panel, to look or to defer,
+/// which FerroUI's `keys` module binds and the legend lists.
+pub const GLANCE_KEYS: &str = "o | d";
 
 /// The words of a grade.
 #[must_use]
@@ -459,18 +465,21 @@ fn glance(visit: &Visit, filter: &CandidateQuery, candidate: &CandidateRow) -> H
         Variant::Secondary.class(),
         label(Some(Glyph::CLOCK), visit.tr(Msg::Defer)),
     ));
-    side_panel(SidePanel {
-        id: format!("glance-{id}"),
-        title: pair_name(visit, candidate),
-        opener: Opener {
-            label: visit.tr(Msg::QueueGlance),
-            glyph: Some(Glyph::PANEL_RIGHT),
-            variant: Variant::Ghost,
-            href: format!("{QUEUE}/{id}"),
+    side_panel_with_shortcut(
+        SidePanel {
+            id: format!("glance-{id}"),
+            title: pair_name(visit, candidate),
+            opener: Opener {
+                label: visit.tr(Msg::QueueGlance),
+                glyph: Some(Glyph::PANEL_RIGHT),
+                variant: Variant::Ghost,
+                href: format!("{QUEUE}/{id}"),
+            },
+            body,
+            words: SidePanelWords::of(locale),
         },
-        body,
-        words: SidePanelWords::of(locale),
-    })
+        GLANCE_KEYS,
+    )
 }
 
 /// The posted paging of the queue, the filters kept.

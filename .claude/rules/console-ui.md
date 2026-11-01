@@ -93,10 +93,11 @@ design (owner rulings of 2026-10-29 on FerroHEALTH/FerroUI#510).
 - **Every important action is a link or a form** (FerroUI §1): a search, a
   preference, Try again, a decision, sign-out and the sidebar's rail all
   work with FerroUI's modules refused, which the `no_script` journeys hold.
-- **No key the console cannot bind is announced.** A console on 0.6 binds
-  no key of its own; the pair's `l`, `n`, `d`, `r`, `[` and `]` and the
-  queue's `o` and `d` come back with #390 once FerroUI binds them
-  (FerroHEALTH/FerroUI#526, FerroHEALTH/FerroUI#530).
+- **No key the console cannot bind is announced.** The console writes no
+  key listener: the pair's `l`, `n`, `d`, `r`, `[` and `]` and the queue's
+  `o` and `d` are announced in `aria-keyshortcuts` on the controls they
+  press, and FerroUI's `keys` module binds them (FerroHEALTH/FerroUI#526,
+  FerroHEALTH/FerroUI#530, #390).
 
 ## 2. The server boundary
 

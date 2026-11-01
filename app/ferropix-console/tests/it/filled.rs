@@ -14,7 +14,7 @@ use ferrohealth_health::document::{IndicatorState, Phase, Readiness, State};
 use ferropix_operator_api::actions::{Action, Actions};
 use ferropix_operator_api::configuration::{Configuration, Mode, Origin, Section, Setting};
 use ferropix_operator_api::domain::{Domain, DomainPage, Domains, Feed, FeedOutcome};
-use ferropix_operator_api::health::Dependencies;
+use ferropix_operator_api::health::{Dependencies, FEED_SENDER, MLLP_LISTENER};
 use ferropix_operator_api::overview::{DayCount, HourFeeds, Overview, Queue, QueueEntry};
 use ferropix_operator_api::patient::{
     Channel, Demographics, DomainKind, DomainRef, Grade, Masked, Name, PersonStatus,
@@ -136,19 +136,32 @@ fn overview() -> Overview {
     }
 }
 
-/// The dependencies with the MLLP listener in `mllp`.
+/// The dependencies with the MLLP listener in `mllp` and the feed sender up,
+/// each under the indicator name the server registers it by.
 fn dependencies(mllp: State) -> Dependencies {
     let listener = match mllp {
-        State::Down => IndicatorState::down("hl7v2_listener", "the MLLP listener is not accepting"),
-        _ => IndicatorState::up("hl7v2_listener"),
+        State::Down => IndicatorState::down(MLLP_LISTENER, "the MLLP listener is not accepting"),
+        _ => IndicatorState::up(MLLP_LISTENER),
     };
     Dependencies {
         readiness: Readiness::new(
             Phase::Serving,
-            vec![IndicatorState::up("database"), listener],
+            vec![
+                IndicatorState::up("database"),
+                listener,
+                IndicatorState::up(FEED_SENDER),
+            ],
         ),
         upstreams: Vec::new(),
     }
+}
+
+/// The listeners card's row that opens with `words`, up to its end.
+fn listener_row<'a>(drawn: &'a str, words: &str) -> &'a str {
+    let (_, row) = drawn
+        .split_once(&format!("<span>{words}</span>"))
+        .expect("the listeners card draws the row");
+    row.split_once("</li>").expect("the row ends").0
 }
 
 #[tokio::test]
@@ -185,6 +198,14 @@ async fn the_dashboard_draws_every_card_and_a_refused_overview_keeps_the_listene
         assert!(drawn.contains(words), "the dashboard shows {words}");
     }
     assert!(drawn.contains("<svg"), "the charts are SVG");
+    assert!(
+        listener_row(&drawn, "MLLP").contains("Down"),
+        "the MLLP row reads its indicator"
+    );
+    assert!(
+        listener_row(&drawn, "Feed sender").contains("Up"),
+        "the feed sender row reads the indicator the server registers"
+    );
     let mut empty = overview();
     empty.queue = Queue {
         open: 0,

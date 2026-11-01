@@ -17,7 +17,8 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
 - `.github/workflows/ci.yml`: the gate on every pull request, merge-group run
   and push to `main`. The workflow tier (zizmor, actionlint, shellcheck, the
   self-test of every helper and guard, the comment-style guard, the pin and
-  licence guard `versions.sh`, the file-length guard, the `TODO(#N)` guard,
+  licence guard `versions.sh`, the file-length guard, the duplication
+  ratchet, the `TODO(#N)` guard,
   the released-changelog guard, and on pull requests the changelog guard
   and the crate-version guard, and hadolint
 over every Dockerfile) and the Rust
@@ -56,6 +57,15 @@ placeholder tree). The
   the lane, `ci.yml` or the pin matrix runs it as a dry run that files
   nothing. A new corpus row needs a reader there, or its vendor script in
   `UNWATCHED_SCRIPTS` with the reason, or the self-test fails.
+- `.github/workflows/ratchet-tighten.yml`: daily and on dispatch, from
+  `main` only, runs the `--update` of the ratchet guards
+  (`scripts/checks/duplication.sh` and `file-length.sh`) and opens, or
+  moves, one pull request that holds only the lowered ratchet files, its
+  commit made through the Git Data REST API so GitHub signs it. A guard
+  fails a rise and passes a fall with a note, so a pull request never
+  rewrites a shared baseline. A `RATCHET_TIGHTEN_TOKEN` secret (contents and
+  pull-requests write) lets its pull request start CI; without it the body
+  says to close and reopen it (#392, FerroHEALTH/FerroEHR#4556).
 - `.github/workflows/fuzz.yml`: each Thursday and on dispatch for five
   minutes per target, and for one minute on a pull request that touches
   what a target reads (`ihe-iti`, the root manifest, `fuzz/`, the vendored

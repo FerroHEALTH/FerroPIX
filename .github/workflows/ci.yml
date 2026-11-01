@@ -189,6 +189,24 @@ jobs:
           persist-credentials: false
       - run: bash scripts/checks/file-length.sh
 
+  # The duplication ratchet: the duplicated lines of the hand-written Rust may
+  # fall and never rise (`.claude/rules/rust-style.md` §Code is written once,
+  # #392). jscpd runs from its pinned image; a fall passes with a note.
+  duplication:
+    name: duplication
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Duplication ratchet self-test
+        run: bash scripts/checks/duplication.sh --self-test
+      - name: The duplicated lines have not risen
+        run: bash scripts/checks/duplication.sh
+
   # Every launcher of the server in a test lane switches the usage report off.
   usage-report-off:
     name: usage-report-off
@@ -1038,6 +1056,7 @@ jobs:
       - stray-literals
       - versions
       - file-length
+      - duplication
       - usage-report-off
       - hadolint
       - helm-chart

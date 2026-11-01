@@ -1292,9 +1292,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-telemetry"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2520fcd3daaf7053226ae5fc5107471d277f4dac94907eea9536c7583805a2c"
+checksum = "41895ebbfe4956540e96aeba84e1d569dbef01373ff71a12b287c8d743e12990"
 dependencies = [
  "axum",
  "ferrohealth-secret",

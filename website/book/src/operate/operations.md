@@ -53,7 +53,7 @@ FerroHEALTH product writes: one line per request under the `tracing` target
 |---|---|
 | `request_id` | The UUID the server minted for the request. The steward trail of `GET {base}/operator/actions` carries the same id; a BALP record carries the `X-Request-Id` of the exchange, the client's when it sent one. |
 | `client_named` | Whether the client sent an `X-Request-Id` of its own. Its value is echoed on the response and never logged. |
-| `method` | The HTTP method. |
+| `method` | The HTTP method, or `_OTHER` for a method outside the standard set, so a client's own token never reaches the line. |
 | `route` | The matched route template, such as `/fhir/Patient/$ihe-pix`, or `<unmatched>`. |
 | `status` | The status answered. |
 | `latency_ms` | The time to the response, in milliseconds. |
@@ -61,9 +61,13 @@ FerroHEALTH product writes: one line per request under the `tracing` target
 | `caller` | The token's `client_id`, or its subject when it names none, or `-` when the credential names neither. A request the gate refused has no `caller`. |
 | `domain` | The identifier domains a successful feed wrote to, comma-separated. A request that wrote none has no `domain`. |
 
-Every request also runs inside a `request` span, which `[telemetry.otlp]`
-exports, and lands in the `http_server_request_duration_seconds` histogram
-that `GET {base}/metrics` serves and `[telemetry.otlp]` pushes.
+Every request also runs inside a server span named for its method and
+route template, such as `GET /fhir/Patient/$ihe-pix` (the method alone when
+no route matched), with an error status on a 5xx, which `[telemetry.otlp]`
+exports. It lands in the `http_server_request_duration_seconds` histogram
+and is counted in `http_server_active_requests`, the requests in flight by
+method and scheme, both of which `GET {base}/metrics` serves and
+`[telemetry.otlp]` pushes.
 
 The line never holds the path as sent, a query string outside
 `telemetry.logged_query_parameters`, a body or a header value. A PIXm Consumer that calls `$ihe-pix` by `GET` puts the patient's

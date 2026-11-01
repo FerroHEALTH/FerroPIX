@@ -34,6 +34,67 @@ the items every child shares, with one child file per concern. A split never
 creates a test file under `src/`, adds no `pub use`, and moves code without
 changing behaviour.
 
+Enforced by `scripts/checks/file-length.sh` (CI guard tier): a hard breach
+fails, and a breach listed in `scripts/checks/file-length-allow.txt` passes
+only while it does not grow. The list only tightens: a listed file that
+shrank, fell to 750 lines or under, or is gone passes with a one-line note,
+your pull request leaves the list alone, and the `Ratchet tighten` workflow
+lowers or removes the entry on `main` (`file-length.sh --update`, which
+never raises or adds an entry; `--record --issue N` adds a new breach with
+the issue that splits it, #392).
+
+## Code is written once
+
+No specification governs this: our own design (#392, the rule VernumBOEK,
+FerroEHR and FerroBRIDGE hold under the same name).
+
+- **Share knowledge and decisions, never text that only looks alike.** Two
+  copies that change for the same reason (one business rule, one wire rule,
+  one security rule) move to one owner in the same change. Two pieces with
+  different reasons to change stay apart, however alike they read.
+- **The owner is the module that owns the concern.** Across crates it is the
+  crate lower in the layering (`ihe-iti` and `nl-generic-functions` below
+  `ferropix-server`, `ferropix-operator-api` for what the server and the
+  console both read). Within a crate it is the module whose part of the
+  domain the code serves. It is never a `util`, `utils`, `helpers` or
+  `common` module, whose name says nothing about what it holds, and never a
+  function that takes a flag to choose between two behaviours.
+- **One copy is fine, two are looked at, three are extracted.**
+- **The ratchet measures it.** `scripts/checks/duplication.sh` runs jscpd
+  (pinned by version and image digest in `docs/VERSIONS.md`, the
+  duplication guard) over `app/*/src/`, `crates/*/src/` and `tools/*/src/`
+  in the `duplication` CI job and holds the total of duplicated lines to the
+  count in `scripts/checks/duplication.count`. A rise fails and names both
+  places of each new block. A fall passes with a one-line note, and your
+  pull request leaves the count alone: the `Ratchet tighten` workflow runs
+  `--update` on `main` each day and opens one pull request with the lower
+  count and `scripts/checks/duplication-baseline.txt`, the guard's own key
+  of every counted block (its two paths and the sha256 of the lines at
+  each, with no line number). `--update` never raises the count; a rise
+  that has to stay is a hand edit of the file in a change that says why.
+  Locally the guard takes a `jscpd` on `PATH` of the pinned version, then
+  the pinned image through docker or podman, then the release binary
+  `scripts/checks/duplication.sh --install` puts under `target/tools/`.
+- **The threshold is 50 tokens over at least 5 lines**, jscpd's own
+  defaults. The scan leaves out the `use` declarations, a file that opens
+  with `// @generated`, a root `.gitattributes` marks generated, a file from
+  its first column-one `#[cfg(test)]` line on (the inline test module), and
+  `tests/`. Measured on 2026-11-01 at `7c231e8` with those exclusions, over
+  260 files and 71,588 lines:
+
+  | Threshold | Blocks | Duplicated lines | Blocks across two files |
+  | --- | --- | --- | --- |
+  | 50 tokens, 5 lines | 127 | 1,364 | 89 |
+  | 70 tokens, 5 lines | 57 | 740 | 39 |
+  | 100 tokens, 5 lines | 17 | 298 | 12 |
+
+  The largest share sits in `ihe-iti` (66 blocks, 771 lines), then
+  `ferropix-server` (42 blocks, 383 lines) and `ferropix-console` (19
+  blocks, 210 lines). Raising the threshold drops the short blocks (two
+  match arms, two error variants written side by side), yet each is code
+  written twice as well, so 50 it is. Raising it is a change to this section
+  and to the guard together, with the table measured again.
+
 ## Comments and documentation
 
 The comment and doc-comment discipline lives in **`comments.md`** (RFC 505

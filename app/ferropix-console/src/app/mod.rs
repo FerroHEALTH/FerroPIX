@@ -48,7 +48,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const SIGN_IN: &str = "/sign-in";
 
 /// The sign-out route, a form post.
-pub const SIGN_OUT: &str = "/logout";
+pub const SIGN_OUT: &str = ferrohealth_session::paths::LOGOUT;
 
 /// The dashboard.
 pub const DASHBOARD: &str = "/";
@@ -86,6 +86,11 @@ pub const PREFERENCES: &str = "/preferences";
 /// The sign-in page a request whose session has ended is sent to, which
 /// the session watch loads with the page's address as its return.
 pub const EXPIRED: &str = "/sign-in/expired";
+
+/// The sign-in page a request is sent to whose session lives on but whose
+/// access token the OpenID Provider could not renew yet; it leads back to
+/// the page once the steward signs in again.
+pub const UNRENEWED: &str = "/sign-in/unrenewed";
 
 /// The id of the navigation, which the drawer button opens.
 const SIDEBAR_ID: &str = "sidebar";
@@ -274,7 +279,7 @@ fn watch(visit: &Visit) -> Html {
     visit.page.session.map_or_else(Html::empty, |left| {
         session_watch(&Watch::new(
             &visit.locale,
-            crate::paths::SESSION,
+            ferrohealth_session::paths::SESSION,
             EXPIRED,
             SIGN_OUT,
             left,

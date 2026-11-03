@@ -13,12 +13,12 @@
 //! answers the server's CSV as a file. No specification governs the
 //! console: our own design.
 
-use crate::session::PREFERENCE_PREFIX;
 use axum::Extension;
 use axum::extract::{FromRequest as _, Request};
 use axum::response::{IntoResponse as _, Redirect, Response};
 use ferropix_operator_api::actions::ActionFilter;
 
+use ferrohealth_session::record::Held;
 use ferropix_operator_api::domain::{Domain, DomainChange, NewDomain};
 use ferropix_operator_api::patient::DomainKind;
 use ferropix_operator_api::pseudonym::{
@@ -27,20 +27,18 @@ use ferropix_operator_api::pseudonym::{
 use ferropix_operator_api::reveal::{MAX_SECONDS, Reveal, Target};
 use ferropix_operator_api::search::{DemographicsSearch, IdentifierSearch, Results};
 use http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
+use http::request::Parts;
 use http::{HeaderMap, StatusCode};
 
 use crate::model::{Document, PageContext, Prefill, Read, Segment};
 use crate::pix::AccessToken;
 use crate::server::ConsoleState;
-use crate::session::request::{Held, held};
 
 mod review;
 
 /// The request's parts and its body read as a form of name and value pairs,
 /// or the answer to a body that is no such form.
-async fn form(
-    request: Request,
-) -> Result<(http::request::Parts, Vec<(String, String)>), Box<Response>> {
+async fn form(request: Request) -> Result<(Parts, Vec<(String, String)>), Box<Response>> {
     let (parts, body) = request.into_parts();
     let rebuilt = Request::from_parts(parts.clone(), body);
     match axum::extract::Form::<Vec<(String, String)>>::from_request(rebuilt, &()).await {
@@ -69,26 +67,21 @@ pub struct Steward {
     admin: bool,
 }
 
-/// The steward's token and who they are when the request holds a live
-/// session.
-fn signed_in(state: &ConsoleState, headers: &HeaderMap) -> Option<(AccessToken, Steward)> {
-    match held(state, headers) {
-        Ok(Held::SignedIn {
-            token,
-            operator,
-            scopes,
-        }) => {
-            let admin = scopes.contains(&state.settings().pix.admin_scope);
-            Some((
-                token,
-                Steward {
-                    name: operator,
-                    admin,
-                },
-            ))
-        }
-        _ => None,
-    }
+/// The steward's token and who they are when the request `parts` holds a
+/// live session.
+fn signed_in(state: &ConsoleState, parts: &Parts) -> Option<(AccessToken, Steward)> {
+    let held = parts.extensions.get::<Held>()?;
+    let token = crate::server::context::token(held)?;
+    let Held::SignedIn(session) = held else {
+        return None;
+    };
+    Some((
+        token,
+        Steward {
+            name: session.operator().map(str::to_owned),
+            admin: session.scopes().contains(&state.settings().pix.admin_scope),
+        },
+    ))
 }
 
 /// The context of the page at `path` drawn from `document`, beside the
@@ -109,7 +102,7 @@ pub async fn posted_context(
             admin: steward.admin,
             probe: Some(probe),
             document: Some(document),
-            ..PageContext::signed_out(state.sessions().cookie_name(PREFERENCE_PREFIX))
+            ..PageContext::signed_out(state.preference_prefix())
         },
         state,
         headers,
@@ -138,16 +131,14 @@ pub enum Answer {
     Unknown,
 }
 
-/// Answers the form `pairs` posted to `path` by the request with
-/// `headers`: a search, a trail filter, a reveal, an administrator's
+/// Answers the form `pairs` the request `parts` posted to its path: a
+/// search, a trail filter, a reveal, an administrator's
 /// domain create or change, or a pseudonymisation domain's form.
-pub async fn answer(
-    state: &ConsoleState,
-    headers: &HeaderMap,
-    path: &str,
-    pairs: &[(String, String)],
-) -> Answer {
-    let path = path
+pub async fn answer(state: &ConsoleState, parts: &Parts, pairs: &[(String, String)]) -> Answer {
+    let headers = &parts.headers;
+    let path = parts
+        .uri
+        .path()
         .split(['?', '#'])
         .next()
         .unwrap_or_default()
@@ -157,7 +148,7 @@ pub async fn answer(
         ["patients", person, crate::pages::patient::REVEAL] => format!("/patients/{person}"),
         _ => path.to_owned(),
     };
-    let Some((token, steward)) = signed_in(state, headers) else {
+    let Some((token, steward)) = signed_in(state, parts) else {
         return Answer::Back(back);
     };
     let document = match segments.as_slice() {
@@ -218,7 +209,7 @@ pub async fn suggest(Extension(state): Extension<ConsoleState>, request: Request
         Ok(read) => read,
         Err(answer) => return *answer,
     };
-    let Some((token, _)) = signed_in(&state, &parts.headers) else {
+    let Some((token, _)) = signed_in(&state, &parts) else {
         return (StatusCode::UNAUTHORIZED, [(CACHE_CONTROL, "no-store")]).into_response();
     };
     let words = field(&pairs, "q").unwrap_or_default();
@@ -229,7 +220,7 @@ pub async fn suggest(Extension(state): Extension<ConsoleState>, request: Request
         .read::<ferropix_operator_api::domain::Domains>("operator/domains?limit=200", &token)
         .await
         .ok();
-    let prefix = state.sessions().cookie_name(PREFERENCE_PREFIX);
+    let prefix = state.preference_prefix();
     let cookies = crate::preferences::kept_cookies(&parts.headers, &prefix);
     let locale = crate::locale::chosen(
         &ferrohealth_ui::theme::Preferences::read(&cookies, &prefix),
@@ -248,7 +239,7 @@ pub async fn post(Extension(state): Extension<ConsoleState>, request: Request) -
         Ok(read) => read,
         Err(answer) => return *answer,
     };
-    match answer(&state, &parts.headers, parts.uri.path(), &pairs).await {
+    match answer(&state, &parts, &pairs).await {
         Answer::Drawn {
             path,
             token,
@@ -450,7 +441,7 @@ pub async fn export(Extension(state): Extension<ConsoleState>, request: Request)
         Ok(read) => read,
         Err(answer) => return *answer,
     };
-    let Some((token, _)) = signed_in(&state, &parts.headers) else {
+    let Some((token, _)) = signed_in(&state, &parts) else {
         return Redirect::to(crate::app::AUDIT).into_response();
     };
     let mut filter = filter_of(&pairs);
@@ -481,7 +472,7 @@ pub async fn export(Extension(state): Extension<ConsoleState>, request: Request)
 fn reveal_seconds(state: &ConsoleState, headers: &HeaderMap) -> u32 {
     let name = format!(
         "{}{}",
-        state.sessions().cookie_name(PREFERENCE_PREFIX),
+        state.preference_prefix(),
         crate::preferences::REVEAL
     );
     headers

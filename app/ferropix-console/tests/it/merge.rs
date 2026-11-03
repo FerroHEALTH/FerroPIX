@@ -16,7 +16,7 @@ use wiremock::matchers::{body_string_contains, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::filled::{page, server};
-use crate::support::{console, offline, post_form, send, steward_session};
+use crate::support::{post_form, send, steward};
 
 /// The patient the pages are about.
 const PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
@@ -69,8 +69,7 @@ async fn a_merge_asks_for_the_other_patient_and_previews_with_the_older_survivin
         !drawn.contains("merge-confirm"),
         "nothing to confirm before a preview"
     );
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let (response, drawn) = send(
         &service,
         post_form(&address, &cookie, &format!("form=preview&other={OTHER}"))?,
@@ -120,8 +119,7 @@ async fn a_merge_posts_both_versions_and_leads_to_the_survivor_and_a_409_is_draw
         .respond_with(refusal(409, "stale", "a person changed since it was read"))
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let address = format!("/patients/{PERSON}/merge");
     let body = format!(
         "form=merge&survivor={PERSON}&survivor_version=3&merged={OTHER}&merged_version=1&reason=Synthetic+ward+call"
@@ -226,8 +224,7 @@ async fn a_revert_posts_the_survivor_s_version_and_a_refusal_is_drawn_in_place()
         ))
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let address = format!("/patients/{PERSON}/unmerge");
     let body = format!("form=revert&merge={MERGE}&survivor_version=3&reason=Synthetic+mistake");
     let (response, _) = send(&service, post_form(&address, &cookie, &body)?).await?;

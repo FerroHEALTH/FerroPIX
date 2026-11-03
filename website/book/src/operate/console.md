@@ -243,9 +243,6 @@ timeout_ms = 30000
 
 [oidc]
 issuer = "https://idp.example.org/realms/ferropix"
-authorization_endpoint = "https://idp.example.org/realms/ferropix/protocol/openid-connect/auth"
-token_endpoint = "https://idp.example.org/realms/ferropix/protocol/openid-connect/token"
-jwks_uri = "https://idp.example.org/realms/ferropix/protocol/openid-connect/certs"
 client_id = "ferropix-console"
 client_secret_file = "/run/secrets/console-client-secret"
 redirect_uri = "https://console.example.org/auth/callback"
@@ -255,15 +252,34 @@ redirect_uri = "https://console.example.org/auth/callback"
 |---|---|
 | `[server]` | Where the console listens and the language a page falls back to. |
 | `[pix]` | The FerroPIX server's base URL, how long one call to it may take, and `admin_scope`, the scope the server's `[operator] admin_scope` names (default `__ferropix.admin`). |
-| `[session]` | Whether the cookies are `Secure`, and the sign-in and session timeouts and bounds. `secure_cookie = false` is refused unless the console is plain HTTP on loopback: its `oidc.redirect_uri`, or its `server.listen` address when it signs in nowhere. |
+| `[session]` | Where the sessions are kept (`store`), whether the cookies are `Secure`, and the sign-in and session timeouts and bounds. `secure_cookie = false` is refused unless the console is plain HTTP on loopback: its `oidc.redirect_uri`, or its `server.listen` address when it signs in nowhere. |
 | `[oidc]` | The OpenID Provider stewards sign in at. Without it the console offers no sign-in. |
+
+`[oidc]` and `[session]` are the sections of `ferrohealth-session`, the
+FerroHEALTH console sign-in crate. With `issuer` alone the console discovers
+the provider's endpoints when it starts (RFC 8414, OpenID Connect Discovery
+1.0); `authorization_endpoint`, `token_endpoint`, `jwks_uri`,
+`end_session_endpoint` and `revocation_endpoint` each take the place of the
+discovered one. `config check` calls no provider: a section that names the
+authorization, token and key-set endpoints is checked whole, and one that
+leaves them to discovery is read when the console starts. `ca_file` adds PEM
+trust roots for a provider behind a private certificate authority, and
+`timeout_s` (default 10) bounds one call to it.
+
+`[session] store` is `memory` (the default), which keeps the sessions in the
+console's process with an opaque id in the cookie, or `sealed`, which keeps
+the whole session in one AES-256-GCM sealed cookie for a console that runs
+as several instances. A sealed store needs `key` or `key_file` (base64 of at
+least 64 bytes, the same on every instance), keeps no refresh token, and
+refuses `oidc.offline_access`. `absolute_timeout_s` may not be shorter than
+`idle_timeout_s`.
 | `[telemetry]` | The console log: `format` and `filter`, the section the server reads ([`[telemetry]`](configuration.md#telemetry)). `RUST_LOG` sets `telemetry.filter`. |
 
 ## Sign-in and the session
 
 Stewards sign in at an OpenID Provider with the authorization code grant and
-PKCE, through the OpenID Connect client of `ferrohealth-smart`, the
-FerroHEALTH authorization crate. The console checks the ID Token against the provider's keys, its
+PKCE, through `ferrohealth-session` and the OpenID Connect client of
+`ferrohealth-smart`, the FerroHEALTH authorization crate. The console checks the ID Token against the provider's keys, its
 issuer, its audience and the sign-in's nonce before a session begins. The
 session lives on the console's server; the browser holds one opaque
 `HttpOnly`, `SameSite=Lax` cookie and never a token. The console calls the
@@ -274,8 +290,12 @@ identifier domain, only when the provider granted the token `[pix]
 admin_scope`: the scopes the token answer names, or the scopes the console
 asked for when the answer names none (RFC 6749 §5.1). Ask for the scope in
 `[oidc] scopes`. The server checks the scope again on every write.
-Sign out ends the session and, when the provider publishes one, signs the
-steward out there too.
+Sign out ends the session, revokes its token when the provider has a
+revocation endpoint (RFC 7009), and, when the provider publishes one, signs
+the steward out there too. When the provider cannot renew an access token
+in time, the session lives on and the next page you open goes to the
+sign-in page that says your access could not be renewed; signing in again,
+or opening the page again a moment later, brings you back to it.
 
 A session ends after `[session] idle_timeout_s` without a request from you,
 and after `absolute_timeout_s` whatever you do. Two minutes before the idle

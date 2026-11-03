@@ -13,9 +13,12 @@
 //! whatever the cookie says. No specification governs the preferences: our
 //! own design.
 
+use std::time::Duration;
+
 use axum::Extension;
 use axum::extract::Form;
 use axum::response::{IntoResponse, Redirect, Response};
+use ferrohealth_session::sessions::SessionError;
 use ferrohealth_ui::theme::Preferences;
 use ferrohealth_ui::theme::{
     Density, Hints, Language, Motion, Preference as _, Theme, WeekStart, cookie,
@@ -29,6 +32,10 @@ use crate::server::ConsoleState;
 
 /// The route every preference posts to, its value under its cookie's name.
 pub const PREFERENCE_ROUTE: &str = "/preference";
+
+/// How long a preference cookie is kept: one year, the family's rule for a
+/// personal preference.
+const KEPT: Duration = Duration::from_hours(365 * 24);
 
 /// The route Reset to defaults posts to.
 pub const RESET_ROUTE: &str = "/preferences/reset";
@@ -218,8 +225,8 @@ pub async fn choose(
             .into_response();
     };
     let (name, value) = value;
-    let cookie = state.sessions().preference_cookie(name, &value).to_string();
-    redirect_with(&preference_return(back, name), &[cookie])
+    let cookie = state.sessions().preference(name, &value, KEPT);
+    redirect_with(&preference_return(back, name), vec![cookie])
 }
 
 /// What Reset to defaults posts.
@@ -238,9 +245,9 @@ pub async fn reset(
     let cleared = Preferences::COOKIES
         .into_iter()
         .chain(OWN)
-        .map(|name| state.sessions().preference_removal(name).to_string())
+        .map(|name| state.sessions().preference_removal(name))
         .collect::<Vec<_>>();
-    redirect_with(return_path(&reset.back), &cleared)
+    redirect_with(return_path(&reset.back), cleared)
 }
 
 /// What the sidebar's Collapse or Expand posts.
@@ -261,22 +268,23 @@ pub async fn sidebar(
     if !matches!(choice.sidebar.as_str(), "rail" | "full") {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    let cookie = state
-        .sessions()
-        .preference_cookie(SIDEBAR, &choice.sidebar)
-        .to_string();
-    redirect_with(return_path(&choice.back), &[cookie])
+    let cookie = state.sessions().preference(SIDEBAR, &choice.sidebar, KEPT);
+    redirect_with(return_path(&choice.back), vec![cookie])
 }
 
-/// The redirect to `location` that sets each of `cookies`.
-fn redirect_with(location: &str, cookies: &[String]) -> Response {
+/// The redirect to `location` that sets each of `cookies`, or `500` when
+/// one could not be written.
+fn redirect_with(location: &str, cookies: Vec<Result<HeaderValue, SessionError>>) -> Response {
     let mut response = Redirect::to(location).into_response();
     for cookie in cookies {
-        match HeaderValue::from_str(cookie) {
+        match cookie {
             Ok(value) => {
                 response.headers_mut().append(SET_COOKIE, value);
             }
-            Err(_invalid) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            Err(error) => {
+                tracing::error!(%error, "a preference cookie could not be written");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         }
     }
     response

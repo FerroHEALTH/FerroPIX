@@ -18,7 +18,9 @@ use crate::support::settings;
 
 /// Sends `request` to a console whose FerroPIX server does not answer.
 async fn send(request: Request<Body>) -> Response<Body> {
-    let state = ConsoleState::new(settings("http://127.0.0.1:9/")).expect("the state builds");
+    let state = ConsoleState::new(settings("http://127.0.0.1:9/"))
+        .await
+        .expect("the state builds");
     router(state)
         .oneshot(request)
         .await
@@ -91,7 +93,9 @@ async fn the_health_route_answers_up_with_the_headers() {
 
 #[tokio::test]
 async fn liveness_answers_and_readiness_is_withdrawn_once_the_drain_starts() {
-    let state = ConsoleState::new(settings("http://127.0.0.1:9/")).expect("the state builds");
+    let state = ConsoleState::new(settings("http://127.0.0.1:9/"))
+        .await
+        .expect("the state builds");
     let lifecycle = state.lifecycle().clone();
     let app = router(state);
     let ready = app

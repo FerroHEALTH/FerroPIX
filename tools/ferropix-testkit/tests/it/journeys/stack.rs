@@ -188,6 +188,7 @@ impl Stack {
                 .resolve()
                 .expect("the journey configuration resolves");
         let state = ferropix_console::server::ConsoleState::new(settings)
+            .await
             .expect("the console's state builds");
         let lifecycle = state.lifecycle().clone();
         tokio::spawn(ferropix_console::server::serve(

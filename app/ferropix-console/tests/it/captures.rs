@@ -14,7 +14,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use crate::support::{console, get, get_with, offline, send, steward_session};
+use crate::support::{get, get_with, send, steward};
 
 /// The pages captured, each with the name its files take.
 const PAGES: [(&str, &str); 16] = [
@@ -57,8 +57,7 @@ async fn every_page_is_written_out_for_a_capture_when_asked() -> Result<(), Box<
         return Ok(());
     };
     std::fs::create_dir_all(&folder)?;
-    let (state, service) = console(&offline("http://127.0.0.1:9/"))?;
-    let session = steward_session(&state);
+    let (_provider, _state, service, session) = steward("http://127.0.0.1:9/").await?;
     let files = files();
     for file in &files {
         let (_, body) = send(&service, get(file)?).await?;

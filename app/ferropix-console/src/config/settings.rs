@@ -7,13 +7,13 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use ferrohealth_smart::oidc::OFFLINE_ACCESS;
+use ferrohealth_session::config::{OidcSection, SessionSettings};
+use ferrohealth_smart::oidc::{OFFLINE_ACCESS, OPENID};
 use ferrohealth_ui::i18n::Locale;
-use secrecy::SecretString;
 use url::Url;
 
+use crate::config::Config;
 use crate::config::error::Error;
-use crate::config::{Config, Oidc};
 
 /// The resolved configuration.
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ pub struct Settings {
     pub locale: Locale,
     /// The FerroPIX server the console is a client of.
     pub pix: PixSettings,
-    /// The server-side sign-in sessions.
+    /// The store and the lifetimes of the sign-in sessions.
     pub session: SessionSettings,
     /// The OpenID Provider operators sign in with, when one is configured.
     pub oidc: Option<OidcSettings>,
@@ -43,49 +43,17 @@ pub struct PixSettings {
     pub admin_scope: String,
 }
 
-/// The resolved `[session]`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SessionSettings {
-    /// Whether the cookies carry `Secure`, and with it the `__Host-` prefix.
-    pub secure_cookie: bool,
-    /// How long a pending sign-in waits for the provider's redirect back.
-    pub sign_in_timeout: Duration,
-    /// How many pending sign-ins the console holds at once.
-    pub max_sign_ins: usize,
-    /// How long a signed-in session lives without a request.
-    pub idle_timeout: Duration,
-    /// How long a signed-in session lives at most.
-    pub absolute_timeout: Duration,
-    /// How many signed-in sessions the console holds at once.
-    pub max_sessions: usize,
-}
-
-/// The resolved `[oidc]`.
+/// The resolved `[oidc]`: the section `ferrohealth-session` checked, and
+/// what the console reads from it for its own pages.
 #[derive(Debug, Clone)]
 pub struct OidcSettings {
-    /// The provider's issuer identifier, exactly as written: an ID Token's
-    /// `iss` must equal it (OpenID Connect Core 1.0 §3.1.3.7).
-    pub issuer: String,
-    /// The provider's authorization endpoint.
-    pub authorization_endpoint: Url,
-    /// The provider's token endpoint.
-    pub token_endpoint: Url,
-    /// The provider's JWK Set location.
-    pub jwks_uri: Url,
-    /// The console's client identifier.
-    pub client_id: String,
-    /// The console's client secret, when it is a confidential client.
-    pub client_secret: Option<SecretString>,
-    /// The console's redirection endpoint.
-    pub redirect_uri: Url,
-    /// The scopes requested, `openid` among them.
-    pub scopes: Vec<String>,
-    /// Whether the sign-in asks for `offline_access`.
-    pub offline_access: bool,
-    /// The provider's end-session endpoint, when it publishes one.
-    pub end_session_endpoint: Option<Url>,
-    /// Where the provider sends the operator after a sign-out.
-    pub post_logout_redirect_uri: Option<Url>,
+    /// The checked section, which builds the console's relying party.
+    pub checked: ferrohealth_session::config::OidcSettings,
+    /// The console's redirection endpoint, whose origin is the console's.
+    redirect_uri: Url,
+    /// Whether the section names the authorization, token and key-set
+    /// endpoints, so the relying party is built with no discovery.
+    endpoints_given: bool,
 }
 
 impl OidcSettings {
@@ -94,6 +62,19 @@ impl OidcSettings {
     #[must_use]
     pub fn origin(&self) -> String {
         self.redirect_uri.origin().ascii_serialization()
+    }
+
+    /// The console's redirection endpoint.
+    #[must_use]
+    pub const fn redirect_uri(&self) -> &Url {
+        &self.redirect_uri
+    }
+
+    /// Whether the relying party is built from the written endpoints alone,
+    /// with no call to the provider.
+    #[must_use]
+    pub const fn endpoints_given(&self) -> bool {
+        self.endpoints_given
     }
 }
 
@@ -105,12 +86,14 @@ impl Config {
     /// [`Error::Locale`] for a `server.locale` that is no language tag,
     /// [`Error::Missing`], [`Error::Url`] and [`Error::UrlShape`] for a URL
     /// that is absent, does not parse or is not one its key admits,
-    /// [`Error::Zero`] for a zero timeout or pool bound, [`Error::Scope`] for
-    /// `offline_access` listed in `oidc.scopes`, [`Error::InsecureCookie`]
-    /// for `session.secure_cookie = false` on a console that is not plain
-    /// HTTP on loopback (its `oidc.redirect_uri`, or its `server.listen`
-    /// address when it signs in nowhere), and the secret errors of
-    /// `oidc.client_secret`.
+    /// [`Error::Zero`] for a zero timeout, lifetime or pool bound,
+    /// [`Error::Scope`] for `offline_access` listed in `oidc.scopes`,
+    /// [`Error::InsecureCookie`] for `session.secure_cookie = false` on a
+    /// console that is not plain HTTP on loopback (its `oidc.redirect_uri`,
+    /// or its `server.listen` address when it signs in nowhere), the secret
+    /// errors of `oidc.client_secret` and `session.key`, and
+    /// [`Error::Session`] for every other refusal of `[oidc]` and
+    /// `[session]`.
     pub fn resolve(&self) -> Result<Settings, Error> {
         let listen: SocketAddr = self
             .server
@@ -126,24 +109,18 @@ impl Config {
         })?;
         let base = base_url("pix.base_url", &self.pix.base_url)?;
         let timeout = positive("pix.timeout_ms", self.pix.timeout_ms).map(Duration::from_millis)?;
-        let seconds = |key: &str, value: u64| positive(key, value).map(Duration::from_secs);
-        let session = &self.session;
-        let session = SessionSettings {
-            secure_cookie: session.secure_cookie,
-            sign_in_timeout: seconds("session.sign_in_timeout_s", session.sign_in_timeout_s)?,
-            max_sign_ins: bound("session.max_sign_ins", session.max_sign_ins)?,
-            idle_timeout: seconds("session.idle_timeout_s", session.idle_timeout_s)?,
-            absolute_timeout: seconds("session.absolute_timeout_s", session.absolute_timeout_s)?,
-            max_sessions: bound("session.max_sessions", session.max_sessions)?,
-        };
         let oidc = self.oidc.as_ref().map(resolve_oidc).transpose()?;
+        let session = match &oidc {
+            Some(oidc) => self.session.check(&oidc.checked)?,
+            None => self.session.check_with(false)?,
+        };
         // NOTE: RFC 6265bis §4.1.2.5: a cookie without `Secure` travels over plain
         // HTTP, so it is admitted only where the console itself is HTTP on loopback.
         let plain_on_loopback = oidc.as_ref().map_or_else(
             || listen.ip().is_loopback(),
             |oidc| oidc.redirect_uri.scheme() == "http" && is_loopback(&oidc.redirect_uri),
         );
-        if !session.secure_cookie && !plain_on_loopback {
+        if !session.secure_cookie() && !plain_on_loopback {
             return Err(Error::InsecureCookie {
                 key: String::from("session.secure_cookie"),
             });
@@ -162,13 +139,23 @@ impl Config {
     }
 }
 
-/// Resolves `[oidc]`, reading its client secret.
-fn resolve_oidc(oidc: &Oidc) -> Result<OidcSettings, Error> {
+/// Resolves `[oidc]`: the console's own rules for its provider and its
+/// redirection endpoint, then the section's check, which reads its client
+/// secret.
+fn resolve_oidc(oidc: &OidcSection) -> Result<OidcSettings, Error> {
     provider_url("oidc.issuer", &oidc.issuer)?;
-    let authorization_endpoint =
-        provider_url("oidc.authorization_endpoint", &oidc.authorization_endpoint)?;
-    let token_endpoint = provider_url("oidc.token_endpoint", &oidc.token_endpoint)?;
-    let jwks_uri = provider_url("oidc.jwks_uri", &oidc.jwks_uri)?;
+    let endpoints = [
+        ("oidc.authorization_endpoint", &oidc.authorization_endpoint),
+        ("oidc.token_endpoint", &oidc.token_endpoint),
+        ("oidc.jwks_uri", &oidc.jwks_uri),
+        ("oidc.end_session_endpoint", &oidc.end_session_endpoint),
+        ("oidc.revocation_endpoint", &oidc.revocation_endpoint),
+    ];
+    for (key, endpoint) in endpoints {
+        if let Some(text) = endpoint {
+            provider_url(key, text)?;
+        }
+    }
     let redirect_uri = web_url("oidc.redirect_uri", &oidc.redirect_uri)?;
     // NOTE: RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a
     // fragment component.
@@ -185,7 +172,7 @@ fn resolve_oidc(oidc: &Oidc) -> Result<OidcSettings, Error> {
     }
     // NOTE: OpenID Connect Core 1.0 §3.1.2.1: an OpenID Connect request MUST
     // carry the `openid` scope value.
-    if !oidc.scopes.iter().any(|scope| scope == "openid") {
+    if !oidc.scopes.iter().any(|scope| scope == OPENID) {
         return Err(Error::Missing {
             key: String::from("oidc.scopes (openid)"),
         });
@@ -198,57 +185,31 @@ fn resolve_oidc(oidc: &Oidc) -> Result<OidcSettings, Error> {
             reason: "must not list offline_access; set oidc.offline_access = true",
         });
     }
-    let end_session_endpoint = oidc
-        .end_session_endpoint
-        .as_deref()
-        .map(|text| provider_url("oidc.end_session_endpoint", text))
-        .transpose()?;
-    let post_logout_redirect_uri = oidc
-        .post_logout_redirect_uri
-        .as_deref()
-        .map(|text| web_url("oidc.post_logout_redirect_uri", text))
-        .transpose()?;
-    // NOTE: OpenID Connect RP-Initiated Logout 1.0 §3: the post-logout redirect
-    // is sent to the end-session endpoint, so one without the other is refused.
-    if post_logout_redirect_uri.is_some() && end_session_endpoint.is_none() {
+    if let Some(text) = &oidc.post_logout_redirect_uri {
+        web_url("oidc.post_logout_redirect_uri", text)?;
+    }
+    let endpoints_given = oidc.authorization_endpoint.is_some()
+        && oidc.token_endpoint.is_some()
+        && oidc.jwks_uri.is_some();
+    // NOTE: OpenID Connect RP-Initiated Logout 1.0 §3: the post-logout redirect is sent to
+    // the end-session endpoint, so one the written endpoints lack is refused before discovery.
+    if oidc.post_logout_redirect_uri.is_some()
+        && endpoints_given
+        && oidc.end_session_endpoint.is_none()
+    {
         return Err(Error::Missing {
             key: String::from("oidc.end_session_endpoint (for post_logout_redirect_uri)"),
         });
     }
-    let client_secret = ferrohealth_secret::file::read_secret(
-        "oidc.client_secret",
-        oidc.client_secret.clone(),
-        oidc.client_secret_file.as_deref(),
-    )?
-    .map(|secret| secret.to_secret_string());
     Ok(OidcSettings {
-        issuer: oidc.issuer.clone(),
-        authorization_endpoint,
-        token_endpoint,
-        jwks_uri,
-        client_id: oidc.client_id.clone(),
-        client_secret,
+        checked: oidc.check()?,
         redirect_uri,
-        scopes: oidc.scopes.clone(),
-        offline_access: oidc.offline_access,
-        end_session_endpoint,
-        post_logout_redirect_uri,
+        endpoints_given,
     })
 }
 
 /// Returns `value`, refusing zero.
 fn positive(key: &str, value: u64) -> Result<u64, Error> {
-    if value == 0 {
-        Err(Error::Zero {
-            key: key.to_owned(),
-        })
-    } else {
-        Ok(value)
-    }
-}
-
-/// Returns the pool bound `value`, refusing zero.
-fn bound(key: &str, value: usize) -> Result<usize, Error> {
     if value == 0 {
         Err(Error::Zero {
             key: key.to_owned(),

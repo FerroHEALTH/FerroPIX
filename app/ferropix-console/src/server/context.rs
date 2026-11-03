@@ -3,26 +3,26 @@
 
 //! What a page is drawn from, and the gate that reads it.
 //!
-//! Every page and every route that acts asks for a live session, and a page
-//! calls the FerroPIX server once before it is drawn. No specification
-//! governs the console's HTTP surface: our own design.
+//! Every page and every route that acts asks for a live session, which
+//! `ferrohealth-session`'s middleware left on the request as its
+//! [`Held`], and a page calls the FerroPIX server once before it is drawn.
+//! No specification governs the console's HTTP surface: our own design.
 
-use crate::session::PREFERENCE_PREFIX;
 use axum::Extension;
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
-use http::header::CACHE_CONTROL;
-use http::{Method, StatusCode};
+use ferrohealth_session::record::{Credential, Held, Session};
+use ferrohealth_session::return_path::ReturnPath;
+use ferrohealth_ui::view::session::sign_in_address;
+use http::Method;
 
 use super::{ConsoleState, HEALTH};
 use crate::app::{ABOUT, SIGN_IN};
-use crate::locale::messages::Msg;
-use crate::locale::{catalog, negotiated, tr_in};
+use crate::locale::negotiated;
 use crate::model::PageContext;
 use crate::paths::{FAVICON, MARK_DARK, MARK_LIGHT, is_sign_in};
-use crate::session::COOKIE;
-use crate::session::request::{Held, held};
+use crate::pix::AccessToken;
 
 /// Whether a request for `path` reaches a file or a route that needs no
 /// session: FerroUI's assets, the marks, the health routes and the sign-in
@@ -38,35 +38,63 @@ pub fn is_public(path: &str) -> bool {
             FAVICON,
             MARK_LIGHT,
             MARK_DARK,
-            crate::paths::LOGIN,
-            crate::oidc::CALLBACK,
-            crate::oidc::logout::LOGOUT,
         ]
         .contains(&path)
+        || ferrohealth_session::paths::is_own(path)
 }
 
-/// What a request to the page at `path` (with its query) is drawn from.
+/// The steward's access token a live session holds.
+#[must_use]
+pub fn token(held: &Held) -> Option<AccessToken> {
+    match held {
+        Held::SignedIn(session) => bearer(session),
+        Held::TokenExpired | Held::Ended | Held::Absent => None,
+    }
+}
+
+/// The access token `session` sends to the server.
+fn bearer(session: &Session) -> Option<AccessToken> {
+    match session.credential() {
+        Credential::Bearer(token) => Some(AccessToken::new(token.to_secret_string())),
+        // NOTE: no specification governs this: our own design; the console signs in through
+        // its OpenID Provider alone, so a session carries a bearer token or no credential.
+        Credential::Basic { .. } => None,
+    }
+}
+
+/// Where a request that holds no live session is sent; `None` for a live
+/// one.
 ///
-/// That is the steward's name, the call to the server's liveness route, on About
+/// That is the sign-in, the sign-in that says the session ended, or the one
+/// that says its access token could not be renewed and leads back to
+/// `here`.
+#[must_use]
+pub fn away(held: &Held, here: &str) -> Option<String> {
+    match held {
+        Held::SignedIn(session) if bearer(session).is_some() => None,
+        Held::SignedIn(_) | Held::Absent => Some(String::from(SIGN_IN)),
+        Held::Ended => Some(String::from(crate::app::EXPIRED)),
+        Held::TokenExpired => Some(sign_in_address(crate::app::UNRENEWED, here)),
+    }
+}
+
+/// What a request to the page at `path` holding `held` is drawn from.
+///
+/// The path carries its query. That is the steward's name, the call to the server's liveness route, on About
 /// the server's `CapabilityStatement`, and the page's document, with the
 /// request's preferences and locale. A request with no live session gets
-/// the sign-in as its redirect, one whose session has ended the sign-in
-/// that says so.
-///
-/// # Errors
-///
-/// Returns the session store's error when it cannot be read.
+/// the sign-in as its redirect ([`away`]).
 pub async fn page_for(
     state: &ConsoleState,
+    held: &Held,
     headers: &http::HeaderMap,
     path: &str,
-) -> Result<PageContext, crate::session::SessionError> {
+) -> PageContext {
     let route = path.split(['?', '#']).next().unwrap_or_default().to_owned();
-    let prefix = state.sessions().cookie_name(PREFERENCE_PREFIX);
     let signed_out = surrounded(
         PageContext {
             path: path.to_owned(),
-            ..PageContext::signed_out(prefix.clone())
+            ..PageContext::signed_out(state.preference_prefix())
         },
         state,
         headers,
@@ -75,36 +103,21 @@ pub async fn page_for(
         let back = path.split_once('?').and_then(|(_, query)| {
             url::form_urlencoded::parse(query.as_bytes())
                 .find(|(name, _)| name == ferrohealth_ui::view::session::RETURN)
-                .and_then(|(_, back)| crate::oidc::return_path(&back).map(str::to_owned))
+                .and_then(|(_, back)| ReturnPath::parse(&back, SIGN_IN))
+                .filter(|back| {
+                    !is_sign_in(back.as_str().split(['?', '#']).next().unwrap_or_default())
+                })
+                .map(|back| back.as_str().to_owned())
         });
-        return Ok(PageContext { back, ..signed_out });
+        return PageContext { back, ..signed_out };
     }
-    let (token, operator, admin) = match held(state, headers)? {
-        Held::SignedIn {
-            token,
-            operator,
-            scopes,
-        } => {
-            let admin = scopes.contains(&state.settings().pix.admin_scope);
-            (token, operator, admin)
-        }
-        Held::Ended => {
-            return Ok(PageContext {
-                redirect: Some(String::from(crate::app::EXPIRED)),
-                ..signed_out
-            });
-        }
-        Held::Absent => {
-            return Ok(PageContext {
-                redirect: Some(String::from(SIGN_IN)),
-                ..signed_out
-            });
-        }
+    let (Held::SignedIn(session), Some(token)) = (held, token(held)) else {
+        return PageContext {
+            redirect: away(held, path),
+            ..signed_out
+        };
     };
-    let session = match state.sessions().cookie_in(headers, COOKIE) {
-        Some(id) => state.sessions().left(&id, false)?,
-        None => None,
-    };
+    let admin = session.scopes().contains(&state.settings().pix.admin_scope);
     let probe = state.pix().probe(&token).await;
     let capability = if route == ABOUT {
         Some(state.pix().capability_statement(&token).await)
@@ -116,15 +129,15 @@ pub async fn page_for(
     } else {
         None
     };
-    Ok(PageContext {
-        operator,
+    PageContext {
+        operator: session.operator().map(str::to_owned),
         probe: Some(probe),
         capability,
         document,
         admin,
-        session,
+        session: Some(session.left()),
         ..signed_out
-    })
+    }
 }
 
 /// `context` with the request's preferences and locale and the console's
@@ -135,7 +148,7 @@ pub fn surrounded(
     state: &ConsoleState,
     headers: &http::HeaderMap,
 ) -> PageContext {
-    let prefix = state.sessions().cookie_name(PREFERENCE_PREFIX);
+    let prefix = state.preference_prefix();
     let preferences = crate::preferences::kept_cookies(headers, &prefix);
     let configured = state.settings().locale.clone();
     let chosen = crate::locale::chosen(
@@ -144,10 +157,14 @@ pub fn surrounded(
         configured.clone(),
     );
     let provider = state
-        .settings()
-        .oidc
-        .as_ref()
-        .and_then(|oidc| oidc.authorization_endpoint.host_str().map(str::to_owned))
+        .relying_party()
+        .and_then(|party| {
+            party
+                .provider()
+                .authorization_endpoint()
+                .host_str()
+                .map(str::to_owned)
+        })
         .unwrap_or_default();
     PageContext {
         preferences,
@@ -184,39 +201,33 @@ pub(super) async fn gate(
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_owned();
-    // NOTE: no specification governs this: our own design; the session route answers for
-    // itself, and a read of it must not count as the steward's activity.
-    if is_public(&path) || path == crate::paths::SESSION {
+    if is_public(&path) {
         return next.run(request).await;
     }
+    let held = request
+        .extensions()
+        .get::<Held>()
+        .cloned()
+        .unwrap_or(Held::Absent);
     let read = request
         .uri()
         .path_and_query()
         .map_or_else(|| path.clone(), |read| read.as_str().to_owned());
     let drawn = request.method() == Method::GET || request.method() == Method::HEAD;
     let page = if drawn {
-        page_for(&state, request.headers(), &read).await
+        page_for(&state, &held, request.headers(), &read).await
     } else {
-        refused(&state, request.headers(), &path)
-    };
-    let page = match page {
-        Ok(page) => page,
-        Err(error) => {
-            tracing::error!(%error, "the session store could not be read");
-            let locale = negotiated(request.headers(), state.settings().locale.clone());
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(CACHE_CONTROL, "no-store")],
-                tr_in(catalog(), &locale, Msg::SessionUnreadable),
-            )
-                .into_response();
-        }
+        refused(&state, &held, &path, &read)
     };
     if let Some(to) = &page.redirect {
         // NOTE: no specification governs this: our own design; the search panel asks with
         // `fetch`, which a redirect does not move, so it reads a `401` and loads the sign-in.
         if path == crate::pages::search::SUGGEST {
-            return (StatusCode::UNAUTHORIZED, [(CACHE_CONTROL, "no-store")]).into_response();
+            return (
+                http::StatusCode::UNAUTHORIZED,
+                [(http::header::CACHE_CONTROL, "no-store")],
+            )
+                .into_response();
         }
         return Redirect::to(to).into_response();
     }
@@ -226,24 +237,15 @@ pub(super) async fn gate(
     next.run(request).await
 }
 
-/// Whether a request that draws no page (a post) holds a live session: its
-/// context carries the sign-in as its redirect when it does not, and
-/// nothing else is read.
-fn refused(
-    state: &ConsoleState,
-    headers: &http::HeaderMap,
-    path: &str,
-) -> Result<PageContext, crate::session::SessionError> {
-    let mut page = PageContext::signed_out(state.sessions().cookie_name(PREFERENCE_PREFIX));
-    if is_sign_in(path) {
-        return Ok(page);
+/// Whether a request to `path` that draws no page (a post) holds a live
+/// session: its context carries the sign-in as its redirect when it does
+/// not, and nothing else is read.
+fn refused(state: &ConsoleState, held: &Held, path: &str, read: &str) -> PageContext {
+    let mut page = PageContext::signed_out(state.preference_prefix());
+    if !is_sign_in(path) {
+        page.redirect = away(held, read);
     }
-    page.redirect = match held(state, headers)? {
-        Held::SignedIn { .. } => None,
-        Held::Ended => Some(String::from(crate::app::EXPIRED)),
-        Held::Absent => Some(String::from(SIGN_IN)),
-    };
-    Ok(page)
+    page
 }
 
 #[cfg(test)]

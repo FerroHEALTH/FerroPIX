@@ -28,7 +28,7 @@ use http::StatusCode;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::support::{console, get_with, offline, post_form, send, session_with, steward_session};
+use crate::support::{get_with, granted, post_form, send, steward};
 
 /// The person every patient case reads.
 const PERSON: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
@@ -60,8 +60,7 @@ pub(crate) async fn server(documents: &[(&str, &str, String)]) -> MockServer {
 
 /// The page at `route` drawn against `server`.
 pub(crate) async fn page(server: &MockServer, route: &str) -> Result<String, Box<dyn Error>> {
-    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", server.uri())).await?;
     let (response, page) = send(&service, get_with(route, &cookie)?).await?;
     assert_eq!(StatusCode::OK, response.status(), "{route}");
     Ok(page)
@@ -342,8 +341,7 @@ async fn a_refused_reveal_is_drawn_in_place_with_the_record() -> Result<(), Box<
         serde_json::to_string(&person(false))?,
     )])
     .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let (response, drawn) = send(
         &service,
         post_form(
@@ -492,12 +490,11 @@ async fn the_domain_editor_is_drawn_only_for_a_sign_in_granted_the_administrator
         next: None,
     };
     let filled = server(&[("GET", "/operator/domains", serde_json::to_string(&listing)?)]).await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let admin = steward_session(&state);
+    let (provider, _state, service, admin) = steward(&format!("{}/", filled.uri())).await?;
     let (_, drawn) = send(&service, get_with("/domains", &admin)?).await?;
     assert!(drawn.contains("Add a domain"), "the administrator's form");
     assert!(drawn.contains("action=\"/domains\""), "it posts");
-    let steward = session_with(&state, &["openid", "__ferropix.steward"]);
+    let steward = granted(&service, &provider, &["openid", "__ferropix.steward"]).await?;
     let (_, drawn) = send(&service, get_with("/domains", &steward)?).await?;
     assert!(
         !drawn.contains("action=\"/domains\""),
@@ -611,8 +608,7 @@ async fn a_refused_domain_create_shows_the_server_s_issue_in_place() -> Result<(
         ))
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let (response, drawn) = send(
         &service,
         post_form(

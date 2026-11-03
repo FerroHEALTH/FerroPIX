@@ -167,6 +167,10 @@ The build order is the milestones:
   journeys behind `FERROPIX_JOURNEYS` (`tests/it/journeys/`, CI's
   `journeys` job), over the Chrome for Testing release `docs/VERSIONS.md`
   pins.
+- `tools/forwarders`: the forwarder ratchet's detector, `publish = false`
+  (#403): it parses the hand-written Rust with `syn` and lists every
+  function whose whole body forwards to one other call, for
+  `scripts/checks/forwarders.sh`.
 - `docs/architecture.md`: the design of record (the server, the store,
   the matching, the three faces, the images and the release, the console).
 - `docs/VERSIONS.md`: the pin matrix, held by `scripts/checks/versions.sh`.
@@ -177,11 +181,12 @@ The build order is the milestones:
 - `scripts/gh/`: the tracker helpers (`fields.sh`, `rel.sh`, `labels.sh`,
   `watch-prs.sh`, `changelog-merge.sh`, and `project.sh`, a stub: there is no
   roadmap board). `scripts/checks/`: the guards (comment style, versions and
-  licence headers, `TODO` pointers, the crate version, the changelog, two
+  licence headers, `TODO` pointers, the crate version, the changelog, three
   ratchets that fail a rise, pass a fall and only tighten (#392):
-  `file-length.sh`, the 1000-line cap with its allow-list, and
+  `file-length.sh`, the 1000-line cap with its allow-list,
   `duplication.sh`, jscpd over the hand-written Rust held to
-  `duplication.count`; `ihe-citations.sh`, every IHE
+  `duplication.count`, and `forwarders.sh`, the forwarders
+  `tools/forwarders` finds held to `forwarders.count` (#403); `ihe-citations.sh`, every IHE
   section the tree cites held to the vendored text, and the documentation
   guards `site-links.sh`, `docs-claims.sh`, `book-guard.sh` and
   `writing-style.sh`, `pin-freshness.sh`, every unwatched pin against
@@ -226,7 +231,8 @@ The build order is the milestones:
   with the coverage of the offline and `FERROPIX_E2E` suites, advisory),
   `pin-freshness.yml` (weekly, files an issue for each pin behind its
   newest upstream release), `ratchet-tighten.yml` (daily, opens one pull
-  request that lowers the ratchet counts on `main`), `fuzz.yml` (weekly and on a pull request that
+  request that lowers the ratchet counts on `main`, or pushes its branch
+  for a maintainer to open when Actions may not), `fuzz.yml` (weekly and on a pull request that
   touches a target's inputs, uploads a crash input, advisory), the weekly published-image
   scan (`image-scan.yml`), Dependabot, the Docs workflow, the release lane
   (`release.yml` calling the reusable `release-build.yml`,

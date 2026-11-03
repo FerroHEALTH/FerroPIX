@@ -207,6 +207,29 @@ jobs:
       - name: The duplicated lines have not risen
         run: bash scripts/checks/duplication.sh
 
+  # The forwarder ratchet: the functions whose whole body forwards to one
+  # other call may fall and never rise (`.claude/rules/rust-style.md` §No
+  # function only forwards to another, #403). tools/forwarders reads source
+  # text only, so the job builds proc-macro2, quote and syn alone and takes
+  # no build cache; a fall passes with a note.
+  forwarders:
+    name: forwarders
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+      - name: Forwarder ratchet self-test
+        run: bash scripts/checks/forwarders.sh --self-test
+      - name: The forwarders have not risen
+        run: bash scripts/checks/forwarders.sh
+
   # Every launcher of the server in a test lane switches the usage report off.
   usage-report-off:
     name: usage-report-off
@@ -1057,6 +1080,7 @@ jobs:
       - versions
       - file-length
       - duplication
+      - forwarders
       - usage-report-off
       - hadolint
       - helm-chart

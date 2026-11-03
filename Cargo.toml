@@ -140,6 +140,15 @@ sqlx = { version = "0.9.0", default-features = false, features = ["postgres", "r
 thirtyfour = { version = "0.38.1", default-features = false, features = ["reqwest", "cdp"] }
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
 
+# The forwarder ratchet's detector (tools/forwarders, #403): it parses the
+# hand-written Rust as source text, at the versions FerroEHR's detector
+# takes; anyhow because it is a binary. Verified against crates.io on
+# 2026-11-03.
+anyhow = "1.0.104"
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.47", default-features = false }
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing"] }
+
 # The reliability bar (no specification governs it: our own design), the
 # FerroHEALTH family's lint set as FerroAUTH carries it.
 [workspace.lints.rust]

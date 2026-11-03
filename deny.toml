@@ -72,6 +72,8 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ferropix-operator-api" },
   # The test support, a path-only dev-dependency, never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-testkit" },
+  # The forwarder ratchet's detector, a tool crate, never published.
+  { allow = ["BUSL-1.1"], crate = "forwarders" },
   # The fuzz workspace's own crate under fuzz/, never published.
   { allow = ["BUSL-1.1"], crate = "ferropix-fuzz" },
   # libfuzzer-sys, which the fuzz workspace alone takes, carries LLVM's

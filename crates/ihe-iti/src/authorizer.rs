@@ -1,24 +1,29 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! How a client authenticates each request to an IHE FHIR server when a
-//! fixed header cannot do it (features `pixm`, `pdqm`, `mcsd`, `pmir`).
+//! How a client authenticates each request when a fixed header cannot do it
+//! (feature `authorizer`, which `pixm`, `pdqm`, `mcsd`, `pmir` and `smart`
+//! turn on), with no FHIR model.
 //!
 //! A client that holds an OAuth 2.0 access token incorporates it in the
 //! `Authorization` header of each request (IUA ITI-72 §3.72.4.2), and a
 //! token expires: the client obtains a new one before it does, and after a
 //! `401` obtains a new one before it retries, never retrying with the token
-//! that was refused (§3.72.4.3). A default header of the HTTP client cannot
-//! change between requests, so an [`Authorizer`] the caller supplies gives
-//! the headers of each request and reads each answer. The PIXm, PDQm, mCSD
-//! and PMIR clients each take one with `with_authorizer`. With the feature
-//! `smart`, [`smart::TokenAuthorizer`] is one over the client-credentials
-//! token of `ferrohealth-smart`.
+//! that was refused (§3.72.4.3). A token bound by `DPoP` needs a proof made
+//! for each request's method and URL (RFC 9449 §4.2, §7.1). A default header
+//! of the HTTP client cannot change between requests, so an [`Authorizer`]
+//! the caller supplies gives the headers of each request and reads each
+//! answer, and [`send`] sends a request through it. The PIXm, PDQm, mCSD and
+//! PMIR clients each take one with `with_authorizer`, and so does the NVI
+//! client of `nl-generic-functions`. With the feature `smart`,
+//! [`smart::TokenAuthorizer`] is one over the client-credentials token of
+//! `ferrohealth-smart`.
 //!
 //! The authorizer is handed the request URL without its query and fragment,
-//! so a patient identifier or a search criterion in the query never reaches
-//! it. A client sends a request at most twice: once, and once more when the
-//! authorizer asks for it after the first answer.
+//! the `htu` of RFC 9449 §4.2, so a patient identifier or a search criterion
+//! in the query never reaches it. A client sends a request at most twice:
+//! once, and once more when the authorizer asks for it after the first
+//! answer.
 
 #[cfg(feature = "smart")]
 pub mod smart;
@@ -26,7 +31,6 @@ pub mod smart;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 use std::time::{Duration, Instant};
 
 use http::{HeaderMap, Method, StatusCode};
@@ -36,9 +40,9 @@ use url::Url;
 pub type Authorized<'a> =
     Pin<Box<dyn Future<Output = Result<HeaderMap, AuthorizerError>> + Send + 'a>>;
 
-/// The source of the headers that authenticate each request to an IHE FHIR
-/// server, such as the `Authorization` header that carries an access token
-/// (IUA ITI-72 §3.72.4.2).
+/// The source of the headers that authenticate each request, such as the
+/// `Authorization` header that carries an access token (IUA ITI-72
+/// §3.72.4.2) and the `DPoP` proof bound to it (RFC 9449 §7.1).
 pub trait Authorizer: Send + Sync + fmt::Debug {
     /// Returns the headers that authenticate a request with `method` to
     /// `url`, which is the request URL without its query and fragment.
@@ -54,7 +58,7 @@ pub trait Authorizer: Send + Sync + fmt::Debug {
     /// Reads the `status` and `headers` the server answered a request to
     /// `url` with, and returns whether the request is sent once more with
     /// new headers, as after a `401` that refused the token (IUA ITI-72
-    /// §3.72.4.3).
+    /// §3.72.4.3) or for a nonce the server demands (RFC 9449 §9).
     ///
     /// The client sends a request at most twice, whatever this returns.
     fn answered(&self, url: &Url, status: StatusCode, headers: &HeaderMap) -> Retry;
@@ -89,10 +93,9 @@ impl AuthorizerError {
     }
 }
 
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 /// Why [`send`] produced no answer.
 #[derive(Debug)]
-pub(crate) enum Unsent {
+pub enum Unsent {
     /// The authorizer made no headers, so nothing was sent.
     Unauthenticated(AuthorizerError),
     /// The timeout ran out before the request could be sent once more.
@@ -101,7 +104,6 @@ pub(crate) enum Unsent {
     Transport(reqwest::Error),
 }
 
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 /// Sends `request` over `http` within `timeout`, with the headers of
 /// `authorizer` when there is one, once more when the authorizer asks for
 /// it after the first answer and the request can be repeated.
@@ -109,7 +111,12 @@ pub(crate) enum Unsent {
 /// `timeout` bounds every send together, the time the authorizer takes
 /// included; a request built with a body that cannot be repeated is sent
 /// once.
-pub(crate) async fn send(
+///
+/// # Errors
+///
+/// [`Unsent`] when the authorizer makes no headers, the timeout runs out
+/// before a resend, or no answer arrives.
+pub async fn send(
     http: &reqwest::Client,
     authorizer: Option<&dyn Authorizer>,
     mut request: reqwest::Request,

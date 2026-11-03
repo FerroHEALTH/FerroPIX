@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.35"
+version = "0.0.36"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -24,17 +24,14 @@ include = ["src/**", "README.md", "LICENSE"]
 # (no specification governs this: our own design). The crate depends on no
 # application.
 [features]
-# The authorizer a data user supplies to authenticate each request to a
-# Generic Function (the IG's GFI-005), with no FHIR, so a crate that only
-# implements it, such as the source of a `DPoP`-bound token, compiles no FHIR
-# model.
-authorizer = ["dep:http", "dep:thiserror", "dep:url"]
 # GF-Localization through the national index (NVI): the HTTP client of the
 # Localization Service search, the FHIR R4 `resources` root set for the
-# Bundle of DocumentReference records it answers with, and the redacting
-# secret type the pseudonymised patient identifier travels in.
+# Bundle of DocumentReference records it answers with, each request
+# authenticated through the authorizer of `ihe-iti` (the IG's GFI-005), and the
+# redacting secret type the pseudonymised patient identifier travels in.
 nvi = [
-  "authorizer",
+  "dep:ihe-iti",
+  "ihe-iti/authorizer",
   "dep:fhir-types",
   "fhir-types/r4",
   "fhir-types/resources",
@@ -95,10 +92,11 @@ fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
-# The SOAP 1.2 envelope reader of ITI TF-2 Appendix V, which the Mitz question
-# is held to; the international crate sits below the national one, and a
-# caret requirement, as a shared crate takes on another family shared crate.
-ihe-iti = { version = "0.0.68", path = "../ihe-iti", default-features = false, optional = true }
+# The SOAP 1.2 envelope of ITI TF-2 Appendix V, which the Mitz question is
+# held to, and the authorizer and send the NVI client authenticates through;
+# the international crate sits below the national one, and a caret
+# requirement, as a shared crate takes on another family shared crate.
+ihe-iti = { version = "0.0.69", path = "../ihe-iti", default-features = false, optional = true }
 # The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.

@@ -34,6 +34,8 @@ const FEATURES: &[&str] = &[
     "pdqm-server",
     "pmir-server",
     "smart",
+    "soap",
+    "authorizer",
 ];
 
 /// The server sides are typed readers and writers: no HTTP server, store or
@@ -147,7 +149,7 @@ fn members(directory: &str) -> BTreeSet<String> {
 }
 
 #[test]
-fn only_xcpd_compiles_the_soap_and_xua_stack() {
+fn only_xcpd_compiles_the_hl7_v3_and_xua_stack_and_soap_only_the_envelope() {
     let xcpd = tree("xcpd", None);
     for name in XCPD_ONLY {
         assert!(xcpd.contains(*name), "xcpd lost {name}: {xcpd:?}");
@@ -173,12 +175,33 @@ fn only_xcpd_compiles_the_soap_and_xua_stack() {
             .filter(|name| closure.contains(**name))
             .collect();
         assert!(leaked.is_empty(), "{feature} compiles {leaked:?}");
+        if *feature == "soap" {
+            continue;
+        }
         let direct = tree(feature, Some("1"));
         let named: Vec<&&str> = XCPD_DIRECT
             .iter()
             .filter(|name| direct.contains(**name))
             .collect();
         assert!(named.is_empty(), "{feature} names {named:?} itself");
+    }
+    let soap = tree("soap", Some("1"));
+    assert!(
+        soap.contains("quick-xml"),
+        "soap reads with quick-xml: {soap:?}"
+    );
+}
+
+#[test]
+fn the_authorizer_and_the_envelope_compile_no_fhir_model() {
+    for feature in ["authorizer", "soap"] {
+        let closure = tree(feature, None);
+        for name in ["fhir-types", "serde_json"] {
+            assert!(
+                !closure.contains(name),
+                "{feature} compiles {name}: {closure:?}"
+            );
+        }
     }
 }
 

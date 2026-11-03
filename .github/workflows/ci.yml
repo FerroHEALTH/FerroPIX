@@ -990,7 +990,8 @@ jobs:
           - { package: ihe-iti, features: pmir-server }
           - { package: ihe-iti, features: smart }
           - { package: ihe-iti, features: "pixm,smart" }
-          - { package: nl-generic-functions, features: authorizer }
+          - { package: ihe-iti, features: soap }
+          - { package: ihe-iti, features: authorizer }
           - { package: nl-generic-functions, features: nvi }
           - { package: nl-generic-functions, features: mitz }
           - { package: nl-generic-functions, features: lrza }

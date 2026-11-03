@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.68"
+version = "0.0.69"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -30,6 +30,7 @@ include = ["src/**", "README.md", "LICENSE"]
 # the FHIR R4 `terminology` root set for Parameters and OperationOutcome, and
 # the redacting secret type the identifiers travel in.
 pixm = [
+  "authorizer",
   "dep:fhir-types",
   "dep:ihe-atna",
   "ihe-atna/redact",
@@ -47,6 +48,7 @@ pixm = [
 # a search or a match answers with and the Parameters a match posts, and the
 # redacting secret type the demographics travel in.
 pdqm = [
+  "authorizer",
   "dep:fhir-types",
   "dep:ihe-atna",
   "ihe-atna/redact",
@@ -75,6 +77,7 @@ pdqm-server = ["pdqm"]
 # root set for the Organization and Endpoint resources a directory publishes,
 # and the HTTP client of the ITI-90 searches and the ITI-91 history.
 mcsd = [
+  "authorizer",
   "dep:fhir-types",
   "fhir-types/r4",
   "fhir-types/resources",
@@ -98,6 +101,7 @@ pmir-server = ["pmir"]
 # an ITI-93 feed carries, and the redacting secret type the identifiers travel
 # in.
 pmir = [
+  "authorizer",
   "dep:fhir-types",
   "fhir-types/r4",
   "fhir-types/resources",
@@ -144,10 +148,16 @@ xcpd = [
 # carries the time of its event, and the recorder's wait is bounded by the
 # exchange's own deadline.
 balp = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
+# The authorizer a client supplies to authenticate each request when a fixed
+# header cannot (IUA ITI-72, and the DPoP proof of RFC 9449), and the send
+# that resends once when it asks, with no FHIR model: what the FHIR clients
+# here and the NVI client of `nl-generic-functions` send through.
+authorizer = ["dep:http", "dep:reqwest", "dep:thiserror", "dep:url"]
 # The IUA authorizer over the OAuth 2.0 client-credentials token of
 # `ferrohealth-smart`: the bearer token of each request taken from its
 # `TokenSource`, and a refused token dropped before the one resend.
 smart = [
+  "authorizer",
   "dep:ferrohealth-smart",
   "ferrohealth-smart/fetch",
   "dep:http",

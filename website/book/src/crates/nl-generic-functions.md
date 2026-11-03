@@ -19,7 +19,6 @@ version on `main` is {{version:nl-generic-functions}}.
 | `mitz` | GF-Consent | Mitz | the closed authorization question: may a data holder make a patient's data of each category available to a data user, answered `Permit` or `Deny` |
 | `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization` |
 | `nuts-auth` | GF-Authentication | the Nuts profile | the access token request of Nuts RFC021, with a `DPoP`-bound token, and the holder's `did:web` DID document |
-| `authorizer` | GF-Authentication | | the trait a data user implements to give each request its own headers (the IG's GFI-005), with no FHIR model; `nvi` turns it on |
 
 ## Identifiers: BSN and the pseudonymised BSN
 

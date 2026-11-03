@@ -16,9 +16,6 @@
 //!   access token for a Verifiable Presentation of the holder's credentials
 //!   (Nuts RFC021), its authorization server held to RFC 8414 on the issuer
 //!   rule and metadata location of `ferrohealth-smart`.
-//! - `authorizer`: the authorizer a data user supplies to authenticate each
-//!   request to a Generic Function (the IG's GFI-005), with no FHIR model;
-//!   `nvi` turns it on.
 //!
 //! The identifier systems the functions share, GF-Identification, are in
 //! the `identification` module, built whenever `nvi`, `lrza` or `mitz` is on.
@@ -30,8 +27,6 @@
 //! are a patient index's own functions in the Netherlands.
 #![doc(test(attr(deny(warnings))))]
 
-#[cfg(feature = "authorizer")]
-pub mod authorizer;
 #[cfg(any(feature = "nvi", feature = "lrza", feature = "mitz"))]
 pub mod identification;
 #[cfg(feature = "lrza")]

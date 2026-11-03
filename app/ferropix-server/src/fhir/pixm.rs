@@ -170,7 +170,7 @@ impl Manager {
                 })
                 .collect();
             if let Err(error) = self.audit.record(exchanges).await {
-                tracing::error!(error = %crate::chain(&error), "an ITI-83 answer is withheld: the record of a minted pseudonym could not be stored");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-83 answer is withheld: the record of a minted pseudonym could not be stored");
                 return wire::send(&Case::CommittedUnaudited.answer(), format);
             }
         }
@@ -188,7 +188,7 @@ impl Manager {
             outcome,
         );
         if let Err(error) = record(&self.audit, &parts, &exchange).await {
-            tracing::error!(error = %crate::chain(&error), "an ITI-83 answer is withheld: its audit record could not be stored");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-83 answer is withheld: its audit record could not be stored");
             return wire::send(&Case::Unaudited.answer(), format);
         }
         match answered {
@@ -378,7 +378,7 @@ impl Manager {
         )
         .await;
         if let Err(error) = recorded {
-            tracing::error!(error = %crate::chain(&error), "the audit record of an ITI-104 message could not be stored");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-104 message could not be stored");
             let case = if applied.is_ok() {
                 Case::CommittedUnaudited
             } else {
@@ -391,9 +391,9 @@ impl Manager {
             Err(error) => {
                 let case = feed_case(&error, removal);
                 if matches!(case, Case::StoreUnavailable | Case::Internal) {
-                    tracing::error!(error = %crate::chain(&error), "an ITI-104 message could not be applied");
+                    tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-104 message could not be applied");
                 } else {
-                    tracing::debug!(error = %crate::chain(&error), "an ITI-104 message is refused");
+                    tracing::debug!(error = %ferrohealth_server::run::chain(&error), "an ITI-104 message is refused");
                 }
                 return wire::send(&case.answer(), format);
             }
@@ -509,7 +509,7 @@ fn unavailable(error: sqlx::Error) -> Case {
 
 /// Logs a store failure and returns its case.
 fn store_failure(error: &crate::store::StoreError) -> Case {
-    tracing::error!(error = %crate::chain(error), "an ITI-83 query could not read the store");
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-83 query could not read the store");
     Case::StoreUnavailable
 }
 

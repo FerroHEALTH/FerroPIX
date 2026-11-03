@@ -4,15 +4,13 @@
 //! The run path of the `ferropix-console` binary: the command line parsed,
 //! the configuration read, and each job run to its exit code.
 
-use std::error::Error;
-use std::fmt::Write as _;
 use std::process::ExitCode;
 
-use clap::Parser;
 use ferrohealth_config::loader::Loaded;
 use ferrohealth_server::cli::{Common, ConfigCommand};
+use ferrohealth_server::run::{EXIT_CONFIG, Failure, Run, chain};
 use ferrohealth_telemetry::section::TelemetrySection;
-use ferrohealth_telemetry::telemetry::{Console, Service, Telemetry};
+use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
 
 use crate::cli::Cli;
 use crate::config::Config;
@@ -23,35 +21,18 @@ use crate::server::ConsoleState;
 /// five seconds a container `HEALTHCHECK` commonly allows.
 pub const HEALTHCHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
-/// The exit code of a configuration the console will not start on, from the
-/// BSD `sysexits.h` set (`EX_CONFIG`).
-pub const EXIT_CONFIG: u8 = 78;
+/// The run path of the `ferropix-console` binary, which names it in every
+/// line it writes.
+pub const RUN: Run = Run::new("ferropix-console");
 
-/// Runs the binary with `args` and returns the process exit code.
+/// Runs the job `cli` names on the runtime of [`RUN`] and returns its exit
+/// code.
 ///
-/// `args` is the whole argument vector, the program name included, so the
-/// command-line parser reports usage under the right name.
-#[must_use]
-#[expect(
-    clippy::print_stderr,
-    reason = "a refused configuration is reported before any log subscriber exists"
-)]
-pub fn run<I>(args: I) -> ExitCode
-where
-    I: IntoIterator<Item = String>,
-{
-    let cli = match Cli::try_parse_from(args) {
-        Ok(cli) => cli,
-        Err(error) => {
-            // NOTE: no specification governs this: our own design; clap prints
-            // the usage or the version itself and names the exit code.
-            let code = error.exit_code();
-            if error.print().is_err() {
-                return ExitCode::FAILURE;
-            }
-            return u8::try_from(code).map_or(ExitCode::FAILURE, ExitCode::from);
-        }
-    };
+/// # Errors
+///
+/// Returns the [`Failure`] of a configuration that does not resolve (with
+/// [`EXIT_CONFIG`], or exit 1 for `healthcheck`) and of a job that fails.
+pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
     let loaded = Config::load(&cli.config).and_then(|loaded| {
         loaded
             .settings()
@@ -61,44 +42,22 @@ where
     let (loaded, settings) = match loaded {
         Ok(loaded) => loaded,
         Err(error) if cli.command == Common::Healthcheck => {
-            eprintln!("ferropix-console: not up: {}", chain(&error));
-            return ExitCode::FAILURE;
+            return Err(Failure::from(error).with_context("not up"));
         }
         Err(error) => {
-            eprintln!("ferropix-console: cannot start: {}", chain(&error));
-            return ExitCode::from(EXIT_CONFIG);
+            return Err(Failure::from(error)
+                .with_context("cannot start")
+                .with_code(EXIT_CONFIG));
         }
     };
     match cli.command {
-        Common::Healthcheck => runtime_then(|| healthcheck(&settings)),
+        Common::Healthcheck => healthcheck(&settings).await,
         Common::Config {
             command: ConfigCommand::Check,
-        } => runtime_then(|| config_check(&loaded, settings)),
+        } => config_check(&loaded, settings).await,
         Common::Serve => {
             let telemetry = loaded.settings().telemetry.clone();
-            runtime_then(|| serve(settings, telemetry))
-        }
-    }
-}
-
-/// Runs `job` on a multi-threaded runtime.
-#[expect(
-    clippy::print_stderr,
-    reason = "a runtime that cannot start is reported before any log subscriber exists"
-)]
-fn runtime_then<F, J>(job: J) -> ExitCode
-where
-    J: FnOnce() -> F,
-    F: Future<Output = ExitCode>,
-{
-    match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime.block_on(job()),
-        Err(error) => {
-            eprintln!("ferropix-console: cannot start the runtime: {error}");
-            ExitCode::FAILURE
+            Box::pin(serve(settings, telemetry)).await
         }
     }
 }
@@ -114,21 +73,13 @@ where
     clippy::print_stdout,
     reason = "the job's one answer goes to standard output"
 )]
-#[expect(
-    clippy::print_stderr,
-    reason = "the job's refusal goes to standard error"
-)]
-async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
-    match ferrohealth_config::report::check_report(loaded) {
-        Ok(report) => println!("{report}"),
-        Err(error) => {
-            eprintln!(
-                "ferropix-console: cannot show the configuration: {}",
-                chain(&error)
-            );
-            return ExitCode::from(EXIT_CONFIG);
-        }
-    }
+async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> Result<ExitCode, Failure> {
+    let report = ferrohealth_config::report::check_report(loaded).map_err(|error| {
+        Failure::from(error)
+            .with_context("cannot show the configuration")
+            .with_code(EXIT_CONFIG)
+    })?;
+    println!("{report}");
     let built = if settings
         .oidc
         .as_ref()
@@ -140,16 +91,13 @@ async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
             .map(drop)
             .map_err(crate::server::StateError::from)
     };
-    match built {
-        Ok(()) => {
-            println!("ferropix-console: the configuration is valid");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("ferropix-console: cannot start: {}", chain(&error));
-            ExitCode::from(EXIT_CONFIG)
-        }
-    }
+    built.map_err(|error| {
+        Failure::from(error)
+            .with_context("cannot start")
+            .with_code(EXIT_CONFIG)
+    })?;
+    println!("ferropix-console: the configuration is valid");
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Runs `healthcheck` against the console this configuration describes.
@@ -157,92 +105,55 @@ async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
     clippy::print_stdout,
     reason = "the job's one-line answer goes to standard output"
 )]
-#[expect(
-    clippy::print_stderr,
-    reason = "the job's one-line refusal goes to standard error"
-)]
-async fn healthcheck(settings: &Settings) -> ExitCode {
+async fn healthcheck(settings: &Settings) -> Result<ExitCode, Failure> {
     let target = ferrohealth_server::healthcheck::target(settings.listen);
     let outcome = ferrohealth_server::healthcheck::check(target, "", HEALTHCHECK_TIMEOUT).await;
     if outcome.exit_code() == 0 {
         println!("ferropix-console: {outcome}");
-        ExitCode::SUCCESS
+        Ok(ExitCode::SUCCESS)
     } else {
-        eprintln!("ferropix-console: {outcome}");
-        ExitCode::FAILURE
+        Err(Failure::boxed(outcome.to_string()))
     }
 }
 
 /// Runs `serve`: the subscriber, the state, and the server until `SIGTERM`
 /// or `SIGINT`.
-#[expect(
-    clippy::print_stderr,
-    reason = "a refusal before the subscriber starts has no other place to go"
-)]
-async fn serve(settings: Settings, section: TelemetrySection) -> ExitCode {
+async fn serve(settings: Settings, section: TelemetrySection) -> Result<ExitCode, Failure> {
     let service = Service::new("ferropix-console", env!("CARGO_PKG_VERSION"))
         .export_crate("ferropix_console");
-    let telemetry = match Telemetry::new(&section, service) {
-        Ok(telemetry) => telemetry,
-        Err(error) => {
-            eprintln!("ferropix-console: cannot start the log: {}", chain(&error));
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Err(error) = telemetry.install(&section, &Console::detect()) {
-        eprintln!("ferropix-console: cannot start the log: {}", chain(&error));
-        return ExitCode::FAILURE;
-    }
+    let log = |error: InitError| Failure::from(error).with_context("cannot start the log");
+    let telemetry = Telemetry::new(&section, service).map_err(log)?;
+    telemetry
+        .install(&section, &Console::detect())
+        .map_err(log)?;
     ferrohealth_telemetry::panic::install_hook();
-    let code = listen_and_serve(settings).await;
+    let served = listen_and_serve(settings).await;
     if let Err(error) = telemetry.shutdown() {
         tracing::warn!(error = %chain(&error), "the telemetry did not flush");
     }
-    code
+    served
 }
 
 /// Builds the state `settings` describe and serves it until `SIGTERM` or
 /// `SIGINT`.
-async fn listen_and_serve(settings: Settings) -> ExitCode {
+async fn listen_and_serve(settings: Settings) -> Result<ExitCode, Failure> {
     let listen = settings.listen;
-    let state = match ConsoleState::new(settings).await {
-        Ok(state) => state,
-        Err(error) => {
-            tracing::error!(error = %chain(&error), "cannot start");
-            return ExitCode::from(EXIT_CONFIG);
-        }
-    };
-    let listener = match tokio::net::TcpListener::bind(listen).await {
-        Ok(listener) => listener,
-        Err(error) => {
-            tracing::error!(%listen, %error, "cannot bind the listen address");
-            return ExitCode::FAILURE;
-        }
-    };
+    let state = ConsoleState::new(settings).await.map_err(|error| {
+        Failure::from(error)
+            .with_context("cannot start")
+            .with_code(EXIT_CONFIG)
+    })?;
+    let listener = tokio::net::TcpListener::bind(listen)
+        .await
+        .map_err(|error| Failure::from(error).with_context("cannot bind the listen address"))?;
     tracing::info!(%listen, "the operator console is listening");
     let lifecycle = state.lifecycle().clone();
     let stop = ferrohealth_server::serve::shutdown_signal();
     match crate::server::serve(listener, crate::server::router(state), lifecycle, stop).await {
-        Ok(_drained) => ExitCode::SUCCESS,
+        Ok(_drained) => Ok(ExitCode::SUCCESS),
         Err(error) => {
             tracing::error!(%error, "the listener failed");
-            ExitCode::FAILURE
+            Ok(ExitCode::FAILURE)
         }
     }
-}
-
-/// Renders `error` with every cause in its chain, colon-separated.
-#[must_use]
-pub fn chain(error: &dyn Error) -> String {
-    let mut text = error.to_string();
-    let mut source = error.source();
-    while let Some(cause) = source {
-        // NOTE: no specification governs this: our own design; writing to a
-        // String cannot fail, so the result carries nothing.
-        if write!(text, ": {cause}").is_err() {
-            break;
-        }
-        source = cause.source();
-    }
-    text
 }

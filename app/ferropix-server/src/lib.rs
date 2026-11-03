@@ -31,15 +31,14 @@ pub mod store;
 pub mod usage_report;
 pub mod xcpd;
 
-use std::error::Error;
 use std::fmt::Write as _;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use clap::Parser;
 use ferrohealth_config::loader::Loaded;
 use ferrohealth_server::cli::{Common, ConfigCommand};
 use ferrohealth_server::healthcheck::Outcome;
+use ferrohealth_server::run::{EXIT_CONFIG, Failure, Run, chain};
 use ferrohealth_server::section::ServerSection;
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
@@ -52,36 +51,18 @@ use crate::config::settings::Settings;
 /// `http.server.request.duration` in.
 pub const METER: &str = "ferropix_server";
 
-/// The exit code of a refused configuration, `EX_CONFIG` from `sysexits`
-/// (<https://man.freebsd.org/cgi/man.cgi?query=sysexits>), so an
-/// orchestrator tells a bad configuration from a failure to serve.
-pub const EXIT_CONFIG: u8 = 78;
+/// The run path of the `ferropix` binary, which names it in every line it
+/// writes.
+pub const RUN: Run = Run::new("ferropix");
 
-/// Runs the binary with `args` and returns the process exit code.
+/// Runs the job `cli` names on the runtime of [`RUN`] and returns its exit
+/// code.
 ///
-/// `args` is the whole argument vector, the program name included, so the
-/// command-line parser reports usage under the right name.
-#[must_use]
-#[expect(
-    clippy::print_stderr,
-    reason = "a pending job and a refused configuration are reported before any log subscriber exists"
-)]
-pub fn run<I>(args: I) -> ExitCode
-where
-    I: IntoIterator<Item = String>,
-{
-    let cli = match Cli::try_parse_from(args) {
-        Ok(cli) => cli,
-        Err(error) => {
-            // NOTE: no specification governs this: our own design; clap prints
-            // the usage or the version itself and names the exit code.
-            let code = error.exit_code();
-            if error.print().is_err() {
-                return ExitCode::FAILURE;
-            }
-            return u8::try_from(code).map_or(ExitCode::FAILURE, ExitCode::from);
-        }
-    };
+/// # Errors
+///
+/// Returns the [`Failure`] of a configuration that does not resolve (with
+/// [`EXIT_CONFIG`], or exit 1 for `healthcheck`) and of a job that fails.
+pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
     let loaded = Config::load(&cli.config).and_then(|loaded| {
         let mut settings = loaded.settings().resolve()?;
         settings.provenance = loaded.provenance().clone();
@@ -90,24 +71,24 @@ where
     let (loaded, settings) = match loaded {
         Ok(loaded) => loaded,
         Err(error) if cli.command == Command::Common(Common::Healthcheck) => {
-            eprintln!("ferropix: not up: {}", chain(&error));
-            return ExitCode::FAILURE;
+            return Err(Failure::from(error).with_context("not up"));
         }
         Err(error) => {
-            eprintln!("ferropix: the configuration is refused: {}", chain(&error));
-            return ExitCode::from(EXIT_CONFIG);
+            return Err(Failure::from(error)
+                .with_context("the configuration is refused")
+                .with_code(EXIT_CONFIG));
         }
     };
     match cli.command {
         Command::Common(Common::Config {
             command: ConfigCommand::Check,
         }) => config_check(&loaded, &settings),
-        Command::Common(Common::Healthcheck) => runtime_then(|| healthcheck(settings)),
-        Command::Common(Common::Serve) => serve(settings),
-        Command::Db { command } => db(settings, &command),
+        Command::Common(Common::Healthcheck) => Ok(healthcheck(settings).await),
+        Command::Common(Common::Serve) => Box::pin(serve(settings)).await,
+        Command::Db { command } => db(settings, &command).await,
         Command::Matching {
             command: MatchingCommand::Estimate,
-        } => estimate(settings),
+        } => estimate(settings).await,
     }
 }
 
@@ -115,40 +96,32 @@ where
 /// printed as the `[matching.fields]` tables that would set it, each beside
 /// the `m` the configuration holds.
 #[expect(
-    clippy::print_stderr,
     clippy::print_stdout,
-    reason = "the job prints its tables on standard output and a failure on stderr"
+    reason = "the job prints its tables on standard output"
 )]
-fn estimate(settings: Settings) -> ExitCode {
-    runtime_then(|| async move {
-        let telemetry = match telemetry(&settings.telemetry) {
-            Ok(telemetry) => telemetry,
-            Err(error) => {
-                eprintln!("ferropix: cannot start: {}", chain(&error));
-                return ExitCode::from(EXIT_CONFIG);
-            }
-        };
-        let outcome = async {
-            let store = store::Store::connect(&settings.db).await?;
-            store::key::verify(&store).await?;
-            let estimates = store::estimate::estimate(&store).await;
-            store.close().await;
-            estimates
-        }
-        .await;
-        let code = match outcome {
-            Ok(estimates) => {
-                println!("{}", estimate_tables(&settings.matching, &estimates));
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("ferropix: the estimate failed: {}", chain(&error));
-                ExitCode::FAILURE
-            }
-        };
-        shut_down(&telemetry);
-        code
-    })
+async fn estimate(settings: Settings) -> Result<ExitCode, Failure> {
+    let telemetry = telemetry(&settings.telemetry).map_err(started)?;
+    let outcome = async {
+        let store = store::Store::connect(&settings.db).await?;
+        store::key::verify(&store).await?;
+        let estimates = store::estimate::estimate(&store).await;
+        store.close().await;
+        estimates
+    }
+    .await;
+    shut_down(&telemetry);
+    let estimates =
+        outcome.map_err(|error| Failure::from(error).with_context("the estimate failed"))?;
+    println!("{}", estimate_tables(&settings.matching, &estimates));
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The failure of a subscriber that cannot be installed, a configuration
+/// the binary cannot start on.
+fn started(error: InitError) -> Failure {
+    Failure::from(error)
+        .with_context("cannot start")
+        .with_code(EXIT_CONFIG)
 }
 
 /// Builds the telemetry `section` asks for, described as the `ferropix`
@@ -211,20 +184,15 @@ pub fn estimate_tables(
 /// it came from and every secret masked, and nothing bound.
 #[expect(
     clippy::print_stdout,
-    clippy::print_stderr,
-    reason = "the job's report goes to standard output and a refusal to stderr"
+    reason = "the job's report goes to standard output"
 )]
-fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> ExitCode {
-    match ferrohealth_config::report::check_report(loaded) {
-        Ok(report) => println!("{report}"),
-        Err(error) => {
-            eprintln!(
-                "ferropix: the configuration cannot be shown: {}",
-                chain(&error)
-            );
-            return ExitCode::from(EXIT_CONFIG);
-        }
-    }
+fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> Result<ExitCode, Failure> {
+    let report = ferrohealth_config::report::check_report(loaded).map_err(|error| {
+        Failure::from(error)
+            .with_context("the configuration cannot be shown")
+            .with_code(EXIT_CONFIG)
+    })?;
+    println!("{report}");
     println!(
         "ferropix: the configuration is accepted ({} profile, {} seeded domain(s))",
         match settings.profile {
@@ -233,7 +201,7 @@ fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> ExitCode {
         },
         settings.domains.len()
     );
-    ExitCode::SUCCESS
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Runs `healthcheck` and reports the outcome as one line.
@@ -274,32 +242,20 @@ pub async fn probe(section: &ServerSection) -> Outcome {
 
 /// Runs `serve`: the subscriber installed, the listener bound, and the
 /// routes served until `SIGTERM` or `SIGINT` and the bounded drain.
-#[expect(
-    clippy::print_stderr,
-    reason = "a subscriber that cannot be installed is reported on stderr"
-)]
-fn serve(settings: Settings) -> ExitCode {
-    runtime_then(|| async move {
-        let telemetry = match telemetry(&settings.telemetry) {
-            Ok(telemetry) => telemetry,
-            Err(error) => {
-                eprintln!("ferropix: cannot start: {}", chain(&error));
-                return ExitCode::from(EXIT_CONFIG);
-            }
-        };
-        let code = match serve::serve_settings(settings, Arc::clone(&telemetry)).await {
-            Ok(()) => {
-                tracing::info!("ferropix stopped");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                tracing::error!(error = %chain(&error), "cannot serve");
-                ExitCode::FAILURE
-            }
-        };
-        shut_down(&telemetry);
-        code
-    })
+async fn serve(settings: Settings) -> Result<ExitCode, Failure> {
+    let telemetry = telemetry(&settings.telemetry).map_err(started)?;
+    let code = match serve::serve_settings(settings, Arc::clone(&telemetry)).await {
+        Ok(()) => {
+            tracing::info!("ferropix stopped");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(error = %chain(&error), "cannot serve");
+            ExitCode::FAILURE
+        }
+    };
+    shut_down(&telemetry);
+    Ok(code)
 }
 
 /// Runs a `db` job: the subscriber installed, then the job against the
@@ -309,33 +265,24 @@ fn serve(settings: Settings) -> ExitCode {
 /// applies the domain seed; `db reseal` rewrites every identifier column
 /// under the configured key, reading the old one from `--old-key-file`.
 #[expect(
-    clippy::print_stderr,
     clippy::print_stdout,
-    reason = "a db job reports its one answer on standard output and a refused key on stderr"
+    reason = "a db job reports its one answer on standard output"
 )]
-fn db(settings: Settings, command: &DbCommand) -> ExitCode {
+async fn db(settings: Settings, command: &DbCommand) -> Result<ExitCode, Failure> {
     let old_key = match command {
         DbCommand::Migrate => None,
-        DbCommand::Reseal { old_key_file } => match read_old_key(old_key_file) {
-            Ok(key) => Some(key),
-            Err(error) => {
-                eprintln!("ferropix: the old key is refused: {}", chain(&error));
-                return ExitCode::from(EXIT_CONFIG);
-            }
-        },
+        DbCommand::Reseal { old_key_file } => {
+            Some(read_old_key(old_key_file).map_err(|error| {
+                Failure::from(error)
+                    .with_context("the old key is refused")
+                    .with_code(EXIT_CONFIG)
+            })?)
+        }
     };
-    runtime_then(|| async move {
-        let telemetry = match telemetry(&settings.telemetry) {
-            Ok(telemetry) => telemetry,
-            Err(error) => {
-                eprintln!("ferropix: cannot start: {}", chain(&error));
-                return ExitCode::from(EXIT_CONFIG);
-            }
-        };
-        let outcome = match old_key {
-            None => match store::Store::start(&settings.db, &settings.domains, store::Job::Migrate)
-                .await
-            {
+    let telemetry = telemetry(&settings.telemetry).map_err(started)?;
+    let outcome = match old_key {
+        None => {
+            match store::Store::start(&settings.db, &settings.domains, store::Job::Migrate).await {
                 Ok(store) => store::pseudonym::seed(&store, &settings.pseudonym_domains)
                     .await
                     .map(|_inserted| store),
@@ -346,23 +293,20 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
                     store,
                     String::from("the migrations and the domain seed are applied"),
                 )
-            }),
-            Some(old) => reseal(&settings, &old).await,
-        };
-        let code = match outcome {
-            Ok((store, line)) => {
-                store.close().await;
-                println!("ferropix: {line}");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("ferropix: the db job failed: {}", chain(&error));
-                ExitCode::FAILURE
-            }
-        };
-        shut_down(&telemetry);
-        code
-    })
+            })
+        }
+        Some(old) => reseal(&settings, &old).await,
+    };
+    let answer = match outcome {
+        Ok((store, line)) => {
+            store.close().await;
+            println!("ferropix: {line}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => Err(Failure::from(error).with_context("the db job failed")),
+    };
+    shut_down(&telemetry);
+    answer
 }
 
 /// Reads the old sealing key of `db reseal` from `path`.
@@ -393,42 +337,4 @@ async fn reseal(
         report.records, report.from, report.to
     );
     Ok((store, line))
-}
-
-/// Runs `job` on a multi-threaded runtime.
-#[expect(
-    clippy::print_stderr,
-    reason = "a runtime that cannot start is reported before any log subscriber exists"
-)]
-fn runtime_then<F, J>(job: J) -> ExitCode
-where
-    J: FnOnce() -> F,
-    F: Future<Output = ExitCode>,
-{
-    match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime.block_on(job()),
-        Err(error) => {
-            eprintln!("ferropix: cannot start the runtime: {error}");
-            ExitCode::FAILURE
-        }
-    }
-}
-
-/// Renders `error` with every cause in its chain, colon-separated.
-#[must_use]
-pub fn chain(error: &dyn Error) -> String {
-    let mut text = error.to_string();
-    let mut source = error.source();
-    while let Some(cause) = source {
-        // NOTE: no specification governs this: our own design; writing to a
-        // String cannot fail, so the result carries nothing.
-        if write!(text, ": {cause}").is_err() {
-            break;
-        }
-        source = cause.source();
-    }
-    text
 }

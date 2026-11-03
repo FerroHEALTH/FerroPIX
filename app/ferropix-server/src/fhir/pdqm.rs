@@ -306,7 +306,7 @@ async fn send<T: Resource>(
     format: Format,
 ) -> Response {
     if let Err(error) = record(face, parts, exchanges).await {
-        tracing::error!(error = %crate::chain(&error), "a PDQm answer was withheld: its audit record could not be stored");
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "a PDQm answer was withheld: its audit record could not be stored");
         return wire::send(
             &Answer::outcome(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -348,7 +348,7 @@ async fn failed(
     error: &PdqError,
     format: Format,
 ) -> Response {
-    tracing::error!(error = %crate::chain(error), "a PDQm request could not be answered");
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "a PDQm request could not be answered");
     let answer = match error {
         PdqError::Store(_) => Answer::outcome(
             StatusCode::SERVICE_UNAVAILABLE,

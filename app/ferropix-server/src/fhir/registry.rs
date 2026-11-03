@@ -303,11 +303,11 @@ fn settled<T>(result: Result<T, FeedError>) -> Result<Applied, Case> {
         Err(FeedError::Identifier { .. }) => Ok(IDENTIFIER_REFUSED),
         Err(FeedError::Contention) => Err(Case::Contention),
         Err(error @ FeedError::Store(_)) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-93 change could not be stored");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-93 change could not be stored");
             Err(Case::StoreUnavailable)
         }
         Err(error @ (FeedError::Demographics(_) | FeedError::Evidence | FeedError::Notice)) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-93 change could not be written");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-93 change could not be written");
             Err(Case::Internal)
         }
     }

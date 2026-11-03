@@ -113,7 +113,7 @@ pub(super) async fn receive(
         }
         Ok(None) => {}
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "the receipts could not be read");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "the receipts could not be read");
             let settled = Settled::rejected("the store could not be read; send the message again");
             return acknowledge(message, settled.code, &settled.faults, stamped);
         }
@@ -123,7 +123,7 @@ pub(super) async fn receive(
         && let Err(error) =
             receipt::record(face.store.pool(), &key, control_id, settled.code.as_str()).await
     {
-        tracing::warn!(error = %crate::chain(&error), "the receipt of a message could not be written");
+        tracing::warn!(error = %ferrohealth_server::run::chain(&error), "the receipt of a message could not be written");
     }
     acknowledge(message, settled.code, &settled.faults, stamped)
 }
@@ -149,7 +149,7 @@ async fn apply(
     let place = match face.audit.reserve() {
         Ok(place) => place,
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-8 message is refused: its audit record has no room");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-8 message is refused: its audit record has no room");
             return Settled::rejected(
                 "the audit record could not be stored, so the message was not applied",
             );
@@ -175,7 +175,7 @@ async fn apply(
         None => Ok(()),
     };
     if let Err(error) = recorded {
-        tracing::error!(error = %crate::chain(&error), "the audit record of an ITI-8 message could not be stored");
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-8 message could not be stored");
         return if applied.is_ok() {
             Settled::refused(Fault::anywhere(
                 ErrorCode::Application,
@@ -363,7 +363,7 @@ fn refusal(error: &FeedError) -> Settled {
             Settled::rejected("concurrent messages moved the same persons; send the message again")
         }
         _ => {
-            tracing::error!(error = %crate::chain(error), "an ITI-8 message could not be applied");
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 message could not be applied");
             Settled::rejected("the store could not apply the message; send it again")
         }
     }

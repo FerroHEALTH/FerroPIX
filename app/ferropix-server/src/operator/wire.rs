@@ -42,7 +42,7 @@ pub const NO_SUCH_PERSON: &str = "no person has this id";
 /// store could not be read, `500` otherwise, the cause logged by its chain.
 #[must_use]
 pub fn failed(error: &OperatorError) -> Response {
-    tracing::error!(error = %crate::chain(error), "an operator request could not be answered");
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "an operator request could not be answered");
     match error {
         OperatorError::Store(_) => {
             problem::refuse(Kind::StoreUnavailable, "the store could not be read")
@@ -57,7 +57,7 @@ pub fn failed(error: &OperatorError) -> Response {
 /// Returns the `503` of a request whose audit record could not be stored.
 #[must_use]
 pub fn unaudited(error: &Unrecorded) -> Response {
-    tracing::error!(error = %crate::chain(error), "an operator answer was withheld: its audit record could not be stored");
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "an operator answer was withheld: its audit record could not be stored");
     problem::refuse(Kind::AuditUnavailable, UNAUDITED)
 }
 

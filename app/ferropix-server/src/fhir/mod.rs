@@ -361,7 +361,7 @@ async fn dependencies(
     let subscribers = match crate::store::subscription::deliveries(&store).await {
         Ok(deliveries) => deliveries.into_iter().map(subscriber).collect(),
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "the PMIR subscribers could not be read");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "the PMIR subscribers could not be read");
             Vec::new()
         }
     };
@@ -417,7 +417,7 @@ async fn consumers(store: &Store) -> Vec<Upstream> {
         let last = match crate::store::outbox::last_notification(store, &configured.name).await {
             Ok(last) => last,
             Err(error) => {
-                tracing::error!(consumer = %configured.name, error = %crate::chain(&error), "the last ITI-10 notification could not be read");
+                tracing::error!(consumer = %configured.name, error = %ferrohealth_server::run::chain(&error), "the last ITI-10 notification could not be read");
                 None
             }
         };

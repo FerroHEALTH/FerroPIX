@@ -225,7 +225,7 @@ fn refused(error: &DecideError) -> Response {
         DecideError::NotFound => problem::refuse(Kind::NotFound, NOT_FOUND),
         DecideError::Stale => problem::refuse(Kind::Stale, STALE),
         DecideError::Feed(error) => {
-            tracing::error!(error = %crate::chain(error), "a merge or a revert could not be made");
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "a merge or a revert could not be made");
             wire::failed(&OperatorError::Unadmitted("merge"))
         }
     }

@@ -136,7 +136,7 @@ pub async fn layer(
             next.run(request).await
         }
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "a request was refused: its audit record has no room in the spool");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "a request was refused: its audit record has no room in the spool");
             if route.mount == table::Mount::Operator {
                 return problem::refuse(Kind::AuditUnavailable, UNAUDITED);
             }

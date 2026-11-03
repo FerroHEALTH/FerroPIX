@@ -50,10 +50,6 @@ use crate::config::settings::Settings;
 /// `http.server.request.duration` in.
 pub const METER: &str = "ferropix_server";
 
-/// The exit code of a job that parses and does not run yet: the conventional
-/// usage exit.
-pub const EXIT_PENDING_JOB: u8 = 2;
-
 /// The exit code of a refused configuration, `EX_CONFIG` from `sysexits`
 /// (<https://man.freebsd.org/cgi/man.cgi?query=sysexits>), so an
 /// orchestrator tells a bad configuration from a failure to serve.
@@ -84,13 +80,6 @@ where
             return u8::try_from(code).map_or(ExitCode::FAILURE, ExitCode::from);
         }
     };
-    if let Some(issue) = cli.command.pending_issue() {
-        eprintln!(
-            "ferropix: `{}` is not implemented yet; it lands with issue #{issue}",
-            cli.command.spelling()
-        );
-        return ExitCode::from(EXIT_PENDING_JOB);
-    }
     let loaded = Config::load(&cli.config).and_then(|loaded| {
         let mut settings = loaded.settings().resolve()?;
         settings.provenance = loaded.provenance().clone();

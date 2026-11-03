@@ -129,18 +129,21 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
     let app = router(
         &settings.server,
         Health::new(health.clone(), lifecycle.clone()),
-        Some(fhir::routes(
-            fhir::Address {
-                base: settings.server.base_path.as_str(),
-                public_base_url: &settings.public_base_url,
-            },
-            Mounts::all(),
-            &smart,
-            &health,
-            &lifecycle,
-            &audit,
-            &backend,
-        )),
+        Some(
+            fhir::routes(
+                fhir::Address {
+                    base: settings.server.base_path.as_str(),
+                    public_base_url: &settings.public_base_url,
+                },
+                Mounts::all(),
+                &smart,
+                &health,
+                &lifecycle,
+                &audit,
+                &backend,
+            )
+            .expect("every route-table row has its handler"),
+        ),
         RequestLog::default(),
         None,
     );

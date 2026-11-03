@@ -161,7 +161,8 @@ impl Harness {
                 },
                 development: false,
             },
-        );
+        )
+        .expect("every route-table row has its handler");
         Self {
             app: router(
                 &settings.server,

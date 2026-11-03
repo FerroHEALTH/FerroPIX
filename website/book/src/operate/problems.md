@@ -60,7 +60,7 @@ when you report it. Every problem answer carries `Cache-Control: no-store`.
 | [`authorization-unavailable`](#authorization-unavailable) | `503` | The token could not be checked. |
 
 A `413` for a body larger than the server reads, a `415` for a body that is
-not `application/json`, a `500` and a `501` are `about:blank` problems.
+not `application/json` and a `500` are `about:blank` problems.
 
 ### `invalid-request`
 

@@ -50,8 +50,8 @@ problem, `application/problem+json`, whose detail never quotes the request;
 | `GET /operator/actions` | steward | A page of the audit trail, the newest first. |
 | `POST /operator/actions/export` | steward | The same filter answered as CSV. |
 
-Every route in the table is served. A route added to the guard's table
-before its handler answers `501`.
+Every route in the table is served: the server refuses to start when a row
+of the guard's table has no handler, and names the row.
 
 ## Deciding a candidate
 

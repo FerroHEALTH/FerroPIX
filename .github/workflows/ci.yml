@@ -1057,6 +1057,22 @@ jobs:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
 
+  # No tracked file keeps an unresolved merge conflict (#436; no
+  # specification governs the guard: our own design).
+  conflict-markers:
+    name: conflict-markers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The guard refuses each marker and skips the vendored trees
+        run: bash scripts/checks/conflict-markers.sh --self-test
+      - run: bash scripts/checks/conflict-markers.sh
+
   # ---- The single required check --------------------------------------------
   # It needs every other job and runs on always(), so it reports even when a
   # gated tier is skipped; it fails when a needed job failed or was cancelled.
@@ -1100,6 +1116,7 @@ jobs:
       - site-links
       - docs-claims
       - book-guard
+      - conflict-markers
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -34,6 +34,7 @@
 
 pub mod actions;
 pub mod candidates;
+pub mod change;
 pub mod configuration;
 pub mod demographics;
 pub mod domains;

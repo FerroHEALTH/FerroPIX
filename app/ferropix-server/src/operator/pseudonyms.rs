@@ -41,7 +41,7 @@ use uuid::Uuid;
 use crate::audit::records::{self, operator::Disclosed};
 use crate::auth::table::Route;
 use crate::config::section::domain::is_system;
-use crate::operator::{Operator, OperatorError, Recorded, count, record_action, wire};
+use crate::operator::{Operator, OperatorError, Recorded, change, count, record_action, wire};
 use crate::problem::{self, Kind};
 use crate::store::pseudonym;
 use crate::store::record::PersonId;
@@ -194,9 +194,10 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     {
         return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
-    let outcome = async {
-        let mut transaction = operator.store.pool().begin().await?;
-        let id: Option<Uuid> = sqlx::query_scalar(
+    let written = change::insert(
+        operator,
+        &PSEUDONYM_DOMAINS,
+        sqlx::query_scalar(
             "INSERT INTO pix.pseudonym_domain (namespace, name, consumer_client_id)
              SELECT $1, $2, $3
              WHERE NOT EXISTS (SELECT 1 FROM pix.identifier_domain WHERE system = $1)
@@ -205,26 +206,11 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         )
         .bind(&new.namespace)
         .bind(new.name.trim())
-        .bind(new.consumer_client_id.as_deref().map(str::trim))
-        .fetch_optional(&mut *transaction)
-        .await?;
-        Ok::<_, OperatorError>(id.map(|id| (transaction, id)))
-    }
+        .bind(new.consumer_client_id.as_deref().map(str::trim)),
+        (&new.namespace, new.reason.as_deref()),
+    )
     .await;
-    let (transaction, id) = match outcome {
-        Ok(Some(written)) => written,
-        Ok(None) => {
-            return problem::refuse(Kind::AlreadyHeld, NAMESPACE_TAKEN);
-        }
-        Err(error) => return wire::failed(&error),
-    };
-    let write = Write {
-        created: true,
-        namespace: &new.namespace,
-        id,
-        reason: new.reason.as_deref(),
-    };
-    match finish(operator, &parts, transaction, &write).await {
+    match finish(operator, &parts, written).await {
         Ok(domain) => outcome::body(StatusCode::CREATED, &domain, wire::JSON),
         Err(refused) => *refused,
     }
@@ -232,139 +218,71 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
 
 /// Answers `PATCH {base}/operator/pseudonym-domains/{id}`.
 pub async fn update(operator: &Operator, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
-    let Some(id) = wire::path_id(&parts) else {
-        return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN);
-    };
-    let (change, _bytes) = match wire::posted::<PseudonymDomainChange>(&parts, body).await {
-        Ok(read) => read,
-        Err(refused) => return *refused,
-    };
+    let (parts, id, change) =
+        match change::requested::<PseudonymDomainChange>(request, NO_SUCH_DOMAIN).await {
+            Ok(requested) => requested,
+            Err(refused) => return *refused,
+        };
     if !reasoned(&change.reason) {
         return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
-    let blank = |text: &Option<String>| text.as_deref().is_some_and(|text| text.trim().is_empty());
-    if blank(&change.name) || blank(&change.consumer_client_id) {
+    if change::blank(change.name.as_deref()) || change::blank(change.consumer_client_id.as_deref())
+    {
         return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
-    let outcome = async {
-        let mut transaction = operator.store.pool().begin().await?;
-        let current: Option<(String, bool)> = sqlx::query_as(
-            "SELECT namespace, retired_at IS NOT NULL FROM pix.pseudonym_domain
-             WHERE id = $1 FOR UPDATE",
-        )
-        .bind(id)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let Some((namespace, retired)) = current else {
-            return Ok(Changed::Missing);
-        };
-        if retired {
-            return Ok(Changed::Retired);
-        }
-        sqlx::query(
-            "UPDATE pix.pseudonym_domain
-             SET name = coalesce($2, name),
-                 consumer_client_id = coalesce($3, consumer_client_id),
-                 retired_at = CASE WHEN $4 THEN now() ELSE retired_at END
-             WHERE id = $1",
-        )
-        .bind(id)
-        .bind(change.name.as_deref().map(str::trim))
-        .bind(change.consumer_client_id.as_deref().map(str::trim))
-        .bind(change.retire)
-        .execute(&mut *transaction)
-        .await?;
-        Ok::<_, OperatorError>(Changed::Written(transaction, namespace))
-    }
-    .await;
-    let (transaction, namespace) = match outcome {
-        Ok(Changed::Written(transaction, namespace)) => (transaction, namespace),
-        Ok(Changed::Missing) => return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN),
-        Ok(Changed::Retired) => {
-            return problem::refuse(Kind::Retired, RETIRED);
-        }
-        Err(error) => return wire::failed(&error),
+    let asked = change::Asked {
+        name: change.name.as_deref(),
+        holder: change.consumer_client_id.as_deref(),
+        retire: change.retire,
+        reason: &change.reason,
     };
-    let write = Write {
-        created: false,
-        namespace: &namespace,
-        id,
-        reason: Some(&change.reason),
-    };
-    match finish(operator, &parts, transaction, &write).await {
+    let written = change::change(operator, &PSEUDONYM_DOMAINS, (id, asked)).await;
+    match finish(operator, &parts, written).await {
         Ok(domain) => outcome::body(StatusCode::OK, &domain, wire::JSON),
         Err(refused) => *refused,
     }
 }
 
-/// What the statement of a change found.
-enum Changed {
-    /// No domain has the id.
-    Missing,
-    /// The domain is retired.
-    Retired,
-    /// The domain of this namespace was changed in this open transaction.
-    Written(Transaction<'static, Postgres>, String),
-}
-
-/// One domain write, its statement run.
-#[derive(Debug, Clone, Copy)]
-struct Write<'a> {
-    /// Whether the domain was created.
-    created: bool,
-    /// The domain's namespace.
-    namespace: &'a str,
-    /// The domain's id.
-    id: Uuid,
-    /// The reason given.
-    reason: Option<&'a str>,
-}
+/// The statements and the refusals of a write of a pseudonymisation domain.
+const PSEUDONYM_DOMAINS: change::Domains = change::Domains {
+    lock: "SELECT namespace, retired_at IS NOT NULL FROM pix.pseudonym_domain
+             WHERE id = $1 FOR UPDATE",
+    update: "UPDATE pix.pseudonym_domain
+             SET name = coalesce($2, name),
+                 consumer_client_id = coalesce($3, consumer_client_id),
+                 retired_at = CASE WHEN $4 THEN now() ELSE retired_at END
+             WHERE id = $1",
+    taken: NAMESPACE_TAKEN,
+    missing: NO_SUCH_DOMAIN,
+    retired: RETIRED,
+    actions: ("pseudonym-domain-create", "pseudonym-domain-update"),
+};
 
 /// Writes the steward action and the record of `write` in its open
 /// `transaction`, commits it and reads the domain back.
 async fn finish(
     operator: &Operator,
     parts: &http::request::Parts,
-    mut transaction: Transaction<'static, Postgres>,
-    write: &Write<'_>,
+    written: change::Written<'_>,
 ) -> Result<PseudonymDomain, Box<Response>> {
     let failed = |error: OperatorError| Box::new(wire::failed(&error));
-    let recorded = Recorded {
-        kind: if write.created {
-            "pseudonym-domain-create"
-        } else {
-            "pseudonym-domain-update"
+    let write = change::commit(
+        (operator, parts),
+        &PSEUDONYM_DOMAINS,
+        written,
+        |recorded, write| recorded.pseudonym_domain = Some(write.id),
+        |call, write| {
+            records::operator::pseudonym_domain_write(
+                call,
+                write.created,
+                &write.key,
+                Outcome::Success,
+            )
         },
-        actor: wire::actor(parts),
-        pseudonym_domain: Some(write.id),
-        reason: write
-            .reason
-            .map(str::trim)
-            .filter(|reason| !reason.is_empty())
-            .map(str::to_owned),
-        request_id: wire::request_id(parts),
-        ..Recorded::default()
-    };
-    record_action(&mut *transaction, &recorded)
-        .await
-        .map_err(failed)?;
-    let call = wire::call(operator, parts);
-    let exchange = records::operator::pseudonym_domain_write(
-        &call,
-        write.created,
-        write.namespace,
-        Outcome::Success,
-    );
-    wire::record(operator, parts, vec![exchange])
-        .await
-        .map_err(|error| Box::new(wire::unaudited(&error)))?;
-    transaction
-        .commit()
-        .await
-        .map_err(|error| failed(error.into()))?;
+    )
+    .await?;
     tracing::info!(
-        namespace = write.namespace,
+        namespace = &write.key,
         created = write.created,
         "a pseudonymisation domain is written"
     );

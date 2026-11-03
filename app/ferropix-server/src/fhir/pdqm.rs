@@ -18,16 +18,14 @@
 //! answer is sent; a record that cannot be stored refuses the answer with
 //! `503`. No log line, span or error carries a value of the request.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{ConnectInfo, Request};
-use axum::response::{IntoResponse, Response};
+use axum::extract::Request;
+use axum::response::Response;
 use axum::routing::{MethodFilter, MethodRouter, on};
-use ferrohealth_smart::resource::Access;
 use http::request::Parts;
-use http::{HeaderValue, Method, StatusCode, header};
+use http::{Method, StatusCode, header};
 use ihe_atna::balp::{Exchange, Outcome};
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pdqm::server::Refusal;
@@ -42,6 +40,7 @@ use crate::audit::records::{self, Call};
 use crate::audit::reserve::{Pending, UNAUDITED};
 use crate::audit::{Audit, Unrecorded};
 use crate::auth::table::Route;
+use crate::fhir::wire;
 use crate::pdqm::{PAGE_PARAMETER, PdqError, Retrieved, Searched, Supplier};
 use ihe_iti::pdqm::audit::{SupplierSearch as Search, supplier_records};
 
@@ -91,7 +90,7 @@ pub fn handler(route: &Route, filter: MethodFilter, face: &Arc<Face>) -> Option<
 async fn search(face: Arc<Face>, request: Request, post: bool) -> Response {
     let (parts, body) = request.into_parts();
     let query = parts.uri.query().unwrap_or_default().to_owned();
-    let call = call(&face, &parts);
+    let call = Call::of_request(&parts, face.supplier.fhir_base());
     let (rest, posted) = if post {
         ("Patient/_search", true)
     } else {
@@ -200,7 +199,7 @@ async fn retrieve(face: Arc<Face>, request: Request) -> Response {
         .next()
         .unwrap_or_default()
         .to_owned();
-    let call = call(&face, &parts);
+    let call = Call::of_request(&parts, face.supplier.fhir_base());
     let raw = raw(&face, &format!("Patient/{id}"), &query, None);
     let Ok(format) = Format::negotiate(raw_format(&query).as_deref(), accept(&parts)) else {
         // NOTE: PDQm 3.2.0 §2:3.78.4.4.2, a retrieve the Supplier cannot write in
@@ -243,7 +242,7 @@ async fn retrieve(face: Arc<Face>, request: Request) -> Response {
 async fn matches(face: Arc<Face>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let query = parts.uri.query().unwrap_or_default().to_owned();
-    let call = call(&face, &parts);
+    let call = Call::of_request(&parts, face.supplier.fhir_base());
     let content_type = parts
         .headers
         .get(header::CONTENT_TYPE)
@@ -308,7 +307,7 @@ async fn send<T: Resource>(
 ) -> Response {
     if let Err(error) = record(face, parts, exchanges).await {
         tracing::error!(error = %crate::chain(&error), "a PDQm answer was withheld: its audit record could not be stored");
-        return written(
+        return wire::send(
             &Answer::outcome(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Severity::Error,
@@ -318,7 +317,7 @@ async fn send<T: Resource>(
             format,
         );
     }
-    written(answer, format)
+    wire::send(answer, format)
 }
 
 /// Answers a request refused before it ran, in the format it asks for when
@@ -378,42 +377,6 @@ async fn record(face: &Face, parts: &Parts, exchanges: Vec<Exchange>) -> Result<
         }
     }
     face.audit.record(exchanges.collect()).await
-}
-
-/// Returns `answer` encoded in `format`, never kept by a cache, or a `500`
-/// when it cannot be encoded.
-fn written<T: Resource>(answer: &Answer<T>, format: Format) -> Response {
-    let Ok(bytes) = answer.encode(format) else {
-        tracing::error!("a PDQm answer could not be encoded");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    let mut response = (answer.status(), Body::from(bytes)).into_response();
-    let headers = response.headers_mut();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static(format.media_type()),
-    );
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response
-}
-
-/// Returns the call of the request `parts` holds.
-fn call(face: &Face, parts: &Parts) -> Call {
-    let access = parts
-        .extensions
-        .get::<Access>()
-        .cloned()
-        .unwrap_or(Access::Open);
-    let remote = parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|info| info.0.ip());
-    Call::of(
-        &access,
-        remote,
-        face.supplier.fhir_base(),
-        crate::http::exchanged_request_id(parts),
-    )
 }
 
 /// Returns the raw request BALP records: the URL of `rest` under the FHIR
@@ -491,7 +454,7 @@ fn cursor_of(pairs: &[u8]) -> Cursor {
 
 /// Returns the `413` the server's body ceiling answers.
 fn too_large() -> Response {
-    written(
+    wire::send(
         &Answer::outcome(
             StatusCode::PAYLOAD_TOO_LARGE,
             Severity::Error,

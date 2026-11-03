@@ -29,13 +29,13 @@ use ferropix_operator_api::domain::{
 use ferropix_operator_api::patient::DomainKind;
 use http::StatusCode;
 use ihe_atna::balp::Outcome;
-use sqlx::{PgConnection, Postgres, Transaction};
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::audit::records;
 use crate::config::section::domain::is_system;
 use crate::operator::{
-    Operator, OperatorError, Recorded, channel, count, domain_kind, record_action, snapshot, wire,
+    Operator, OperatorError, change, channel, count, domain_kind, snapshot, wire,
 };
 use crate::problem::{self, Kind};
 use crate::store::seed;
@@ -237,9 +237,10 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     if !operator.sources.admits(new.source_client_id.trim()) {
         return problem::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
     }
-    let outcome = async {
-        let mut transaction = operator.store.pool().begin().await?;
-        let id: Option<Uuid> = sqlx::query_scalar(
+    let written = change::insert(
+        operator,
+        &IDENTIFIER_DOMAINS,
+        sqlx::query_scalar(
             "INSERT INTO pix.identifier_domain (system, name, kind, source_client_id, sensitive)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (system) DO NOTHING
@@ -249,24 +250,11 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         .bind(new.name.trim())
         .bind(kind)
         .bind(new.source_client_id.trim())
-        .bind(new.sensitive.unwrap_or(true))
-        .fetch_optional(&mut *transaction)
-        .await?;
-        Ok::<_, OperatorError>(id.map(|id| (transaction, id)))
-    }
+        .bind(new.sensitive.unwrap_or(true)),
+        (&new.system, new.reason.as_deref()),
+    )
     .await;
-    let (transaction, id) = match outcome {
-        Ok(Some(written)) => written,
-        Ok(None) => return problem::refuse(Kind::AlreadyHeld, SYSTEM_TAKEN),
-        Err(error) => return wire::failed(&error),
-    };
-    let write = Write {
-        created: true,
-        system: &new.system,
-        id,
-        reason: new.reason.as_deref(),
-    };
-    match finish(operator, &parts, transaction, &write).await {
+    match finish(operator, &parts, written).await {
         Ok(page) => outcome::body(StatusCode::CREATED, &page.domain, wire::JSON),
         Err(refused) => *refused,
     }
@@ -275,19 +263,15 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
 /// Answers `PATCH {base}/operator/domains/{id}`: a new name, a new Source or
 /// the domain retired.
 pub async fn update(operator: &Operator, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
-    let Some(id) = wire::path_id(&parts) else {
-        return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN);
-    };
-    let (change, _bytes) = match wire::posted::<DomainChange>(&parts, body).await {
-        Ok(read) => read,
+    let (parts, id, change) = match change::requested::<DomainChange>(request, NO_SUCH_DOMAIN).await
+    {
+        Ok(requested) => requested,
         Err(refused) => return *refused,
     };
     if change.reason.trim().is_empty() {
         return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
-    let blank = |text: &Option<String>| text.as_deref().is_some_and(|text| text.trim().is_empty());
-    if blank(&change.name) || blank(&change.source_client_id) {
+    if change::blank(change.name.as_deref()) || change::blank(change.source_client_id.as_deref()) {
         return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if let Some(source) = &change.source_client_id
@@ -295,79 +279,33 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
     {
         return problem::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
     }
-    let outcome = async {
-        let mut transaction = operator.store.pool().begin().await?;
-        let current: Option<(String, bool)> = sqlx::query_as(
-            "SELECT system, retired_at IS NOT NULL FROM pix.identifier_domain
-             WHERE id = $1 FOR UPDATE",
-        )
-        .bind(id)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let Some((system, retired)) = current else {
-            return Ok(Changed::Missing);
-        };
-        if retired {
-            return Ok(Changed::Retired);
-        }
-        sqlx::query(
-            "UPDATE pix.identifier_domain
-             SET name = coalesce($2, name),
-                 source_client_id = coalesce($3, source_client_id),
-                 retired_at = CASE WHEN $4 THEN now() ELSE retired_at END
-             WHERE id = $1",
-        )
-        .bind(id)
-        .bind(change.name.as_deref().map(str::trim))
-        .bind(change.source_client_id.as_deref().map(str::trim))
-        .bind(change.retire)
-        .execute(&mut *transaction)
-        .await?;
-        Ok::<_, OperatorError>(Changed::Written(transaction, system))
-    }
-    .await;
-    let (transaction, system) = match outcome {
-        Ok(Changed::Written(transaction, system)) => (transaction, system),
-        Ok(Changed::Missing) => return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN),
-        Ok(Changed::Retired) => {
-            return problem::refuse(Kind::Retired, RETIRED);
-        }
-        Err(error) => return wire::failed(&error),
+    let asked = change::Asked {
+        name: change.name.as_deref(),
+        holder: change.source_client_id.as_deref(),
+        retire: change.retire,
+        reason: &change.reason,
     };
-    let write = Write {
-        created: false,
-        system: &system,
-        id,
-        reason: Some(&change.reason),
-    };
-    match finish(operator, &parts, transaction, &write).await {
+    let written = change::change(operator, &IDENTIFIER_DOMAINS, (id, asked)).await;
+    match finish(operator, &parts, written).await {
         Ok(page) => outcome::body(StatusCode::OK, &page.domain, wire::JSON),
         Err(refused) => *refused,
     }
 }
 
-/// What the statement of a change found.
-enum Changed {
-    /// No domain has the id.
-    Missing,
-    /// The domain is retired.
-    Retired,
-    /// The domain of this system was changed in this open transaction.
-    Written(Transaction<'static, Postgres>, String),
-}
-
-/// One domain write, its statement run.
-#[derive(Debug, Clone, Copy)]
-struct Write<'a> {
-    /// Whether the domain was created.
-    created: bool,
-    /// The domain's system.
-    system: &'a str,
-    /// The domain's id.
-    id: Uuid,
-    /// The reason given.
-    reason: Option<&'a str>,
-}
+/// The statements and the refusals of a write of an identifier domain.
+const IDENTIFIER_DOMAINS: change::Domains = change::Domains {
+    lock: "SELECT system, retired_at IS NOT NULL FROM pix.identifier_domain
+             WHERE id = $1 FOR UPDATE",
+    update: "UPDATE pix.identifier_domain
+             SET name = coalesce($2, name),
+                 source_client_id = coalesce($3, source_client_id),
+                 retired_at = CASE WHEN $4 THEN now() ELSE retired_at END
+             WHERE id = $1",
+    taken: SYSTEM_TAKEN,
+    missing: NO_SUCH_DOMAIN,
+    retired: RETIRED,
+    actions: ("domain-create", "domain-update"),
+};
 
 /// Writes the steward action and the BALP record of `write` in its open
 /// `transaction` and commits it; then gives the guard the store's Sources
@@ -375,45 +313,25 @@ struct Write<'a> {
 async fn finish(
     operator: &Operator,
     parts: &http::request::Parts,
-    mut transaction: Transaction<'static, Postgres>,
-    write: &Write<'_>,
+    written: change::Written<'_>,
 ) -> Result<DomainPage, Box<Response>> {
     let failed = |error: OperatorError| Box::new(wire::failed(&error));
-    let recorded = Recorded {
-        kind: if write.created {
-            "domain-create"
-        } else {
-            "domain-update"
+    let write = change::commit(
+        (operator, parts),
+        &IDENTIFIER_DOMAINS,
+        written,
+        |recorded, write| recorded.domain = Some(write.id),
+        |call, write| {
+            records::operator::domain_write(call, write.created, &write.key, Outcome::Success)
         },
-        actor: wire::actor(parts),
-        domain: Some(write.id),
-        reason: write
-            .reason
-            .map(str::trim)
-            .filter(|reason| !reason.is_empty())
-            .map(str::to_owned),
-        request_id: wire::request_id(parts),
-        ..Recorded::default()
-    };
-    record_action(&mut *transaction, &recorded)
-        .await
-        .map_err(failed)?;
-    let call = wire::call(operator, parts);
-    let exchange =
-        records::operator::domain_write(&call, write.created, write.system, Outcome::Success);
-    wire::record(operator, parts, vec![exchange])
-        .await
-        .map_err(|error| Box::new(wire::unaudited(&error)))?;
-    transaction
-        .commit()
-        .await
-        .map_err(|error| failed(error.into()))?;
+    )
+    .await?;
     let stored = seed::stored(&operator.store)
         .await
         .map_err(|error| failed(error.into()))?;
     operator.sources.replace(&stored);
     tracing::info!(
-        system = write.system,
+        system = &write.key,
         created = write.created,
         "an identifier domain is written"
     );

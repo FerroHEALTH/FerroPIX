@@ -8,10 +8,9 @@
 use std::fmt;
 
 use fhir_types::codec::{Json, Path, Value};
-use fhir_types::r4::operation_outcome::{OperationOutcome, OperationOutcomeIssue};
+use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::patient::Patient;
 use fhir_types::r4::subscription::Subscription;
-use http::StatusCode;
 use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 
@@ -302,17 +301,6 @@ impl SubscriptionError {
             Self::Criteria => IssueType::NotSupported,
             _ => IssueType::Invalid,
         };
-        Answer::new(
-            StatusCode::BAD_REQUEST,
-            OperationOutcome {
-                issue: vec![OperationOutcomeIssue {
-                    severity: "error".into(),
-                    code: code.to_string().into(),
-                    diagnostics: Some(self.to_string().into()),
-                    ..OperationOutcomeIssue::default()
-                }],
-                ..OperationOutcome::default()
-            },
-        )
+        Answer::refusal(code, self)
     }
 }

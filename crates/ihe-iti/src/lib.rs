@@ -13,6 +13,8 @@
 //! - `soap`: the SOAP 1.2 envelope reader of ITI TF-2 Appendix V and the HTTP
 //!   post it travels on, which XCPD sends and reads through and any other
 //!   Appendix V transaction can, with no profile.
+//! - `rest`: the FHIR R4 search value escaping and the JSON media types every
+//!   FHIR client shares, with no FHIR model.
 //! - `authorizer`: the authorizer that makes each request's headers and the
 //!   send that resends once when it asks (IUA ITI-72), with no FHIR model.
 //! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
@@ -47,6 +49,8 @@
 //! stack and its own store (module `server`).
 #![doc(test(attr(deny(warnings))))]
 
+#[cfg(all(feature = "balp", any(feature = "pixm", feature = "pdqm")))]
+mod audited;
 #[cfg(feature = "authorizer")]
 pub mod authorizer;
 #[cfg(any(feature = "authorizer", feature = "soap"))]
@@ -63,8 +67,8 @@ pub mod pixm;
 pub mod pmir;
 #[cfg(all(feature = "balp", any(feature = "pixm", feature = "pdqm")))]
 pub mod received;
-#[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
-mod search;
+#[cfg(feature = "rest")]
+pub mod rest;
 #[cfg(any(
     feature = "pixm-server",
     feature = "pdqm-server",

@@ -72,7 +72,7 @@ use http::StatusCode;
 use http::header::{ACCEPT, CONTENT_TYPE, LOCATION};
 use url::Url;
 
-use crate::authorizer::{self, Authorizer};
+use crate::authorizer::{self, Authorizable, Authorizer};
 use crate::exchange::{self, Answer, Unanswered};
 use crate::outcome;
 use error::{InvalidInput, SubscribeError, SubscriptionMalformation};
@@ -118,18 +118,6 @@ impl PmirSubscriber {
             #[cfg(feature = "balp")]
             audit: None,
         })
-    }
-
-    /// This subscriber, asking `authorizer` for the headers of every request
-    /// and handing it every answer, as for an access token it incorporates
-    /// (IUA ITI-72 §3.72.4.2).
-    ///
-    /// Build the HTTP client without a default `Authorization` header then:
-    /// the authorizer's headers are added to it, never in its place.
-    #[must_use]
-    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
     }
 
     /// Sends the request `request` builds, asking for FHIR JSON, within
@@ -415,6 +403,13 @@ impl PmirSubscriber {
             return Ok(());
         }
         Err(rejected(&answer))
+    }
+}
+
+impl Authorizable for PmirSubscriber {
+    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 }
 

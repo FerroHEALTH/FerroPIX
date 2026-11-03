@@ -87,7 +87,7 @@ use std::time::Duration;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
-use crate::authorizer::{self, Authorizer};
+use crate::authorizer::{self, Authorizable, Authorizer};
 use crate::exchange::{self, Unanswered};
 use error::{InvalidInput, PdqmError};
 use ihe_atna::redact::RedactedUrl;
@@ -140,18 +140,6 @@ impl PdqmClient {
         })
     }
 
-    /// This client, asking `authorizer` for the headers of every request and
-    /// handing it every answer, as for an access token it incorporates (IUA
-    /// ITI-72 §3.72.4.2).
-    ///
-    /// Build the HTTP client without a default `Authorization` header then:
-    /// the authorizer's headers are added to it, never in its place.
-    #[must_use]
-    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-
     /// This client, recording the audit record of every search, every page
     /// and every match through `recorder` (§2:3.78.5.1, §2:3.119.5.1.1,
     /// feature `balp`).
@@ -178,20 +166,17 @@ impl PdqmClient {
         result: Result<SearchResult, PdqmError>,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<SearchResult, PdqmError> {
-        use ihe_atna::balp::recording::{Late, Recorded, within};
         if let Some(recorder) = &self.audit {
             let exchange = audit::exchange(&self.base, request(), on_behalf, &result);
             // NOTE: PDQm §2:3.78.5.1 makes the audit record part of the query, so
             // an answer whose record was refused is not used.
-            match within(deadline, recorder.record(exchange)).await {
-                Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
-                Recorded::Late if result.is_ok() => {
-                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(
-                        Late::new(),
-                    ))));
-                }
-                Recorded::Accepted | Recorded::Late => {}
-            }
+            return crate::audited::settled(
+                deadline,
+                recorder.record(exchange),
+                result,
+                PdqmError::Audit,
+            )
+            .await;
         }
         result
     }
@@ -258,7 +243,6 @@ impl PdqmClient {
         result: Result<MatchResult, PdqmError>,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<MatchResult, PdqmError> {
-        use ihe_atna::balp::recording::{Late, Recorded, within};
         use secrecy::ExposeSecret as _;
         if let Some(recorder) = &self.audit {
             // NOTE: BALP Query records the raw request; a POST operation is its
@@ -276,15 +260,13 @@ impl PdqmClient {
             );
             // NOTE: PDQm §2:3.119.5.1.1 makes the audit record part of the match, so
             // an answer whose record was refused is not used.
-            match within(deadline, recorder.record(exchange)).await {
-                Recorded::Refused(error) => return Err(PdqmError::Audit(error)),
-                Recorded::Late if result.is_ok() => {
-                    return Err(PdqmError::Audit(ihe_atna::balp::AuditError(Box::new(
-                        Late::new(),
-                    ))));
-                }
-                Recorded::Accepted | Recorded::Late => {}
-            }
+            return crate::audited::settled(
+                deadline,
+                recorder.record(exchange),
+                result,
+                PdqmError::Audit,
+            )
+            .await;
         }
         result
     }
@@ -448,6 +430,13 @@ impl PdqmClient {
             &self.base,
             names_domain,
         )
+    }
+}
+
+impl Authorizable for PdqmClient {
+    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 }
 

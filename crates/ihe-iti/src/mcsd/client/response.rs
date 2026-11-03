@@ -16,6 +16,7 @@ use crate::exchange::Unanswered;
 use crate::mcsd::budget::Budget;
 use crate::mcsd::error::{Malformation, McsdError};
 use crate::outcome;
+use crate::rest;
 
 /// One page the directory answered `200` with.
 pub(super) struct Page {
@@ -65,7 +66,7 @@ pub(super) fn page(
             issues: outcome::issues(media, &body),
         });
     }
-    if !outcome::fhir_json(media) {
+    if !rest::fhir_json(media) {
         return Err(Malformation::NotFhirJson.into());
     }
     Ok(Page { body, date })

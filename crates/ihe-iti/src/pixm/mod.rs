@@ -85,7 +85,7 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use secrecy::ExposeSecret;
 use url::Url;
 
-use crate::authorizer::{self, Authorizer};
+use crate::authorizer::{self, Authorizable, Authorizer};
 use crate::exchange::{self, Unanswered};
 use error::{InvalidInput, PixmError};
 use identifier::{CrossReference, SourceIdentifier, TargetSystem};
@@ -162,18 +162,6 @@ impl PixmClient {
         })
     }
 
-    /// This client, asking `authorizer` for the headers of every request and
-    /// handing it every answer, as for an access token it incorporates (IUA
-    /// ITI-72 §3.72.4.2).
-    ///
-    /// Build the HTTP client without a default `Authorization` header then:
-    /// the authorizer's headers are added to it, never in its place.
-    #[must_use]
-    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-
     /// This client, asking the Manager with `invocation`.
     #[must_use]
     pub fn invoked_by(mut self, invocation: Invocation) -> Self {
@@ -245,19 +233,16 @@ impl PixmClient {
         let result = self.ask(&request, source, targets, timeout).await;
         #[cfg(feature = "balp")]
         if let Some(recorder) = &self.audit {
-            use ihe_atna::balp::recording::{Late, Recorded, within};
             let exchange = audit::exchange(&self.endpoint, (&request, source), on_behalf, &result);
             // NOTE: PIXm §2:3.83.5.1.1 makes the audit record part of the exchange,
             // so an answer whose record was not accepted is not used.
-            match within(deadline, recorder.record(exchange)).await {
-                Recorded::Refused(error) => return Err(PixmError::Audit(error)),
-                Recorded::Late if result.is_ok() => {
-                    return Err(PixmError::Audit(ihe_atna::balp::AuditError(Box::new(
-                        Late::new(),
-                    ))));
-                }
-                Recorded::Accepted | Recorded::Late => {}
-            }
+            return crate::audited::settled(
+                deadline,
+                recorder.record(exchange),
+                result,
+                PixmError::Audit,
+            )
+            .await;
         }
         result
     }
@@ -292,6 +277,13 @@ impl PixmClient {
             source,
             targets,
         )
+    }
+}
+
+impl Authorizable for PixmClient {
+    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 }
 

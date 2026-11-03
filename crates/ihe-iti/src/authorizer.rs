@@ -14,7 +14,7 @@
 //! of the HTTP client cannot change between requests, so an [`Authorizer`]
 //! the caller supplies gives the headers of each request and reads each
 //! answer, and [`send`] sends a request through it. The PIXm, PDQm, mCSD and
-//! PMIR clients each take one with `with_authorizer`, and so does the NVI
+//! PMIR clients each take one through [`Authorizable`], and so does the NVI
 //! client of `nl-generic-functions`. With the feature `smart`,
 //! [`smart::TokenAuthorizer`] is one over the client-credentials token of
 //! `ferrohealth-smart`.
@@ -31,12 +31,25 @@ pub mod smart;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use http::{HeaderMap, Method, StatusCode};
 use url::Url;
 
 use crate::exchange::Unanswered;
+
+/// A client that asks an [`Authorizer`] for the headers of every request
+/// and hands it every answer, as for an access token it incorporates (IUA
+/// ITI-72 §3.72.4.2).
+pub trait Authorizable: Sized {
+    /// This client, asking `authorizer` for the headers of every request.
+    ///
+    /// Build the HTTP client without a default `Authorization` header then:
+    /// the authorizer's headers are added to it, never in its place.
+    #[must_use]
+    fn with_authorizer(self, authorizer: Arc<dyn Authorizer>) -> Self;
+}
 
 /// The headers an [`Authorizer`] gives one request, once they are made.
 pub type Authorized<'a> =

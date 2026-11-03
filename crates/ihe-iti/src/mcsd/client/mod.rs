@@ -27,7 +27,7 @@ use url::Url;
 
 use super::budget::Budget;
 use super::error::{InvalidBase, McsdError};
-use crate::authorizer::{self, Authorizer};
+use crate::authorizer::{self, Authorizable, Authorizer};
 use crate::exchange::Unanswered;
 
 use ihe_atna::redact::RedactedUrl;
@@ -317,18 +317,6 @@ impl McsdClient {
         })
     }
 
-    /// This client, asking `authorizer` for the headers of every request and
-    /// handing it every answer, as for an access token it incorporates (IUA
-    /// ITI-72 §3.72.4.2).
-    ///
-    /// Build the HTTP client without a default `Authorization` header then:
-    /// the authorizer's headers are added to it, never in its place.
-    #[must_use]
-    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-
     /// This client, recording the audit record of every ITI-90 search and
     /// ITI-91 history through `recorder` (§2:3.90.5.1, §2:3.91.5.1, feature
     /// `balp`).
@@ -518,6 +506,13 @@ impl McsdClient {
             .map(str::to_owned);
         let body = response::body(answer, budget).await?;
         response::page(status, media.as_deref(), body, date)
+    }
+}
+
+impl Authorizable for McsdClient {
+    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 }
 

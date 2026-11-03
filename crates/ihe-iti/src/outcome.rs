@@ -15,6 +15,8 @@ use std::fmt;
 use fhir_types::codec::{DecodeError, DecodeErrorKind, Json, Object, Path, Value};
 use fhir_types::r4::operation_outcome::OperationOutcome;
 
+use crate::rest::fhir_json;
+
 /// The FHIR R4 `issue-type` of an `OperationOutcome` issue
 /// (<http://hl7.org/fhir/R4/valueset-issue-type.html>).
 ///
@@ -169,18 +171,6 @@ impl fmt::Display for IssueType {
     }
 }
 
-/// Whether `media` is FHIR JSON (ITI TF-2 Appendix Z.6), or plain JSON, which
-/// FHIR R4 accepts for the same content (<http://hl7.org/fhir/R4/http.html#mime-type>).
-pub(crate) fn fhir_json(media: Option<&str>) -> bool {
-    media
-        .and_then(|value| value.split(';').next())
-        .map(str::trim)
-        .is_some_and(|essence| {
-            essence.eq_ignore_ascii_case("application/fhir+json")
-                || essence.eq_ignore_ascii_case("application/json")
-        })
-}
-
 /// How a client's answer fails to be a FHIR JSON resource, before its
 /// profile reads it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -301,7 +291,7 @@ pub(crate) fn issues(media: Option<&str>, body: &[u8]) -> Vec<IssueType> {
 
 #[cfg(test)]
 mod tests {
-    use super::{IssueType, fhir_json, issues};
+    use super::{IssueType, issues};
 
     #[test]
     fn every_code_round_trips_and_free_text_is_unrecognized() {
@@ -323,14 +313,6 @@ mod tests {
             IssueType::Unrecognized,
             "free text in a code field is dropped"
         );
-    }
-
-    #[test]
-    fn fhir_json_and_plain_json_are_accepted_with_parameters() {
-        assert!(fhir_json(Some("application/fhir+json; fhirVersion=4.0")));
-        assert!(fhir_json(Some("Application/JSON")));
-        assert!(!fhir_json(Some("text/html")));
-        assert!(!fhir_json(None));
     }
 
     #[test]

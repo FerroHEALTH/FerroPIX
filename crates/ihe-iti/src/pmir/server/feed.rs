@@ -7,10 +7,8 @@
 
 use std::fmt;
 
-use fhir_types::r4::bundle::{Bundle, BundleEntry};
-use fhir_types::r4::message_header::{
-    MessageHeader, MessageHeaderEvent, MessageHeaderResponse, MessageHeaderSource,
-};
+use fhir_types::r4::bundle::Bundle;
+use fhir_types::r4::message_header::MessageHeaderResponse;
 use fhir_types::r4::operation_outcome::{OperationOutcome, OperationOutcomeIssue};
 use fhir_types::r4::patient::Patient;
 use fhir_types::r4::reference::Reference;
@@ -18,14 +16,10 @@ use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 
 use super::super::error::FeedError;
-use super::super::message::{self, RESPONSE_EVENT};
+use super::super::message;
 use crate::outcome::IssueType;
 use crate::server::answer::Answer;
 use crate::server::format::{BodyError, Format};
-
-/// The `MessageDefinition` a feed response names.
-const RESPONSE_DEFINITION: &str =
-    "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition.Response";
 
 /// The local id of the `OperationOutcome` a refusing response contains.
 const OUTCOME_ID: &str = "outcome";
@@ -164,18 +158,7 @@ impl ReadError {
             Self::Body(_) => IssueType::Structure,
             Self::Message(error) => error.issue(),
         };
-        Answer::new(
-            StatusCode::BAD_REQUEST,
-            OperationOutcome {
-                issue: vec![OperationOutcomeIssue {
-                    severity: "error".into(),
-                    code: code.to_string().into(),
-                    diagnostics: Some(self.to_string().into()),
-                    ..OperationOutcomeIssue::default()
-                }],
-                ..OperationOutcome::default()
-            },
-        )
+        Answer::refusal(code, self)
     }
 }
 
@@ -251,45 +234,14 @@ pub fn response(
             vec![Resource::OperationOutcome(Box::new(outcome))],
         )
     };
-    let header = MessageHeader {
-        id: Some(response_id.to_owned()),
-        meta: None,
-        implicit_rules: None,
-        language: None,
-        text: None,
-        contained,
-        extension: Vec::new(),
-        modifier_extension: Vec::new(),
-        event: MessageHeaderEvent::Uri(RESPONSE_EVENT.into()),
-        destination: Vec::new(),
-        sender: None,
-        enterer: None,
-        author: None,
-        source: MessageHeaderSource {
-            endpoint: registry.into(),
-            ..MessageHeaderSource::default()
-        },
-        responsible: None,
-        reason: None,
-        response: Some(MessageHeaderResponse {
-            identifier: message.id.as_str().into(),
-            code: code.into(),
-            details,
-            ..MessageHeaderResponse::default()
-        }),
-        focus: Vec::new(),
-        definition: Some(RESPONSE_DEFINITION.into()),
+    let answered = MessageHeaderResponse {
+        identifier: message.id.as_str().into(),
+        code: code.into(),
+        details,
+        ..MessageHeaderResponse::default()
     };
     Answer::new(
         StatusCode::OK,
-        Bundle {
-            r#type: "message".into(),
-            entry: vec![BundleEntry {
-                full_url: Some(format!("urn:uuid:{response_id}").into()),
-                resource: Some(Resource::MessageHeader(Box::new(header))),
-                ..BundleEntry::default()
-            }],
-            ..Bundle::default()
-        },
+        message::response(response_id, registry, answered, contained),
     )
 }

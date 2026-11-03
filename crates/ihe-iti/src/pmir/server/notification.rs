@@ -8,19 +8,13 @@
 use std::fmt;
 
 use fhir_types::r4::bundle::{Bundle, BundleEntry, BundleEntryRequest, BundleEntryResponse};
-use fhir_types::r4::message_header::{
-    MessageHeader, MessageHeaderDestination, MessageHeaderEvent, MessageHeaderSource,
-};
+use fhir_types::r4::message_header::{MessageHeader, MessageHeaderDestination};
 use fhir_types::r4::patient::Patient;
 use fhir_types::r4::reference::Reference;
 use fhir_types::r4::resource::Resource;
 use url::Url;
 
-use super::super::message::FEED_EVENT;
-
-/// The `MessageDefinition` a feed message names.
-const FEED_DEFINITION: &str =
-    "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition";
+use super::super::message::{self, FEED_DEFINITION, FEED_EVENT};
 
 /// One change the Registry made, as the feed reports it.
 ///
@@ -83,34 +77,16 @@ pub fn message(notices: &[Notice], addressing: &Addressing<'_>) -> Bundle {
         .map(|notice| history_entry(notice, base))
         .collect();
     let header = MessageHeader {
-        id: Some(addressing.message_id.to_owned()),
-        meta: None,
-        implicit_rules: None,
-        language: None,
-        text: None,
-        contained: Vec::new(),
-        extension: Vec::new(),
-        modifier_extension: Vec::new(),
-        event: MessageHeaderEvent::Uri(FEED_EVENT.into()),
         destination: vec![MessageHeaderDestination {
             endpoint: addressing.destination.as_str().into(),
             ..MessageHeaderDestination::default()
         }],
-        sender: None,
-        enterer: None,
-        author: None,
-        source: MessageHeaderSource {
-            endpoint: base.into(),
-            ..MessageHeaderSource::default()
-        },
-        responsible: None,
-        reason: None,
-        response: None,
         focus: vec![Reference {
             reference: Some(history_url.as_str().into()),
             ..Reference::default()
         }],
         definition: Some(FEED_DEFINITION.into()),
+        ..message::header(addressing.message_id, FEED_EVENT, base)
     };
     Bundle {
         r#type: "message".into(),

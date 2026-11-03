@@ -24,8 +24,8 @@ use fhir_types::r4::reference::Reference;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::feed::demographics;
 use crate::pdqm::PdqError;
+use crate::store::demographics;
 use crate::store::seal::Sealer;
 use crate::store::xref;
 

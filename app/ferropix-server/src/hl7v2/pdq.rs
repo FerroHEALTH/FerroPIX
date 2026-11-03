@@ -35,7 +35,7 @@ use uuid::Uuid;
 
 use crate::audit::records::{self, Call, V2Query};
 use crate::config::section::hl7v2::Sender;
-use crate::hl7v2::authority::Hd;
+use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
 use crate::hl7v2::feed::{fhir_escape, query_part, url_encoded};
 use crate::hl7v2::pid::{self, Shown};

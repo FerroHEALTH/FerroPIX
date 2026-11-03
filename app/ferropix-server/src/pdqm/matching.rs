@@ -22,12 +22,12 @@ use uuid::Uuid;
 
 use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
-use crate::feed::demographics;
 use crate::matching::blocking;
 use crate::matching::scorer::{Grade, Scorer};
 use crate::matching::subject::{IdentifierKey, Subject};
 use crate::pdqm::PdqError;
 use crate::store::StoreError;
+use crate::store::demographics;
 use crate::store::identifier::Rule;
 use crate::store::record;
 use crate::store::seal::{SealError, Sealer};

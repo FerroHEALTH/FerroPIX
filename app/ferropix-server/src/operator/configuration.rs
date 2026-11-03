@@ -13,7 +13,7 @@
 //! (`docs/architecture.md` §5.1). No specification governs the API: our
 //! own design.
 
-use crate::fhir::outcome::body;
+use crate::outcome::body;
 use axum::response::Response;
 use ferropix_operator_api::configuration::{Configuration, Mode, Origin, Section, Setting};
 use http::StatusCode;

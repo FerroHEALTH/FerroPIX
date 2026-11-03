@@ -13,7 +13,7 @@
 //! an unknown person writes neither. What the document holds is our own
 //! design (`docs/architecture.md` §12.3).
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::patient::{DomainRef, Masked, PersonStatus};

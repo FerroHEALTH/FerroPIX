@@ -15,7 +15,6 @@
 //! each in JSON or XML.
 
 pub mod capability;
-pub mod outcome;
 pub mod pdqm;
 pub mod pixm;
 pub mod pmir;
@@ -42,7 +41,7 @@ use crate::auth::{Discovery, Smart};
 use crate::config::section::matching::Matching;
 use crate::config::section::operator::Operator;
 use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
-use crate::fhir::outcome::body;
+use crate::outcome::body;
 use crate::store::Store;
 
 /// What the transactions of the FHIR face read and write: the store, the

@@ -19,7 +19,7 @@ use ferrobridge_hl7v2::decode::{Charset, decode};
 use ferrobridge_hl7v2::parse::Delimiters;
 use ferrobridge_hl7v2::parse::lex::lex;
 
-use crate::hl7v2::authority::{Authorities, Hd};
+use crate::config::section::hl7v2::authority::{Authorities, Hd};
 use crate::hl7v2::pid::{self, Shown};
 use crate::hl7v2::stamped::Stamped;
 use crate::hl7v2::write::Writer;
@@ -203,7 +203,7 @@ mod tests {
     use ferrobridge_hl7v2::parse::structure::structure_declared;
 
     use super::{Acknowledged, Party, acknowledged, adt_a31, read};
-    use crate::hl7v2::authority::Authorities;
+    use crate::config::section::hl7v2::authority::Authorities;
     use crate::hl7v2::stamped::Stamped;
 
     const EAST: &str = "urn:oid:2.999.1.1";

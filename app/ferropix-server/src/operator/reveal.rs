@@ -15,7 +15,7 @@
 //! is capped at 30 seconds. These rules are our own design
 //! (`docs/architecture.md` §12.5, decision D10).
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::reveal::{

@@ -43,9 +43,9 @@ use uuid::Uuid;
 
 use crate::config::section::matching::{BlockingKey, Matching};
 use crate::config::section::profiles::Deprecated;
-use crate::feed::demographics::DemographicsError;
 use crate::matching::scorer::{Grade, Scorer};
 use crate::pdqm::patient::Person;
+use crate::store::demographics::DemographicsError;
 use crate::store::record;
 use crate::store::{Store, StoreError};
 

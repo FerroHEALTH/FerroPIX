@@ -15,18 +15,14 @@
 //! §4.2), after FerroEHR's sealed `national_identifier`.
 
 use std::fmt;
-use std::sync::Arc;
 
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
 use aws_lc_rs::error::Unspecified;
 use aws_lc_rs::{hkdf, hmac, rand};
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
 use secrecy::{ExposeSecret, ExposeSecretMut as _, SecretBox};
 use uuid::Uuid;
 
-/// The length of the sealing key in bytes.
-pub const KEY_LEN: usize = 32;
+use crate::config::section::db::SealingKey;
 
 /// The length of a [`KeyId`] in bytes.
 pub const KEY_ID_LEN: usize = 16;
@@ -42,11 +38,6 @@ const HMAC_INFO: &[u8] = b"ferropix identifier hmac v1";
 
 /// The HKDF info of the key id.
 const KEY_ID_INFO: &[u8] = b"ferropix key id v1";
-
-/// The sealing key is not the base64 of 32 bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("the sealing key is not the base64 of exactly 32 bytes")]
-pub struct KeyFormatError;
 
 /// The cryptographic library refused an operation, or a sealed value does
 /// not open under the key.
@@ -68,55 +59,6 @@ pub enum SealError {
     /// An opened value is not UTF-8.
     #[error("an opened identifier is not UTF-8")]
     Utf8(#[source] std::str::Utf8Error),
-}
-
-/// The 32-byte sealing key, as the key file holds it: its base64, trimmed.
-///
-/// It renders as `***` through `Debug`, and its bytes are zeroed on drop.
-#[derive(Clone)]
-pub struct SealingKey(Arc<SecretBox<[u8; KEY_LEN]>>);
-
-impl SealingKey {
-    /// Reads a key from the base64 text of its 32 bytes.
-    ///
-    /// A key is made with `openssl rand -base64 32`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ferropix_server::store::seal::SealingKey;
-    ///
-    /// let key = SealingKey::from_base64("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")?;
-    /// assert_eq!(format!("{key:?}"), "SealingKey(***)");
-    /// assert!(SealingKey::from_base64("too short").is_err());
-    /// # Ok::<(), ferropix_server::store::seal::KeyFormatError>(())
-    /// ```
-    ///
-    /// # Errors
-    /// Returns [`KeyFormatError`] when `text` is not standard padded base64 or
-    /// does not decode to exactly 32 bytes.
-    pub fn from_base64(text: &str) -> Result<Self, KeyFormatError> {
-        // NOTE: no specification governs this: our own design; the decoder's
-        // error names the offending byte, which is key material, so it is dropped.
-        let decoded = SecretBox::new(Box::new(
-            STANDARD.decode(text.trim()).ok().ok_or(KeyFormatError)?,
-        ));
-        let bytes = <[u8; KEY_LEN]>::try_from(decoded.expose_secret().as_slice())
-            .ok()
-            .ok_or(KeyFormatError)?;
-        Ok(Self(Arc::new(SecretBox::new(Box::new(bytes)))))
-    }
-
-    /// Returns the bytes, for the derivations of this module.
-    fn bytes(&self) -> &[u8; KEY_LEN] {
-        self.0.expose_secret()
-    }
-}
-
-impl fmt::Debug for SealingKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SealingKey(***)")
-    }
 }
 
 /// The id of a sealing key: 16 bytes derived from it, which identify the key
@@ -312,7 +254,8 @@ impl Sealer {
 mod tests {
     use uuid::Uuid;
 
-    use super::{IdentifierValue, KeyFormatError, SealError, Sealer, SealingKey};
+    use super::{IdentifierValue, SealError, Sealer};
+    use crate::config::section::db::{KeyFormatError, SealingKey};
 
     fn key(byte: u8) -> SealingKey {
         use base64::Engine as _;

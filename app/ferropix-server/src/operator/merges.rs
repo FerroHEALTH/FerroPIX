@@ -13,7 +13,7 @@
 //! specification governs the screens: our own design; PMIR 1.6.0
 //! §2:3.93.4.1.3 admits the local unmerge policy.
 
-use crate::fhir::outcome::body;
+use crate::outcome::body;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::candidate::PersonIdentifier;

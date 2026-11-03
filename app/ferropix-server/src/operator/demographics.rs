@@ -7,7 +7,7 @@
 use ferropix_operator_api::patient::{Address, Demographics, Name, Telecom};
 use fhir_types::r4::patient::Patient;
 
-use crate::feed::demographics::{self, DemographicsError};
+use crate::store::demographics::{self, DemographicsError};
 
 /// Returns the demographics `patient` states.
 #[must_use]

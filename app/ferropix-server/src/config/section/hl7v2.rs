@@ -26,6 +26,8 @@
 //! MSH-4, and `[hl7v2.notification]` bounds the retries. No specification
 //! governs the address, the timeouts or the retry bounds: our own design.
 
+pub mod authority;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
 use std::time::Duration;

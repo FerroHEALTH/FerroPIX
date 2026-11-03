@@ -23,7 +23,7 @@ use ferrohealth_server::refusal::RefusalBody;
 use ferrohealth_server::request_id::RequestIds;
 use http::{HeaderValue, StatusCode, Uri, header};
 
-use crate::fhir::outcome;
+use crate::outcome;
 
 /// The base URI of every FerroPIX problem type: the book page that
 /// documents them, one heading per slug, as the console reads it.
@@ -245,7 +245,7 @@ pub fn is_fhir_or_ihe(base: &str, path: &str) -> bool {
     let Some(relative) = path.strip_prefix(base) else {
         return false;
     };
-    [crate::auth::table::FHIR, crate::xcpd::PATH]
+    [crate::mount::FHIR, crate::mount::XCPD]
         .iter()
         .any(|prefix| {
             relative

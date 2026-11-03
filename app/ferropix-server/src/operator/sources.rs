@@ -16,7 +16,7 @@
 //! an action and an outcome, never a value. No specification governs the
 //! API: our own design.
 
-use crate::fhir::outcome::body;
+use crate::outcome::body;
 use http::StatusCode;
 use std::collections::BTreeMap;
 

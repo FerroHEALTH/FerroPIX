@@ -12,14 +12,49 @@
 //! the lease runs out. No specification governs the outbox: our own design.
 
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use secrecy::{ExposeSecret as _, SecretString};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
+use crate::config::section::hl7v2::authority::Authorities;
+use crate::config::section::hl7v2::{Consumer, Notification};
 use crate::store::seal::{IdentifierValue, SealError, Sealer};
 use crate::store::{Store, StoreError};
+
+/// What wakes the outbox sender: a message written.
+#[derive(Debug, Clone, Default)]
+pub struct Wake(Arc<tokio::sync::Notify>);
+
+impl Wake {
+    /// Wakes the sender to look at the outbox now.
+    pub fn now(&self) {
+        self.0.notify_one();
+    }
+
+    /// Waits until the sender is woken.
+    pub async fn woken(&self) {
+        self.0.notified().await;
+    }
+}
+
+/// What a cross-reference change is notified with while consumers are
+/// configured.
+#[derive(Debug, Clone)]
+pub struct Notifying {
+    /// The Manager's sending application and facility.
+    pub manager: (String, String),
+    /// The consumers, in configuration order.
+    pub consumers: Arc<[Consumer]>,
+    /// The assigning authority of each domain.
+    pub authorities: Authorities,
+    /// The retry bounds.
+    pub notification: Notification,
+    /// What wakes the outbox sender.
+    pub wake: Wake,
+}
 
 /// How long a claimed row stays out of reach of another claim.
 pub const LEASE: Duration = Duration::from_secs(300);

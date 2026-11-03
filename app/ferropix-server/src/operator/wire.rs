@@ -10,10 +10,8 @@
 //! §5). No specification governs the operator API's documents: our own
 //! design.
 
-use std::net::SocketAddr;
-
 use axum::body::Body;
-use axum::extract::{ConnectInfo, MatchedPath};
+use axum::extract::MatchedPath;
 use axum::response::Response;
 use ferrohealth_smart::resource::Access;
 use http::request::Parts;
@@ -22,7 +20,6 @@ use ihe_atna::balp::Exchange;
 use serde::de::DeserializeOwned;
 
 use crate::audit::Unrecorded;
-use crate::audit::records::Call;
 use crate::audit::reserve::{Pending, UNAUDITED};
 use crate::operator::{Operator, OperatorError};
 use crate::problem::{self, Kind};
@@ -113,22 +110,6 @@ pub fn query<T: DeserializeOwned + Default>(parts: &Parts) -> Result<T, Box<Resp
     axum::extract::Query::try_from_uri(&parts.uri)
         .map(|axum::extract::Query(read)| read)
         .map_err(|_unread| Box::new(problem::refuse(Kind::InvalidRequest, NOT_THE_QUERY)))
-}
-
-/// Returns the call of the request `parts` holds, at the operator API's
-/// base.
-#[must_use]
-pub fn call(operator: &Operator, parts: &Parts) -> Call {
-    let remote = parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|info| info.0.ip());
-    Call::of(
-        &access(parts),
-        remote,
-        &operator.endpoint,
-        crate::http::exchanged_request_id(parts),
-    )
 }
 
 /// Returns the actor a steward action records: the subject of the caller's

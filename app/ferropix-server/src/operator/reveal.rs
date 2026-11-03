@@ -120,7 +120,7 @@ async fn disclose(
     let action = record_action(&mut *transaction, recorded)
         .await
         .map_err(failed)?;
-    let call = wire::call(operator, parts);
+    let call = records::Call::of_request(parts, &operator.endpoint);
     let exchange = records::operator::disclosure(
         &call,
         &format!("Patient/{person}"),

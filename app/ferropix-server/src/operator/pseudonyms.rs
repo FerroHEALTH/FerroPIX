@@ -361,7 +361,7 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
             Ok(namespace) => namespace,
             Err(error) => return wire::failed(&error.into()),
         };
-        let call = wire::call(operator, &parts);
+        let call = records::Call::of_request(&parts, &operator.endpoint);
         let exchange = records::pseudonym_minted(
             &call,
             &format!("Patient/{}", survivor.uuid()),
@@ -454,7 +454,7 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
         Ok(action) => action,
         Err(error) => return wire::failed(&error),
     };
-    let call = wire::call(operator, &parts);
+    let call = records::Call::of_request(&parts, &operator.endpoint);
     let exchange = records::operator::disclosure(
         &call,
         &format!("Patient/{}", person.uuid()),

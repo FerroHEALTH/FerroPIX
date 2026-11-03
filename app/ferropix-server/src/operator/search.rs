@@ -238,7 +238,7 @@ async fn answer(
         .iter()
         .map(|(person, _)| format!("Patient/{person}"))
         .collect();
-    let call = wire::call(operator, parts);
+    let call = records::Call::of_request(parts, &operator.endpoint);
     let exchanges = records::operator::steward_search(
         &call,
         &raw(operator, rest, bytes),

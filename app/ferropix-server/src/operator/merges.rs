@@ -79,7 +79,7 @@ pub async fn preview(operator: &Operator, request: Request) -> Response {
         Ok(None) => return problem::refuse(Kind::NotFound, NOT_FOUND),
         Err(error) => return wire::failed(&error),
     };
-    let call = wire::call(operator, &parts);
+    let call = records::Call::of_request(&parts, &operator.endpoint);
     let exchanges = [&preview.survivor.id, &preview.merged.id]
         .iter()
         .map(|person| {
@@ -170,7 +170,7 @@ async fn finish(
     change: &Change,
     person: PersonId,
 ) -> Response {
-    let call = wire::call(operator, parts);
+    let call = records::Call::of_request(parts, &operator.endpoint);
     let exchange = records::operator::steward(
         &call,
         StewardAction::Decide,

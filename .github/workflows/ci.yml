@@ -956,6 +956,8 @@ jobs:
           cache: "false"
       - name: Every published crate packages
         run: bash scripts/release/publish-crates.sh dry-run
+      - name: The crates package as one set, as the release lane packages them
+        run: bash scripts/release/publish-crates.sh package "$RUNNER_TEMP/crates"
 
   # Each published crate is one specification with a feature per profile, so
   # every feature, and every profile with its audit feature, must lint and

@@ -66,8 +66,8 @@ FerroHEALTH/FerroFED#367; no specification governs it: our own design):
 
 ## The publish lane is resumable and verified
 
-`scripts/release/publish-crates.sh` (`publish` / `verify` / `version` /
-`list`) uploads the crates its `CRATES` array lists, in dependency order,
+`scripts/release/publish-crates.sh` (`publish` / `dry-run` / `package` /
+`verify` / `version` / `list`) uploads the crates its `CRATES` array lists, in dependency order,
 counts "already exists" as done, and reads the registry back before
 reporting success. Two lanes call it: the `crates` leg of `release.yml` on a
 `v*` tag (the primary path, paused by the `crates-io` environment's required
@@ -78,8 +78,11 @@ no long-lived crates.io token exists in the repository. Neither lane restores
 a build cache (`ci-cd.md`). While `CRATES` is empty, the release lane
 publishes the notes alone and skips both crate legs.
 
-`cargo publish -p <crate> --dry-run --locked` runs for every listed crate on
-every pull request as the `publish-dry-run` job.
+`publish-crates.sh dry-run` and `publish-crates.sh package DIR` run on every
+pull request in the `publish-dry-run` job. Both take every listed crate in
+one cargo call, so a crate that requires a sibling not yet on crates.io
+resolves it from the set; `release-crate.yml` packages the `.crate` files it
+attests through the same `package` (#446).
 
 ## Owner steps (once per crate)
 

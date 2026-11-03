@@ -67,12 +67,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use http::header::{ACCEPT, CONTENT_TYPE};
-use http::{HeaderMap, Method};
 use url::Url;
 
-use crate::authorizer::{Authorizer, Retry};
 use crate::identification::{PseudoBsn, Ura};
 use error::{InvalidInput, Malformation, NviError};
+use ihe_iti::authorizer::{self, Authorizer, Unsent};
 
 /// The system of the localization record type the IG fixes (LOINC).
 pub const LOINC_SYSTEM: &str = "http://loinc.org";
@@ -203,45 +202,30 @@ impl NviClient {
         Err(Malformation::TooManyPages { limit: PAGES }.into())
     }
 
-    /// Sends the search `url` before `deadline`, with the authorizer's
-    /// headers when there is one, once more when the authorizer asks for it.
+    /// Sends the search `url` before `deadline`, through the authorizer when
+    /// there is one.
     async fn send(
         &self,
         url: &Url,
         deadline: Option<Instant>,
     ) -> Result<reqwest::Response, NviError> {
-        let target = request::target(url);
-        let mut resent = false;
-        loop {
-            let headers = match &self.authorizer {
-                Some(authorizer) => authorizer
-                    .authorize(&Method::GET, &target)
-                    .await
-                    .map_err(NviError::Unauthenticated)?,
-                None => HeaderMap::new(),
-            };
-            let remaining = deadline
-                .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
-                .filter(|remaining| !remaining.is_zero())
-                .ok_or(NviError::Timeout)?;
-            let response = self
-                .http
-                .get(url.clone())
-                .headers(headers)
-                .header(ACCEPT, FHIR_JSON)
-                .timeout(remaining)
-                .send()
-                .await
-                .map_err(error::transport)?;
-            let Some(authorizer) = &self.authorizer else {
-                return Ok(response);
-            };
-            let retry = authorizer.answered(&target, response.status(), response.headers());
-            if resent || retry == Retry::Done {
-                return Ok(response);
-            }
-            resent = true;
-        }
+        let remaining = deadline
+            .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(NviError::Timeout)?;
+        let request = self
+            .http
+            .get(url.clone())
+            .header(ACCEPT, FHIR_JSON)
+            .build()
+            .map_err(error::transport)?;
+        authorizer::send(&self.http, self.authorizer.as_deref(), request, remaining)
+            .await
+            .map_err(|unsent| match unsent {
+                Unsent::Unauthenticated(source) => NviError::Unauthenticated(source),
+                Unsent::Timeout => NviError::Timeout,
+                Unsent::Transport(source) => error::transport(source),
+            })
     }
 }
 

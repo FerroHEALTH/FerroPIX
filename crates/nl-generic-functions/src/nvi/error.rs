@@ -41,7 +41,7 @@ pub enum NviError {
     /// The authorizer could not authenticate the request, so nothing was
     /// sent.
     #[error("the request to the Localization Service could not be authenticated")]
-    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
+    Unauthenticated(#[source] ihe_iti::authorizer::AuthorizerError),
     /// The answer does not hold to the Localization Service search.
     #[error("the Localization Service's answer does not hold to the IG")]
     Malformed(#[from] Malformation),

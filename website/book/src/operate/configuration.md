@@ -550,8 +550,8 @@ Every profile and function is a feature, and none is on by default.
 
 | Crate | Features | Pages |
 |---|---|---|
-| `ihe-iti` | `pixm`, `pdqm`, `pmir`, `mcsd`, `xcpd`, and the audit records `balp` (with a FHIR profile) and `atna` (with `xcpd`) | [ihe-iti](../crates/ihe-iti.md#features) |
-| `nl-generic-functions` | `nvi`, `mitz`, `lrza`, `nuts-auth`, and `authorizer` | [nl-generic-functions](../crates/nl-generic-functions.md#features) |
+| `ihe-iti` | `pixm`, `pdqm`, `pmir`, `mcsd`, `xcpd`, `soap`, `authorizer`, `smart`, and the audit records `balp` (with a FHIR profile) and `atna` (with `xcpd`) | [ihe-iti](../crates/ihe-iti.md#features) |
+| `nl-generic-functions` | `nvi`, `mitz`, `lrza` and `nuts-auth` | [nl-generic-functions](../crates/nl-generic-functions.md#features) |
 
 ### Building a client
 

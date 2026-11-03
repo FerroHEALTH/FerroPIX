@@ -12,6 +12,8 @@
 //!   SOAP 1.2 with HL7 v3 and SAML XUA.
 //! - `soap`: the SOAP 1.2 envelope reader of ITI TF-2 Appendix V, which XCPD
 //!   reads through and any other Appendix V transaction can, with no profile.
+//! - `authorizer`: the authorizer that makes each request's headers and the
+//!   send that resends once when it asks (IUA ITI-72), with no FHIR model.
 //! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
 //!   ITI-91, ITI-93 and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`.
 //! - `atna`: the DICOM audit message of ITI-55 with `xcpd`, with no FHIR
@@ -44,13 +46,7 @@
 //! stack and its own store (module `server`).
 #![doc(test(attr(deny(warnings))))]
 
-#[cfg(any(
-    feature = "pixm",
-    feature = "pdqm",
-    feature = "mcsd",
-    feature = "pmir",
-    feature = "smart"
-))]
+#[cfg(feature = "authorizer")]
 pub mod authorizer;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;

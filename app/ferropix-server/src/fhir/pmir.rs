@@ -30,7 +30,7 @@ use ihe_atna::balp::Outcome;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pmir::server::subscription::RequestedSubscription;
 use ihe_iti::server::answer::{Answer, Resource, Severity};
-use ihe_iti::server::format::{Format, FormatError};
+use ihe_iti::server::format::Format;
 use url::Url;
 use uuid::Uuid;
 
@@ -39,6 +39,7 @@ use crate::audit::records::{self, Call, SubscriptionAction};
 use crate::audit::reserve::{Pending, UNAUDITED};
 use crate::auth::table::Route;
 use crate::config::section::is_loopback_url;
+use crate::fhir::wire;
 use crate::store::Store;
 use crate::store::subscription::{self, Updated};
 
@@ -341,13 +342,7 @@ async fn requested(
     parts: &Parts,
     body: Body,
 ) -> Result<RequestedSubscription, Box<Answer<OperationOutcome>>> {
-    let content_type = parts
-        .headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok());
-    let Some(format) = Format::of_content_type(content_type) else {
-        return Err(Box::new(FormatError::UnsupportedMediaType.refusal()));
-    };
+    let format = wire::body_format(&parts.headers).map_err(|case| Box::new(case.answer()))?;
     let Ok(bytes) = axum::body::to_bytes(body, usize::MAX).await else {
         return Err(Box::new(Answer::outcome(
             StatusCode::PAYLOAD_TOO_LARGE,

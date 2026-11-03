@@ -216,7 +216,7 @@ pub(crate) async fn sign_in(
         ..answer
     };
     provider.reset().await?;
-    provider.answer_grant(CODE_GRANT, &answer).await?;
+    provider.answer_grant(&[CODE_GRANT], &answer).await?;
     let (response, body) = complete(service, &begun).await?;
     assert_eq!(StatusCode::SEE_OTHER, response.status(), "{body}");
     session_cookie(&response)

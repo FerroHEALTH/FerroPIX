@@ -124,7 +124,7 @@ async fn led_to(
         ..TokenAnswer::bearer(OPERATOR_TOKEN)
     };
     provider.reset().await?;
-    provider.answer_grant(CODE_GRANT, &answer).await?;
+    provider.answer_grant(&[CODE_GRANT], &answer).await?;
     let (response, body) = complete(service, &begun).await?;
     assert_eq!(StatusCode::SEE_OTHER, response.status(), "{body}");
     Ok(header(&response, "location").to_owned())

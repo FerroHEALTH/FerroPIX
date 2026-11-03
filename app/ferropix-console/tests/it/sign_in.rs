@@ -53,7 +53,7 @@ async fn answers(provider: &Provider, claims: &IdTokenClaims) -> Result<(), Box<
         id_token: Some(provider.id_token(claims)?),
         ..TokenAnswer::bearer(OPERATOR_TOKEN)
     };
-    provider.answer_grant(CODE_GRANT, &answer).await?;
+    provider.answer_grant(&[CODE_GRANT], &answer).await?;
     Ok(())
 }
 
@@ -359,7 +359,7 @@ async fn an_id_token_not_signed_by_a_published_key_is_refused() -> Result<(), Bo
         id_token: Some(stranger.id_token(&claims)?),
         ..TokenAnswer::bearer(OPERATOR_TOKEN)
     };
-    provider.answer_grant(CODE_GRANT, &answer).await?;
+    provider.answer_grant(&[CODE_GRANT], &answer).await?;
     let (response, _body) = complete(&service, &begun).await?;
     assert_eq!(StatusCode::UNAUTHORIZED, response.status());
 
@@ -375,7 +375,7 @@ async fn an_id_token_not_signed_by_a_published_key_is_refused() -> Result<(), Bo
     provider.reset().await?;
     provider
         .answer_grant(
-            CODE_GRANT,
+            &[CODE_GRANT],
             &TokenAnswer {
                 id_token: Some(shared),
                 ..TokenAnswer::bearer(OPERATOR_TOKEN)
@@ -394,7 +394,7 @@ async fn an_answer_without_an_id_token_or_a_refusing_endpoint_is_a_bad_gateway()
     let (provider, state, service) = provider_console("", "").await?;
     let begun = begin(&service).await?;
     provider
-        .answer_grant(CODE_GRANT, &TokenAnswer::bearer(OPERATOR_TOKEN))
+        .answer_grant(&[CODE_GRANT], &TokenAnswer::bearer(OPERATOR_TOKEN))
         .await?;
     let (response, _body) = complete(&service, &begun).await?;
     assert_eq!(StatusCode::BAD_GATEWAY, response.status());

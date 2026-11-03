@@ -198,17 +198,9 @@ impl Provider {
         refresh_token: &str,
         answer: &TokenAnswer,
     ) -> Result<(), ProviderError> {
-        let body = serde_json::to_string(answer).map_err(ProviderError::Json)?;
-        Mock::given(method("POST"))
-            .and(path(TOKEN_PATH))
-            .and(body_string_contains("grant_type=refresh_token"))
-            .and(body_string_contains(format!(
-                "refresh_token={refresh_token}"
-            )))
-            .respond_with(json(200, body))
-            .mount(&self.server)
-            .await;
-        Ok(())
+        let token = format!("refresh_token={refresh_token}");
+        self.answer_grant(&["grant_type=refresh_token", &token], answer)
+            .await
     }
 
     /// Refuses every grant at the token endpoint with `status` and the
@@ -347,23 +339,22 @@ impl Provider {
         )
     }
 
-    /// Answers every token request whose form carries `grant`, such as
-    /// [`CODE_GRANT`], with `answer`.
+    /// Answers every token request whose form carries each of `form`, such
+    /// as [`CODE_GRANT`], with `answer`.
     ///
     /// # Errors
     /// Returns [`ProviderError::Json`] when the answer cannot be written.
     pub async fn answer_grant(
         &self,
-        grant: &str,
+        form: &[&str],
         answer: &TokenAnswer,
     ) -> Result<(), ProviderError> {
         let body = serde_json::to_string(answer).map_err(ProviderError::Json)?;
-        Mock::given(method("POST"))
-            .and(path(TOKEN_PATH))
-            .and(body_string_contains(grant))
-            .respond_with(json(200, body))
-            .mount(&self.server)
-            .await;
+        let mut mock = Mock::given(method("POST")).and(path(TOKEN_PATH));
+        for field in form {
+            mock = mock.and(body_string_contains(*field));
+        }
+        mock.respond_with(json(200, body)).mount(&self.server).await;
         Ok(())
     }
 }

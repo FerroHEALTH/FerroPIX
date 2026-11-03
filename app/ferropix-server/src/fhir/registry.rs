@@ -33,7 +33,7 @@ use ferrohealth_smart::resource::Access;
 use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::patient::Patient;
 use http::request::Parts;
-use http::{Method, StatusCode, header};
+use http::{Method, StatusCode};
 use ihe_atna::balp::Outcome;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pmir::server::feed::{self, Applied, Change, FeedMessage};
@@ -52,6 +52,7 @@ use crate::config::section::matching::Matching;
 use crate::feed::{Context, FeedError, Feeder};
 use crate::fhir::pmir::{answer_format, call, record, unaudited, written};
 use crate::fhir::status::Case;
+use crate::fhir::wire;
 use crate::store::Store;
 use crate::store::record::{Channel, PersonId};
 use ferrohealth_telemetry::request_log::RequestId;
@@ -227,13 +228,7 @@ async fn receive(registry: Arc<Registry>, request: Request) -> Response {
 /// Reads the feed message the request carries, or the answer that refuses
 /// it.
 async fn read(parts: &Parts, body: Body) -> Result<FeedMessage, Box<Answer<OperationOutcome>>> {
-    let content_type = parts
-        .headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok());
-    let Some(format) = Format::of_content_type(content_type) else {
-        return Err(Box::new(Case::UnsupportedMediaType.answer()));
-    };
+    let format = wire::body_format(&parts.headers).map_err(|case| Box::new(case.answer()))?;
     let Ok(bytes) = axum::body::to_bytes(body, usize::MAX).await else {
         return Err(Box::new(Case::PayloadTooLarge.answer()));
     };

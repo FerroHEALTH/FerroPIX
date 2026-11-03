@@ -172,25 +172,19 @@ pub(super) fn subscription<T>(
     criteria: Option<String>,
     result: &Result<T, SubscribeError>,
 ) -> Exchange {
-    Exchange {
+    sent(
         kind,
-        recorded: Timestamp::now(),
-        outcome: outcome(result),
-        outcome_description: None,
-        direction: Direction::Sent {
-            server: registry(subscriptions),
-        },
-        on_behalf: OnBehalfOf::System,
-        entities: vec![Entity::Resource {
+        subscriptions,
+        result,
+        Entity::Resource {
             reference,
             resource_type: "Subscription",
             kind: SYSTEM_OBJECT,
             role: Some(DOMAIN_RESOURCE),
             name: None,
             query: criteria,
-        }],
-        security: Vec::new(),
-    }
+        },
+    )
 }
 
 /// The audit record of the search `request` of the Registry whose
@@ -200,8 +194,25 @@ pub(super) fn search<T>(
     request: &Url,
     result: &Result<T, SubscribeError>,
 ) -> Exchange {
+    sent(
+        subscription_search(),
+        subscriptions,
+        result,
+        Entity::Query(request_text(request)),
+    )
+}
+
+/// The audit record of the ITI-94 interaction of `kind` the subscriber
+/// sent to the Registry whose `[base]/Subscription` URL is `subscriptions`,
+/// on its own behalf, about `entity`, ending in `result`.
+fn sent<T>(
+    kind: EventKind,
+    subscriptions: &Url,
+    result: &Result<T, SubscribeError>,
+    entity: Entity,
+) -> Exchange {
     Exchange {
-        kind: subscription_search(),
+        kind,
         recorded: Timestamp::now(),
         outcome: outcome(result),
         outcome_description: None,
@@ -209,7 +220,7 @@ pub(super) fn search<T>(
             server: registry(subscriptions),
         },
         on_behalf: OnBehalfOf::System,
-        entities: vec![Entity::Query(request_text(request))],
+        entities: vec![entity],
         security: Vec::new(),
     }
 }

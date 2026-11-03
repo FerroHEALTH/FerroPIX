@@ -319,22 +319,30 @@ impl<R: DirectoryResource> DirectoryEntry<R> {
     }
 }
 
+/// The `system` and the `value` of each of `identifiers`, in order; `None`
+/// for a half an identifier does not carry.
+pub fn identifier_pairs(
+    identifiers: &[Identifier],
+) -> impl Iterator<Item = (Option<&str>, Option<&str>)> {
+    identifiers.iter().map(|identifier| {
+        (
+            identifier
+                .system
+                .as_ref()
+                .and_then(|uri| uri.value.as_deref()),
+            identifier
+                .value
+                .as_ref()
+                .and_then(|value| value.value.as_deref()),
+        )
+    })
+}
+
 impl DirectoryEntry<Organization> {
     /// The `system` and the `value` of every identifier, in resource order;
     /// `None` for a half the identifier does not carry.
     pub fn identifiers(&self) -> impl Iterator<Item = (Option<&str>, Option<&str>)> {
-        self.resource.identifier.iter().map(|identifier| {
-            (
-                identifier
-                    .system
-                    .as_ref()
-                    .and_then(|uri| uri.value.as_deref()),
-                identifier
-                    .value
-                    .as_ref()
-                    .and_then(|value| value.value.as_deref()),
-            )
-        })
+        identifier_pairs(&self.resource.identifier)
     }
 
     /// The organisation's `name`.

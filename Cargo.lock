@@ -2320,7 +2320,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.71"
+version = "0.0.72"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2764,7 +2764,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.0.38"
+version = "0.0.39"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

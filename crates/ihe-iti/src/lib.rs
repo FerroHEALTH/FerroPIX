@@ -53,6 +53,8 @@
 mod audited;
 #[cfg(feature = "authorizer")]
 pub mod authorizer;
+#[cfg(any(feature = "pdqm", feature = "mcsd", feature = "pmir"))]
+mod bundle;
 #[cfg(any(feature = "authorizer", feature = "soap"))]
 pub mod exchange;
 #[cfg(feature = "mcsd")]

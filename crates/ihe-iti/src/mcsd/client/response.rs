@@ -6,12 +6,13 @@
 //! §3.91.4.2; FHIR R4 search and history).
 
 use fhir_types::codec::{Json, Object, Path, Value};
-use fhir_types::r4::bundle::{Bundle, BundleEntry, BundleLink};
+use fhir_types::r4::bundle::Bundle;
 use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use url::Url;
 
 use super::{CareResource, CareService, Change, Match, Version};
+use crate::bundle;
 use crate::exchange::Unanswered;
 use crate::mcsd::budget::Budget;
 use crate::mcsd::error::{Malformation, McsdError};
@@ -80,11 +81,11 @@ pub(super) fn searchset(
     base: &Url,
 ) -> Result<Searchset, Malformation> {
     let bundle = bundle(body, "searchset")?;
-    let next = next(&bundle.link, base)?;
+    let next = bundle::next(&bundle.link, base).map_err(|_bad| Malformation::NextLink)?;
     let entries = bundle.entry.len();
     let mut matches = Vec::new();
     for (index, entry) in bundle.entry.into_iter().enumerate() {
-        let full_url = full_url(&entry);
+        let full_url = bundle::full_url(&entry);
         let resource = match entry.resource {
             // NOTE: FHIR R4 search, search.mode `outcome`: an OperationOutcome
             // in a searchset tells about the search and is no match.
@@ -109,10 +110,10 @@ pub(super) fn searchset(
 /// link, resolved against `base`.
 pub(super) fn history(body: &[u8], kind: CareService, base: &Url) -> Result<History, Malformation> {
     let bundle = bundle(body, "history")?;
-    let next = next(&bundle.link, base)?;
+    let next = bundle::next(&bundle.link, base).map_err(|_bad| Malformation::NextLink)?;
     let mut changes = Vec::new();
     for (index, entry) in bundle.entry.into_iter().enumerate() {
-        let full_url = full_url(&entry);
+        let full_url = bundle::full_url(&entry);
         let request = entry
             .request
             .as_ref()
@@ -172,15 +173,6 @@ fn bundle(body: &[u8], expected: &'static str) -> Result<Bundle, Malformation> {
     Ok(bundle)
 }
 
-/// The entry's `fullUrl`, when it carries a non-empty one.
-fn full_url(entry: &BundleEntry) -> Option<String> {
-    entry
-        .full_url
-        .as_ref()
-        .and_then(|full_url| full_url.value.clone())
-        .filter(|full_url| !full_url.is_empty())
-}
-
 /// The resource of entry `index` as a [`CareResource`] of `kind`.
 fn care_resource(
     index: usize,
@@ -201,30 +193,7 @@ fn care_resource(
 /// The logical id a deletion's `request.url` names, `[type]/[id]` or
 /// `[type]/[id]/_history/[vid]` under any base, when its type is `kind`.
 fn deleted(url: &str, kind: CareService) -> Option<String> {
-    let path = url.split(['?', '#']).next()?;
-    let segments: Vec<&str> = path.split('/').collect();
-    let at = segments
-        .iter()
-        .rposition(|segment| *segment == kind.resource_type())?;
-    match segments.get(at.saturating_add(1)..)? {
-        [id] | [id, "_history", _] if !id.is_empty() => Some((*id).to_owned()),
-        _ => None,
-    }
-}
-
-/// The `next` link, resolved against the FHIR base (FHIR R4 paging,
-/// <http://hl7.org/fhir/R4/http.html#paging>).
-fn next(links: &[BundleLink], base: &Url) -> Result<Option<Url>, Malformation> {
-    let Some(link) = links
-        .iter()
-        .find(|link| link.relation.value.as_deref() == Some("next"))
-    else {
-        return Ok(None);
-    };
-    let url = link.url.value.as_deref().ok_or(Malformation::NextLink)?;
-    base.join(url)
-        .map(Some)
-        .map_err(|_unparsable| Malformation::NextLink)
+    bundle::logical_id(url, kind.resource_type())
 }
 
 #[cfg(test)]

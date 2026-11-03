@@ -398,7 +398,28 @@ impl McsdClient {
         kind: CareService,
         budget: &mut Budget,
     ) -> Result<Found, McsdError> {
-        let mut matches = Vec::new();
+        let (matches, answered_at) = self
+            .pages(url, budget, |body| {
+                let read = response::searchset(body, kind, &self.base)?;
+                Ok((read.entries, read.matches, read.next))
+            })
+            .await?;
+        Ok(Found {
+            matches,
+            answered_at,
+        })
+    }
+
+    /// Reads every page that begins at `url` with `read`, which answers how
+    /// many entries a page held, what it found and its `next` link, and
+    /// returns everything found with the first page's `Date`.
+    async fn pages<T>(
+        &self,
+        url: Url,
+        budget: &mut Budget,
+        read: impl Fn(&[u8]) -> Result<(usize, Vec<T>, Option<Url>), McsdError>,
+    ) -> Result<(Vec<T>, Option<String>), McsdError> {
+        let mut found = Vec::new();
         let mut answered_at = None;
         let mut next = Some(url);
         let mut first = true;
@@ -408,15 +429,12 @@ impl McsdClient {
                 answered_at = page.date;
                 first = false;
             }
-            let read = response::searchset(&page.body, kind, &self.base)?;
-            budget.entries(read.entries)?;
-            matches.extend(read.matches);
-            next = read.next;
+            let (entries, items, link) = read(&page.body)?;
+            budget.entries(entries)?;
+            found.extend(items);
+            next = link;
         }
-        Ok(Found {
-            matches,
-            answered_at,
-        })
+        Ok((found, answered_at))
     }
 
     /// Asks the directory for every version of a resource of type `kind`
@@ -451,21 +469,12 @@ impl McsdClient {
         kind: CareService,
         budget: &mut Budget,
     ) -> Result<Updates, McsdError> {
-        let mut changes = Vec::new();
-        let mut answered_at = None;
-        let mut next = Some(url);
-        let mut first = true;
-        while let Some(url) = next.take() {
-            let page = self.page(url, budget).await?;
-            if first {
-                answered_at = page.date;
-                first = false;
-            }
-            let read = response::history(&page.body, kind, &self.base)?;
-            budget.entries(read.changes.len())?;
-            changes.extend(read.changes);
-            next = read.next;
-        }
+        let (changes, answered_at) = self
+            .pages(url, budget, |body| {
+                let read = response::history(body, kind, &self.base)?;
+                Ok((read.changes.len(), read.changes, read.next))
+            })
+            .await?;
         Ok(Updates {
             changes,
             answered_at,

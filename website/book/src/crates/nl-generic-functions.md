@@ -17,7 +17,7 @@ version on `main` is {{version:nl-generic-functions}}.
 |---|---|---|---|
 | `nvi` | GF-Localization | the national index (NVI) | the Localization Service search: which care providers (by URA) hold data for a patient (by pseudonymised BSN) |
 | `mitz` | GF-Consent | Mitz | the closed authorization question: may a data holder make a patient's data of each category available to a data user, answered `Permit` or `Deny` |
-| `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization` |
+| `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization`, its identifiers read as the mCSD directory of `ihe-iti` reads them |
 | `nuts-auth` | GF-Authentication | the Nuts profile | the access token request of Nuts RFC021, with a `DPoP`-bound token, and the holder's `did:web` DID document |
 
 ## Identifiers: BSN and the pseudonymised BSN

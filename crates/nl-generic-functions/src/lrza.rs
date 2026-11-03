@@ -46,6 +46,7 @@
 use std::collections::BTreeSet;
 
 use fhir_types::r4::organization::Organization;
+use ihe_iti::mcsd::directory::identifier_pairs;
 
 use crate::identification::{URA_SYSTEM, Ura};
 
@@ -75,19 +76,7 @@ pub enum LrzaError {
 /// [`LrzaError::EmptyValue`] for a URA identifier without a value, and
 /// [`LrzaError::Ambiguous`] for two different URAs.
 pub fn ura(organization: &Organization) -> Result<Option<Ura>, LrzaError> {
-    let identifiers = organization.identifier.iter().map(|identifier| {
-        (
-            identifier
-                .system
-                .as_ref()
-                .and_then(|uri| uri.value.as_deref()),
-            identifier
-                .value
-                .as_ref()
-                .and_then(|value| value.value.as_deref()),
-        )
-    });
-    match ura_in(identifiers)? {
+    match ura_in(identifier_pairs(&organization.identifier))? {
         Some(ura) => Ok(Some(ura)),
         None if organization.part_of.is_some() => Ok(None),
         None => Err(LrzaError::Missing),

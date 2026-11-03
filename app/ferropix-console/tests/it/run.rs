@@ -6,7 +6,13 @@
 
 use std::process::ExitCode;
 
-use ferropix_console::command::{EXIT_CONFIG, run};
+use ferrohealth_server::run::EXIT_CONFIG;
+use ferropix_console::command::{RUN, dispatch};
+
+/// Runs the binary with `args`.
+fn run(args: Vec<String>) -> ExitCode {
+    RUN.run(args, dispatch)
+}
 
 fn args(config: &std::path::Path, job: &[&str]) -> Vec<String> {
     let mut args = vec![
@@ -33,7 +39,7 @@ fn config_check_refuses_an_invalid_configuration_with_ex_config() {
     let config = dir.path().join("console.toml");
     std::fs::write(&config, "[pix]\ntimeout_ms = 0\n").expect("the configuration file");
     assert_eq!(
-        ExitCode::from(EXIT_CONFIG),
+        ExitCode::from(EXIT_CONFIG.get()),
         run(args(&config, &["config", "check"]))
     );
 }
@@ -43,7 +49,7 @@ fn an_unreadable_configuration_file_is_ex_config() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let config = dir.path().join("absent.toml");
     assert_eq!(
-        ExitCode::from(EXIT_CONFIG),
+        ExitCode::from(EXIT_CONFIG.get()),
         run(args(&config, &["config", "check"]))
     );
 }

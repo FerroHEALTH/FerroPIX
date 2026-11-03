@@ -139,14 +139,14 @@ async fn run(
                 }
             }
             Err(error) => {
-                tracing::error!(error = %crate::chain(&error), "the outbox could not be read");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "the outbox could not be read");
             }
         }
         let wait = match outbox::next_due(&store).await {
             Ok(Some(due)) => due.min(IDLE),
             Ok(None) => IDLE,
             Err(error) => {
-                tracing::error!(error = %crate::chain(&error), "the outbox could not be read");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "the outbox could not be read");
                 IDLE
             }
         };
@@ -202,7 +202,7 @@ impl HealthIndicator for Backlog {
                 Ok(_) => Outcome::up(),
                 Err(error) => Outcome::down(format!(
                     "the outbox could not be read: {}",
-                    crate::chain(&error)
+                    ferrohealth_server::run::chain(&error)
                 )),
             }
         })
@@ -221,7 +221,7 @@ async fn prune(store: &Store, retention: Retention) {
                 }
             }
             Err(error) => {
-                tracing::error!(error = %crate::chain(&error), "the outbox could not be pruned");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "the outbox could not be pruned");
                 break;
             }
         }
@@ -276,7 +276,7 @@ async fn deliver(store: &Store, channels: &Channels, row: Claimed) {
         }
     };
     if let Err(error) = recorded {
-        tracing::error!(row = %row.id, error = %crate::chain(&error), "the outcome of an outbox delivery could not be recorded; the row falls due again after its lease");
+        tracing::error!(row = %row.id, error = %ferrohealth_server::run::chain(&error), "the outcome of an outbox delivery could not be recorded; the row falls due again after its lease");
     }
 }
 
@@ -294,7 +294,7 @@ async fn subscription_failed(store: &Store, row: &Claimed, failure: &str) {
         }
         Ok(false) => {}
         Err(error) => {
-            tracing::error!(subscription = %subscription, error = %crate::chain(&error), "a PMIR subscription could not be set to error");
+            tracing::error!(subscription = %subscription, error = %ferrohealth_server::run::chain(&error), "a PMIR subscription could not be set to error");
         }
     }
 }
@@ -371,7 +371,7 @@ async fn notify(channel: &MllpChannel, row: &Claimed) -> Result<(), String> {
         outcome,
     );
     if let Err(error) = place.record(&exchange).await {
-        tracing::error!(consumer = %consumer.name, error = %crate::chain(&error), "the audit record of an ITI-10 notification could not be stored");
+        tracing::error!(consumer = %consumer.name, error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-10 notification could not be stored");
     }
     match answered {
         Acknowledged::Accepted => Ok(()),

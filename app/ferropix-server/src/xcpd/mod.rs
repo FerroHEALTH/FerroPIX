@@ -248,7 +248,7 @@ impl Gateway {
         };
         if let Err(error) = outbox::enqueue(self.store.pool(), self.store.sealer(), &message).await
         {
-            tracing::error!(error = %crate::chain(&error), "an asynchronous ITI-55 answer could not be written to the outbox");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an asynchronous ITI-55 answer could not be written to the outbox");
             return fault(Blame::Receiver, "the answer could not be queued");
         }
         self.wake.now();
@@ -326,7 +326,7 @@ impl Gateway {
         match self.discover(received).await {
             Ok(settled) => settled,
             Err(error) => {
-                tracing::error!(error = %crate::chain(&error), "an ITI-55 query could not be answered");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-55 query could not be answered");
                 Outcome::Unable(vec![DetectedIssue::InternalError])
             }
         }

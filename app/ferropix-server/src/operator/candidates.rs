@@ -244,7 +244,7 @@ const fn verdict_name(verdict: steward::Verdict) -> &'static str {
 
 /// The kind of error a refused decision's log line names.
 fn feed_error(error: &crate::feed::FeedError) -> &'static str {
-    tracing::error!(error = %crate::chain(error), "a steward decision could not be made");
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "a steward decision could not be made");
     "decision"
 }
 

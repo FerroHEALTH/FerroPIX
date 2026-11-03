@@ -95,7 +95,7 @@ pub(super) async fn query(
     let wanted = qpd.and_then(|qpd| qpd.field(4));
     let settled = match face.audit.reserve() {
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-9 query is refused: its audit record has no room");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-9 query is refused: its audit record has no room");
             return answer(
                 message,
                 &Settled::rejected(
@@ -129,7 +129,7 @@ pub(super) async fn query(
                 outcome,
             );
             if let Err(error) = place.record(&exchange).await {
-                tracing::error!(error = %crate::chain(&error), "an ITI-9 answer is withheld: its audit record could not be stored");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-9 answer is withheld: its audit record could not be stored");
                 Settled::rejected(
                     "the audit record could not be stored, so the query was not answered",
                 )
@@ -175,7 +175,7 @@ async fn settle(
     let found = match xref::lookup(&mut connection, face.store.sealer(), system, value).await {
         Ok(found) => found,
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-9 query could not be read");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-9 query could not be read");
             return Settled::rejected("the store could not be read");
         }
     };
@@ -242,7 +242,7 @@ async fn targets(
     wanted: Option<&Field>,
 ) -> Result<Vec<String>, Settled> {
     let domains = record::domains(&mut *connection).await.map_err(|error| {
-        tracing::error!(error = %crate::chain(&error), "the domains could not be read for an ITI-9 query");
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "the domains could not be read for an ITI-9 query");
         Settled::rejected("the store could not be read")
     })?;
     let mut targets = Vec::new();

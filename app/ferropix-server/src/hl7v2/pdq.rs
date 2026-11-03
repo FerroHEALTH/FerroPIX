@@ -103,7 +103,7 @@ pub(super) async fn query(
     let place = match face.audit.reserve() {
         Ok(place) => place,
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-21 query is refused: its audit record has no room");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 query is refused: its audit record has no room");
             return answer(
                 message,
                 &Settled::rejected(
@@ -134,7 +134,7 @@ pub(super) async fn query(
         outcome,
     );
     if let Err(error) = place.record(&exchange).await {
-        tracing::error!(error = %crate::chain(&error), "an ITI-21 answer is withheld: its audit record could not be stored");
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 answer is withheld: its audit record could not be stored");
         return answer(
             message,
             &Settled::rejected(
@@ -472,7 +472,7 @@ async fn domains(face: &Face, qpd: Option<&Segment>) -> Result<Vec<String>, Sett
         return Ok(Vec::new());
     }
     let known = record::domains(face.store.pool()).await.map_err(|error| {
-        tracing::error!(error = %crate::chain(&error), "the domains could not be read for an ITI-21 query");
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "the domains could not be read for an ITI-21 query");
         Settled::rejected("the store could not be read")
     })?;
     let mut systems = Vec::new();
@@ -536,7 +536,7 @@ async fn run(
             .search(&parsed, after)
             .await
             .map_err(|error| {
-                tracing::error!(error = %crate::chain(&error), "an ITI-21 search failed");
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 search failed");
                 Settled::rejected("the store could not be read")
             })?;
         let Searched::Found { answer, persons } = searched else {

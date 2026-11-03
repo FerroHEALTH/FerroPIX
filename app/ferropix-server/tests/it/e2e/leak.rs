@@ -8,7 +8,7 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use ferropix_server::chain;
+use ferrohealth_server::run::chain;
 use ferropix_server::store::record::{self, Channel, Demographics};
 use ferropix_server::store::reseal;
 use ferropix_server::store::seal::Sealer;

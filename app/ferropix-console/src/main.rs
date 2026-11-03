@@ -5,5 +5,5 @@
 //! path.
 
 fn main() -> std::process::ExitCode {
-    ferropix_console::command::run(std::env::args())
+    ferropix_console::command::RUN.run(std::env::args(), ferropix_console::command::dispatch)
 }

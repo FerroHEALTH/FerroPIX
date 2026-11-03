@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use ferropix_server::EXIT_CONFIG;
+use ferrohealth_server::run::EXIT_CONFIG;
 
 use crate::support::{DATA_KEY, PASSWORD, Secrets};
 
@@ -118,7 +118,7 @@ fn an_unknown_override_variable_refuses_the_start_and_names_the_key() {
         .envs(environment)
         .output()
         .expect("the binary runs");
-    assert_eq!(Some(i32::from(EXIT_CONFIG)), output.status.code());
+    assert_eq!(Some(i32::from(EXIT_CONFIG.get())), output.status.code());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("db.pasword"), "{stderr}");
     assert!(stderr.contains("FERROPIX__DB__PASWORD"), "{stderr}");
@@ -146,7 +146,7 @@ fn config_check_names_the_first_error_and_exits_with_ex_config() {
         ],
         &secrets,
     );
-    assert_eq!(Some(i32::from(EXIT_CONFIG)), output.status.code());
+    assert_eq!(Some(i32::from(EXIT_CONFIG.get())), output.status.code());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("listen_port"), "{stderr}");
     assert_eq!(
@@ -182,7 +182,7 @@ fn config_check_never_prints_a_secret_it_refuses() {
         .envs(environment)
         .output()
         .expect("the binary runs");
-    assert_eq!(Some(i32::from(EXIT_CONFIG)), output.status.code());
+    assert_eq!(Some(i32::from(EXIT_CONFIG.get())), output.status.code());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("db.url"), "{stderr}");
     assert!(!stderr.contains(PASSWORD), "{stderr}");
@@ -230,7 +230,7 @@ fn db_reseal_refuses_an_old_key_that_is_no_key_and_never_prints_it() {
         &secrets,
     );
     assert_eq!(
-        Some(i32::from(EXIT_CONFIG)),
+        Some(i32::from(EXIT_CONFIG.get())),
         output.status.code(),
         "{output:?}"
     );

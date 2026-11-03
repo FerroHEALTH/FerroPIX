@@ -141,7 +141,7 @@ async fn create(face: Arc<Face>, request: Request) -> Response {
             .await
         }
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be stored");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 subscription could not be stored");
             let exchange = records::subscription(
                 &call,
                 SubscriptionAction::Create,
@@ -208,7 +208,7 @@ async fn read(face: Arc<Face>, request: Request) -> Response {
             .await
         }
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be read");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 subscription could not be read");
             let exchange = records::subscription(
                 &call,
                 SubscriptionAction::Read,
@@ -286,7 +286,7 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
             ),
         ),
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be updated");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 subscription could not be updated");
             (Outcome::SeriousFailure, refused(Refusal::Unavailable))
         }
     };
@@ -337,7 +337,7 @@ async fn delete(face: Arc<Face>, request: Request) -> Response {
             .await
         }
         Err(error) => {
-            tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be deleted");
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 subscription could not be deleted");
             let exchange = records::subscription(
                 &call,
                 SubscriptionAction::Delete,
@@ -467,7 +467,7 @@ pub(super) async fn record(
         None => audit.record(vec![exchange.clone()]).await,
     };
     stored.map_err(|error| {
-        tracing::error!(error = %crate::chain(&error), "a PMIR answer was withheld: its audit record could not be stored");
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "a PMIR answer was withheld: its audit record could not be stored");
     })
 }
 

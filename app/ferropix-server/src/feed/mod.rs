@@ -281,7 +281,7 @@ impl Feeder {
         if locked.removed {
             return Err(FeedError::NotFound);
         }
-        let action = write::action(
+        let action = write::recorded(
             &mut transaction,
             "remove",
             context,
@@ -289,6 +289,7 @@ impl Feeder {
                 record: Some(locked.id),
                 ..Subjects::default()
             },
+            None,
         )
         .await?;
         sqlx::query("UPDATE pix.source_record SET removed_at = now() WHERE id = $1")
@@ -353,7 +354,7 @@ impl Feeder {
         let (version, subject) = self
             .write_version(&mut transaction, &locked, patient, &carried, context)
             .await?;
-        write::action(
+        write::recorded(
             &mut transaction,
             "feed",
             context,
@@ -361,6 +362,7 @@ impl Feeder {
                 record: Some(locked.id),
                 ..Subjects::default()
             },
+            None,
         )
         .await?;
         let mut me = me(
@@ -427,7 +429,7 @@ impl Feeder {
         let locked = write::lock_or_insert(&mut transaction, keys, domain, &subsumed).await?;
         self.write_version(&mut transaction, &locked, patient, &carried, context)
             .await?;
-        let action = write::action(
+        let action = write::recorded(
             &mut transaction,
             "resolve-duplicate",
             context,
@@ -435,6 +437,7 @@ impl Feeder {
                 record: Some(locked.id),
                 ..Subjects::default()
             },
+            None,
         )
         .await?;
         sqlx::query("UPDATE pix.source_record SET active = false, replaced_by = $2 WHERE id = $1")

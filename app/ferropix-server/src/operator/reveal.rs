@@ -15,17 +15,19 @@
 //! is capped at 30 seconds. These rules are our own design
 //! (`docs/architecture.md` §12.5, decision D10).
 
+use crate::fhir::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::reveal::{
     DEFAULT_SECONDS, MAX_REASON, MAX_SECONDS, Reveal, Revealed, Target, Value,
 };
+use http::StatusCode;
 use ihe_atna::balp::Outcome;
 use uuid::Uuid;
 
 use crate::audit::records::{self, operator::Disclosed};
 use crate::operator::{Operator, OperatorError, Recorded, opened, record_action, wire};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 
 /// The detail of a target the person does not hold.
 pub const NOT_HELD: &str = "the person holds no identifier or pseudonym under this handle";
@@ -54,7 +56,7 @@ struct Found {
 pub async fn answer(operator: &Operator, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let Some(person) = wire::path_id(&parts) else {
-        return not_held();
+        return problem::refuse(Kind::NotFound, NOT_HELD);
     };
     let (reveal, _bytes) = match wire::posted::<Reveal>(&parts, body).await {
         Ok(read) => read,
@@ -62,11 +64,11 @@ pub async fn answer(operator: &Operator, request: Request) -> Response {
     };
     let reason = reveal.reason.trim();
     if reason.is_empty() || reason.chars().count() > MAX_REASON {
-        return wire::refuse(Kind::ReasonRequired, NO_REASON);
+        return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let found = match find(operator, person, &reveal.target).await {
         Ok(Some(found)) => found,
-        Ok(None) => return not_held(),
+        Ok(None) => return problem::refuse(Kind::NotFound, NOT_HELD),
         Err(error) => return wire::failed(&error),
     };
     let recorded = Recorded {
@@ -83,15 +85,19 @@ pub async fn answer(operator: &Operator, request: Request) -> Response {
         Ok(action) => action,
         Err(refused) => return *refused,
     };
-    wire::answer(&Revealed {
-        value: Value(found.value),
-        system: found.system,
-        seconds: reveal
-            .seconds
-            .unwrap_or(DEFAULT_SECONDS)
-            .clamp(1, MAX_SECONDS),
-        action: action.to_string(),
-    })
+    outcome::body(
+        StatusCode::OK,
+        &Revealed {
+            value: Value(found.value),
+            system: found.system,
+            seconds: reveal
+                .seconds
+                .unwrap_or(DEFAULT_SECONDS)
+                .clamp(1, MAX_SECONDS),
+            action: action.to_string(),
+        },
+        wire::JSON,
+    )
 }
 
 /// Writes the steward action and the BALP disclosure record of `found` in
@@ -160,11 +166,6 @@ fn identifier(
         domain: Some(domain),
         pseudonym_domain: None,
     })
-}
-
-/// Returns the `404` of a target the person does not hold.
-fn not_held() -> Response {
-    wire::refuse(Kind::NotFound, NOT_HELD)
 }
 
 /// Finds `target` among what `person` holds, opened.

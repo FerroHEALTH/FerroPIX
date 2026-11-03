@@ -30,7 +30,7 @@ use ferropix_operator_api::candidate::PersonIdentifier;
 use ferropix_operator_api::merge::{Party, Preview};
 
 use crate::locale::messages::Msg;
-use crate::markup::{h, hidden, t};
+use crate::markup::hidden;
 use crate::model::{Probe, Read};
 use crate::pages::{Needs, or_dash, server_state};
 use crate::visit::Visit;
@@ -77,11 +77,11 @@ fn party(visit: &Visit, party: &Party) -> Html {
         .name
         .clone()
         .unwrap_or_else(|| visit.tr_with(Msg::PersonId, &[("person", party.id.clone().into())]));
-    h(format!(
+    Html::raw(format!(
         "<a href=\"{}\">{}</a><p class=\"fui-small fui-muted\">{} {}</p>",
-        t(format!("/patients/{}", party.id)),
-        t(name),
-        t(visit.tr(Msg::MergeMade)),
+        Html::text(format!("/patients/{}", party.id)),
+        Html::text(name),
+        Html::text(visit.tr(Msg::MergeMade)),
         timestamp(&visit.locale, &party.created_at),
     ))
 }
@@ -117,25 +117,27 @@ fn effect(visit: &Visit, preview: &Preview) -> Html {
         (visit.tr(Msg::MergeIdentifiers), identifiers),
         (
             visit.tr(Msg::MergePseudonyms),
-            h(format!(
+            Html::raw(format!(
                 "<ul class=\"fui-identifier-list\">{pseudonyms}</ul>"
             )),
         ),
         (
             visit.tr(Msg::MergeSubscriptions),
-            t(visit.tr_with(Msg::Count, &[("count", preview.subscriptions.into())])),
+            Html::text(visit.tr_with(Msg::Count, &[("count", preview.subscriptions.into())])),
         ),
         (
             visit.tr(Msg::MergeCandidates),
-            t(visit.tr_with(
-                Msg::Count,
-                &[(
-                    "count",
-                    u64::try_from(preview.candidates.len())
-                        .unwrap_or(u64::MAX)
-                        .into(),
-                )],
-            )),
+            Html::text(
+                visit.tr_with(
+                    Msg::Count,
+                    &[(
+                        "count",
+                        u64::try_from(preview.candidates.len())
+                            .unwrap_or(u64::MAX)
+                            .into(),
+                    )],
+                ),
+            ),
         ),
     ])
 }
@@ -149,7 +151,7 @@ fn refused_notice(visit: &Visit, refused: Option<&Probe>, route: &str) -> Html {
                 Tone::Warn,
                 Announce::Alert,
                 None,
-                h(format!("<p>{}</p>", t(visit.tr(Msg::MergeStale)))),
+                Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::MergeStale)))),
             )
         } else {
             server_state(visit, Some(probe), Needs::of(Msg::WhatMergeWrite), route)
@@ -159,7 +161,7 @@ fn refused_notice(visit: &Visit, refused: Option<&Probe>, route: &str) -> Html {
 
 /// The required reason of a danger dialog.
 fn reason_field(visit: &Visit, id: &'static str) -> Html {
-    Field::new(id, visit.tr(Msg::RevealReason)).view(h(format!(
+    Field::new(id, visit.tr(Msg::RevealReason)).view(Html::raw(format!(
         "<input id=\"{id}\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">"
     )))
 }
@@ -167,17 +169,17 @@ fn reason_field(visit: &Visit, id: &'static str) -> Html {
 /// A danger button that opens the dialog `dialog`, showing `glyph` and
 /// `words`.
 fn asks(dialog: &str, glyph: Glyph, words: &str) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{}\" aria-haspopup=\"dialog\">{}</button>",
         Variant::Destructive.class(),
-        t(dialog),
+        Html::text(dialog),
         label(Some(glyph), words)
     ))
 }
 
 /// The submit of a danger dialog, showing `glyph` and `words`.
 fn confirms(glyph: Glyph, words: &str) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<button type=\"submit\" class=\"{}\">{}</button>",
         Variant::Destructive.class(),
         label(Some(glyph), words)
@@ -205,17 +207,17 @@ pub fn merge(
             }
         })
         .unwrap_or_default();
-    let other_field = Field::new("merge-other", visit.tr(Msg::MergeOtherField)).view(h(format!(
+    let other_field = Field::new("merge-other", visit.tr(Msg::MergeOtherField)).view(Html::raw(format!(
         "<input id=\"merge-other\" name=\"other\" type=\"text\" class=\"{INPUT}\" required autocomplete=\"off\" spellcheck=\"false\" value=\"{}\">",
-        t(&other)
+        Html::text(&other)
     )));
     let pick = card(
         visit.tr(Msg::MergeOther),
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{}\" class=\"fui-form\">{}<p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{other_field}</div><div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button></div></form>",
-            t(&action),
+            Html::text(&action),
             hidden(FORM, PREVIEW),
-            t(visit.tr(Msg::MergeOtherNote)),
+            Html::text(visit.tr(Msg::MergeOtherNote)),
             Variant::Secondary.class(),
             label(Some(Glyph::EYE), visit.tr(Msg::MergePreview)),
         )),
@@ -246,9 +248,9 @@ fn previewed(visit: &Visit, person: &str, action: &str, preview: &Preview) -> Ht
     } else {
         &survivor.id
     };
-    let swap = h(format!(
+    let swap = Html::raw(format!(
         "<form method=\"post\" action=\"{}\" class=\"fui-inline-form\">{}{}{}<button type=\"submit\" class=\"{}\">{}</button></form>",
-        t(action),
+        Html::text(action),
         hidden(FORM, PREVIEW),
         hidden("other", other),
         hidden("survivor", &merged.id),
@@ -289,9 +291,9 @@ fn previewed(visit: &Visit, person: &str, action: &str, preview: &Preview) -> Ht
             parties,
             swap,
             effect(visit, preview),
-            h(format!(
+            Html::raw(format!(
                 "<p class=\"fui-help\">{}</p>",
-                t(visit.tr(Msg::MergeReversible))
+                Html::text(visit.tr(Msg::MergeReversible))
             )),
             asks(MERGE_DIALOG, Glyph::GIT_COMPARE, &visit.tr(Msg::MergeAsk)),
             dialog,
@@ -325,7 +327,7 @@ pub fn unmerge(
             Tone::Info,
             Announce::Status,
             None,
-            h(format!("<p>{}</p>", t(visit.tr(Msg::UnmergeNone)))),
+            Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::UnmergeNone)))),
         ),
     };
     stack(refused_notice(visit, refused, "POST /operator/merges/{id}/revert").then(body))
@@ -342,9 +344,11 @@ fn reverted(visit: &Visit, action: &str, merge: &str, preview: &Preview) -> Html
                 Tone::Warn,
                 Announce::Status,
                 None,
-                h(format!(
+                Html::raw(format!(
                     "<p>{}</p>",
-                    t(visit.tr_with(Msg::UnmergeFirst, &[("merge", first.clone().into())]))
+                    Html::text(
+                        visit.tr_with(Msg::UnmergeFirst, &[("merge", first.clone().into())])
+                    )
                 )),
             )
         });

@@ -28,7 +28,7 @@ use ferropix_operator_api::pseudonym::{MAX_REASON, PseudonymDomain, PseudonymDom
 
 use crate::app::PSEUDONYM_DOMAINS;
 use crate::locale::messages::Msg;
-use crate::markup::{h, hidden, submit, t};
+use crate::markup::{hidden, submit};
 use crate::model::Read;
 use crate::pages::{Needs, or_dash, server_state};
 use crate::visit::Visit;
@@ -67,9 +67,9 @@ pub fn pseudonym_domains(
             change_form(visit, &live)
         })
     } else {
-        h(format!(
+        Html::raw(format!(
             "<p class=\"fui-help\">{}</p>",
-            t(visit.tr(Msg::PseudonymAdminOnly))
+            Html::text(visit.tr(Msg::PseudonymAdminOnly))
         ))
     };
     stack(Html::join([
@@ -92,13 +92,13 @@ fn resolved_notice(visit: &Visit, resolved: Option<&Read<Resolution>>) -> Html {
                 Tone::Ok,
                 Announce::Status,
                 None,
-                h(format!(
+                Html::raw(format!(
                     "<p><strong>{}</strong></p><p>{} <a href=\"{}\"><code>{}</code></a></p><p class=\"fui-small fui-muted\">{}</p>",
-                    t(visit.tr(Msg::ResolvedTitle)),
-                    t(visit.tr(Msg::ResolvedPerson)),
-                    t(format!("/patients/{person}")),
-                    t(visit.tr_with(Msg::PersonId, &[("person", person.clone().into())])),
-                    t(visit.tr(Msg::ResolvedDisclosure)),
+                    Html::text(visit.tr(Msg::ResolvedTitle)),
+                    Html::text(visit.tr(Msg::ResolvedPerson)),
+                    Html::text(format!("/patients/{person}")),
+                    Html::text(visit.tr_with(Msg::PersonId, &[("person", person.clone().into())])),
+                    Html::text(visit.tr(Msg::ResolvedDisclosure)),
                 )),
             )
         }
@@ -119,7 +119,7 @@ fn written_notice(visit: &Visit, written: Option<&Read<()>>) -> Html {
             Tone::Ok,
             Announce::Status,
             None,
-            h(format!("<p>{}</p>", t(visit.tr(Msg::DomainSaved)))),
+            Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::DomainSaved)))),
         ),
         Some(Err(probe)) => server_state(
             visit,
@@ -166,27 +166,27 @@ fn domain_table(visit: &Visit, domains: &PseudonymDomains) -> Html {
         .map(|domain| {
             let consumer_cell = domain.consumer_client_id.as_ref().map_or_else(
                 || or_dash(locale, None),
-                |client| h(format!("<code>{}</code>", t(client))),
+                |client| Html::raw(format!("<code>{}</code>", Html::text(client))),
             );
             let badge_view = if domain.retired_at.is_some() {
                 badge(Tone::Neutral, visit.tr(Msg::Retired))
             } else {
                 badge(Tone::Ok, visit.tr(Msg::StateActive))
             };
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}{}{}</tr>",
-                title_cell(None, t(&domain.name), None),
+                title_cell(None, Html::text(&domain.name), None),
                 cell(
                     namespace,
-                    h(format!(
+                    Html::raw(format!(
                         "<code class=\"fui-wrap\">{}</code>",
-                        t(&domain.namespace)
+                        Html::text(&domain.namespace)
                     ))
                 ),
                 cell(consumer, consumer_cell),
                 cell(
                     pseudonyms,
-                    t(visit.tr_with(Msg::Count, &[("count", domain.pseudonyms.into())]))
+                    Html::text(visit.tr_with(Msg::Count, &[("count", domain.pseudonyms.into())]))
                 ),
                 cell(created, timestamp(locale, &domain.created_at)),
                 cell(state, badge_view),
@@ -210,10 +210,10 @@ fn options(live: &[&PseudonymDomain], by_id: bool) -> Html {
     live.iter()
         .map(|domain| {
             let value = if by_id { &domain.id } else { &domain.namespace };
-            h(format!(
+            Html::raw(format!(
                 "<option value=\"{}\">{}</option>",
-                t(value),
-                t(&domain.name)
+                Html::text(value),
+                Html::text(&domain.name)
             ))
         })
         .collect()
@@ -223,30 +223,30 @@ fn options(live: &[&PseudonymDomain], by_id: bool) -> Html {
 /// pseudonym is posted and never drawn back.
 fn resolve_form(visit: &Visit, live: &[&PseudonymDomain]) -> Html {
     let body = if live.is_empty() {
-        h(format!(
+        Html::raw(format!(
             "<p class=\"fui-help\">{}</p>",
-            t(visit.tr(Msg::ResolveNoDomain))
+            Html::text(visit.tr(Msg::ResolveNoDomain))
         ))
     } else {
         let namespace = Field::new("resolve-namespace", visit.tr(Msg::DetailPseudonymDomain))
-            .view(h(format!(
+            .view(Html::raw(format!(
                 "<select id=\"resolve-namespace\" name=\"namespace\" class=\"{SELECT}\">{}</select>",
                 options(live, false)
             )));
-        let pseudonym = Field::new("resolve-pseudonym", visit.tr(Msg::ResolvePseudonym)).view(h(
+        let pseudonym = Field::new("resolve-pseudonym", visit.tr(Msg::ResolvePseudonym)).view(Html::raw(
             format!(
                 "<input id=\"resolve-pseudonym\" name=\"pseudonym\" type=\"text\" class=\"{INPUT}\" required autocomplete=\"off\" spellcheck=\"false\">"
             ),
         ));
-        let reason = Field::new("resolve-reason", visit.tr(Msg::RevealReason)).view(h(format!(
+        let reason = Field::new("resolve-reason", visit.tr(Msg::RevealReason)).view(Html::raw(format!(
             "<input id=\"resolve-reason\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"{MAX_REASON}\" autocomplete=\"off\" aria-describedby=\"{}\">",
-            t(help_id("resolve"))
+            Html::text(help_id("resolve"))
         )));
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{PSEUDONYM_DOMAINS}\" class=\"fui-form\">{}<p class=\"fui-help\" id=\"{}\">{}</p><div class=\"fui-form-grid\">{namespace}{pseudonym}{reason}</div><div class=\"fui-form-foot\">{}</div></form>",
             hidden(FORM, RESOLVE),
-            t(help_id("resolve")),
-            t(visit.tr(Msg::ResolveNote)),
+            Html::text(help_id("resolve")),
+            Html::text(visit.tr(Msg::ResolveNote)),
             submit(
                 Variant::Secondary.class(),
                 &label(Some(Glyph::SEARCH), visit.tr(Msg::ResolveSubmit))
@@ -264,7 +264,7 @@ fn text_field(
     words: Msg,
     required: bool,
 ) -> Html {
-    Field::new(id, visit.tr(words)).view(h(format!(
+    Field::new(id, visit.tr(words)).view(Html::raw(format!(
         "<input id=\"{id}\" name=\"{name}\" type=\"text\" class=\"{INPUT}\" autocomplete=\"off\"{}>",
         if required { " required" } else { "" }
     )))
@@ -274,10 +274,10 @@ fn text_field(
 fn create_form(visit: &Visit) -> Html {
     disclosure(
         visit.tr(Msg::DomainCreate),
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{PSEUDONYM_DOMAINS}\" class=\"fui-form\">{}<p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{}{}{}{}</div><div class=\"fui-form-foot\">{}</div></form>",
             hidden(FORM, CREATE),
-            t(visit.tr(Msg::DomainAdminNote)),
+            Html::text(visit.tr(Msg::DomainAdminNote)),
             text_field(
                 visit,
                 "create-namespace",
@@ -306,7 +306,7 @@ fn create_form(visit: &Visit) -> Html {
 /// consumer, or retires it.
 fn change_form(visit: &Visit, live: &[&PseudonymDomain]) -> Html {
     let domain =
-        Field::new("change-domain", visit.tr(Msg::DetailPseudonymDomain)).view(h(format!(
+        Field::new("change-domain", visit.tr(Msg::DetailPseudonymDomain)).view(Html::raw(format!(
             "<select id=\"change-domain\" name=\"domain\" class=\"{SELECT}\">{}</select>",
             options(live, true)
         )));
@@ -314,17 +314,17 @@ fn change_form(visit: &Visit, live: &[&PseudonymDomain]) -> Html {
         "change-retire",
         visit.tr(Msg::DomainRetire),
         visit.tr(Msg::PseudonymRetireHelp),
-        h(format!(
+        Html::raw(format!(
             "<input id=\"change-retire\" name=\"retire\" type=\"checkbox\" value=\"on\" aria-describedby=\"{}\">",
-            t(help_id("change-retire"))
+            Html::text(help_id("change-retire"))
         )),
     );
     disclosure(
         visit.tr(Msg::PseudonymChange),
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{PSEUDONYM_DOMAINS}\" class=\"fui-form\">{}<p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{domain}{}{}{}</div>{retire}<div class=\"fui-form-foot\">{}</div></form>",
             hidden(FORM, CHANGE),
-            t(visit.tr(Msg::DomainAdminNote)),
+            Html::text(visit.tr(Msg::DomainAdminNote)),
             text_field(visit, "change-name", "name", Msg::ColName, false),
             text_field(
                 visit,

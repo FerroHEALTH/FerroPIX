@@ -49,8 +49,9 @@ use crate::auth::guard::NOT_THE_SOURCE;
 use crate::auth::source::{Sources, Verdict};
 use crate::auth::table::Route;
 use crate::config::section::matching::Matching;
+use crate::feed::master::MasterChange;
 use crate::feed::{Context, FeedError, Feeder};
-use crate::fhir::pmir::{answer_format, call, record, unaudited, written};
+use crate::fhir::pmir::{Refusal, answer_format, call, record, refused, written};
 use crate::fhir::status::Case;
 use crate::fhir::wire;
 use crate::store::Store;
@@ -249,13 +250,17 @@ async fn apply(
             let Some(id) = identity(patient) else {
                 return Ok(NOT_A_UUID);
             };
-            feeder.create_master(system, id, patient, context).await
+            feeder
+                .master(MasterChange::Create, system, id, patient, context)
+                .await
         }
         Change::Update(patient) => {
             let Some(id) = identity(patient) else {
                 return Ok(NOT_A_UUID);
             };
-            feeder.update_master(system, id, patient, context).await
+            feeder
+                .master(MasterChange::Update, system, id, patient, context)
+                .await
         }
         Change::Merge {
             deprecated,
@@ -402,7 +407,7 @@ async fn answer<T: ihe_iti::server::answer::Resource>(
     match record(&registry.audit, parts, exchange).await {
         Ok(()) => written(answer, format, None),
         Err(()) if committed => written(&Case::CommittedUnaudited.answer(), format, None),
-        Err(()) => written(&unaudited(), format, None),
+        Err(()) => written(&refused(Refusal::Unaudited), format, None),
     }
 }
 

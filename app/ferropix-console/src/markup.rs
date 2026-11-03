@@ -9,19 +9,6 @@
 
 use ferrohealth_ui::html::Html;
 
-/// The markup `markup`, made by the page from FerroUI's parts and text
-/// escaped with [`t`].
-#[must_use]
-pub const fn h(markup: String) -> Html {
-    Html::raw(markup)
-}
-
-/// `text` escaped as a text node or an attribute value.
-#[must_use]
-pub fn t(text: impl AsRef<str>) -> Html {
-    Html::text(text)
-}
-
 /// `part` when there is one, else no markup.
 #[must_use]
 pub fn opt(part: Option<Html>) -> Html {
@@ -31,18 +18,18 @@ pub fn opt(part: Option<Html>) -> Html {
 /// A hidden form field `name` holding `value`.
 #[must_use]
 pub fn hidden(name: &str, value: &str) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<input type=\"hidden\" name=\"{}\" value=\"{}\">",
-        t(name),
-        t(value)
+        Html::text(name),
+        Html::text(value)
     ))
 }
 
 /// A submit button of the classes `class` showing `content`.
 #[must_use]
 pub fn submit(class: &str, content: &Html) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<button type=\"submit\" class=\"{}\">{content}</button>",
-        t(class)
+        Html::text(class)
     ))
 }

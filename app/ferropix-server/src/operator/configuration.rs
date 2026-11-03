@@ -13,8 +13,10 @@
 //! (`docs/architecture.md` §5.1). No specification governs the API: our
 //! own design.
 
+use crate::fhir::outcome::body;
 use axum::response::Response;
 use ferropix_operator_api::configuration::{Configuration, Mode, Origin, Section, Setting};
+use http::StatusCode;
 
 use ferrohealth_config::provenance::{Provenance, Source};
 
@@ -41,10 +43,11 @@ pub const RULES: [(&str, &str); 3] = [
 /// Answers the configuration in effect.
 #[must_use]
 pub fn answer(operator: &Operator) -> Response {
-    wire::answer(&document(
-        &operator.matching,
-        &operator.configured.provenance,
-    ))
+    body(
+        StatusCode::OK,
+        &document(&operator.matching, &operator.configured.provenance),
+        wire::JSON,
+    )
 }
 
 /// Returns the configuration document of `matching`, its settings marked by

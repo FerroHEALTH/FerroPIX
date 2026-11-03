@@ -16,6 +16,8 @@
 //! an action and an outcome, never a value. No specification governs the
 //! API: our own design.
 
+use crate::fhir::outcome::body;
+use http::StatusCode;
 use std::collections::BTreeMap;
 
 use axum::extract::{MatchedPath, Request};
@@ -25,7 +27,7 @@ use ferropix_operator_api::source::{Admission, MESSAGES, Message, Source, Source
 
 use crate::config::section::hl7v2::Sender;
 use crate::operator::{Operator, OperatorError, wire};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 
 /// The detail of an id that names no source.
 pub const NO_SUCH_SOURCE: &str = "no source has this id";
@@ -36,10 +38,14 @@ const FEED_KINDS: [&str; 3] = ["feed", "resolve-duplicate", "remove"];
 /// Answers every source.
 pub async fn list(operator: &Operator) -> Response {
     match read_all(operator).await {
-        Ok(sources) => wire::answer(&Sources {
-            sources,
-            file: crate::operator::configuration::file_name(&operator.configured.provenance),
-        }),
+        Ok(sources) => body(
+            StatusCode::OK,
+            &Sources {
+                sources,
+                file: crate::operator::configuration::file_name(&operator.configured.provenance),
+            },
+            wire::JSON,
+        ),
         Err(error) => wire::failed(&error),
     }
 }
@@ -48,24 +54,19 @@ pub async fn list(operator: &Operator) -> Response {
 pub async fn one(operator: &Operator, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
     let Some(id) = source_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NO_SUCH_SOURCE);
     };
     let sources = match read_all(operator).await {
         Ok(sources) => sources,
         Err(error) => return wire::failed(&error),
     };
     let Some(source) = sources.into_iter().find(|source| source.id == id) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NO_SUCH_SOURCE);
     };
     match messages(operator, &source).await {
-        Ok(messages) => wire::answer(&SourcePage { source, messages }),
+        Ok(messages) => body(StatusCode::OK, &SourcePage { source, messages }, wire::JSON),
         Err(error) => wire::failed(&error),
     }
-}
-
-/// Returns the `404` of an id that names no source.
-fn not_found() -> Response {
-    wire::refuse(Kind::NotFound, NO_SUCH_SOURCE)
 }
 
 /// Returns the `{id}` of the route, read from the path by its template.

@@ -30,7 +30,7 @@ use ferropix_operator_api::overview::Overview;
 
 use crate::app::QUEUE;
 use crate::locale::messages::Msg;
-use crate::markup::{h, t};
+
 use crate::model::Read;
 use crate::pages::queue::grade_words;
 use crate::pages::{Needs, server_state};
@@ -257,9 +257,9 @@ fn listeners(visit: &Visit, dependencies: &Read<Dependencies>) -> Html {
                     .find(|indicator| indicator.name == name)
             };
             let row = |words: Msg, mark: Html| {
-                h(format!(
+                Html::raw(format!(
                     "<li class=\"fui-cluster\"><span>{}</span>{mark}</li>",
-                    t(visit.tr(words))
+                    Html::text(visit.tr(words))
                 ))
             };
             let of = |name: &str| match indicator(name) {
@@ -269,7 +269,7 @@ fn listeners(visit: &Visit, dependencies: &Read<Dependencies>) -> Html {
                 Some(found) => state(Mark::Bad, visit.tr(Msg::ListenerDown), found.detail.clone()),
                 None => state(Mark::Neutral, visit.tr(Msg::ListenerOff), None),
             };
-            h(format!(
+            Html::raw(format!(
                 "<ul class=\"fui-plain-list\">{}{}{}</ul>",
                 row(
                     Msg::ListenerHttp,
@@ -292,19 +292,19 @@ fn oldest(visit: &Visit, overview: &Overview) -> Html {
             .oldest
             .iter()
             .map(|entry| {
-                h(format!(
+                Html::raw(format!(
                     "<li class=\"fui-cluster\"><a href=\"{}\">{}</a>{}<span class=\"fui-muted fui-small\">{}</span></li>",
-                    t(format!("{QUEUE}/{}", entry.candidate)),
+                    Html::text(format!("{QUEUE}/{}", entry.candidate)),
                     timestamp(&visit.locale, &entry.created_at),
                     badge(Tone::Info, grade_words(visit, entry.grade)),
-                    t(visit.tr_with(
+                    Html::text(visit.tr_with(
                         Msg::Score,
                         &[("score", format!("{:.2}", entry.score).into())]
                     )),
                 ))
             })
             .collect();
-        h(format!("<ul class=\"fui-plain-list\">{rows}</ul>"))
+        Html::raw(format!("<ul class=\"fui-plain-list\">{rows}</ul>"))
     };
     card(
         visit.tr(Msg::OldestInQueue),

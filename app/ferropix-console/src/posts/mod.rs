@@ -13,6 +13,7 @@
 //! answers the server's CSV as a file. No specification governs the
 //! console: our own design.
 
+use crate::session::PREFERENCE_PREFIX;
 use axum::Extension;
 use axum::extract::{FromRequest as _, Request};
 use axum::response::{IntoResponse as _, Redirect, Response};
@@ -108,7 +109,7 @@ pub async fn posted_context(
             admin: steward.admin,
             probe: Some(probe),
             document: Some(document),
-            ..PageContext::signed_out(state.sessions().preference_prefix())
+            ..PageContext::signed_out(state.sessions().cookie_name(PREFERENCE_PREFIX))
         },
         state,
         headers,
@@ -228,7 +229,7 @@ pub async fn suggest(Extension(state): Extension<ConsoleState>, request: Request
         .read::<ferropix_operator_api::domain::Domains>("operator/domains?limit=200", &token)
         .await
         .ok();
-    let prefix = state.sessions().preference_prefix();
+    let prefix = state.sessions().cookie_name(PREFERENCE_PREFIX);
     let cookies = crate::preferences::kept_cookies(&parts.headers, &prefix);
     let locale = crate::locale::chosen(
         &ferrohealth_ui::theme::Preferences::read(&cookies, &prefix),
@@ -480,7 +481,7 @@ pub async fn export(Extension(state): Extension<ConsoleState>, request: Request)
 fn reveal_seconds(state: &ConsoleState, headers: &HeaderMap) -> u32 {
     let name = format!(
         "{}{}",
-        state.sessions().preference_prefix(),
+        state.sessions().cookie_name(PREFERENCE_PREFIX),
         crate::preferences::REVEAL
     );
     headers

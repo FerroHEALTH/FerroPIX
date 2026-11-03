@@ -5,13 +5,13 @@
 //! status in words before its number, what the address may mean, and the
 //! ways on, FerroUI's error page in the shell.
 
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::view::error_page::{ErrorPage, Status, Way, error_page};
 use http::StatusCode;
 
 use crate::app::{DASHBOARD, SEARCH};
 use crate::locale::messages::Msg;
-use crate::markup::t;
 use crate::pages::Drawn;
 use crate::visit::Visit;
 
@@ -23,7 +23,7 @@ pub fn not_found(visit: &Visit) -> Drawn {
         ErrorPage {
             status: Status::NotFound,
             title: visit.tr(Msg::NotFoundTitle),
-            body: t(visit.tr(Msg::NotFoundBody)),
+            body: Html::text(visit.tr(Msg::NotFoundBody)),
             hint: None,
             ways: vec![
                 Way {

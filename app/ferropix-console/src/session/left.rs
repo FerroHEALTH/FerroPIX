@@ -12,31 +12,17 @@ use ferrohealth_ui::view::session::Left;
 use super::{SessionError, SessionId, Sessions, live};
 
 impl Sessions {
-    /// What the live signed-in session `id` has left, in whole seconds,
-    /// without counting the read as the steward's activity: the answer of
-    /// the session route's `GET` (FerroUI `docs/consoles.md`, "The
-    /// session's end"). `None` for a session that is not live, which is
-    /// dropped.
+    /// What the live signed-in session `id` has left, in whole seconds.
     ///
-    /// # Errors
-    /// Returns [`SessionError::Poisoned`] when the store is unusable.
-    pub fn left(&self, id: &SessionId) -> Result<Option<Left>, SessionError> {
-        self.remaining(id, false)
-    }
-
-    /// Counts the steward's activity on the live signed-in session `id`,
-    /// which starts its idle timeout again but never moves its absolute
-    /// one, and answers what it has left: the session route's `POST`.
+    /// The session route's `GET` reads it without touching the session
+    /// (FerroUI `docs/consoles.md`, "The session's end"); with `touch` it
+    /// first counts the steward's activity, which starts the idle timeout
+    /// again but never moves the absolute one, for the route's `POST`.
     /// `None` for a session that is not live, which is dropped.
     ///
     /// # Errors
     /// Returns [`SessionError::Poisoned`] when the store is unusable.
-    pub fn extend(&self, id: &SessionId) -> Result<Option<Left>, SessionError> {
-        self.remaining(id, true)
-    }
-
-    /// What the live session `id` has left, touched first when `touch`.
-    fn remaining(&self, id: &SessionId, touch: bool) -> Result<Option<Left>, SessionError> {
+    pub fn left(&self, id: &SessionId, touch: bool) -> Result<Option<Left>, SessionError> {
         let now = Instant::now();
         let mut store = self.lock()?;
         let Some(session) = store.sessions.get_mut(id) else {
@@ -92,15 +78,15 @@ mod tests {
         let sessions = Sessions::new(settings());
         let id = sessions.establish(signed_in()).expect("room");
         std::thread::sleep(Duration::from_millis(1100));
-        let read = sessions.left(&id).expect("usable").expect("live");
+        let read = sessions.left(&id, false).expect("usable").expect("live");
         assert!(read.idle <= 58, "a second has passed: {read:?}");
         assert!((598..=599).contains(&read.absolute), "{read:?}");
-        let again = sessions.left(&id).expect("usable").expect("live");
+        let again = sessions.left(&id, false).expect("usable").expect("live");
         assert!(
             again.idle <= read.idle,
             "a read did not restart the idle timeout"
         );
-        let extended = sessions.extend(&id).expect("usable").expect("live");
+        let extended = sessions.left(&id, true).expect("usable").expect("live");
         assert_eq!(60, extended.idle, "an extension restarts the idle timeout");
         assert!(
             extended.absolute <= read.absolute,
@@ -124,9 +110,15 @@ mod tests {
                 ..signed_in()
             })
             .expect("room");
-        let left = sessions.left(&bounded).expect("usable").expect("live");
+        let left = sessions
+            .left(&bounded, false)
+            .expect("usable")
+            .expect("live");
         assert!(left.absolute <= 30, "{left:?}");
-        let left = sessions.left(&renewable).expect("usable").expect("live");
+        let left = sessions
+            .left(&renewable, false)
+            .expect("usable")
+            .expect("live");
         assert!(left.absolute > 30, "{left:?}");
     }
 
@@ -137,10 +129,10 @@ mod tests {
             ..settings()
         });
         let id = sessions.establish(signed_in()).expect("room");
-        assert_eq!(None, sessions.left(&id).expect("usable"));
-        assert_eq!(None, sessions.extend(&id).expect("usable"));
+        assert_eq!(None, sessions.left(&id, false).expect("usable"));
+        assert_eq!(None, sessions.left(&id, true).expect("usable"));
         assert_eq!(0, sessions.occupancy().expect("usable").sessions);
         let unknown = SessionId::from_cookie("not-a-session");
-        assert_eq!(None, sessions.extend(&unknown).expect("usable"));
+        assert_eq!(None, sessions.left(&unknown, true).expect("usable"));
     }
 }

@@ -236,7 +236,7 @@ pub async fn revert(
     if !in_place || current.as_deref() != Some(read) {
         return Err(DecideError::Stale.into());
     }
-    let action = write::reasoned(
+    let action = write::recorded(
         &mut transaction,
         "unmerge",
         context,

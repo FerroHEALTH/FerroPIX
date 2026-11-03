@@ -460,7 +460,7 @@ pub(super) async fn open_link(
     .execute(&mut *connection)
     .await
     .map_err(store)?;
-    write::action(
+    write::recorded(
         connection,
         "link",
         context,
@@ -469,6 +469,7 @@ pub(super) async fn open_link(
             record: Some(record),
             ..Subjects::default()
         },
+        None,
     )
     .await?;
     Ok(())

@@ -38,7 +38,7 @@ use ferropix_operator_api::patient::Grade;
 
 use crate::app::{DASHBOARD, QUEUE};
 use crate::locale::messages::Msg;
-use crate::markup::{h, hidden, t};
+use crate::markup::hidden;
 use crate::model::Read;
 use crate::pages::{Needs, or_dash, server_state};
 use crate::visit::Visit;
@@ -126,7 +126,10 @@ fn deferred_notice(visit: &Visit, deferred: Option<&Read<()>>) -> Html {
             Tone::Ok,
             Announce::Status,
             None,
-            h(format!("<p>{}</p>", t(visit.tr(Msg::QueueDeferred)))),
+            Html::raw(format!(
+                "<p>{}</p>",
+                Html::text(visit.tr(Msg::QueueDeferred))
+            )),
         ),
         Some(Err(probe)) => server_state(
             visit,
@@ -173,11 +176,11 @@ fn filters(visit: &Visit, filter: &CandidateQuery) -> Html {
             || visit.tr(Msg::QueueAnyGrade),
             |grade| grade_words(visit, grade),
         );
-        h(format!(
+        Html::raw(format!(
             "<option value=\"{}\"{}>{}</option>",
-            t(value),
+            Html::text(value),
             if grade == chosen { " selected" } else { "" },
-            t(words)
+            Html::text(words)
         ))
     })
     .collect();
@@ -185,28 +188,28 @@ fn filters(visit: &Visit, filter: &CandidateQuery) -> Html {
         .older_than_days
         .map(|days| days.to_string())
         .unwrap_or_default();
-    let grade = Field::new("grade", visit.tr(Msg::ColGrade)).view(h(format!(
+    let grade = Field::new("grade", visit.tr(Msg::ColGrade)).view(Html::raw(format!(
         "<select id=\"grade\" name=\"grade\" class=\"{SELECT}\">{grades}</select>"
     )));
-    let domain = Field::new("domain", visit.tr(Msg::QueueDomain)).view(h(format!(
+    let domain = Field::new("domain", visit.tr(Msg::QueueDomain)).view(Html::raw(format!(
         "<input id=\"domain\" name=\"domain\" type=\"text\" class=\"{INPUT}\" autocomplete=\"off\" value=\"{}\">",
-        t(filter.domain.clone().unwrap_or_default())
+        Html::text(filter.domain.clone().unwrap_or_default())
     )));
-    let older = Field::new("older", visit.tr(Msg::QueueOlder)).view(h(format!(
+    let older = Field::new("older", visit.tr(Msg::QueueOlder)).view(Html::raw(format!(
         "<input id=\"older\" name=\"older\" type=\"number\" min=\"0\" class=\"{INPUT}\" value=\"{}\">",
-        t(days)
+        Html::text(days)
     )));
     let deferred = check_field(
         "deferred",
         visit.tr(Msg::QueueShowDeferred),
         visit.tr(Msg::QueueShowDeferredHelp),
-        h(format!(
+        Html::raw(format!(
             "<input id=\"deferred\" name=\"deferred\" type=\"checkbox\" value=\"on\"{} aria-describedby=\"{}\">",
             if filter.deferred { " checked" } else { "" },
-            t(help_id("deferred"))
+            Html::text(help_id("deferred"))
         )),
     );
-    h(format!(
+    Html::raw(format!(
         "<form method=\"post\" action=\"{QUEUE}\" class=\"fui-form\">{}<div class=\"fui-form-grid\">{grade}{domain}{older}</div>{deferred}<div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button><button type=\"submit\" name=\"clear\" value=\"on\" formnovalidate class=\"{}\">{}</button></div></form>",
         hidden(FORM, FILTER),
         Variant::Primary.class(),
@@ -252,18 +255,18 @@ fn empty(visit: &Visit, filter: &CandidateQuery, candidates: &Candidates) -> Htm
         .last_decision_at
         .as_ref()
         .map_or_else(Html::empty, |at| {
-            h(format!(
+            Html::raw(format!(
                 "<p class=\"fui-small fui-muted\">{} {}</p>",
-                t(visit.tr(Msg::QueueLastDecision)),
+                Html::text(visit.tr(Msg::QueueLastDecision)),
                 timestamp(&visit.locale, at)
             ))
         });
     Html::join([
         list_empty(visit.tr(Msg::QueueEmpty), None),
         last,
-        h(format!(
+        Html::raw(format!(
             "<p class=\"fui-small\"><a href=\"{DASHBOARD}\">{}</a></p>",
-            t(visit.tr(Msg::Dashboard))
+            Html::text(visit.tr(Msg::Dashboard))
         )),
     ])
 }
@@ -299,7 +302,7 @@ fn candidate_row(
         cells: Html::join([
             title_cell(
                 Some(&format!("{QUEUE}/{}", candidate.id)),
-                t(pair_name(visit, candidate)),
+                Html::text(pair_name(visit, candidate)),
                 None,
             ),
             cell(
@@ -339,9 +342,9 @@ fn candidate_row(
 // NOTE: FerroUI COMPONENTS.md R9: the row is its link's target, so its actions sit in the
 // actions cell (`table::view::ACTIONS`), above the link.
 fn actions_cell(column: &Column, actions: &Html) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<td data-label=\"{}\" data-role=\"{}\" class=\"{ACTIONS}\">{actions}</td>",
-        t(column.label.text()),
+        Html::text(column.label.text()),
         column.role.key()
     ))
 }
@@ -375,10 +378,10 @@ fn list(visit: &Visit, filter: &CandidateQuery, candidates: &Candidates) -> Html
             ("total", candidates.total.into()),
         ],
     );
-    let hint = h(format!(
+    let hint = Html::raw(format!(
         "<p class=\"fui-small fui-muted\">{} · {}</p>",
-        t(range),
-        t(visit.tr(Msg::QueueKeys))
+        Html::text(range),
+        Html::text(visit.tr(Msg::QueueKeys))
     ));
     let foot = worklist_foot(Some(hint), pager(visit, filter, candidates));
     queue_card(visit, candidates, worklist(table).then(foot))
@@ -398,7 +401,7 @@ fn pair_name(visit: &Visit, candidate: &CandidateRow) -> String {
 
 /// Two values one above the other, a dash for one that is absent.
 fn pair_line(visit: &Visit, a: Option<&String>, b: Option<&String>) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<span>{}<br>{}</span>",
         or_dash(&visit.locale, a.cloned()),
         or_dash(&visit.locale, b.cloned())
@@ -408,9 +411,9 @@ fn pair_line(visit: &Visit, a: Option<&String>, b: Option<&String>) -> Html {
 /// When a candidate was queued, and for a deferred one when it comes back.
 fn waited(visit: &Visit, candidate: &CandidateRow) -> Html {
     match &candidate.deferred_until {
-        Some(until) => h(format!(
+        Some(until) => Html::raw(format!(
             "<span>{} {}</span>",
-            t(visit.tr(Msg::QueueBackOn)),
+            Html::text(visit.tr(Msg::QueueBackOn)),
             timestamp(&visit.locale, until)
         )),
         None => timestamp(&visit.locale, &candidate.created_at),
@@ -425,7 +428,10 @@ fn glance(visit: &Visit, filter: &CandidateQuery, candidate: &CandidateRow) -> H
     let until_id = format!("until-{id}");
     let reason_id = format!("reason-{id}");
     let facts = definitions(vec![
-        (visit.tr(Msg::ColPair), t(pair_name(visit, candidate))),
+        (
+            visit.tr(Msg::ColPair),
+            Html::text(pair_name(visit, candidate)),
+        ),
         (
             visit.tr(Msg::ColScore),
             score_bar(locale, candidate.score, grade_tone(candidate.grade)),
@@ -446,19 +452,19 @@ fn glance(visit: &Visit, filter: &CandidateQuery, candidate: &CandidateRow) -> H
             ),
         ),
     ]);
-    let until = Field::new(until_id.clone(), visit.tr(Msg::DeferUntil)).view(h(format!(
+    let until = Field::new(until_id.clone(), visit.tr(Msg::DeferUntil)).view(Html::raw(format!(
         "<input id=\"{}\" name=\"until\" type=\"date\" class=\"{INPUT}\" required>",
-        t(&until_id)
+        Html::text(&until_id)
     )));
-    let reason = Field::new(reason_id.clone(), visit.tr(Msg::RevealReason)).view(h(format!(
+    let reason = Field::new(reason_id.clone(), visit.tr(Msg::RevealReason)).view(Html::raw(format!(
         "<input id=\"{}\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">",
-        t(&reason_id)
+        Html::text(&reason_id)
     )));
-    let body = h(format!(
+    let body = Html::raw(format!(
         "{facts}<p><a href=\"{}\" class=\"{}\">{}</a></p><form method=\"post\" action=\"{QUEUE}\" class=\"fui-form\">{}{}{}{until}{reason}<div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button></div></form>",
-        t(format!("{QUEUE}/{id}")),
+        Html::text(format!("{QUEUE}/{id}")),
         Variant::Primary.class(),
-        t(visit.tr(Msg::QueueDecide)),
+        Html::text(visit.tr(Msg::QueueDecide)),
         hidden(FORM, DEFER),
         hidden("candidate", id),
         kept(filter),
@@ -489,7 +495,7 @@ fn pager(visit: &Visit, filter: &CandidateQuery, candidates: &Candidates) -> Opt
         return None;
     }
     let page = |offset: u32, words: Msg, glyph: Glyph| {
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{QUEUE}\" class=\"fui-inline-form\">{}{}{}<button type=\"submit\" class=\"{}\">{}</button></form>",
             hidden(FORM, FILTER),
             kept(filter),
@@ -498,7 +504,7 @@ fn pager(visit: &Visit, filter: &CandidateQuery, candidates: &Candidates) -> Opt
             label(Some(glyph), visit.tr(words)),
         ))
     };
-    Some(h(format!(
+    Some(Html::raw(format!(
         "<div class=\"fui-actions\">{}{}</div>",
         previous.map_or_else(Html::empty, |offset| page(
             offset,

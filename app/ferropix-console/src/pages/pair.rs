@@ -38,7 +38,7 @@ use ferropix_operator_api::candidate::{
 
 use crate::app::QUEUE;
 use crate::locale::messages::Msg;
-use crate::markup::{h, hidden, t};
+use crate::markup::hidden;
 use crate::model::{DecisionOutcome, Probe, Reach};
 use crate::pages::patient::{FIELDS, compare_record, value_of};
 use crate::pages::queue::grade_words;
@@ -85,7 +85,7 @@ pub fn pair(
                 Tone::Warn,
                 Announce::Status,
                 None,
-                h(format!("<p>{}</p>", t(visit.tr(Msg::PairChanged)))),
+                Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::PairChanged)))),
             ),
         ),
         refused,
@@ -117,18 +117,18 @@ fn is_conflict(probe: &Probe) -> bool {
 fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
     let link = |id: Option<&String>, words: Msg, key: &str, glyph: Glyph| {
         id.map_or_else(Html::empty, |id| {
-            h(format!(
+            Html::raw(format!(
                 "<a href=\"{}\" class=\"{}\"{}>{}</a>",
-                t(format!("{QUEUE}/{id}")),
+                Html::text(format!("{QUEUE}/{id}")),
                 Variant::Secondary.small(),
                 announced(key),
                 label(Some(glyph), visit.tr(words)),
             ))
         })
     };
-    h(format!(
+    Html::raw(format!(
         "<nav class=\"fui-actions\" aria-label=\"{}\">{}{}</nav>",
-        t(visit.tr(Msg::PairNeighbours)),
+        Html::text(visit.tr(Msg::PairNeighbours)),
         link(
             candidate.previous.as_ref(),
             Msg::PairPrevious,
@@ -148,7 +148,7 @@ fn neighbours(visit: &Visit, candidate: &Candidate) -> Html {
 /// announces `key` (FerroUI `docs/consoles.md`, "Keyboard shortcuts").
 fn announced(key: &str) -> String {
     aria_keys(key).map_or_else(String::new, |keys| {
-        format!(" aria-keyshortcuts=\"{}\"", t(keys))
+        format!(" aria-keyshortcuts=\"{}\"", Html::text(keys))
     })
 }
 
@@ -163,25 +163,25 @@ fn decided_notice(visit: &Visit, candidate: &Candidate) -> Html {
         Tone::Info,
         Announce::Status,
         None,
-        h(format!(
+        Html::raw(format!(
             "<p>{}</p>{}{}",
-            t(visit.tr_with(
+            Html::text(visit.tr_with(
                 Msg::PairDecided,
                 &[("how", how.into()), ("who", who.into())]
             )),
             candidate
                 .decided_at
                 .as_ref()
-                .map_or_else(Html::empty, |at| h(format!(
+                .map_or_else(Html::empty, |at| Html::raw(format!(
                     "<p class=\"fui-small fui-muted\">{}</p>",
                     timestamp(&visit.locale, at)
                 ))),
             candidate
                 .reason
                 .as_ref()
-                .map_or_else(Html::empty, |reason| h(format!(
+                .map_or_else(Html::empty, |reason| Html::raw(format!(
                     "<p class=\"fui-small\">{}</p>",
-                    t(reason)
+                    Html::text(reason)
                 ))),
         )),
     )
@@ -301,19 +301,19 @@ fn breakdown(visit: &Visit, candidate: &Candidate) -> Html {
             Tone::Warn,
             Announce::Status,
             None,
-            h(format!(
+            Html::raw(format!(
                 "<p>{}</p>",
-                t(visit.tr_with(
+                Html::text(visit.tr_with(
                     Msg::PairConflicts,
                     &[("conflicts", evidence.conflicts.join(", ").into())]
                 ))
             )),
         )
     };
-    h(format!(
+    Html::raw(format!(
         "<p class=\"fui-small\">{} <code>{}</code></p>{conflicts}{}",
-        t(visit.tr(Msg::PairBlockingKey)),
-        t(key),
+        Html::text(visit.tr(Msg::PairBlockingKey)),
+        Html::text(key),
         score_breakdown(&visit.locale, &score),
     ))
 }
@@ -337,10 +337,12 @@ fn persons(visit: &Visit, candidate: &Candidate) -> Html {
             .collect();
         (
             record.domain.name.clone(),
-            h(format!(
+            Html::raw(format!(
                 "<p><a href=\"{}\"><code>{}</code></a></p>{}",
-                t(format!("/patients/{}", record.person)),
-                t(visit.tr_with(Msg::PersonId, &[("person", record.person.clone().into())])),
+                Html::text(format!("/patients/{}", record.person)),
+                Html::text(
+                    visit.tr_with(Msg::PersonId, &[("person", record.person.clone().into())])
+                ),
                 identifier_list(&visit.locale, &identifiers),
             )),
         )
@@ -352,7 +354,7 @@ fn persons(visit: &Visit, candidate: &Candidate) -> Html {
 /// the bar's form.
 fn versions(candidate: &Candidate) -> Html {
     let form = format!("{BAR}-form");
-    h(format!(
+    Html::raw(format!(
         "<input type=\"hidden\" form=\"{form}\" name=\"a_version\" value=\"{}\"><input type=\"hidden\" form=\"{form}\" name=\"b_version\" value=\"{}\">",
         candidate.a.version, candidate.b.version
     ))
@@ -366,11 +368,11 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
         hidden("decision", "link"),
         hidden("a_version", &candidate.a.version.to_string()),
         hidden("b_version", &candidate.b.version.to_string()),
-        Field::new("merge-reason", visit.tr(Msg::RevealReason)).view(h(format!(
+        Field::new("merge-reason", visit.tr(Msg::RevealReason)).view(Html::raw(format!(
             "<input id=\"merge-reason\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">"
         ))),
     ]);
-    let confirm = h(format!(
+    let confirm = Html::raw(format!(
         "<button type=\"submit\" class=\"{}\">{}</button>",
         Variant::Destructive.class(),
         label(Some(Glyph::LINK), visit.tr(Msg::PairLinkMerge))
@@ -395,9 +397,9 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
     );
     card(
         visit.tr(Msg::PairMerges),
-        h(format!(
+        Html::raw(format!(
             "<p>{}</p><button type=\"button\" class=\"{}\" command=\"show-modal\" commandfor=\"{MERGE_DIALOG}\" aria-haspopup=\"dialog\"{}>{}</button>{dialog}",
-            t(visit.tr(Msg::PairMergesNote)),
+            Html::text(visit.tr(Msg::PairMergesNote)),
             Variant::Primary.class(),
             announced("l"),
             label(Some(Glyph::LINK), visit.tr(Msg::PairLinkAsk)),

@@ -212,8 +212,10 @@ pub fn pair(visit: &Visit) -> Drawn {
     screen.view()
 }
 
-/// The page of a patient's merge (`unmerge` false) or unmerge.
-fn merge_screen(visit: &Visit, unmerge: bool) -> Drawn {
+/// The merge of a patient at `/patients/{person}/merge` (design 08), or with
+/// `unmerge` its unmerge at `/patients/{person}/unmerge` (design 05.7).
+#[must_use]
+pub fn merge(visit: &Visit, unmerge: bool) -> Drawn {
     let Some(person) = visit.param("person").filter(|id| is_uuid(id)) else {
         return not_found(visit);
     };
@@ -291,18 +293,6 @@ pub fn patient(visit: &Visit) -> Drawn {
     screen.title = visit.tr_with(Msg::PersonId, &[("person", person.into())]);
     screen.mono = true;
     screen.view()
-}
-
-/// The merge of a patient at `/patients/{person}/merge` (design 08).
-#[must_use]
-pub fn merge(visit: &Visit) -> Drawn {
-    merge_screen(visit, false)
-}
-
-/// The unmerge of a patient at `/patients/{person}/unmerge` (design 05.7).
-#[must_use]
-pub fn unmerge(visit: &Visit) -> Drawn {
-    merge_screen(visit, true)
 }
 
 /// The sources at `/sources` (design 33).

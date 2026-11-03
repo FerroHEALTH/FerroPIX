@@ -119,7 +119,7 @@ pub(super) async fn merge_moving(
     .fetch_one(&mut *connection)
     .await
     .map_err(store)?;
-    let action = write::reasoned(
+    let action = write::recorded(
         connection,
         recording.kind,
         context,
@@ -254,7 +254,7 @@ pub(super) async fn candidate(
     let Some(id) = id else {
         return Ok(None);
     };
-    write::action(
+    write::recorded(
         connection,
         "candidate",
         context,
@@ -263,6 +263,7 @@ pub(super) async fn candidate(
             candidate: Some(id),
             ..Subjects::default()
         },
+        None,
     )
     .await?;
     Ok(Some(CandidateId(id)))

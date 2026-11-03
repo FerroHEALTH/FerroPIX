@@ -284,20 +284,9 @@ pub(super) struct Subjects {
     pub merge: Option<Uuid>,
 }
 
-/// Inserts the steward action row of one system action of kind `kind` and
-/// returns its id.
-pub(super) async fn action(
-    connection: &mut PgConnection,
-    kind: &str,
-    context: &Context,
-    subjects: Subjects,
-) -> Result<Uuid, StoreError> {
-    reasoned(connection, kind, context, subjects, None).await
-}
-
 /// Inserts the steward action row of kind `kind`, with the `reason` a
-/// steward gave, and returns its id.
-pub(super) async fn reasoned(
+/// steward gave or `None` for a system action, and returns its id.
+pub(super) async fn recorded(
     connection: &mut PgConnection,
     kind: &str,
     context: &Context,

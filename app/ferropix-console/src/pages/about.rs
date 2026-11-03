@@ -11,6 +11,7 @@
 //! server's version is not known.
 
 use ferrohealth_ui::highlight::Language;
+use ferrohealth_ui::html::Html;
 use ferrohealth_ui::view::surface::{Header, card};
 use ferrohealth_ui::view::template::about::{
     AboutPage as Page, Link, Manufacturer, SelfDescription, about_page as library_page,
@@ -19,7 +20,6 @@ use serde::Deserialize;
 
 use crate::app::shell::footer;
 use crate::locale::messages::Msg;
-use crate::markup::t;
 use crate::model::Capability;
 use crate::pages::Drawn;
 use crate::visit::Visit;
@@ -78,11 +78,11 @@ pub fn about_page(visit: &Visit) -> Drawn {
         .fhir_version
         .unwrap_or_else(|| visit.tr(Msg::NotKnown));
     let versions = vec![
-        (visit.tr(Msg::VersionServer), t(server)),
-        (visit.tr(Msg::VersionFhir), t(fhir)),
+        (visit.tr(Msg::VersionServer), Html::text(server)),
+        (visit.tr(Msg::VersionFhir), Html::text(fhir)),
         (
             visit.tr(Msg::VersionFerroui),
-            t(format!("ferrohealth-ui {FERROUI}")),
+            Html::text(format!("ferrohealth-ui {FERROUI}")),
         ),
     ];
     let (self_description, cards) = match capability {

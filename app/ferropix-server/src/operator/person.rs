@@ -13,6 +13,7 @@
 //! an unknown person writes neither. What the document holds is our own
 //! design (`docs/architecture.md` §12.3).
 
+use crate::fhir::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::patient::{DomainRef, Masked, PersonStatus};
@@ -20,6 +21,7 @@ use ferropix_operator_api::person::{
     HISTORY, HistoryEntry, HistoryEvent, IdentifierHandle, IdentifierRow, Link, LinkKind, Person,
     PseudonymRow, RecordState, SourceRecord,
 };
+use http::StatusCode;
 use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -31,7 +33,7 @@ use crate::operator::{
     snapshot, wire,
 };
 use crate::pdqm::patient::{SERVED, SERVED_ORDER};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 use crate::store::seal::Sealer;
 
 /// The format every timestamp of the document is written in, RFC 3339 UTC.
@@ -44,11 +46,11 @@ const PSEUDONYM_DOMAINS: i64 = 200;
 pub async fn answer(operator: &Operator, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
     let Some(id) = wire::path_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, wire::NO_SUCH_PERSON);
     };
     let person = match read(operator, id).await {
         Ok(Some(person)) => person,
-        Ok(None) => return not_found(),
+        Ok(None) => return problem::refuse(Kind::NotFound, wire::NO_SUCH_PERSON),
         Err(error) => return wire::failed(&error),
     };
     let recorded = Recorded {
@@ -71,12 +73,7 @@ pub async fn answer(operator: &Operator, request: Request) -> Response {
     if let Err(error) = wire::record(operator, &parts, vec![exchange]).await {
         return wire::unaudited(&error);
     }
-    wire::answer(&person)
-}
-
-/// Returns the `404` of an id that names no person.
-fn not_found() -> Response {
-    wire::refuse(Kind::NotFound, wire::NO_SUCH_PERSON)
+    outcome::body(StatusCode::OK, &person, wire::JSON)
 }
 
 /// Reads the person `id`, or `None` when the store holds none.

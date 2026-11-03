@@ -10,10 +10,12 @@
 //! record. What the dashboard counts is our own design: no specification
 //! governs it.
 
+use crate::fhir::outcome;
 use axum::response::Response;
 use ferropix_operator_api::overview::{
     DayCount, FEED_HOURS, HourFeeds, OLDEST, Overview, QUEUE_DAYS, Queue, QueueEntry,
 };
+use http::StatusCode;
 use sqlx::PgConnection;
 
 use crate::operator::{Operator, OperatorError, count, grade, snapshot, wire};
@@ -25,7 +27,7 @@ type Counts = (i64, i64, i64, i64, i64, i64, i64);
 /// Answers the dashboard.
 pub async fn answer(operator: &Operator) -> Response {
     match read(operator).await {
-        Ok(overview) => wire::answer(&overview),
+        Ok(overview) => outcome::body(StatusCode::OK, &overview, wire::JSON),
         Err(error) => wire::failed(&error),
     }
 }

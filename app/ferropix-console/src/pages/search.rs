@@ -37,7 +37,7 @@ use ferropix_operator_api::search::Results;
 use crate::app::{SEARCH, SEARCH_DEMOGRAPHICS};
 use crate::locale::messages::Msg;
 use crate::locale::tr;
-use crate::markup::{h, hidden, submit, t};
+use crate::markup::{hidden, submit};
 use crate::model::{Document, Prefill, Segment};
 use crate::pages::patient::full_name;
 use crate::pages::queue::grade_words;
@@ -73,22 +73,22 @@ fn by_identifier(visit: &Visit, domains: Option<&Domains>) -> Html {
         })
         .unwrap_or_default();
     let domain = if choices.is_empty() {
-        Field::new("domain", visit.tr(Msg::Domain)).view(h(format!(
+        Field::new("domain", visit.tr(Msg::Domain)).view(Html::raw(format!(
             "<select id=\"domain\" name=\"domain\" class=\"{SELECT}\" disabled><option value=\"\">{}</option></select>",
-            t(visit.tr(Msg::DomainsNotKnown))
+            Html::text(visit.tr(Msg::DomainsNotKnown))
         )))
     } else {
         let options: Html = choices
             .into_iter()
             .map(|(system, name)| {
-                h(format!(
+                Html::raw(format!(
                     "<option value=\"{}\">{}</option>",
-                    t(system),
-                    t(name)
+                    Html::text(system),
+                    Html::text(name)
                 ))
             })
             .collect();
-        Field::new("domain", visit.tr(Msg::Domain)).view(h(format!(
+        Field::new("domain", visit.tr(Msg::Domain)).view(Html::raw(format!(
             "<select id=\"domain\" name=\"domain\" class=\"{SELECT}\" required>{options}</select>"
         )))
     };
@@ -101,12 +101,12 @@ fn by_identifier(visit: &Visit, domains: Option<&Domains>) -> Html {
             "identifier",
             Some(help_id("identifier")),
         ));
-    h(format!(
+    Html::raw(format!(
         "<form method=\"post\" action=\"{SEARCH}\" class=\"fui-form\">{}<div class=\"fui-form-grid\">{domain}<div class=\"fui-span-2\">{identifier}</div><div>{}</div></div><p id=\"{}\" class=\"fui-help\">{}</p></form>",
         hidden("segment", "identifier"),
         search_submit(visit),
-        t(help_id("identifier")),
-        t(visit.tr(Msg::IdentifierHelp)),
+        Html::text(help_id("identifier")),
+        Html::text(visit.tr(Msg::IdentifierHelp)),
     ))
 }
 
@@ -124,11 +124,11 @@ fn text_field(
         None => field,
     };
     let described = hint.map_or_else(String::new, |_| {
-        format!(" aria-describedby=\"{}\"", t(help_id(id)))
+        format!(" aria-describedby=\"{}\"", Html::text(help_id(id)))
     });
-    field.view(h(format!(
+    field.view(Html::raw(format!(
         "<input id=\"{id}\" name=\"{id}\" type=\"text\" class=\"{INPUT}\" autocomplete=\"off\"{described} value=\"{}\">",
-        t(value.cloned().unwrap_or_default())
+        Html::text(value.cloned().unwrap_or_default())
     )))
 }
 
@@ -181,25 +181,25 @@ fn by_demographics(visit: &Visit, prefill: &Prefill) -> Html {
     ]
     .into_iter()
     .map(|(value, words)| {
-        h(format!(
+        Html::raw(format!(
             "<option value=\"{value}\">{}</option>",
-            t(visit.tr(words))
+            Html::text(visit.tr(words))
         ))
     })
     .collect();
-    let gender = Field::new("gender", visit.tr(Msg::Gender)).view(h(format!(
+    let gender = Field::new("gender", visit.tr(Msg::Gender)).view(Html::raw(format!(
         "<select id=\"gender\" name=\"gender\" class=\"{SELECT}\">{genders}</select>"
     )));
     let exact = check_field(
         "exact",
         visit.tr(Msg::ExactNames),
         visit.tr(Msg::ExactNamesHelp),
-        h(format!(
+        Html::raw(format!(
             "<input id=\"exact\" name=\"exact\" type=\"checkbox\" value=\"on\" aria-describedby=\"{}\">",
-            t(help_id("exact"))
+            Html::text(help_id("exact"))
         )),
     );
-    h(format!(
+    Html::raw(format!(
         "<form method=\"post\" action=\"{SEARCH_DEMOGRAPHICS}\" class=\"fui-form\">{}<div class=\"fui-form-grid\">{}{}{}{gender}{}</div><div class=\"fui-form-foot\">{exact} {}</div></form>",
         hidden("segment", "demographics"),
         text_field(
@@ -270,9 +270,9 @@ pub fn search_page(visit: &Visit) -> Drawn {
             Needs::of(Msg::WhatSearch),
             route,
         )
-        .then(h(format!(
+        .then(Html::raw(format!(
             "<p class=\"fui-muted\">{}</p>",
-            t(visit.tr(Msg::NothingSearched))
+            Html::text(visit.tr(Msg::NothingSearched))
         )))
     } else {
         Html::empty()
@@ -406,7 +406,11 @@ fn result_row(
         focused: first,
         class: None,
         cells: Html::join([
-            title_cell(Some(&format!("/patients/{}", hit.id)), t(name), None),
+            title_cell(
+                Some(&format!("/patients/{}", hit.id)),
+                Html::text(name),
+                None,
+            ),
             at(1, born),
             at(2, gender),
             at(3, identifier_list(locale, &chips)),

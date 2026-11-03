@@ -20,6 +20,14 @@ use url::Url;
 use super::super::audit::{EventOutcome, NetworkAccessPoint};
 use super::super::identifier::HomeCommunityId;
 use ihe_atna::redact::{REDACTED, RedactedUrl};
+#[cfg(feature = "atna")]
+use {
+    super::super::audit::{DESTINATION_ROLE, SOURCE_ROLE, message},
+    ihe_atna::atna::codes::OBJECT_ID_PATIENT_NUMBER,
+    ihe_atna::atna::message::{
+        AccessPoint, ActiveParticipant, AuditMessage, AuditSource, CodedValue, ParticipantObject,
+    },
+};
 
 /// One ITI-55 Responding Gateway audit message (§3.55.5.1.2).
 #[derive(Clone)]
@@ -70,22 +78,7 @@ impl RespondingAuditEvent {
     /// Gateway's audit table fills it (§3.55.5.1.2), written by `source` on
     /// the host `host`.
     #[must_use]
-    pub fn message(
-        &self,
-        source: &ihe_atna::atna::message::AuditSource,
-        host: &ihe_atna::atna::message::AccessPoint,
-    ) -> ihe_atna::atna::message::AuditMessage {
-        use ihe_atna::atna::codes::OBJECT_ID_PATIENT_NUMBER;
-        use ihe_atna::atna::message::{
-            AccessPoint, ActiveParticipant, AuditMessage, CodedValue, EventIdentification,
-            ParticipantObject,
-        };
-
-        use super::super::audit::{
-            DESTINATION_ROLE, EVENT_ACTION, EVENT_ID, EVENT_TYPE, HOME_COMMUNITY_DETAIL,
-            SOURCE_ROLE,
-        };
-        let transaction = CodedValue::of(EVENT_TYPE);
+    pub fn message(&self, source: &AuditSource, host: &AccessPoint) -> AuditMessage {
         let participants = vec![
             ActiveParticipant {
                 user_id: self.source_user.clone(),
@@ -95,10 +88,10 @@ impl RespondingAuditEvent {
                 // §3.55.5.1.2 leaves the source's flag unspecialized: the initiating gateway.
                 user_is_requestor: true,
                 role_id_codes: vec![CodedValue::of(SOURCE_ROLE)],
-                access_point: self.source_access_point.as_ref().map(|point| AccessPoint {
-                    type_code: point.type_code(),
-                    id: point.id(),
-                }),
+                access_point: self
+                    .source_access_point
+                    .as_ref()
+                    .map(NetworkAccessPoint::atna),
             },
             ActiveParticipant {
                 user_id: self.destination.to_string(),
@@ -109,7 +102,7 @@ impl RespondingAuditEvent {
                 access_point: Some(host.clone()),
             },
         ];
-        let mut objects: Vec<ParticipantObject> = self
+        let patients = self
             .patients
             .iter()
             .map(|patient| ParticipantObject {
@@ -124,38 +117,12 @@ impl RespondingAuditEvent {
                 details: Vec::new(),
             })
             .collect();
-        objects.push(ParticipantObject {
-            // NOTE: ITI TF-2 §3.55.5.1.2 leaves ParticipantObjectID optional and PS3.15
-            // A.5.1 requires the attribute, so it is written empty.
-            id: SecretString::from(String::new()),
-            type_code: Some("2"),
-            type_code_role: Some("24"),
-            data_life_cycle: None,
-            id_type_code: transaction.clone(),
-            query: Some(self.query.clone()),
-            details: self
-                .home_community
-                .iter()
-                .map(|community| {
-                    (
-                        HOME_COMMUNITY_DETAIL.to_owned(),
-                        SecretString::from(community.to_string()),
-                    )
-                })
-                .collect(),
-        });
-        AuditMessage {
-            event: EventIdentification {
-                event_id: CodedValue::of(EVENT_ID),
-                action: EVENT_ACTION,
-                date_time: self.date_time,
-                outcome: self.outcome.code(),
-                type_codes: vec![transaction],
-                outcome_description: None,
-            },
+        message(
+            (self.date_time, self.outcome),
             participants,
-            source: source.clone(),
-            objects,
-        }
+            source,
+            patients,
+            (&self.query, self.home_community.as_ref()),
+        )
     }
 }

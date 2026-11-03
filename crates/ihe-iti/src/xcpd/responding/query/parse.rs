@@ -7,11 +7,12 @@
 
 use secrecy::SecretString;
 
+use super::super::super::ACTION;
 use super::super::super::identifier::{HomeCommunityId, Oid, PatientIdentifier};
 use super::super::super::request::ProcessingCode;
-use super::super::super::{ACTION, HL7};
+use super::super::super::v3::{self, Ns};
 use super::{BirthTime, Parameters, PersonName, PostalAddress, Priority, ReceivedQuery, Refusal};
-use crate::soap::{self, ANONYMOUS, Element, Visitor};
+use crate::soap::{ANONYMOUS, Element, Visitor};
 
 /// The local names a parameter element may carry, lowerCamel as the HL7 v3
 /// XML ITS writes them; §3.55.4.1.2.4's example spells one `LivingSubjectId`.
@@ -32,15 +33,6 @@ fn parameter(local: &str) -> Option<&'static str> {
         .iter()
         .copied()
         .find(|name| name.eq_ignore_ascii_case(local))
-}
-
-/// Which namespace an element is in, of the ones the reader looks at.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Ns {
-    Soap,
-    Wsa,
-    Hl7,
-    Other,
 }
 
 /// What the reader collects.
@@ -83,8 +75,7 @@ impl Visitor for Collected {
     type Namespace = Ns;
     type Error = Refusal;
     const SOAP: Ns = Ns::Soap;
-    const NAMESPACES: &'static [(&'static str, Ns)] =
-        &[(soap::ADDRESSING, Ns::Wsa), (HL7, Ns::Hl7)];
+    const NAMESPACES: &'static [(&'static str, Ns)] = v3::NAMESPACES;
     const OTHER: Ns = Ns::Other;
 
     fn opened(&mut self, open: &[(Ns, &str)], element: &Element<'_>) -> Result<(), Refusal> {

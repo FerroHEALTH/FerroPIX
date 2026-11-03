@@ -79,11 +79,12 @@ mod response;
 use std::fmt;
 use std::time::Duration;
 
-use http::header::{ACCEPT, CONTENT_TYPE, HeaderName};
+use http::header::HeaderName;
 use url::Url;
 use uuid::Uuid;
 
-use error::{ClientError, InvalidInput, Malformation, MitzError};
+use error::{ClientError, InvalidInput, MitzError};
+use ihe_iti::soap;
 use question::{ClosedAnswer, ClosedQuestion};
 
 /// The XACML 3.0 core namespace of the `Request` and the `Response`
@@ -225,25 +226,22 @@ impl MitzClient {
         let message = Uuid::new_v4();
         let body =
             request::envelope(question, &self.endpoint, message).map_err(MitzError::Encode)?;
-        let response = self
-            .http
-            .post(self.endpoint.clone())
-            .header(CONTENT_TYPE, SOAP_REQUEST)
-            .header(ACCEPT, "application/soap+xml")
-            .header(REQUEST_ID, message.to_string())
-            .timeout(timeout)
-            .body(body)
-            .send()
-            .await
-            .map_err(error::transport)?;
-        let status = response.status();
-        let media = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let answer = body_of(response).await?;
-        response::read(status, media.as_deref(), &answer, question)
+        let answer = soap::post::<MitzError>(
+            self.http
+                .post(self.endpoint.clone())
+                .header(REQUEST_ID, message.to_string()),
+            SOAP_REQUEST,
+            body,
+            timeout,
+            response::LIMIT,
+        )
+        .await?;
+        response::read(
+            answer.status,
+            answer.media.as_deref(),
+            &answer.body,
+            question,
+        )
     }
 }
 
@@ -253,23 +251,4 @@ impl fmt::Debug for MitzClient {
             .field("endpoint", &self.endpoint.as_str())
             .finish_non_exhaustive()
     }
-}
-
-/// The answer's body, up to [`response::LIMIT`] bytes.
-async fn body_of(mut response: reqwest::Response) -> Result<Vec<u8>, MitzError> {
-    let status = response.status();
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(error::transport)? {
-        if body.len().saturating_add(chunk.len()) > response::LIMIT {
-            if status != http::StatusCode::OK {
-                return Err(MitzError::Rejected { status });
-            }
-            return Err(Malformation::TooLarge {
-                limit: response::LIMIT,
-            }
-            .into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
 }

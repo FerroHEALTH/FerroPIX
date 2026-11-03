@@ -95,12 +95,6 @@ impl<T: Resource> Answer<T> {
         &self.resource
     }
 
-    /// Returns the resource, by value.
-    #[must_use]
-    pub fn into_resource(self) -> T {
-        self.resource
-    }
-
     /// Returns the resource encoded in `format`, the body of the answer, whose
     /// media type is [`Format::media_type`].
     ///

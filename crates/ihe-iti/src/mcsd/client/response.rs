@@ -12,6 +12,7 @@ use http::StatusCode;
 use url::Url;
 
 use super::{CareResource, CareService, Change, Match, Version};
+use crate::exchange::Unanswered;
 use crate::mcsd::budget::Budget;
 use crate::mcsd::error::{Malformation, McsdError};
 use crate::outcome;
@@ -38,34 +39,13 @@ pub(super) struct History {
     pub(super) next: Option<Url>,
 }
 
-/// A transport failure, with the request URL removed: the URL may carry the
-/// base's credentials.
-pub(super) fn transport(error: reqwest::Error) -> McsdError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        McsdError::Timeout
-    } else {
-        McsdError::Transport(error)
-    }
-}
-
-/// A send that produced no answer, a transport failure read as [`transport`]
-/// reads it.
-pub(super) fn unsent(error: crate::authorizer::Unsent) -> McsdError {
-    match error {
-        crate::authorizer::Unsent::Unauthenticated(source) => McsdError::Unauthenticated(source),
-        crate::authorizer::Unsent::Timeout => McsdError::Timeout,
-        crate::authorizer::Unsent::Transport(source) => transport(source),
-    }
-}
-
 /// Reads the answer's body, spending its bytes from `budget` as they arrive.
 pub(super) async fn body(
     mut response: reqwest::Response,
     budget: &mut Budget,
 ) -> Result<Vec<u8>, McsdError> {
     let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(transport)? {
+    while let Some(chunk) = response.chunk().await.map_err(McsdError::failed)? {
         budget.bytes(chunk.len())?;
         body.extend_from_slice(&chunk);
     }

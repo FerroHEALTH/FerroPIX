@@ -12,7 +12,7 @@
 
 use std::fmt;
 
-use fhir_types::codec::{Json, Path, Value};
+use fhir_types::codec::{DecodeError, DecodeErrorKind, Json, Object, Path, Value};
 use fhir_types::r4::operation_outcome::OperationOutcome;
 
 /// The FHIR R4 `issue-type` of an `OperationOutcome` issue
@@ -181,6 +181,78 @@ pub(crate) fn fhir_json(media: Option<&str>) -> bool {
         })
 }
 
+/// How a client's answer fails to be a FHIR JSON resource, before its
+/// profile reads it.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum Unreadable {
+    /// The answer's media type is not FHIR JSON.
+    #[error("the answer is not application/fhir+json")]
+    NotFhirJson,
+    /// The answer is longer than the client reads.
+    #[error("the answer exceeds {limit} bytes")]
+    TooLarge {
+        /// The limit, in bytes.
+        limit: usize,
+    },
+    /// The answer is not JSON.
+    #[error("the answer is not JSON (line {line}, column {column})")]
+    NotJson {
+        /// The line of the syntax error.
+        line: usize,
+        /// The column of the syntax error.
+        column: usize,
+    },
+    /// The answer is not a JSON object with a `resourceType`.
+    #[error("the answer is not a FHIR resource")]
+    NotAResource,
+    /// The resource does not decode as FHIR R4.
+    #[error("the resource does not decode as FHIR R4: {kind}")]
+    Decode {
+        /// Why it was refused.
+        kind: DecodeErrorKind,
+    },
+}
+
+impl From<DecodeError> for Unreadable {
+    fn from(error: DecodeError) -> Self {
+        Self::Decode { kind: error.kind }
+    }
+}
+
+/// A FHIR JSON resource an answer holds, not yet decoded.
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
+pub(crate) struct Received {
+    /// Its `resourceType`.
+    pub(crate) resource_type: String,
+    /// Its members, `resourceType` among them.
+    pub(crate) object: Object,
+}
+
+/// The resource of an answer with media type `media` and `body`.
+#[cfg(any(feature = "pixm", feature = "pdqm"))]
+pub(crate) fn resource(media: Option<&str>, body: &[u8]) -> Result<Received, Unreadable> {
+    if !fhir_json(media) {
+        return Err(Unreadable::NotFhirJson);
+    }
+    let value: Value = serde_json::from_slice(body).map_err(|error| Unreadable::NotJson {
+        line: error.line(),
+        column: error.column(),
+    })?;
+    let Value::Object(object) = value else {
+        return Err(Unreadable::NotAResource);
+    };
+    let resource_type = object
+        .get("resourceType")
+        .and_then(Value::as_str)
+        .ok_or(Unreadable::NotAResource)?
+        .to_owned();
+    Ok(Received {
+        resource_type,
+        object,
+    })
+}
+
 /// The issue types of an `OperationOutcome` resource already parsed, in order.
 pub(crate) fn of(outcome: &OperationOutcome) -> Vec<IssueType> {
     outcome
@@ -196,16 +268,23 @@ pub(crate) fn of(outcome: &OperationOutcome) -> Vec<IssueType> {
         .collect()
 }
 
+/// The JSON object of a failure answer's FHIR JSON body, or none when it holds
+/// none: a failure body is read for its issue codes only, and the status
+/// decides.
+pub(crate) fn failure_object(media: Option<&str>, body: &[u8]) -> Option<Object> {
+    if !fhir_json(media) {
+        return None;
+    }
+    match serde_json::from_slice::<Value>(body) {
+        Ok(Value::Object(object)) => Some(object),
+        _ => None,
+    }
+}
+
 /// The issue types of a failure answer's `OperationOutcome`, or none when the
 /// body is not one.
 pub(crate) fn issues(media: Option<&str>, body: &[u8]) -> Vec<IssueType> {
-    if !fhir_json(media) {
-        return Vec::new();
-    }
-    let Ok(value) = serde_json::from_slice::<Value>(body) else {
-        return Vec::new();
-    };
-    let Some(object) = value.as_object() else {
+    let Some(object) = failure_object(media, body) else {
         return Vec::new();
     };
     if object.get("resourceType").and_then(Value::as_str) != Some("OperationOutcome") {
@@ -213,7 +292,7 @@ pub(crate) fn issues(media: Option<&str>, body: &[u8]) -> Vec<IssueType> {
     }
     // NOTE: FHIR R4 http.html, a failure body that is no `OperationOutcome` is a
     // status alone; the status decides, and an undecodable outcome adds nothing.
-    let Ok(outcome) = OperationOutcome::from_json(object, &mut Path::root("OperationOutcome"))
+    let Ok(outcome) = OperationOutcome::from_json(&object, &mut Path::root("OperationOutcome"))
     else {
         return Vec::new();
     };

@@ -22,6 +22,7 @@ use super::super::HL7;
 use super::super::discovery::RequestedAttribute;
 use super::super::error::DetectedIssue;
 use super::super::identifier::{HomeCommunityId, Oid};
+use super::super::v3::{self, Out, code, ii};
 use super::query::{PersonName, PostalAddress, ReceivedQuery};
 use crate::soap::{self, ENVELOPE};
 use ihe_atna::redact::REDACTED;
@@ -35,9 +36,6 @@ pub const RESPONSE_ACTION: &str = "urn:hl7-org:v3:PRPA_IN201306UV02:CrossGateway
 
 /// The WS-Addressing action of an acknowledgement (§3.55.6.1.1).
 const ACKNOWLEDGEMENT_ACTION: &str = "urn:hl7-org:v3:MCCI_IN000002UV01";
-
-/// The OID of the HL7 interaction and trigger event identifiers.
-const HL7_INTERACTION: &str = "2.16.840.1.113883.1.6";
 
 /// The code system of the Health Data Locator designation
 /// (Table 3.55.4.2.2.5-1).
@@ -125,8 +123,6 @@ pub struct Responder {
     /// The gateway's community, the sender device's organization.
     pub community: HomeCommunityId,
 }
-
-type Out = Writer<Vec<u8>>;
 
 /// The answer to `query` from `responder`: the SOAP 1.2 envelope of the
 /// `PRPA_IN201306UV02` that `outcome` writes (§3.55.4.2.2), with the
@@ -305,7 +301,7 @@ fn response(
                         .create_element("code")
                         .with_attributes([
                             ("code", "PRPA_TE201306UV02"),
-                            ("codeSystem", HL7_INTERACTION),
+                            ("codeSystem", v3::INTERACTION),
                         ])
                         .write_empty()?;
                     if let Outcome::Matched(candidates) = outcome {
@@ -327,9 +323,8 @@ fn response(
     Ok(())
 }
 
-/// The transmission wrapper's `id`, `creationTime`, `interactionId`, codes,
-/// and its receiver (the initiating gateway's device) and sender (this
-/// gateway's device).
+/// The transmission wrapper with its codes, and its receiver (the
+/// initiating gateway's device) and sender (this gateway's device).
 fn wrapper(
     writer: &mut Out,
     query: &ReceivedQuery,
@@ -337,46 +332,22 @@ fn wrapper(
     message: Uuid,
     interaction: &str,
 ) -> std::io::Result<()> {
-    let id = message.to_string();
-    let created = Timestamp::now().strftime("%Y%m%d%H%M%S+0000").to_string();
-    writer
-        .create_element("id")
-        .with_attribute(("root", id.as_str()))
-        .write_empty()?;
-    writer
-        .create_element("creationTime")
-        .with_attribute(("value", created.as_str()))
-        .write_empty()?;
-    writer
-        .create_element("interactionId")
-        .with_attributes([("root", HL7_INTERACTION), ("extension", interaction)])
-        .write_empty()?;
-    code(writer, "processingCode", processing(query))?;
-    code(writer, "processingModeCode", "T")?;
-    code(writer, "acceptAckCode", "NE")?;
-    let initiating = query
-        .sender_device
-        .as_ref()
-        .map_or("", |device| device.as_str());
+    v3::transmission(
+        writer,
+        (message, Timestamp::now()),
+        interaction,
+        query.processing.code(),
+        "NE",
+    )?;
+    let initiating = query.sender_device.as_ref().map(Oid::as_str);
     // NOTE: IHE's example answers name the receiver by its device alone (ITI TF-2 Appendix W).
-    device(writer, ("receiver", "RCV"), initiating, None)?;
-    device(
+    v3::device(writer, ("receiver", "RCV"), initiating, None)?;
+    v3::device(
         writer,
         ("sender", "SND"),
-        responder.device.as_str(),
+        Some(responder.device.as_str()),
         Some(&responder.community),
-    )?;
-    Ok(())
-}
-
-/// The request's `processingCode`, which the answer keeps.
-fn processing(query: &ReceivedQuery) -> &'static str {
-    use super::super::request::ProcessingCode;
-    match query.processing {
-        ProcessingCode::Production => "P",
-        ProcessingCode::Training => "T",
-        ProcessingCode::Debugging => "D",
-    }
+    )
 }
 
 /// The `acknowledgement` with `type_code`, naming the request's
@@ -421,75 +392,6 @@ fn query_ack(writer: &mut Out, query: &ReceivedQuery, status: &str) -> std::io::
                 query.query_id.1.as_deref(),
             )?;
             code(writer, "queryResponseCode", status)?;
-            Ok(())
-        })?;
-    Ok(())
-}
-
-/// An `II` element `name` with `root` and, when given, `extension`.
-fn ii(writer: &mut Out, name: &str, root: &str, extension: Option<&str>) -> std::io::Result<()> {
-    let element = writer.create_element(name).with_attribute(("root", root));
-    match extension {
-        Some(extension) => element
-            .with_attribute(("extension", extension))
-            .write_empty()?,
-        None => element.write_empty()?,
-    };
-    Ok(())
-}
-
-/// An element with one `code` attribute.
-fn code(writer: &mut Out, name: &str, value: &str) -> std::io::Result<()> {
-    writer
-        .create_element(name)
-        .with_attribute(("code", value))
-        .write_empty()?;
-    Ok(())
-}
-
-/// A `receiver` or `sender` with its device `id`, and the device's
-/// organization when a community is named.
-fn device(
-    writer: &mut Out,
-    (role, type_code): (&str, &str),
-    device: &str,
-    community: Option<&HomeCommunityId>,
-) -> std::io::Result<()> {
-    writer
-        .create_element(role)
-        .with_attribute(("typeCode", type_code))
-        .write_inner_content(|writer| {
-            writer
-                .create_element("device")
-                .with_attributes([("classCode", "DEV"), ("determinerCode", "INSTANCE")])
-                .write_inner_content(|writer| {
-                    if device.is_empty() {
-                        writer
-                            .create_element("id")
-                            .with_attribute(("nullFlavor", "NI"))
-                            .write_empty()?;
-                    } else {
-                        ii(writer, "id", device, None)?;
-                    }
-                    if let Some(community) = community {
-                        writer
-                            .create_element("asAgent")
-                            .with_attribute(("classCode", "AGNT"))
-                            .write_inner_content(|writer| {
-                                writer
-                                    .create_element("representedOrganization")
-                                    .with_attributes([
-                                        ("classCode", "ORG"),
-                                        ("determinerCode", "INSTANCE"),
-                                    ])
-                                    .write_inner_content(|writer| {
-                                        ii(writer, "id", community.oid().as_str(), None)
-                                    })?;
-                                Ok(())
-                            })?;
-                    }
-                    Ok(())
-                })?;
             Ok(())
         })?;
     Ok(())

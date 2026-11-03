@@ -12,6 +12,8 @@
 
 use http::StatusCode;
 
+use crate::authorizer::{AuthorizerError, Unauthenticated};
+use crate::exchange::Unanswered;
 use crate::outcome::IssueType;
 
 /// An argument the subscriber refuses before anything is sent.
@@ -61,7 +63,7 @@ pub enum SubscribeError {
     /// The authorizer made no headers for the request, so nothing was sent
     /// (IUA ITI-72 §3.72.4.2).
     #[error("the request to the Patient Identity Registry could not be authenticated")]
-    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
+    Unauthenticated(#[source] AuthorizerError),
     /// The `Subscription` could not be written as FHIR JSON, so nothing was
     /// sent.
     #[error("the Subscription cannot be written as FHIR JSON")]
@@ -292,25 +294,18 @@ impl FeedError {
     }
 }
 
-/// A transport failure, with the request URL removed: it names the Registry,
-/// whose base may carry a credential.
-pub(super) fn transport(error: reqwest::Error) -> SubscribeError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        SubscribeError::Timeout
-    } else {
-        SubscribeError::Transport(error)
+impl Unanswered for SubscribeError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
     }
 }
 
-/// A send that produced no answer, a transport failure read as [`transport`]
-/// reads it.
-pub(super) fn unsent(error: crate::authorizer::Unsent) -> SubscribeError {
-    match error {
-        crate::authorizer::Unsent::Unauthenticated(source) => {
-            SubscribeError::Unauthenticated(source)
-        }
-        crate::authorizer::Unsent::Timeout => SubscribeError::Timeout,
-        crate::authorizer::Unsent::Transport(source) => transport(source),
+impl Unauthenticated for SubscribeError {
+    fn unauthenticated(source: AuthorizerError) -> Self {
+        Self::Unauthenticated(source)
     }
 }

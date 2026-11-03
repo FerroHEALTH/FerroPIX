@@ -86,6 +86,7 @@ use secrecy::ExposeSecret;
 use url::Url;
 
 use crate::authorizer::{self, Authorizer};
+use crate::exchange::{self, Unanswered};
 use error::{InvalidInput, PixmError};
 use identifier::{CrossReference, SourceIdentifier, TargetSystem};
 use ihe_atna::redact::RedactedUrl;
@@ -279,18 +280,18 @@ impl PixmClient {
         let built = builder
             .header(ACCEPT, FHIR_JSON)
             .build()
-            .map_err(error::transport)?;
-        let response = authorizer::send(&self.http, self.authorizer.as_deref(), built, timeout)
-            .await
-            .map_err(error::unsent)?;
-        let status = response.status();
-        let media = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let body = response::body(response).await?;
-        response::read(status, media.as_deref(), &body, source, targets)
+            .map_err(PixmError::failed)?;
+        let response =
+            authorizer::send::<PixmError>(&self.http, self.authorizer.as_deref(), built, timeout)
+                .await?;
+        let answer = exchange::read(response, response::LIMIT, response::too_large).await?;
+        response::read(
+            answer.status,
+            answer.media.as_deref(),
+            &answer.body,
+            source,
+            targets,
+        )
     }
 }
 

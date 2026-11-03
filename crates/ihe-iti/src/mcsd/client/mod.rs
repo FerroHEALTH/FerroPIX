@@ -28,6 +28,7 @@ use url::Url;
 use super::budget::Budget;
 use super::error::{InvalidBase, McsdError};
 use crate::authorizer::{self, Authorizer};
+use crate::exchange::Unanswered;
 
 use ihe_atna::redact::RedactedUrl;
 
@@ -496,15 +497,14 @@ impl McsdClient {
             .get(url)
             .header(ACCEPT, FHIR_JSON)
             .build()
-            .map_err(response::transport)?;
-        let answer = authorizer::send(
+            .map_err(McsdError::failed)?;
+        let answer = authorizer::send::<McsdError>(
             &self.http,
             self.authorizer.as_deref(),
             request,
             budget.remaining()?,
         )
-        .await
-        .map_err(response::unsent)?;
+        .await?;
         let status = answer.status();
         let media = answer
             .headers()

@@ -30,6 +30,11 @@ use secrecy::SecretString;
 use url::Url;
 
 use super::identifier::HomeCommunityId;
+#[cfg(feature = "atna")]
+use ihe_atna::atna::message::{
+    AccessPoint, ActiveParticipant, AuditMessage, AuditSource, CodedValue, EventIdentification,
+    ParticipantObject,
+};
 use ihe_atna::redact::{REDACTED, RedactedUrl};
 use ihe_atna::user::OnBehalfOf;
 
@@ -116,6 +121,15 @@ impl NetworkAccessPoint {
         match self {
             Self::MachineName(name) => name.clone(),
             Self::IpAddress(address) => address.to_string(),
+        }
+    }
+
+    /// This access point in the audit message model.
+    #[cfg(feature = "atna")]
+    pub(super) fn atna(&self) -> AccessPoint {
+        AccessPoint {
+            type_code: self.type_code(),
+            id: self.id(),
         }
     }
 }
@@ -214,16 +228,7 @@ impl AuditEvent {
     /// Gateway's audit table fills it (§3.55.5.1.1), written by `source` on
     /// the host `host`.
     #[must_use]
-    pub fn message(
-        &self,
-        source: &ihe_atna::atna::message::AuditSource,
-        host: &ihe_atna::atna::message::AccessPoint,
-    ) -> ihe_atna::atna::message::AuditMessage {
-        use ihe_atna::atna::message::{
-            AccessPoint, ActiveParticipant, AuditMessage, CodedValue, EventIdentification,
-            ParticipantObject,
-        };
-        let transaction = CodedValue::of(EVENT_TYPE);
+    pub fn message(&self, source: &AuditSource, host: &AccessPoint) -> AuditMessage {
         let mut participants = vec![ActiveParticipant {
             // NOTE: ITI TF-2 §3.55.5.1.1 leaves a synchronous exchange's source UserID
             // not specialized, and PS3.15 A.5.1 requires one: it is the wsa:ReplyTo sent.
@@ -257,43 +262,63 @@ impl AuditEvent {
             access_point: self
                 .destination_access_point
                 .as_ref()
-                .map(|point| AccessPoint {
-                    type_code: point.type_code(),
-                    id: point.id(),
-                }),
+                .map(NetworkAccessPoint::atna),
         });
-        AuditMessage {
-            event: EventIdentification {
-                event_id: CodedValue::of(EVENT_ID),
-                action: EVENT_ACTION,
-                date_time: self.date_time,
-                outcome: self.outcome.code(),
-                type_codes: vec![transaction.clone()],
-                outcome_description: None,
-            },
+        message(
+            (self.date_time, self.outcome),
             participants,
-            source: source.clone(),
-            objects: vec![ParticipantObject {
-                // NOTE: ITI TF-2 §3.55.5.1.1 leaves ParticipantObjectID optional and PS3.15
-                // A.5.1 requires the attribute, so it is written empty.
-                id: SecretString::from(String::new()),
-                type_code: Some("2"),
-                type_code_role: Some("24"),
-                data_life_cycle: None,
-                id_type_code: transaction,
-                query: Some(self.query.clone()),
-                details: self
-                    .home_community
-                    .iter()
-                    .map(|community| {
-                        (
-                            HOME_COMMUNITY_DETAIL.to_owned(),
-                            SecretString::from(community.to_string()),
-                        )
-                    })
-                    .collect(),
-            }],
-        }
+            source,
+            Vec::new(),
+            (&self.query, self.home_community.as_ref()),
+        )
+    }
+}
+
+/// The audit message of an ITI-55 exchange at `date_time` ending in
+/// `outcome`, written by `source`: the `participants` and the patient
+/// `objects` a gateway's audit table names, then the query object both
+/// tables fill with the `homeCommunityId` the exchange named
+/// (§3.55.5.1.1, §3.55.5.1.2).
+#[cfg(feature = "atna")]
+pub(super) fn message(
+    (date_time, outcome): (Timestamp, EventOutcome),
+    participants: Vec<ActiveParticipant>,
+    source: &AuditSource,
+    mut objects: Vec<ParticipantObject>,
+    (query, home_community): (&SecretString, Option<&HomeCommunityId>),
+) -> AuditMessage {
+    let transaction = CodedValue::of(EVENT_TYPE);
+    objects.push(ParticipantObject {
+        // NOTE: ITI TF-2 §3.55.5.1.1 and §3.55.5.1.2 leave ParticipantObjectID optional
+        // and PS3.15 A.5.1 requires the attribute, so it is written empty.
+        id: SecretString::from(String::new()),
+        type_code: Some("2"),
+        type_code_role: Some("24"),
+        data_life_cycle: None,
+        id_type_code: transaction.clone(),
+        query: Some(query.clone()),
+        details: home_community
+            .iter()
+            .map(|community| {
+                (
+                    HOME_COMMUNITY_DETAIL.to_owned(),
+                    SecretString::from(community.to_string()),
+                )
+            })
+            .collect(),
+    });
+    AuditMessage {
+        event: EventIdentification {
+            event_id: CodedValue::of(EVENT_ID),
+            action: EVENT_ACTION,
+            date_time,
+            outcome: outcome.code(),
+            type_codes: vec![transaction],
+            outcome_description: None,
+        },
+        participants,
+        source: source.clone(),
+        objects,
     }
 }
 

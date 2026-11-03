@@ -5,18 +5,19 @@
 //! `OperationOutcome` on failure (§2:3.78.4.2.2, §2:3.78.4.1.3,
 //! §2:3.119.4.2.2, §2:3.119.4.1.3).
 
-use fhir_types::codec::{DecodeError, Json, Object, Path, Value};
-use fhir_types::r4::bundle::{Bundle, BundleEntrySearch, BundleLink};
+use fhir_types::codec::{Json, Object, Path};
+use fhir_types::r4::bundle::{Bundle, BundleEntry, BundleEntrySearch, BundleLink};
 use fhir_types::r4::extension::ExtensionValue;
 use fhir_types::r4::operation_outcome::OperationOutcome;
+use fhir_types::r4::patient::Patient;
 use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use secrecy::SecretString;
 use url::Url;
 
-use crate::outcome::{self, IssueType};
+use crate::outcome::{self, IssueType, Unreadable};
 
-use super::error::{self, Malformation, PdqmError};
+use super::error::{Malformation, PdqmError};
 use super::matches::{MatchGrade, MatchResult, MatchedPatient, Page, SearchResult};
 
 /// The longest answer the client reads: one page of Patients.
@@ -24,16 +25,9 @@ use super::matches::{MatchGrade, MatchResult, MatchedPatient, Page, SearchResult
 // page costs to read and decode.
 pub(super) const LIMIT: usize = 8 << 20;
 
-/// Reads the answer's body, refusing one longer than [`LIMIT`].
-pub(super) async fn body(mut response: reqwest::Response) -> Result<Vec<u8>, PdqmError> {
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(error::transport)? {
-        if body.len().saturating_add(chunk.len()) > LIMIT {
-            return Err(Malformation::TooLarge { limit: LIMIT }.into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+/// The refusal of an answer longer than [`LIMIT`], whatever its status.
+pub(super) fn too_large(_status: StatusCode) -> PdqmError {
+    Malformation::from(Unreadable::TooLarge { limit: LIMIT }).into()
 }
 
 /// What the answer with `status`, media type `media` and `body` means, for a
@@ -47,15 +41,7 @@ pub(super) fn read(
     names_domain: bool,
 ) -> Result<SearchResult, PdqmError> {
     if status == StatusCode::OK {
-        if !outcome::fhir_json(media) {
-            return Err(Malformation::NotFhirJson.into());
-        }
-        let value = json(body)?;
-        let object = value.as_object().ok_or(Malformation::NotAResource)?;
-        if resource_type(object)? != "Bundle" {
-            return Err(Malformation::UnexpectedResource.into());
-        }
-        return Ok(searchset(object, base)?);
+        return Ok(searchset(&bundle(media, body)?, base)?);
     }
     let issues = outcome::issues(media, body);
     if status == StatusCode::NOT_FOUND && names_domain && issues.contains(&IssueType::NotFound) {
@@ -75,15 +61,7 @@ pub(super) fn read_match(
     body: &[u8],
 ) -> Result<MatchResult, PdqmError> {
     if status == StatusCode::OK {
-        if !outcome::fhir_json(media) {
-            return Err(Malformation::NotFhirJson.into());
-        }
-        let value = json(body)?;
-        let object = value.as_object().ok_or(Malformation::NotAResource)?;
-        if resource_type(object)? != "Bundle" {
-            return Err(Malformation::UnexpectedResource.into());
-        }
-        return Ok(matchset(object)?);
+        return Ok(matchset(&bundle(media, body)?)?);
     }
     let mut issues = outcome::issues(media, body);
     if issues.is_empty() {
@@ -95,18 +73,12 @@ pub(super) fn read_match(
 /// The issue types of every `OperationOutcome` in a failure answer that is a
 /// Bundle of them (§2:3.119.4.1.3, Case 9), or none when it is not one.
 fn bundled_issues(media: Option<&str>, body: &[u8]) -> Vec<IssueType> {
-    if !outcome::fhir_json(media) {
-        return Vec::new();
-    }
-    let Ok(value) = serde_json::from_slice::<Value>(body) else {
-        return Vec::new();
-    };
-    let Some(object) = value.as_object() else {
+    let Some(object) = outcome::failure_object(media, body) else {
         return Vec::new();
     };
     // NOTE: FHIR R4 http.html, a failure body is read for its issue codes only;
     // the status decides, and a body that is no Bundle of outcomes adds nothing.
-    let Ok(bundle) = Bundle::from_json(object, &mut Path::root("Bundle")) else {
+    let Ok(bundle) = Bundle::from_json(&object, &mut Path::root("Bundle")) else {
         return Vec::new();
     };
     bundle
@@ -120,61 +92,89 @@ fn bundled_issues(media: Option<&str>, body: &[u8]) -> Vec<IssueType> {
         .collect()
 }
 
-fn json(body: &[u8]) -> Result<Value, Malformation> {
-    serde_json::from_slice(body).map_err(|error| Malformation::NotJson {
-        line: error.line(),
-        column: error.column(),
-    })
+/// The members of the Bundle a success answer holds.
+fn bundle(media: Option<&str>, body: &[u8]) -> Result<Object, Malformation> {
+    let received = outcome::resource(media, body)?;
+    if received.resource_type != "Bundle" {
+        return Err(Malformation::UnexpectedResource);
+    }
+    Ok(received.object)
 }
 
-fn resource_type(object: &Object) -> Result<&str, Malformation> {
-    object
-        .get("resourceType")
-        .and_then(Value::as_str)
-        .ok_or(Malformation::NotAResource)
+/// The `searchset` Bundle `object` holds: both the Query Patient Resource
+/// Response Message and the Match Output Bundle profile fix its `type`.
+fn searchset_bundle(object: &Object) -> Result<Bundle, Malformation> {
+    let bundle = Bundle::from_json(object, &mut Path::root("Bundle")).map_err(Unreadable::from)?;
+    if bundle.r#type.value.as_deref() != Some("searchset") {
+        return Err(Malformation::NotSearchset);
+    }
+    Ok(bundle)
 }
 
-fn decode(error: DecodeError) -> Malformation {
-    Malformation::Decode { kind: error.kind }
+/// The Patients and the warnings of a Bundle's `entries`, read in order so
+/// the first departure in the Bundle is the one reported: each Patient entry
+/// at its position, with its `fullUrl` and `search`, by `patient`, and each
+/// `OperationOutcome` entry at its position by `held` before its issue
+/// types are kept. Both profiles require a `fullUrl` on every entry and
+/// answer with no `_include`.
+fn read_entries(
+    entries: Vec<BundleEntry>,
+    mut patient: impl FnMut(
+        usize,
+        SecretString,
+        Box<Patient>,
+        Option<&BundleEntrySearch>,
+    ) -> Result<MatchedPatient, Malformation>,
+    held: impl Fn(usize, &OperationOutcome) -> Result<(), Malformation>,
+) -> Result<(Vec<MatchedPatient>, Vec<IssueType>), Malformation> {
+    let mut patients = Vec::new();
+    let mut warnings = Vec::new();
+    for (index, entry) in entries.into_iter().enumerate() {
+        let full_url = entry
+            .full_url
+            .as_ref()
+            .and_then(|full_url| full_url.value.as_deref())
+            .filter(|full_url| !full_url.is_empty())
+            .map(SecretString::from)
+            .ok_or(Malformation::NoFullUrl { index })?;
+        match entry.resource {
+            Some(Resource::Patient(found)) => {
+                patients.push(patient(index, full_url, found, entry.search.as_ref())?);
+            }
+            Some(Resource::OperationOutcome(found)) => {
+                held(index, &found)?;
+                warnings.extend(outcome::of(&found));
+            }
+            Some(_) => return Err(Malformation::UnexpectedEntry { index }),
+            None => return Err(Malformation::NoResource { index }),
+        }
+    }
+    Ok((patients, warnings))
 }
 
 /// The page a `searchset` Bundle holds, held to the Query Patient Resource
 /// Response Message profile: `type` `searchset`, a `total`, and a `fullUrl` on
 /// every entry.
 fn searchset(object: &Object, base: &Url) -> Result<SearchResult, Malformation> {
-    let bundle = Bundle::from_json(object, &mut Path::root("Bundle")).map_err(decode)?;
-    if bundle.r#type.value.as_deref() != Some("searchset") {
-        return Err(Malformation::NotSearchset);
-    }
+    let bundle = searchset_bundle(object)?;
     let total = bundle
         .total
         .as_ref()
         .and_then(|total| total.value)
         .ok_or(Malformation::NoTotal)?;
     let next = next(&bundle.link, base)?;
-    let mut patients = Vec::new();
-    let mut warnings = Vec::new();
-    for (index, entry) in bundle.entry.into_iter().enumerate() {
-        let full_url = entry
-            .full_url
-            .and_then(|full_url| full_url.value)
-            .filter(|full_url| !full_url.is_empty())
-            .ok_or(Malformation::NoFullUrl { index })?;
-        match entry.resource {
-            Some(Resource::Patient(patient)) => {
-                let search = entry.search.as_ref();
-                patients.push(MatchedPatient::new(
-                    SecretString::from(full_url),
-                    patient,
-                    score(index, search)?,
-                    grade(index, search)?,
-                ));
-            }
-            Some(Resource::OperationOutcome(found)) => warnings.extend(outcome::of(&found)),
-            Some(_) => return Err(Malformation::UnexpectedEntry { index }),
-            None => return Err(Malformation::NoResource { index }),
-        }
-    }
+    let (patients, warnings) = read_entries(
+        bundle.entry,
+        |index, full_url, patient, search| {
+            Ok(MatchedPatient::new(
+                full_url,
+                patient,
+                score(index, search)?,
+                grade(index, search)?,
+            ))
+        },
+        |_, _| Ok(()),
+    )?;
     if u32::try_from(patients.len()).map_or(true, |matched| matched > total) {
         return Err(Malformation::TotalBelowMatches);
     }
@@ -202,49 +202,36 @@ fn next(links: &[BundleLink], base: &Url) -> Result<Option<Page>, Malformation> 
 /// (§2:3.119.4.2.2.4). An `OperationOutcome` entry is a warning, never an
 /// error (§2:3.119.4.1.3, Cases 7 and 10).
 fn matchset(object: &Object) -> Result<MatchResult, Malformation> {
-    let bundle = Bundle::from_json(object, &mut Path::root("Bundle")).map_err(decode)?;
-    if bundle.r#type.value.as_deref() != Some("searchset") {
-        return Err(Malformation::NotSearchset);
-    }
-    let mut patients = Vec::new();
-    let mut warnings = Vec::new();
-    for (index, entry) in bundle.entry.into_iter().enumerate() {
-        let full_url = entry
-            .full_url
-            .and_then(|full_url| full_url.value)
-            .filter(|full_url| !full_url.is_empty())
-            .ok_or(Malformation::NoFullUrl { index })?;
-        match entry.resource {
-            Some(Resource::Patient(patient)) => {
-                let search = entry.search.as_ref();
-                if search
-                    .and_then(|search| search.mode.as_ref())
-                    .and_then(|mode| mode.value.as_deref())
-                    != Some("match")
-                {
-                    return Err(Malformation::NotMatchMode { index });
-                }
-                let score = score(index, search)?
-                    .filter(|score| (0.0..=1.0).contains(score))
-                    .ok_or(Malformation::NoScore { index })?;
-                let grade = grade(index, search)?.ok_or(Malformation::NoMatchGrade { index })?;
-                patients.push(MatchedPatient::new(
-                    SecretString::from(full_url),
-                    patient,
-                    Some(score),
-                    Some(grade),
-                ));
+    let bundle = searchset_bundle(object)?;
+    let (patients, warnings) = read_entries(
+        bundle.entry,
+        |index, full_url, patient, search| {
+            if search
+                .and_then(|search| search.mode.as_ref())
+                .and_then(|mode| mode.value.as_deref())
+                != Some("match")
+            {
+                return Err(Malformation::NotMatchMode { index });
             }
-            Some(Resource::OperationOutcome(found)) => {
-                if failed(&found) {
-                    return Err(Malformation::ErrorOutcome { index });
-                }
-                warnings.extend(outcome::of(&found));
+            let score = score(index, search)?
+                .filter(|score| (0.0..=1.0).contains(score))
+                .ok_or(Malformation::NoScore { index })?;
+            let grade = grade(index, search)?.ok_or(Malformation::NoMatchGrade { index })?;
+            Ok(MatchedPatient::new(
+                full_url,
+                patient,
+                Some(score),
+                Some(grade),
+            ))
+        },
+        |index, found| {
+            if failed(found) {
+                Err(Malformation::ErrorOutcome { index })
+            } else {
+                Ok(())
             }
-            Some(_) => return Err(Malformation::UnexpectedEntry { index }),
-            None => return Err(Malformation::NoResource { index }),
-        }
-    }
+        },
+    )?;
     Ok(MatchResult::new(patients, warnings))
 }
 

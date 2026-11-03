@@ -141,12 +141,6 @@ impl Revision {
     pub fn patient(&self) -> &Patient {
         &self.patient
     }
-
-    /// Returns the Patient, by value.
-    #[must_use]
-    pub fn into_patient(self) -> Box<Patient> {
-        self.patient
-    }
 }
 
 impl fmt::Debug for Revision {

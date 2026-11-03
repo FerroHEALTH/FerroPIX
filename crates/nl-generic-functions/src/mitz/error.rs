@@ -9,7 +9,8 @@
 //! never a patient value, so an error may name one.
 
 use http::StatusCode;
-use ihe_iti::soap::{self, FaultCode};
+use ihe_iti::exchange::Unanswered;
+use ihe_iti::soap::{self, FaultCode, Refusal};
 
 use super::question::DataCategory;
 
@@ -198,12 +199,22 @@ pub enum Malformation {
     },
 }
 
-/// A transport failure, with the request URL removed.
-pub(super) fn transport(error: reqwest::Error) -> MitzError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        MitzError::Timeout
-    } else {
-        MitzError::Transport(error)
+impl Unanswered for MitzError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
+    }
+}
+
+impl Refusal for MitzError {
+    fn rejected(status: StatusCode) -> Self {
+        Self::Rejected { status }
+    }
+
+    fn too_large(limit: usize) -> Self {
+        Malformation::TooLarge { limit }.into()
     }
 }

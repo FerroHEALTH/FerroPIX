@@ -10,7 +10,8 @@
 
 use http::StatusCode;
 
-use crate::soap::{self, FaultCode};
+use crate::exchange::Unanswered;
+use crate::soap::{self, FaultCode, Refusal};
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -193,4 +194,24 @@ pub enum Malformation {
         /// The event's position, counted from 0.
         event: usize,
     },
+}
+
+impl Unanswered for XcpdError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
+    }
+}
+
+impl Refusal for XcpdError {
+    fn rejected(status: StatusCode) -> Self {
+        Self::Rejected { status }
+    }
+
+    fn too_large(limit: usize) -> Self {
+        Malformation::TooLarge { limit }.into()
+    }
 }

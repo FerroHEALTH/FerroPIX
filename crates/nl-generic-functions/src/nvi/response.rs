@@ -15,7 +15,7 @@ use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use secrecy::ExposeSecret;
 
-use super::error::{self, Malformation, NviError};
+use super::error::{Malformation, NviError};
 use super::{LOINC_SYSTEM, PATIENT_DATA_TYPE};
 use crate::identification::{PSEUDO_BSN_SYSTEM, PseudoBsn, URA_SYSTEM, Ura};
 
@@ -29,16 +29,9 @@ pub(super) struct Page {
     pub(super) next: Option<String>,
 }
 
-/// Reads the answer's body, refusing one longer than [`LIMIT`].
-pub(super) async fn body(mut response: reqwest::Response) -> Result<Vec<u8>, NviError> {
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(error::transport)? {
-        if body.len().saturating_add(chunk.len()) > LIMIT {
-            return Err(Malformation::TooLarge { limit: LIMIT }.into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+/// The refusal of an answer longer than [`LIMIT`], whatever its status.
+pub(super) fn too_large(_status: StatusCode) -> NviError {
+    Malformation::TooLarge { limit: LIMIT }.into()
 }
 
 /// What the answer with `status`, media type `media` and `body` holds for

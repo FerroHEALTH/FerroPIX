@@ -9,6 +9,8 @@
 //! record is named by its position in the answer, never by its content.
 
 use http::StatusCode;
+use ihe_iti::authorizer::{AuthorizerError, Unauthenticated};
+use ihe_iti::exchange::Unanswered;
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -41,7 +43,7 @@ pub enum NviError {
     /// The authorizer could not authenticate the request, so nothing was
     /// sent.
     #[error("the request to the Localization Service could not be authenticated")]
-    Unauthenticated(#[source] ihe_iti::authorizer::AuthorizerError),
+    Unauthenticated(#[source] AuthorizerError),
     /// The answer does not hold to the Localization Service search.
     #[error("the Localization Service's answer does not hold to the IG")]
     Malformed(#[from] Malformation),
@@ -130,13 +132,18 @@ pub enum Malformation {
     },
 }
 
-/// A transport failure, with the request URL removed: it holds the
-/// pseudonym.
-pub(super) fn transport(error: reqwest::Error) -> NviError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        NviError::Timeout
-    } else {
-        NviError::Transport(error)
+impl Unanswered for NviError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
+    }
+}
+
+impl Unauthenticated for NviError {
+    fn unauthenticated(source: AuthorizerError) -> Self {
+        Self::Unauthenticated(source)
     }
 }

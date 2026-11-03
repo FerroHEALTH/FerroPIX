@@ -88,6 +88,7 @@ use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
 use crate::authorizer::{self, Authorizer};
+use crate::exchange::{self, Unanswered};
 use error::{InvalidInput, PdqmError};
 use ihe_atna::redact::RedactedUrl;
 use ihe_atna::user::OnBehalfOf;
@@ -302,16 +303,10 @@ impl PdqmClient {
             .header(CONTENT_TYPE, FHIR_JSON)
             .body(body)
             .build()
-            .map_err(error::transport)?;
+            .map_err(PdqmError::failed)?;
         let response = self.send(built, timeout).await?;
-        let status = response.status();
-        let media = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let body = response::body(response).await?;
-        response::read_match(status, media.as_deref(), &body)
+        let answer = exchange::read(response, response::LIMIT, response::too_large).await?;
+        response::read_match(answer.status, answer.media.as_deref(), &answer.body)
     }
 
     /// Asks the Supplier for the first page of Patients that match `query`,
@@ -374,7 +369,7 @@ impl PdqmClient {
             .header(CONTENT_TYPE, request::FORM)
             .body(query.form())
             .build()
-            .map_err(error::transport)?;
+            .map_err(PdqmError::failed)?;
         let response = self.send(built, timeout).await?;
         self.answer(response, query.names_domain()).await
     }
@@ -425,7 +420,7 @@ impl PdqmClient {
             .get(page.url().clone())
             .header(ACCEPT, FHIR_JSON)
             .build()
-            .map_err(error::transport)?;
+            .map_err(PdqmError::failed)?;
         let response = self.send(built, timeout).await?;
         self.answer(response, false).await
     }
@@ -437,9 +432,7 @@ impl PdqmClient {
         request: reqwest::Request,
         timeout: Duration,
     ) -> Result<reqwest::Response, PdqmError> {
-        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout)
-            .await
-            .map_err(error::unsent)
+        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout).await
     }
 
     async fn answer(
@@ -447,14 +440,14 @@ impl PdqmClient {
         response: reqwest::Response,
         names_domain: bool,
     ) -> Result<SearchResult, PdqmError> {
-        let status = response.status();
-        let media = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let body = response::body(response).await?;
-        response::read(status, media.as_deref(), &body, &self.base, names_domain)
+        let answer = exchange::read(response, response::LIMIT, response::too_large).await?;
+        response::read(
+            answer.status,
+            answer.media.as_deref(),
+            &answer.body,
+            &self.base,
+            names_domain,
+        )
     }
 }
 

@@ -137,6 +137,28 @@ impl Answer<OperationOutcome> {
         code: IssueType,
         diagnostics: &'static str,
     ) -> Self {
+        Self::of_issue(status, severity, code, diagnostics)
+    }
+
+    /// Returns the `400` that refuses a request for the `error` of type
+    /// `code`, whose `diagnostics` is the error's own text, which never
+    /// quotes the request.
+    #[cfg(feature = "pmir-server")]
+    pub(crate) fn refusal(code: IssueType, error: &(impl fmt::Display + ?Sized)) -> Self {
+        Self::of_issue(
+            StatusCode::BAD_REQUEST,
+            Severity::Error,
+            code,
+            &error.to_string(),
+        )
+    }
+
+    fn of_issue(
+        status: StatusCode,
+        severity: Severity,
+        code: IssueType,
+        diagnostics: &str,
+    ) -> Self {
         let issue = OperationOutcomeIssue {
             severity: severity.code().into(),
             code: code.to_string().into(),

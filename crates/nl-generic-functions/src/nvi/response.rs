@@ -13,6 +13,7 @@ use fhir_types::r4::document_reference::DocumentReference;
 use fhir_types::r4::identifier::Identifier;
 use fhir_types::r4::resource::Resource;
 use http::StatusCode;
+use ihe_iti::rest::fhir_json;
 use secrecy::ExposeSecret;
 
 use super::error::{Malformation, NviError};
@@ -152,18 +153,6 @@ fn value(identifier: &Identifier) -> Option<&str> {
         .value
         .as_ref()
         .and_then(|value| value.value.as_deref())
-}
-
-/// Whether `media` is FHIR JSON, or plain JSON, which FHIR R4 admits for a
-/// JSON answer (<http://hl7.org/fhir/R4/http.html#mime-type>).
-fn fhir_json(media: Option<&str>) -> bool {
-    media
-        .and_then(|value| value.split(';').next())
-        .map(str::trim)
-        .is_some_and(|essence| {
-            essence.eq_ignore_ascii_case("application/fhir+json")
-                || essence.eq_ignore_ascii_case("application/json")
-        })
 }
 
 #[cfg(test)]

@@ -18,6 +18,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `soap` | The SOAP 1.2 envelope reader of ITI TF-2 Appendix V, with no profile, and the HTTP post the envelope travels on: what `xcpd` sends and reads its messages through, and what another crate's Appendix V transaction sends and reads its own through, its body read by a visitor it supplies | Appendix V |
 | `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna): the client side's, and the PIXm Manager's and the PDQm Supplier's from a `received::Received` request | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
+| `rest` | The FHIR R4 search value escaping and the JSON media types of an answer every FHIR client here shares, with no FHIR model: what the NVI client of `nl-generic-functions` reads its answers with too | FHIR R4 search, HTTP |
 | `authorizer` | The authorizer a client supplies to make each request's headers, such as an access token and its `DPoP` proof, and the send that resends once when it asks, with no FHIR model: what the FHIR clients here and the NVI client of `nl-generic-functions` authenticate through | ITI-72 |
 | `smart` | The IUA authorizer over the OAuth 2.0 client-credentials token of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) | ITI-72 |
 | `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |
@@ -34,7 +35,7 @@ The profiles are published at <https://profiles.ihe.net/ITI/>.
 
 The PIXm, PDQm, mCSD and PMIR clients send the credential their
 `reqwest::Client` carries in its default headers, or, built
-`.with_authorizer(…)`, ask an `ihe_iti::authorizer::Authorizer` for the
+`.with_authorizer(…)` of the `ihe_iti::authorizer::Authorizable` trait, ask an `ihe_iti::authorizer::Authorizer` for the
 headers of every request: an OAuth 2.0 access token incorporated as IUA
 ITI-72 §3.72.4.2 asks, which the authorizer refreshes before it expires. The
 authorizer reads every answer, and a request it asks for again after a `401`

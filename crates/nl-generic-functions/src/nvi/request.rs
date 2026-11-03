@@ -8,6 +8,7 @@
 
 use std::fmt;
 
+use ihe_iti::rest::escape;
 use secrecy::ExposeSecret;
 use url::Url;
 
@@ -80,20 +81,6 @@ pub(super) fn next(endpoint: &Url, next: &str) -> Result<Url, Malformation> {
     } else {
         Err(Malformation::NextLink)
     }
-}
-
-/// Returns `part` with the characters FHIR search gives a meaning to escaped
-/// by a backslash: `\`, `|`, `,` and `$` (FHIR R4 search, Escaping Search
-/// Parameters, <http://hl7.org/fhir/R4/search.html#escaping>).
-fn escape(part: &str) -> String {
-    let mut escaped = String::with_capacity(part.len());
-    for character in part.chars() {
-        if matches!(character, '\\' | '|' | ',' | '$') {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
 }
 
 /// A URL whose `Debug` shows it without its userinfo and its query, either

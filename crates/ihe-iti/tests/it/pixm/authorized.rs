@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use http::header::AUTHORIZATION;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use ihe_atna::user::OnBehalfOf;
-use ihe_iti::authorizer::{Authorized, Authorizer, AuthorizerError, Retry};
+use ihe_iti::authorizer::{Authorizable, Authorized, Authorizer, AuthorizerError, Retry};
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::CrossReference;
 use url::Url;

@@ -10,7 +10,7 @@ use fhir_types::r4::parameters::{Parameters, ParametersParameter, ParametersPara
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
-use crate::search::escape;
+use crate::rest::escape;
 
 use super::Invocation;
 use super::error::InvalidInput;

@@ -10,7 +10,7 @@ use std::fmt;
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
-use crate::search::escape;
+use crate::rest::escape;
 
 use super::error::InvalidInput;
 

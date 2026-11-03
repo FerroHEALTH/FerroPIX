@@ -16,7 +16,7 @@ use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use secrecy::SecretString;
 
-use crate::outcome;
+use crate::rest;
 
 use super::error::FeedError;
 use super::feed::{Event, Identifier, PatientIdentity, Unwritable};
@@ -29,7 +29,7 @@ pub(super) const FEED_EVENT: &str = "urn:ihe:iti:pmir:2019:patient-feed";
 pub(super) const RESPONSE_EVENT: &str = "urn:ihe:iti:pmir:2019:patient-feed-response";
 
 /// The `MessageDefinition` a feed message may name.
-const FEED_DEFINITION: &str =
+pub(super) const FEED_DEFINITION: &str =
     "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition";
 
 /// The `MessageDefinition` a feed response names.
@@ -81,7 +81,7 @@ pub(super) struct Message {
 /// Reads the message: its `MessageHeader.id` and its changes, in history
 /// order.
 pub(super) fn read(media: Option<&str>, body: &[u8]) -> Result<(String, Vec<Event>), FeedError> {
-    if !outcome::fhir_json(media) {
+    if !rest::fhir_json(media) {
         return Err(FeedError::NotFhirJson);
     }
     let value: Value = serde_json::from_slice(body).map_err(|error| FeedError::NotJson {
@@ -408,15 +408,11 @@ fn identity(patient: &Patient) -> PatientIdentity {
     PatientIdentity::new(patient.id.clone().map(SecretString::from), identifiers)
 }
 
-/// The response to the message `request_id`, as FHIR JSON
-/// (§2:3.93.4.2.2).
-pub(super) fn acknowledgement(
-    request_id: &str,
-    response_id: &str,
-    source: &str,
-) -> Result<Vec<u8>, Unwritable> {
-    let header = MessageHeader {
-        id: Some(response_id.to_owned()),
+/// The `MessageHeader` `id` of `event` from `source`, every other element
+/// empty (the PMIR `MessageHeader` profiles).
+pub(super) fn header(id: &str, event: &str, source: &str) -> MessageHeader {
+    MessageHeader {
+        id: Some(id.to_owned()),
         meta: None,
         implicit_rules: None,
         language: None,
@@ -424,7 +420,7 @@ pub(super) fn acknowledgement(
         contained: Vec::new(),
         extension: Vec::new(),
         modifier_extension: Vec::new(),
-        event: MessageHeaderEvent::Uri(RESPONSE_EVENT.into()),
+        event: MessageHeaderEvent::Uri(event.into()),
         destination: Vec::new(),
         sender: None,
         enterer: None,
@@ -435,15 +431,28 @@ pub(super) fn acknowledgement(
         },
         responsible: None,
         reason: None,
-        response: Some(MessageHeaderResponse {
-            identifier: request_id.into(),
-            code: "ok".into(),
-            ..MessageHeaderResponse::default()
-        }),
+        response: None,
         focus: Vec::new(),
+        definition: None,
+    }
+}
+
+/// The feed response `response_id` from `source`, answering with
+/// `response` and containing `contained`: a `Bundle` of type `message` whose
+/// one entry is its `MessageHeader` (§2:3.93.4.2.2).
+pub(super) fn response(
+    response_id: &str,
+    source: &str,
+    response: MessageHeaderResponse,
+    contained: Vec<Resource>,
+) -> Bundle {
+    let header = MessageHeader {
+        contained,
+        response: Some(response),
         definition: Some(RESPONSE_DEFINITION.into()),
+        ..header(response_id, RESPONSE_EVENT, source)
     };
-    let bundle = Bundle {
+    Bundle {
         r#type: "message".into(),
         entry: vec![BundleEntry {
             full_url: Some(format!("urn:uuid:{response_id}").into()),
@@ -451,8 +460,22 @@ pub(super) fn acknowledgement(
             ..BundleEntry::default()
         }],
         ..Bundle::default()
+    }
+}
+
+/// The response to the message `request_id` that reports `ok`, as FHIR JSON
+/// (§2:3.93.4.2.2).
+pub(super) fn acknowledgement(
+    request_id: &str,
+    response_id: &str,
+    source: &str,
+) -> Result<Vec<u8>, Unwritable> {
+    let ok = MessageHeaderResponse {
+        identifier: request_id.into(),
+        code: "ok".into(),
+        ..MessageHeaderResponse::default()
     };
-    serde_json::to_vec(&bundle).map_err(Unwritable)
+    serde_json::to_vec(&response(response_id, source, ok, Vec::new())).map_err(Unwritable)
 }
 
 #[cfg(test)]

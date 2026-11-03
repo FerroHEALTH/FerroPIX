@@ -12,8 +12,8 @@ use fhir_types::r4::resource::Resource;
 use fhir_types::r4::subscription::{Subscription, SubscriptionChannel};
 use url::Url;
 
-use crate::outcome;
-use crate::search::escape;
+use crate::rest;
+use crate::rest::escape;
 use ihe_atna::redact::RedactedUrl;
 
 use super::error::{InvalidInput, SubscriptionMalformation};
@@ -217,20 +217,25 @@ impl SubscriptionStatus {
     }
 }
 
+/// The JSON of an answer with `media` and `body`, which is FHIR JSON
+/// (ITI TF-2 Appendix Z.6).
+fn json(media: Option<&str>, body: &[u8]) -> Result<Value, SubscriptionMalformation> {
+    if !rest::fhir_json(media) {
+        return Err(SubscriptionMalformation::NotFhirJson);
+    }
+    serde_json::from_slice(body).map_err(|error| SubscriptionMalformation::NotJson {
+        line: error.line(),
+        column: error.column(),
+    })
+}
+
 /// The status a read of the subscription answered with `media` and `body`
 /// holds.
 pub(super) fn status(
     media: Option<&str>,
     body: &[u8],
 ) -> Result<SubscriptionStatus, SubscriptionMalformation> {
-    if !outcome::fhir_json(media) {
-        return Err(SubscriptionMalformation::NotFhirJson);
-    }
-    let value: Value =
-        serde_json::from_slice(body).map_err(|error| SubscriptionMalformation::NotJson {
-            line: error.line(),
-            column: error.column(),
-        })?;
+    let value = json(media, body)?;
     let object: &Object = value
         .as_object()
         .ok_or(SubscriptionMalformation::NotASubscription)?;
@@ -283,14 +288,7 @@ pub(super) fn listed(
     request: &SubscriptionRequest,
     endpoint: &Url,
 ) -> Result<Vec<Listed>, SubscriptionMalformation> {
-    if !outcome::fhir_json(media) {
-        return Err(SubscriptionMalformation::NotFhirJson);
-    }
-    let value: Value =
-        serde_json::from_slice(body).map_err(|error| SubscriptionMalformation::NotJson {
-            line: error.line(),
-            column: error.column(),
-        })?;
+    let value = json(media, body)?;
     let object: &Object = value
         .as_object()
         .ok_or(SubscriptionMalformation::NotASearchset)?;

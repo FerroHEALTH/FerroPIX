@@ -71,7 +71,7 @@ use url::Url;
 
 use crate::identification::{PseudoBsn, Ura};
 use error::{InvalidInput, Malformation, NviError};
-use ihe_iti::authorizer::{self, Authorizer};
+use ihe_iti::authorizer::{self, Authorizable, Authorizer};
 use ihe_iti::exchange::{self, Unanswered};
 
 /// The system of the localization record type the IG fixes (LOINC).
@@ -146,17 +146,6 @@ impl NviClient {
         })
     }
 
-    /// Returns this client, asking `authorizer` for the headers of every
-    /// request and handing it every answer (the IG's GFI-005).
-    ///
-    /// Build the HTTP client without a default `Authorization` header then:
-    /// the authorizer's headers are added to it, never in its place.
-    #[must_use]
-    pub fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-
     /// Returns the `[base]/DocumentReference` URL the client searches.
     #[must_use]
     pub fn endpoint(&self) -> &Url {
@@ -220,6 +209,13 @@ impl NviClient {
             .build()
             .map_err(NviError::failed)?;
         authorizer::send(&self.http, self.authorizer.as_deref(), request, remaining).await
+    }
+}
+
+impl Authorizable for NviClient {
+    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
+        self.authorizer = Some(authorizer);
+        self
     }
 }
 

@@ -15,6 +15,7 @@ use ferrohealth_smart::client::{ClientCredentials, Endpoint, TokenError};
 use http::StatusCode;
 use http::header::AUTHORIZATION;
 use ihe_atna::user::OnBehalfOf;
+use ihe_iti::authorizer::Authorizable;
 use ihe_iti::authorizer::smart::TokenAuthorizer;
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::CrossReference;

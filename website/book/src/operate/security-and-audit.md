@@ -93,7 +93,7 @@ Basic users are for a run on your own machine: they need
 
 The PIXm, PDQm, mCSD and PMIR clients send the credential their
 `reqwest::Client` carries in its default headers or, built
-`.with_authorizer(…)`, ask an `ihe_iti::authorizer::Authorizer` for the
+`.with_authorizer(…)` of the `ihe_iti::authorizer::Authorizable` trait, ask an `ihe_iti::authorizer::Authorizer` for the
 headers of every request: an OAuth 2.0 access token incorporated as IUA
 ITI-72 §3.72.4.2 asks. After a `401` the request is sent once more with new
 headers (§3.72.4.3), never more than twice in all. The authorizer is handed

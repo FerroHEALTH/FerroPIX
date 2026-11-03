@@ -149,6 +149,28 @@ impl Call {
         }
     }
 
+    /// Returns the call of the request `parts` holds at `endpoint`: the
+    /// caller's access, an unauthenticated one when the request carries
+    /// none, the peer the listener saw and the request id.
+    #[must_use]
+    pub fn of_request(parts: &http::request::Parts, endpoint: &url::Url) -> Self {
+        let access = parts
+            .extensions
+            .get::<Access>()
+            .cloned()
+            .unwrap_or(Access::Open);
+        let remote = parts
+            .extensions
+            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+            .map(|info| info.0.ip());
+        Self::of(
+            &access,
+            remote,
+            endpoint,
+            crate::http::exchanged_request_id(parts),
+        )
+    }
+
     /// Returns the exchange of `kind` this call made, ended in `outcome`,
     /// concerning `entities`.
     fn exchange(&self, kind: EventKind, outcome: Outcome, entities: Vec<Entity>) -> Exchange {

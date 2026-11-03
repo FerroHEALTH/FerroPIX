@@ -30,7 +30,7 @@ use crate::app::PSEUDONYM_DOMAINS;
 use crate::locale::messages::Msg;
 use crate::markup::{hidden, submit};
 use crate::model::Read;
-use crate::pages::{Needs, or_dash, server_state};
+use crate::pages::{Needs, create_button, or_dash, server_state, written_notice};
 use crate::visit::Visit;
 
 /// The hidden field that names which of the page's forms was posted.
@@ -74,7 +74,7 @@ pub fn pseudonym_domains(
     };
     stack(Html::join([
         resolved_notice(visit, resolved),
-        written_notice(visit, written),
+        written_notice(visit, written, "POST /operator/pseudonym-domains"),
         domain_table(visit, domains),
         resolve_form(visit, &live),
         editor,
@@ -107,25 +107,6 @@ fn resolved_notice(visit: &Visit, resolved: Option<&Read<Resolution>>) -> Html {
             Some(probe),
             Needs::of(Msg::WhatPseudonymResolve),
             "POST /operator/pseudonyms/resolve",
-        ),
-    }
-}
-
-/// The outcome of a domain write just posted.
-fn written_notice(visit: &Visit, written: Option<&Read<()>>) -> Html {
-    match written {
-        None => Html::empty(),
-        Some(Ok(())) => notice(
-            Tone::Ok,
-            Announce::Status,
-            None,
-            Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::DomainSaved)))),
-        ),
-        Some(Err(probe)) => server_state(
-            visit,
-            Some(probe),
-            Needs::of(Msg::WhatDomainWrite),
-            "POST /operator/pseudonym-domains",
         ),
     }
 }
@@ -294,10 +275,7 @@ fn create_form(visit: &Visit) -> Html {
                 false
             ),
             text_field(visit, "create-reason", "reason", Msg::RevealReason, true),
-            submit(
-                Variant::Primary.class(),
-                &label(Some(Glyph::PLUS), visit.tr(Msg::DomainCreate))
-            ),
+            create_button(visit),
         )),
     )
 }

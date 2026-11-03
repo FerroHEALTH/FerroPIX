@@ -20,11 +20,10 @@
 //! value or name reaches a log line, a span or an error: the handlers log
 //! the outcome's case alone (#52).
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{ConnectInfo, Request};
+use axum::extract::Request;
 use axum::response::Response;
 use ferrohealth_smart::resource::Access;
 use http::request::Parts;
@@ -163,7 +162,7 @@ impl Manager {
         if let Ok((_, minted)) = &answered
             && !minted.is_empty()
         {
-            let call = self.call(&parts);
+            let call = Call::of_request(&parts, &self.endpoint);
             let exchanges = minted
                 .iter()
                 .map(|(person, namespace)| {
@@ -182,7 +181,12 @@ impl Manager {
                 .as_ref()
                 .map(|(body_format, text)| (body_format.media_type(), text)),
         );
-        let exchange = manager_query(&self.call(&parts).received(), raw, pix.source(), outcome);
+        let exchange = manager_query(
+            &Call::of_request(&parts, &self.endpoint).received(),
+            raw,
+            pix.source(),
+            outcome,
+        );
         if let Err(error) = record(&self.audit, &parts, &exchange).await {
             tracing::error!(error = %crate::chain(&error), "an ITI-83 answer is withheld: its audit record could not be stored");
             return wire::send(&Case::Unaudited.answer(), format);
@@ -367,7 +371,7 @@ impl Manager {
         let recorded = feed::record(
             &self.audit,
             pending,
-            &self.call(parts),
+            &Call::of_request(parts, &self.endpoint),
             condition,
             removal,
             applied.as_ref(),
@@ -437,26 +441,6 @@ impl Manager {
                 .map(RequestId::id)
                 .map(str::to_owned),
         }
-    }
-
-    /// Returns who called and where, as the request's audit record names
-    /// them.
-    fn call(&self, parts: &Parts) -> Call {
-        let access = parts
-            .extensions
-            .get::<Access>()
-            .cloned()
-            .unwrap_or(Access::Open);
-        let remote = parts
-            .extensions
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|ConnectInfo(address)| address.ip());
-        Call::of(
-            &access,
-            remote,
-            &self.endpoint,
-            crate::http::exchanged_request_id(parts),
-        )
     }
 
     /// Returns the URL the request was made to, under the public base, as

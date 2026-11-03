@@ -14,14 +14,12 @@
 //! the answer leaves, and a record that cannot be stored withholds the
 //! answer with `503`.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{ConnectInfo, Request};
+use axum::extract::Request;
 use axum::response::{IntoResponse as _, Response};
 use axum::routing::{MethodFilter, MethodRouter, on};
-use ferrohealth_smart::resource::Access;
 use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::subscription::Subscription;
 use http::request::Parts;
@@ -108,7 +106,7 @@ pub fn handler(route: &Route, filter: MethodFilter, face: &Arc<Face>) -> Option<
 /// `POST {base}/fhir/Subscription` (§2:3.94.4.1, §2:3.94.4.2).
 async fn create(face: Arc<Face>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
-    let call = call(&face.fhir_base, &parts);
+    let call = Call::of_request(&parts, &face.fhir_base);
     let format = answer_format(&parts);
     let requested = match requested(&face, &parts, body).await {
         Ok(requested) => requested,
@@ -166,7 +164,7 @@ async fn create(face: Arc<Face>, request: Request) -> Response {
 /// `GET {base}/fhir/Subscription/{id}` (§2:3.94.4.3).
 async fn read(face: Arc<Face>, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
-    let call = call(&face.fhir_base, &parts);
+    let call = Call::of_request(&parts, &face.fhir_base);
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let found = match id {
@@ -233,7 +231,7 @@ async fn read(face: Arc<Face>, request: Request) -> Response {
 /// `PUT {base}/fhir/Subscription/{id}`: enable or disable (§2:3.94.4.4).
 async fn update(face: Arc<Face>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
-    let call = call(&face.fhir_base, &parts);
+    let call = Call::of_request(&parts, &face.fhir_base);
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let label = id.map(|id| id.to_string());
@@ -300,7 +298,7 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
 /// `DELETE {base}/fhir/Subscription/{id}` (§2:3.94.4.5).
 async fn delete(face: Arc<Face>, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
-    let call = call(&face.fhir_base, &parts);
+    let call = Call::of_request(&parts, &face.fhir_base);
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let label = id.map(|id| id.to_string());
@@ -402,25 +400,6 @@ fn id_of(parts: &Parts) -> Option<Uuid> {
         .and_then(|id| Uuid::try_parse(id).ok())
 }
 
-/// Who called and where, at the FHIR base `fhir_base`.
-pub(super) fn call(fhir_base: &Url, parts: &Parts) -> Call {
-    let access = parts
-        .extensions
-        .get::<Access>()
-        .cloned()
-        .unwrap_or(Access::Open);
-    let remote = parts
-        .extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|info| info.0.ip());
-    Call::of(
-        &access,
-        remote,
-        fhir_base,
-        crate::http::exchanged_request_id(parts),
-    )
-}
-
 /// The format the answer is written in: the one `_format` or `Accept` asks,
 /// JSON when neither names one the face writes.
 pub(super) fn answer_format(parts: &Parts) -> Format {
@@ -514,19 +493,11 @@ pub(super) fn written<T: Resource>(
     format: Format,
     location: Option<&str>,
 ) -> Response {
-    let Ok(bytes) = answer.encode(format) else {
-        tracing::error!("a PMIR answer could not be encoded");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    let mut response = (answer.status(), Body::from(bytes)).into_response();
-    let headers = response.headers_mut();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static(format.media_type()),
-    );
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    if let Some(location) = location.and_then(|location| HeaderValue::from_str(location).ok()) {
-        headers.insert(header::LOCATION, location);
+    let mut response = wire::send(answer, format);
+    if response.status() == answer.status()
+        && let Some(location) = location.and_then(|location| HeaderValue::from_str(location).ok())
+    {
+        response.headers_mut().insert(header::LOCATION, location);
     }
     response
 }

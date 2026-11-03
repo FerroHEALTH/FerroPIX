@@ -202,6 +202,37 @@ impl Needs {
     }
 }
 
+/// The submit button of the form that creates a domain.
+#[must_use]
+pub fn create_button(visit: &Visit) -> Html {
+    crate::markup::submit(
+        Variant::Primary.class(),
+        &ferrohealth_ui::view::button::label(Some(Glyph::PLUS), visit.tr(Msg::DomainCreate)),
+    )
+}
+
+/// The outcome of a domain write just posted to the operator API `route`:
+/// saved, or the server's refusal with its issues.
+#[must_use]
+pub fn written_notice(
+    visit: &Visit,
+    written: Option<&crate::model::Read<()>>,
+    route: &str,
+) -> Html {
+    match written {
+        None => Html::empty(),
+        Some(Ok(())) => notice(
+            Tone::Ok,
+            Announce::Status,
+            None,
+            Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::DomainSaved)))),
+        ),
+        Some(Err(probe)) => {
+            server_state(visit, Some(probe), Needs::of(Msg::WhatDomainWrite), route)
+        }
+    }
+}
+
 /// The state of a page that reads the operator API `route`.
 ///
 /// It is drawn from the call `probe` to the server's liveness route: the

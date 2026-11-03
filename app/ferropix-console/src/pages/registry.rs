@@ -19,7 +19,7 @@ use ferrohealth_ui::table::view::{
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT, SELECT, check_field, help_id};
-use ferrohealth_ui::view::notice::{Announce, notice};
+
 use ferrohealth_ui::view::status::badge;
 use ferrohealth_ui::view::surface::{card, definitions, disclosure, stack};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
@@ -36,7 +36,7 @@ use crate::app::{DOMAINS, SOURCES};
 use crate::locale::messages::Msg;
 use crate::markup::submit;
 use crate::model::Read;
-use crate::pages::{Needs, or_dash, server_state};
+use crate::pages::{create_button, or_dash, written_notice};
 use crate::visit::Visit;
 
 /// The book's page that says how FerroPIX is configured.
@@ -283,26 +283,6 @@ fn outcome(outcome: &str) -> Html {
     badge(tone, outcome.to_owned())
 }
 
-/// The outcome of a domain write just posted: saved, or the server's
-/// refusal with its issues.
-fn written_notice(visit: &Visit, written: Option<&Read<()>>) -> Html {
-    match written {
-        None => Html::empty(),
-        Some(Ok(())) => notice(
-            Tone::Ok,
-            Announce::Status,
-            None,
-            Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::DomainSaved)))),
-        ),
-        Some(Err(probe)) => server_state(
-            visit,
-            Some(probe),
-            Needs::of(Msg::WhatDomainWrite),
-            "POST /operator/domains",
-        ),
-    }
-}
-
 /// A text field of a domain form.
 fn domain_field(visit: &Visit, id: &'static str, words: Msg, required: bool) -> Html {
     Field::new(id, visit.tr(words)).view(Html::raw(format!(
@@ -362,10 +342,7 @@ fn create_form(visit: &Visit) -> Html {
             domain_field(visit, "name", Msg::ColName, true),
             domain_field(visit, "source", Msg::ColSource, true),
             domain_field(visit, "reason", Msg::RevealReason, true),
-            submit(
-                Variant::Primary.class(),
-                &label(Some(Glyph::PLUS), visit.tr(Msg::DomainCreate))
-            ),
+            create_button(visit),
         )),
     )
 }
@@ -406,7 +383,7 @@ pub fn domains(visit: &Visit, domains: &Domains, written: Option<&Read<()>>, adm
         admin_only(visit)
     };
     stack(Html::join([
-        written_notice(visit, written),
+        written_notice(visit, written, "POST /operator/domains"),
         domain_table(visit, domains),
         editor,
     ]))
@@ -557,7 +534,7 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
         admin_only(visit)
     };
     stack(Html::join([
-        written_notice(visit, written),
+        written_notice(visit, written, "POST /operator/domains"),
         card(visit.tr(Msg::DomainDefinition), facts),
         change,
         listed(visit, Msg::LastFeeds, page.feeds.len(), feeds),

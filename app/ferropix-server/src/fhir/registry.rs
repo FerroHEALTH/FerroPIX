@@ -51,7 +51,7 @@ use crate::auth::table::Route;
 use crate::config::section::matching::Matching;
 use crate::feed::master::MasterChange;
 use crate::feed::{Context, FeedError, Feeder};
-use crate::fhir::pmir::{Refusal, answer_format, call, record, refused, written};
+use crate::fhir::pmir::{Refusal, answer_format, record, refused, written};
 use crate::fhir::status::Case;
 use crate::fhir::wire;
 use crate::store::Store;
@@ -157,7 +157,7 @@ pub fn handler(
 /// `POST {base}/fhir`: one feed message (§2:3.93.4.1, §2:3.93.4.2).
 async fn receive(registry: Arc<Registry>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
-    let call = call(&registry.fhir_base, &parts);
+    let call = Call::of_request(&parts, &registry.fhir_base);
     let format = answer_format(&parts);
     let access = parts
         .extensions

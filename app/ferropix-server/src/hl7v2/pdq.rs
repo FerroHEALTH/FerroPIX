@@ -38,12 +38,12 @@ use crate::config::section::hl7v2::Sender;
 use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
 use crate::hl7v2::feed::{fhir_escape, query_part, url_encoded};
-use crate::hl7v2::pid::{self, Shown};
-use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Fault, Writer, location};
 use crate::hl7v2::{Answer, Face, acknowledge, sender_key};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
+use crate::v2::pid::{self, Shown};
+use crate::v2::stamped::Stamped;
+use crate::v2::write::{Fault, Writer, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// One person of an answer: its id and its `Patient`'s JSON.

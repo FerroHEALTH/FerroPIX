@@ -23,13 +23,13 @@ use secrecy::SecretString;
 
 use crate::audit::records::{self, Call, Identifier, V2Query};
 use crate::config::section::hl7v2::authority::Hd;
-use crate::hl7v2::pid::{self, Shown};
-use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Fault, Writer, location};
 use crate::hl7v2::{Answer, Face};
 use crate::store::identifier::Rule;
 use crate::store::record;
 use crate::store::xref::{self, Lookup};
+use crate::v2::pid::{self, Shown};
+use crate::v2::stamped::Stamped;
+use crate::v2::write::{Fault, Writer, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// What a query settled.

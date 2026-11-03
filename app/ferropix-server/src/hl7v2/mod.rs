@@ -22,20 +22,16 @@
 //!   search ITI-78 runs, with the continuation protocol (§3.21.4).
 //!
 //! Every other type is acknowledged `AR` with `ERR` code `200`. The other
-//! way, [`notification`] writes ITI-10's ADT^A31 to each configured consumer
+//! way, [`crate::v2::notification`] writes ITI-10's ADT^A31 to each configured consumer
 //! after a cross-reference change, which the outbox sender delivers. No byte of a
 //! message reaches a log line: the span names MSH-10 and the type, and the
 //! events the acknowledgment code.
 
 pub mod cursor;
 pub mod feed;
-pub mod notification;
 pub mod pdq;
-pub mod pid;
 pub mod pix;
 pub mod receipt;
-pub mod stamped;
-pub mod write;
 
 use std::future::Future;
 use std::net::SocketAddr;
@@ -65,10 +61,10 @@ use crate::config::section::matching::Matching;
 use crate::config::section::profiles::Deprecated;
 use crate::feed::Feeder;
 use crate::hl7v2::cursor::Cursors;
-use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Fault, Writer};
 use crate::pdqm::Supplier;
 use crate::store::Store;
+use crate::v2::stamped::Stamped;
+use crate::v2::write::{Fault, Writer};
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// The answer to one message: its acknowledgment code and its text, before
@@ -504,8 +500,8 @@ mod tests {
 
     use super::{acknowledge, names, sender_key};
     use crate::config::section::hl7v2::Sender;
-    use crate::hl7v2::stamped::Stamped;
-    use crate::hl7v2::write::Fault;
+    use crate::v2::stamped::Stamped;
+    use crate::v2::write::Fault;
     use ferrobridge_hl7v2::parse::ErrorCode;
 
     fn sender(application: &str, facility: &str) -> Sender {

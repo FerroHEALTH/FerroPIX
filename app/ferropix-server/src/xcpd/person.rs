@@ -23,8 +23,8 @@ use ihe_iti::xcpd::responding::query::{BirthTime, Parameters, PersonName, Postal
 use secrecy::{ExposeSecret as _, SecretString};
 
 use crate::config::section::xcpd::AnswerDomain;
-use crate::hl7v2::pid::birth_date;
 use crate::matching::subject::MOTHERS_MAIDEN_NAME;
+use crate::v2::pid::birth_date;
 
 /// The `URL` scheme of a telephone number (RFC 3966).
 const TEL: &str = "tel:";

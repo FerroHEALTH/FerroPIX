@@ -28,9 +28,9 @@ use crate::audit::records::{self, Identifier};
 use crate::config::section::hl7v2::Consumer;
 use crate::config::section::hl7v2::authority::Authorities;
 use crate::config::section::outbox::Retention;
-use crate::hl7v2::notification::{self, Acknowledged, Party};
 use crate::store::Store;
 use crate::store::outbox::{self, Channel, Claimed, LEASE, Wake};
+use crate::v2::notification::{self, Acknowledged, Party};
 
 /// The longest the sender sleeps without looking at the outbox.
 pub const IDLE: Duration = Duration::from_secs(30);

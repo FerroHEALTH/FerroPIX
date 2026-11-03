@@ -133,7 +133,7 @@ async fn feed(
                 destination: &destination,
             },
         );
-        let bytes = crate::fhir::wire::encoded(&bundle, format).ok_or(FeedError::Notice)?;
+        let bytes = crate::outcome::encoded(&bundle, format).ok_or(FeedError::Notice)?;
         let payload = String::from_utf8(bytes).map_err(|_not_utf8| FeedError::Notice)?;
         outbox::enqueue(
             &mut *connection,

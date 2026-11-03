@@ -23,10 +23,10 @@ use uuid::Uuid;
 
 use crate::feed::FeedError;
 use crate::feed::announce::Change;
-use crate::hl7v2::notification::{self, Party};
-use crate::hl7v2::stamped::Stamped;
 use crate::store::outbox::{self, Channel, Message};
 use crate::store::{Store, xref};
+use crate::v2::notification::{self, Party};
+use crate::v2::stamped::Stamped;
 
 /// The media type an ITI-10 notification is stored under.
 pub const MEDIA_TYPE: &str = "application/hl7-v2";

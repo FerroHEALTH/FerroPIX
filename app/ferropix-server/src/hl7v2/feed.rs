@@ -28,11 +28,11 @@ use secrecy::SecretString;
 use crate::audit::records::{self, Call, Identifier};
 use crate::config::section::hl7v2::Sender;
 use crate::feed::{Action, Applied, Context, FeedError};
-use crate::hl7v2::pid::{self, Cx};
-use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::{Fault, location};
 use crate::hl7v2::{Answer, Face, acknowledge, receipt, sender_key};
 use crate::store::record::Channel;
+use crate::v2::pid::{self, Cx};
+use crate::v2::stamped::Stamped;
+use crate::v2::write::{Fault, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// What applying a message settled: the code, the faults, and whether the

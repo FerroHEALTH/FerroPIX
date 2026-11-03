@@ -542,7 +542,7 @@ self_test() {
   expect "Hub image postgres 18.6;Registry image ghcr.io/example/a 6.1.3;Port image registry.example:5000/x/y 1.0" \
     "$got" "the image rows of a matrix"
   got="$(matrix_images "$MATRIX" | cut -f1 | paste -sd ';' -)"
-  expect "PostgreSQL test image;Stub OpenID Provider image;distroless static base;PostgreSQL quickstart image;Quickstart issuer image" \
+  expect "PostgreSQL test image;Stub OpenID Provider image;distroless static base;PostgreSQL quickstart image;Quickstart issuer image;jscpd image" \
     "$got" "the image rows of $MATRIX"
 
   printf '%s\n' '      - uses: taiki-e/install-action@0000 # v2' '        with:' '          tool: zizmor@1.2.3' \

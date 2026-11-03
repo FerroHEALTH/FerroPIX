@@ -16,6 +16,7 @@ use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use secrecy::SecretString;
 
+use crate::bundle;
 use crate::rest;
 
 use super::error::FeedError;
@@ -139,8 +140,8 @@ pub(super) fn read_bundle(object: &Object) -> Result<Message, FeedError> {
     let found = bundle.entry.len();
     let [header_entry, history_entry] = <[BundleEntry; 2]>::try_from(bundle.entry)
         .map_err(|_entries| FeedError::EntryCount { found })?;
-    let header_url = full_url(&header_entry).ok_or(FeedError::NoFullUrl { entry: 0 })?;
-    let history_url = full_url(&history_entry).ok_or(FeedError::NoFullUrl { entry: 1 })?;
+    let header_url = bundle::full_url(&header_entry).ok_or(FeedError::NoFullUrl { entry: 0 })?;
+    let history_url = bundle::full_url(&history_entry).ok_or(FeedError::NoFullUrl { entry: 1 })?;
     let Some(Resource::MessageHeader(header)) = header_entry.resource else {
         return Err(FeedError::NoHeader);
     };
@@ -247,15 +248,6 @@ fn restful_base(full_url: &str) -> Option<&str> {
     restful.then_some(base)
 }
 
-/// The entry's `fullUrl`, when it carries a non-empty one.
-fn full_url(entry: &BundleEntry) -> Option<String> {
-    entry
-        .full_url
-        .as_ref()
-        .and_then(|full_url| full_url.value.clone())
-        .filter(|full_url| !full_url.is_empty())
-}
-
 /// The change history entry `index` reports, and the Patient it changes when
 /// the entry names one, which no other entry may change.
 fn change(index: usize, entry: BundleEntry) -> Result<(Change, Option<String>), FeedError> {
@@ -334,14 +326,7 @@ fn patient(index: usize, resource: Option<Resource>) -> Result<Box<Patient>, Fee
 /// `Patient/[id]` relative or under any base, with an optional
 /// `/_history/[vid]`, or `None` when it names none.
 fn named_patient(request: &BundleEntryRequest) -> Option<String> {
-    let url = request.url.value.as_deref()?;
-    let path = url.split(['?', '#']).next()?;
-    let segments: Vec<&str> = path.split('/').collect();
-    let at = segments.iter().rposition(|segment| *segment == "Patient")?;
-    match segments.get(at.saturating_add(1)..)? {
-        [id] | [id, "_history", _] if !id.is_empty() => Some((*id).to_owned()),
-        _ => None,
-    }
+    bundle::logical_id(request.url.value.as_deref()?, "Patient")
 }
 
 /// The Patient an entry changes: the one its resource carries, which must be

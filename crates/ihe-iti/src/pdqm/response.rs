@@ -6,7 +6,7 @@
 //! §2:3.119.4.2.2, §2:3.119.4.1.3).
 
 use fhir_types::codec::{Json, Object, Path};
-use fhir_types::r4::bundle::{Bundle, BundleEntry, BundleEntrySearch, BundleLink};
+use fhir_types::r4::bundle::{Bundle, BundleEntry, BundleEntrySearch};
 use fhir_types::r4::extension::ExtensionValue;
 use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::patient::Patient;
@@ -162,7 +162,9 @@ fn searchset(object: &Object, base: &Url) -> Result<SearchResult, Malformation> 
         .as_ref()
         .and_then(|total| total.value)
         .ok_or(Malformation::NoTotal)?;
-    let next = next(&bundle.link, base)?;
+    let next = crate::bundle::next(&bundle.link, base)
+        .map_err(|_bad| Malformation::NextLink)?
+        .map(Page::new);
     let (patients, warnings) = read_entries(
         bundle.entry,
         |index, full_url, patient, search| {
@@ -179,21 +181,6 @@ fn searchset(object: &Object, base: &Url) -> Result<SearchResult, Malformation> 
         return Err(Malformation::TotalBelowMatches);
     }
     Ok(SearchResult::new(total, patients, warnings, next))
-}
-
-/// The `next` link, resolved against the FHIR base (FHIR R4 paging,
-/// <http://hl7.org/fhir/R4/http.html#paging>).
-fn next(links: &[BundleLink], base: &Url) -> Result<Option<Page>, Malformation> {
-    let Some(link) = links
-        .iter()
-        .find(|link| link.relation.value.as_deref() == Some("next"))
-    else {
-        return Ok(None);
-    };
-    let url = link.url.value.as_deref().ok_or(Malformation::NextLink)?;
-    base.join(url)
-        .map(|url| Some(Page::new(url)))
-        .map_err(|_unparsable| Malformation::NextLink)
 }
 
 /// The matches a `$match` Bundle holds, held to the PDQm Match Output Bundle

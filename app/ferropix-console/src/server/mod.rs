@@ -205,9 +205,9 @@ pub fn router(state: ConsoleState) -> axum::Router {
     let health = ferrohealth_server::health::routes(state.health().clone());
     let pages = axum::Router::new()
         .merge(health)
-        .route(FAVICON, get(favicon))
-        .route(MARK_LIGHT, get(mark_light))
-        .route(MARK_DARK, get(mark_dark))
+        .route(FAVICON, get(brand))
+        .route(MARK_LIGHT, get(brand))
+        .route(MARK_DARK, get(brand))
         .route(crate::paths::LOGIN, get(crate::oidc::login))
         .route(crate::oidc::CALLBACK, get(crate::oidc::callback))
         .route(
@@ -228,7 +228,7 @@ pub fn router(state: ConsoleState) -> axum::Router {
         )
         .route(
             crate::paths::SESSION,
-            get(crate::session::route::read).post(crate::session::route::extend),
+            get(crate::session::route::session).post(crate::session::route::session),
         )
         .route(crate::pages::search::SUGGEST, post(crate::posts::suggest))
         .route(crate::pages::trail::EXPORT, post(crate::posts::export))
@@ -405,32 +405,27 @@ pub fn form_action(settings: &Settings) -> String {
     }
 }
 
-/// An answer of `text` as `media`, revalidated so a rebuilt one is fetched
-/// again (RFC 9111 §5.2.2.4).
-fn file(media: &'static str, text: &'static str) -> Response {
+/// The brand marks the console serves, by route.
+const BRAND: [(&str, &str); 3] = [
+    (FAVICON, FAVICON_SVG),
+    (MARK_LIGHT, MARK_LIGHT_SVG),
+    (MARK_DARK, MARK_DARK_SVG),
+];
+
+/// Serves the brand mark the request's path names as SVG, revalidated so a
+/// rebuilt one is fetched again (RFC 9111 §5.2.2.4).
+async fn brand(uri: http::Uri) -> Response {
+    let Some((_, svg)) = BRAND.iter().find(|(route, _)| uri.path().ends_with(route)) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
     (
         [
-            (CONTENT_TYPE, HeaderValue::from_static(media)),
+            (CONTENT_TYPE, HeaderValue::from_static("image/svg+xml")),
             (CACHE_CONTROL, HeaderValue::from_static("no-cache")),
         ],
-        text,
+        *svg,
     )
         .into_response()
-}
-
-/// Serves the favicon.
-async fn favicon() -> Response {
-    file("image/svg+xml", FAVICON_SVG)
-}
-
-/// Serves the brand mark in the light theme.
-async fn mark_light() -> Response {
-    file("image/svg+xml", MARK_LIGHT_SVG)
-}
-
-/// Serves the brand mark in the dark theme.
-async fn mark_dark() -> Response {
-    file("image/svg+xml", MARK_DARK_SVG)
 }
 
 /// Compresses FerroUI's assets with brotli or gzip, as the request's

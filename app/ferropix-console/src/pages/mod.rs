@@ -39,7 +39,7 @@ use http::StatusCode;
 
 use crate::locale::messages::Msg;
 use crate::locale::{tr, tr_with};
-use crate::markup::{h, t};
+
 use crate::model::{Failure, Probe, Reach};
 use crate::visit::Visit;
 
@@ -153,9 +153,9 @@ fn try_again(visit: &Visit, probe: &Probe) -> Html {
             Some(Glyph::REFRESH_CW),
             visit.tr(Msg::TryAgain),
         )
-        .then(h(format!(
+        .then(Html::raw(format!(
             "<span class=\"fui-small fui-muted\">{} {}</span>",
-            t(visit.tr(Msg::LastTried)),
+            Html::text(visit.tr(Msg::LastTried)),
             timestamp(locale, &probe.at)
         ))),
     )
@@ -168,15 +168,15 @@ fn technical_detail(locale: &Locale, probe: &Probe) -> Html {
         definitions(vec![
             (
                 tr(locale, Msg::DetailFailure),
-                t(failure_words(locale, &probe.reach)),
+                Html::text(failure_words(locale, &probe.reach)),
             ),
             (
                 tr(locale, Msg::DetailRoute),
-                h(format!("<code>{}</code>", t(&probe.route))),
+                Html::raw(format!("<code>{}</code>", Html::text(&probe.route))),
             ),
             (
                 tr(locale, Msg::DetailRequestId),
-                h(format!("<code>{}</code>", t(&probe.request_id))),
+                Html::raw(format!("<code>{}</code>", Html::text(&probe.request_id))),
             ),
             (tr(locale, Msg::DetailTime), timestamp(locale, &probe.at)),
         ]),
@@ -219,14 +219,14 @@ pub fn server_state(visit: &Visit, probe: Option<&Probe>, needs: Needs, route: &
             Tone::Info,
             Announce::Status,
             None,
-            h(format!(
+            Html::raw(format!(
                 "<p>{}</p><p class=\"fui-small fui-muted\">{}</p>",
-                t(tr_with(
+                Html::text(tr_with(
                     locale,
                     Msg::NotServed,
                     &[("what", Arg::from(what))]
                 )),
-                t(tr_with(
+                Html::text(tr_with(
                     locale,
                     Msg::NotServedRoute,
                     &[("route", Arg::from(route.to_owned()))]
@@ -237,7 +237,7 @@ pub fn server_state(visit: &Visit, probe: Option<&Probe>, needs: Needs, route: &
     let away = if needs.away {
         card(
             tr(locale, Msg::AwayTitle),
-            h(format!("<p>{}</p>", t(tr(locale, Msg::AwayBody)))),
+            Html::raw(format!("<p>{}</p>", Html::text(tr(locale, Msg::AwayBody)))),
         )
     } else {
         Html::empty()
@@ -291,6 +291,6 @@ pub fn gender_words(locale: &Locale, code: &str) -> String {
 pub fn or_dash(locale: &Locale, value: Option<String>) -> Html {
     value.map_or_else(
         || ferrohealth_ui::view::surface::or_none(locale, String::new()),
-        t,
+        Html::text,
     )
 }

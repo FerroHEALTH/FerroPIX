@@ -270,7 +270,7 @@ async fn link_pair(
             .bind(reason)
             .execute(&mut *connection)
             .await?;
-            let action = write::reasoned(
+            let action = write::recorded(
                 connection,
                 "link",
                 context,
@@ -297,7 +297,7 @@ async fn recorded(
     a: RecordId,
     context: &Context,
 ) -> Result<Uuid, DecideError> {
-    let action = write::reasoned(
+    let action = write::recorded(
         connection,
         kind,
         context,

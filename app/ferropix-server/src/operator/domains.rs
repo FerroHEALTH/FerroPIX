@@ -19,6 +19,7 @@
 //! commits (PIXm 3.1.0 §2:3.104.5). Our own design (`docs/architecture.md`
 //! §12.3).
 
+use crate::fhir::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::domain::{
@@ -36,7 +37,7 @@ use crate::config::section::domain::is_system;
 use crate::operator::{
     Operator, OperatorError, Recorded, channel, count, domain_kind, record_action, snapshot, wire,
 };
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 use crate::store::seed;
 
 /// The detail of an id that names no domain.
@@ -92,7 +93,7 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     match read_page(operator, &query).await {
-        Ok(page) => wire::answer(&page),
+        Ok(page) => outcome::body(StatusCode::OK, &page, wire::JSON),
         Err(error) => wire::failed(&error),
     }
 }
@@ -101,18 +102,13 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
 pub async fn one(operator: &Operator, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
     let Some(id) = wire::path_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN);
     };
     match read_one(operator, id).await {
-        Ok(Some(page)) => wire::answer(&page),
-        Ok(None) => not_found(),
+        Ok(Some(page)) => outcome::body(StatusCode::OK, &page, wire::JSON),
+        Ok(None) => problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN),
         Err(error) => wire::failed(&error),
     }
-}
-
-/// Returns the `404` of an id that names no domain.
-fn not_found() -> Response {
-    wire::refuse(Kind::NotFound, NO_SUCH_DOMAIN)
 }
 
 /// Reads the page of domains `query` asks for.
@@ -229,17 +225,17 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         DomainKind::Local => "local",
         DomainKind::Authoritative => "authoritative",
         DomainKind::Master => {
-            return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
+            return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
         }
     };
     if !is_system(&new.system)
         || new.name.trim().is_empty()
         || new.source_client_id.trim().is_empty()
     {
-        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
+        return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if !operator.sources.admits(new.source_client_id.trim()) {
-        return wire::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
+        return problem::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -261,7 +257,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     .await;
     let (transaction, id) = match outcome {
         Ok(Some(written)) => written,
-        Ok(None) => return wire::refuse(Kind::AlreadyHeld, SYSTEM_TAKEN),
+        Ok(None) => return problem::refuse(Kind::AlreadyHeld, SYSTEM_TAKEN),
         Err(error) => return wire::failed(&error),
     };
     let write = Write {
@@ -271,7 +267,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         reason: new.reason.as_deref(),
     };
     match finish(operator, &parts, transaction, &write).await {
-        Ok(page) => crate::fhir::outcome::body(StatusCode::CREATED, &page.domain, wire::JSON),
+        Ok(page) => outcome::body(StatusCode::CREATED, &page.domain, wire::JSON),
         Err(refused) => *refused,
     }
 }
@@ -281,23 +277,23 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
 pub async fn update(operator: &Operator, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let Some(id) = wire::path_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN);
     };
     let (change, _bytes) = match wire::posted::<DomainChange>(&parts, body).await {
         Ok(read) => read,
         Err(refused) => return *refused,
     };
     if change.reason.trim().is_empty() {
-        return wire::refuse(Kind::ReasonRequired, NO_REASON);
+        return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let blank = |text: &Option<String>| text.as_deref().is_some_and(|text| text.trim().is_empty());
     if blank(&change.name) || blank(&change.source_client_id) {
-        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
+        return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if let Some(source) = &change.source_client_id
         && !operator.sources.admits(source.trim())
     {
-        return wire::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
+        return problem::refuse(Kind::SourceNotAdmitted, SOURCE_NOT_ADMITTED);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -332,9 +328,9 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
     .await;
     let (transaction, system) = match outcome {
         Ok(Changed::Written(transaction, system)) => (transaction, system),
-        Ok(Changed::Missing) => return not_found(),
+        Ok(Changed::Missing) => return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN),
         Ok(Changed::Retired) => {
-            return wire::refuse(Kind::Retired, RETIRED);
+            return problem::refuse(Kind::Retired, RETIRED);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -345,7 +341,7 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
         reason: Some(&change.reason),
     };
     match finish(operator, &parts, transaction, &write).await {
-        Ok(page) => wire::answer(&page.domain),
+        Ok(page) => outcome::body(StatusCode::OK, &page.domain, wire::JSON),
         Err(refused) => *refused,
     }
 }

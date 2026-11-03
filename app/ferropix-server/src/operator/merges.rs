@@ -13,6 +13,7 @@
 //! specification governs the screens: our own design; PMIR 1.6.0
 //! §2:3.93.4.1.3 admits the local unmerge policy.
 
+use crate::fhir::outcome::body;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::candidate::PersonIdentifier;
@@ -20,6 +21,7 @@ use ferropix_operator_api::merge::{
     NewMerge, Outcome as MergeOutcome, Party, Preview, PreviewQuery, PseudonymMove, Revert,
 };
 use ferropix_operator_api::patient::{DomainRef, Masked};
+use http::StatusCode;
 use http::request::Parts;
 use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
@@ -32,7 +34,7 @@ use crate::feed::steward::DecideError;
 use crate::matching::scorer::mask;
 use crate::operator::person::{UTC, carried, records as person_records};
 use crate::operator::{Operator, OperatorError, demographics, domain_kind, opened, snapshot, wire};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 use crate::store::record::{Channel, PersonId};
 use crate::store::seal::Sealer;
 
@@ -70,11 +72,11 @@ pub async fn preview(operator: &Operator, request: Request) -> Response {
             read_merge(operator, survivor, merged).await
         }
         (None, None, Some(Some(merge))) => read_revert(operator, merge).await,
-        _ => return wire::refuse(Kind::InvalidRequest, NOT_TWO),
+        _ => return problem::refuse(Kind::InvalidRequest, NOT_TWO),
     };
     let preview = match read {
         Ok(Some(preview)) => preview,
-        Ok(None) => return not_found(),
+        Ok(None) => return problem::refuse(Kind::NotFound, NOT_FOUND),
         Err(error) => return wire::failed(&error),
     };
     let call = wire::call(operator, &parts);
@@ -92,7 +94,7 @@ pub async fn preview(operator: &Operator, request: Request) -> Response {
     if let Err(error) = wire::record(operator, &parts, exchanges).await {
         return wire::unaudited(&error);
     }
-    wire::answer(&preview)
+    body(StatusCode::OK, &preview, wire::JSON)
 }
 
 /// Merges the two persons the request posts.
@@ -108,10 +110,10 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     };
     let (Some(survivor), Some(merged)) = (wire::uuid(&posted.survivor), wire::uuid(&posted.merged))
     else {
-        return wire::refuse(Kind::InvalidRequest, NOT_TWO);
+        return problem::refuse(Kind::InvalidRequest, NOT_TWO);
     };
     if survivor == merged {
-        return wire::refuse(Kind::InvalidRequest, NOT_TWO);
+        return problem::refuse(Kind::InvalidRequest, NOT_TWO);
     }
     let merge_request = MergeRequest {
         survivor: PersonId::from_uuid(survivor),
@@ -132,7 +134,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
 pub async fn revert(operator: &Operator, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let Some(merge) = wire::path_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NOT_FOUND);
     };
     let (posted, _bytes) = match wire::posted::<Revert>(&parts, body).await {
         Ok(posted) => posted,
@@ -153,7 +155,7 @@ pub async fn revert(operator: &Operator, request: Request) -> Response {
     let (transaction, change) = match made {
         Ok(made) => made,
         Err(RevertError::NotLatest { .. }) => {
-            return wire::refuse(Kind::LaterMerge, NOT_LATEST);
+            return problem::refuse(Kind::LaterMerge, NOT_LATEST);
         }
         Err(RevertError::Decide(error)) => return refused(&error),
     };
@@ -186,13 +188,17 @@ async fn finish(
         moved = change.moved,
         "a steward merged or unmerged two persons"
     );
-    wire::answer(&MergeOutcome {
-        merge: change.merge.to_string(),
-        action: change.action.to_string(),
-        survivor: change.survivor.uuid().to_string(),
-        merged: change.merged.uuid().to_string(),
-        moved: change.moved,
-    })
+    body(
+        StatusCode::OK,
+        &MergeOutcome {
+            merge: change.merge.to_string(),
+            action: change.action.to_string(),
+            survivor: change.survivor.uuid().to_string(),
+            merged: change.merged.uuid().to_string(),
+            moved: change.moved,
+        },
+        wire::JSON,
+    )
 }
 
 /// The actor, channel and request of `parts`.
@@ -208,7 +214,7 @@ fn context(parts: &Parts) -> Context {
 fn reason(posted: &str) -> Result<String, Box<Response>> {
     let reason = posted.trim();
     if reason.is_empty() || reason.chars().count() > REASON {
-        return Err(Box::new(wire::refuse(Kind::ReasonRequired, NO_REASON)));
+        return Err(Box::new(problem::refuse(Kind::ReasonRequired, NO_REASON)));
     }
     Ok(reason.to_owned())
 }
@@ -216,18 +222,13 @@ fn reason(posted: &str) -> Result<String, Box<Response>> {
 /// The answer of a change the store did not make.
 fn refused(error: &DecideError) -> Response {
     match error {
-        DecideError::NotFound => not_found(),
-        DecideError::Stale => wire::refuse(Kind::Stale, STALE),
+        DecideError::NotFound => problem::refuse(Kind::NotFound, NOT_FOUND),
+        DecideError::Stale => problem::refuse(Kind::Stale, STALE),
         DecideError::Feed(error) => {
             tracing::error!(error = %crate::chain(error), "a merge or a revert could not be made");
             wire::failed(&OperatorError::Unadmitted("merge"))
         }
     }
-}
-
-/// Returns the `404` of an id that names no person or merge.
-fn not_found() -> Response {
-    wire::refuse(Kind::NotFound, NOT_FOUND)
 }
 
 /// Reads the preview of merging `merged` into `survivor`, or `None` when

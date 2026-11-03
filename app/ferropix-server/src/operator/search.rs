@@ -19,6 +19,8 @@
 //! request refused before it runs writes none. No search writes a steward
 //! action: the BALP trail holds it. These rules are our own design.
 
+use crate::fhir::outcome::body;
+use http::StatusCode;
 use std::collections::BTreeMap;
 
 use axum::extract::Request;
@@ -41,7 +43,7 @@ use crate::matching::scorer::{Grade, mask};
 use crate::operator::person::leading;
 use crate::operator::{Operator, OperatorError, domain_kind, snapshot, wire};
 use crate::pdqm::matching;
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 use crate::store::identifier::Rule;
 use crate::store::{record, xref};
 
@@ -97,7 +99,7 @@ pub async fn by_identifier(operator: &Operator, request: Request) -> Response {
     let found = match identifier_persons(operator, &search).await {
         Ok(Some(found)) => found,
         Ok(None) => {
-            return wire::refuse(Kind::UnknownDomain, UNKNOWN_DOMAIN);
+            return problem::refuse(Kind::UnknownDomain, UNKNOWN_DOMAIN);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -113,7 +115,7 @@ pub async fn by_demographics(operator: &Operator, request: Request) -> Response 
         Err(refused) => return *refused,
     };
     let Some(input) = input(&search) else {
-        return wire::refuse(Kind::InvalidRequest, NO_FIELD);
+        return problem::refuse(Kind::InvalidRequest, NO_FIELD);
     };
     let window = Window::of(search.offset, search.limit);
     let matched = match matched(operator, &input).await {
@@ -246,12 +248,16 @@ async fn answer(
     if let Err(error) = wire::record(operator, parts, exchanges).await {
         return wire::unaudited(&error);
     }
-    wire::answer(&Results {
-        total,
-        offset: window.offset,
-        next,
-        persons,
-    })
+    body(
+        StatusCode::OK,
+        &Results {
+            total,
+            offset: window.offset,
+            next,
+            persons,
+        },
+        wire::JSON,
+    )
 }
 
 /// Reads each person of `page` as a hit, in order.

@@ -34,7 +34,7 @@ use ferropix_operator_api::source::{Admission, Message, Source, SourcePage, Sour
 
 use crate::app::{DOMAINS, SOURCES};
 use crate::locale::messages::Msg;
-use crate::markup::{h, submit, t};
+use crate::markup::submit;
 use crate::model::Read;
 use crate::pages::{Needs, or_dash, server_state};
 use crate::visit::Visit;
@@ -77,12 +77,15 @@ fn when(visit: &Visit, at: Option<&String>) -> Html {
 
 /// `text` in the code face, wrapping where it is long.
 fn code_wrap(text: &str) -> Html {
-    h(format!("<code class=\"fui-wrap\">{}</code>", t(text)))
+    Html::raw(format!(
+        "<code class=\"fui-wrap\">{}</code>",
+        Html::text(text)
+    ))
 }
 
 /// `text` in the code face.
 fn code(text: &str) -> Html {
-    h(format!("<code>{}</code>", t(text)))
+    Html::raw(format!("<code>{}</code>", Html::text(text)))
 }
 
 /// The list card titled `title` holding `body`, counting `count`.
@@ -130,15 +133,18 @@ pub fn sources(visit: &Visit, sources: &Sources) -> Html {
         .sources
         .iter()
         .map(|source| {
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}{}</tr>",
                 title_cell(
                     Some(&format!("{SOURCES}/{}", source.id)),
-                    t(&source.name),
+                    Html::text(&source.name),
                     None
                 ),
-                cell(channel_column, t(channel(visit, source.channel))),
-                cell(admission_column, t(admission(visit, &source.admission))),
+                cell(channel_column, Html::text(channel(visit, source.channel))),
+                cell(
+                    admission_column,
+                    Html::text(admission(visit, &source.admission))
+                ),
                 cell(domains_column, domain_list(visit, &source.domains)),
                 cell(activity_column, when(visit, source.last_activity.as_ref())),
             ))
@@ -152,7 +158,7 @@ pub fn sources(visit: &Visit, sources: &Sources) -> Html {
         body: Body::Rows(rows),
     });
     let file = sources.file.as_ref().map_or_else(Html::empty, |file| {
-        h(format!(
+        Html::raw(format!(
             "<p class=\"fui-small fui-muted\">{}</p>",
             file_line(
                 &visit.locale,
@@ -191,7 +197,7 @@ fn domain_list(visit: &Visit, domains: &[String]) -> Html {
     }
     domains
         .iter()
-        .map(|system| code_wrap(system).then(t(" ")))
+        .map(|system| code_wrap(system).then(Html::text(" ")))
         .collect()
 }
 
@@ -200,10 +206,13 @@ fn domain_list(visit: &Visit, domains: &[String]) -> Html {
 pub fn source(visit: &Visit, page: &SourcePage) -> Html {
     let source: &Source = &page.source;
     let facts = definitions(vec![
-        (visit.tr(Msg::ColChannel), t(channel(visit, source.channel))),
+        (
+            visit.tr(Msg::ColChannel),
+            Html::text(channel(visit, source.channel)),
+        ),
         (
             visit.tr(Msg::ColAdmission),
-            t(admission(visit, &source.admission)),
+            Html::text(admission(visit, &source.admission)),
         ),
         (
             visit.tr(Msg::ColDomains),
@@ -237,13 +246,13 @@ fn messages(visit: &Visit, messages: &[Message]) -> Html {
     let rows: Html = messages
         .iter()
         .map(|message| {
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}</tr>",
                 title_cell(None, timestamp(&visit.locale, &message.at), None),
-                cell(channel_column, t(channel(visit, message.channel))),
+                cell(channel_column, Html::text(channel(visit, message.channel))),
                 cell(
                     action_column,
-                    t(crate::pages::action_words(&visit.locale, &message.action))
+                    Html::text(crate::pages::action_words(&visit.locale, &message.action))
                 ),
                 cell(outcome_column, outcome(&message.outcome)),
             ))
@@ -283,7 +292,7 @@ fn written_notice(visit: &Visit, written: Option<&Read<()>>) -> Html {
             Tone::Ok,
             Announce::Status,
             None,
-            h(format!("<p>{}</p>", t(visit.tr(Msg::DomainSaved)))),
+            Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::DomainSaved)))),
         ),
         Some(Err(probe)) => server_state(
             visit,
@@ -296,7 +305,7 @@ fn written_notice(visit: &Visit, written: Option<&Read<()>>) -> Html {
 
 /// A text field of a domain form.
 fn domain_field(visit: &Visit, id: &'static str, words: Msg, required: bool) -> Html {
-    Field::new(id, visit.tr(words)).view(h(format!(
+    Field::new(id, visit.tr(words)).view(Html::raw(format!(
         "<input id=\"{id}\" name=\"{id}\" type=\"text\" class=\"{INPUT}\" autocomplete=\"off\"{}>",
         if required { " required" } else { "" }
     )))
@@ -305,19 +314,19 @@ fn domain_field(visit: &Visit, id: &'static str, words: Msg, required: bool) -> 
 /// The note drawn in place of an administrator's form for a steward the
 /// provider did not grant the administrator scope.
 fn admin_only(visit: &Visit) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<p class=\"fui-help\">{}</p>",
-        t(visit.tr(Msg::DomainAdminOnly))
+        Html::text(visit.tr(Msg::DomainAdminOnly))
     ))
 }
 
 /// The checkbox `id`, named as its id, posting `on`, checked when
 /// `checked`, described by its help line.
 fn checkbox(id: &str, checked: bool) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<input id=\"{id}\" name=\"{id}\" type=\"checkbox\" value=\"on\"{} aria-describedby=\"{}\">",
         if checked { " checked" } else { "" },
-        t(help_id(id))
+        Html::text(help_id(id))
     ))
 }
 
@@ -329,13 +338,13 @@ fn create_form(visit: &Visit) -> Html {
     ]
     .into_iter()
     .map(|(value, words)| {
-        h(format!(
+        Html::raw(format!(
             "<option value=\"{value}\">{}</option>",
-            t(visit.tr(words))
+            Html::text(visit.tr(words))
         ))
     })
     .collect();
-    let kind = Field::new("kind", visit.tr(Msg::ColKind)).view(h(format!(
+    let kind = Field::new("kind", visit.tr(Msg::ColKind)).view(Html::raw(format!(
         "<select id=\"kind\" name=\"kind\" class=\"{SELECT}\">{kinds}</select>"
     )));
     let sensitive = check_field(
@@ -346,9 +355,9 @@ fn create_form(visit: &Visit) -> Html {
     );
     disclosure(
         visit.tr(Msg::DomainCreate),
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{DOMAINS}\" class=\"fui-form\"><p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{}{}{kind}{}{}</div>{sensitive}<div class=\"fui-form-foot\">{}</div></form>",
-            t(visit.tr(Msg::DomainAdminNote)),
+            Html::text(visit.tr(Msg::DomainAdminNote)),
             domain_field(visit, "system", Msg::ColSystem, true),
             domain_field(visit, "name", Msg::ColName, true),
             domain_field(visit, "source", Msg::ColSource, true),
@@ -372,10 +381,10 @@ fn change_form(visit: &Visit, domain: &Domain) -> Html {
     );
     disclosure(
         visit.tr(Msg::DomainChange),
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{}\" class=\"fui-form\"><p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{}{}{}</div>{retire}<div class=\"fui-form-foot\">{}</div></form>",
-            t(format!("{DOMAINS}/{}", domain.id)),
-            t(visit.tr(Msg::DomainAdminNote)),
+            Html::text(format!("{DOMAINS}/{}", domain.id)),
+            Html::text(visit.tr(Msg::DomainAdminNote)),
             domain_field(visit, "name", Msg::ColName, false),
             domain_field(visit, "source", Msg::ColSource, false),
             domain_field(visit, "reason", Msg::RevealReason, true),
@@ -442,18 +451,18 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
         .domains
         .iter()
         .map(|domain| {
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}{}{}{}{}</tr>",
                 title_cell(
                     Some(&format!("{DOMAINS}/{}", domain.id)),
-                    t(&domain.name),
+                    Html::text(&domain.name),
                     None
                 ),
                 cell(system, code_wrap(&domain.system)),
-                cell(kind_column, t(kind(visit, domain.kind))),
-                cell(sensitive, t(sealed(visit, domain.sensitive))),
+                cell(kind_column, Html::text(kind(visit, domain.kind))),
+                cell(sensitive, Html::text(sealed(visit, domain.sensitive))),
                 cell(source_column, code(&domain.source_client_id)),
-                cell(records, t(number(visit, domain.records))),
+                cell(records, Html::text(number(visit, domain.records))),
                 cell(fed, when(visit, domain.last_fed.as_ref())),
                 cell(state, domain_state(visit, domain)),
             ))
@@ -489,13 +498,16 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
     let domain = &page.domain;
     let facts = definitions(vec![
         (visit.tr(Msg::ColSystem), code_wrap(&domain.system)),
-        (visit.tr(Msg::ColKind), t(kind(visit, domain.kind))),
+        (visit.tr(Msg::ColKind), Html::text(kind(visit, domain.kind))),
         (
             visit.tr(Msg::ColSensitive),
-            t(sealed(visit, domain.sensitive)),
+            Html::text(sealed(visit, domain.sensitive)),
         ),
         (visit.tr(Msg::ColSource), code(&domain.source_client_id)),
-        (visit.tr(Msg::ColRecords), t(number(visit, domain.records))),
+        (
+            visit.tr(Msg::ColRecords),
+            Html::text(number(visit, domain.records)),
+        ),
         (
             visit.tr(Msg::ColCreated),
             timestamp(&visit.locale, &domain.created_at),
@@ -515,13 +527,13 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
             .feeds
             .iter()
             .map(|feed| {
-                h(format!(
+                Html::raw(format!(
                     "<tr>{}{}{}</tr>",
                     title_cell(None, timestamp(&visit.locale, &feed.at), None),
-                    cell(channel_column, t(channel(visit, feed.channel))),
+                    cell(channel_column, Html::text(channel(visit, feed.channel))),
                     cell(
                         outcome_column,
-                        t(visit.tr(match feed.outcome {
+                        Html::text(visit.tr(match feed.outcome {
                             FeedOutcome::Created => Msg::FeedCreated,
                             FeedOutcome::Revised => Msg::FeedRevised,
                         }))
@@ -557,7 +569,7 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
 #[must_use]
 pub fn configuration(visit: &Visit, configuration: &Configuration) -> Html {
     let line = configuration.file.as_ref().map_or_else(
-        || t(visit.tr(Msg::ConfigurationNoFile)),
+        || Html::text(visit.tr(Msg::ConfigurationNoFile)),
         |file| {
             file_line(
                 &visit.locale,
@@ -571,7 +583,7 @@ pub fn configuration(visit: &Visit, configuration: &Configuration) -> Html {
         .iter()
         .map(|section| card(section_title(visit, section), section_panel(visit, section)))
         .collect();
-    stack(h(format!(
+    stack(Html::raw(format!(
         "<p class=\"fui-small fui-muted\">{line}</p>{panels}"
     )))
 }
@@ -615,7 +627,9 @@ fn section_panel(visit: &Visit, section: &Section) -> Html {
                         String::new()
                     },
                     value: if built_in {
-                        t(rule_text(visit, &setting.key).unwrap_or_else(|| setting.value.clone()))
+                        Html::text(
+                            rule_text(visit, &setting.key).unwrap_or_else(|| setting.value.clone()),
+                        )
                     } else {
                         code(&setting.value)
                     },
@@ -631,7 +645,7 @@ fn section_panel(visit: &Visit, section: &Section) -> Html {
             )
         })
         .collect();
-    settings_panel(t(intro), None, rows)
+    settings_panel(Html::text(intro), None, rows)
 }
 
 /// The words of the setting `key` of the configuration document, or the key

@@ -150,7 +150,15 @@ async fn create(face: Arc<Face>, request: Request) -> Response {
                 None,
                 Outcome::SeriousFailure,
             );
-            send(&face, &parts, exchange, &unavailable(), format, None).await
+            send(
+                &face,
+                &parts,
+                exchange,
+                &refused(Refusal::Unavailable),
+                format,
+                None,
+            )
+            .await
         }
     }
 }
@@ -191,7 +199,15 @@ async fn read(face: Arc<Face>, request: Request) -> Response {
                 label.as_deref(),
                 Outcome::MinorFailure,
             );
-            send(&face, &parts, exchange, &not_found(), format, None).await
+            send(
+                &face,
+                &parts,
+                exchange,
+                &refused(Refusal::NotFound),
+                format,
+                None,
+            )
+            .await
         }
         Err(error) => {
             tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be read");
@@ -201,7 +217,15 @@ async fn read(face: Arc<Face>, request: Request) -> Response {
                 label.as_deref(),
                 Outcome::SeriousFailure,
             );
-            send(&face, &parts, exchange, &unavailable(), format, None).await
+            send(
+                &face,
+                &parts,
+                exchange,
+                &refused(Refusal::Unavailable),
+                format,
+                None,
+            )
+            .await
         }
     }
 }
@@ -232,9 +256,17 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
             None,
             Outcome::MinorFailure,
         );
-        return send(&face, &parts, exchange, &not_found(), format, None).await;
+        return send(
+            &face,
+            &parts,
+            exchange,
+            &refused(Refusal::NotFound),
+            format,
+            None,
+        )
+        .await;
     };
-    match subscription::update(&face.store, id, &requested).await {
+    let (outcome, refusal) = match subscription::update(&face.store, id, &requested).await {
         Ok(Updated::Done(updated)) => {
             let exchange = records::subscription(
                 &call,
@@ -242,51 +274,27 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
                 label.as_deref(),
                 Outcome::Success,
             );
-            send(
-                &face,
-                &parts,
-                exchange,
-                &answer(StatusCode::OK, *updated),
-                format,
-                None,
-            )
-            .await
+            let updated = answer(StatusCode::OK, *updated);
+            return send(&face, &parts, exchange, &updated, format, None).await;
         }
-        Ok(Updated::NotFound) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Update,
-                label.as_deref(),
-                Outcome::MinorFailure,
-            );
-            send(&face, &parts, exchange, &not_found(), format, None).await
-        }
-        Ok(Updated::Status) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Update,
-                label.as_deref(),
-                Outcome::MinorFailure,
-            );
-            let refusal = Answer::outcome(
+        Ok(Updated::NotFound) => (Outcome::MinorFailure, refused(Refusal::NotFound)),
+        Ok(Updated::Status) => (
+            Outcome::MinorFailure,
+            Answer::outcome(
                 StatusCode::BAD_REQUEST,
                 Severity::Error,
                 IssueType::BusinessRule,
                 "a subscriber enables a subscription with status requested and disables it with off",
-            );
-            send(&face, &parts, exchange, &refusal, format, None).await
-        }
+            ),
+        ),
         Err(error) => {
             tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be updated");
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Update,
-                label.as_deref(),
-                Outcome::SeriousFailure,
-            );
-            send(&face, &parts, exchange, &unavailable(), format, None).await
+            (Outcome::SeriousFailure, refused(Refusal::Unavailable))
         }
-    }
+    };
+    let exchange =
+        records::subscription(&call, SubscriptionAction::Update, label.as_deref(), outcome);
+    send(&face, &parts, exchange, &refusal, format, None).await
 }
 
 /// `DELETE {base}/fhir/Subscription/{id}` (§2:3.94.4.5).
@@ -310,7 +318,7 @@ async fn delete(face: Arc<Face>, request: Request) -> Response {
             );
             match record(&face.audit, &parts, &exchange).await {
                 Ok(()) => StatusCode::NO_CONTENT.into_response(),
-                Err(()) => written(&unaudited(), format, None),
+                Err(()) => written(&refused(Refusal::Unaudited), format, None),
             }
         }
         Ok(false) => {
@@ -320,7 +328,15 @@ async fn delete(face: Arc<Face>, request: Request) -> Response {
                 label.as_deref(),
                 Outcome::MinorFailure,
             );
-            send(&face, &parts, exchange, &not_found(), format, None).await
+            send(
+                &face,
+                &parts,
+                exchange,
+                &refused(Refusal::NotFound),
+                format,
+                None,
+            )
+            .await
         }
         Err(error) => {
             tracing::error!(error = %crate::chain(&error), "an ITI-94 subscription could not be deleted");
@@ -330,7 +346,15 @@ async fn delete(face: Arc<Face>, request: Request) -> Response {
                 label.as_deref(),
                 Outcome::SeriousFailure,
             );
-            send(&face, &parts, exchange, &unavailable(), format, None).await
+            send(
+                &face,
+                &parts,
+                exchange,
+                &refused(Refusal::Unavailable),
+                format,
+                None,
+            )
+            .await
         }
     }
 }
@@ -419,34 +443,37 @@ fn answer(status: StatusCode, subscription: Subscription) -> Answer<Subscription
     }
 }
 
-/// The `404` of a subscription that is not there (FHIR R4 http.html#read).
-fn not_found() -> Answer<OperationOutcome> {
-    Answer::outcome(
-        StatusCode::NOT_FOUND,
-        Severity::Error,
-        IssueType::NotFound,
-        "no subscription has this id",
-    )
+/// A refusal the PMIR face answers with an `OperationOutcome`.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Refusal {
+    /// A subscription that is not there (FHIR R4 http.html#read).
+    NotFound,
+    /// A store that could not serve the request.
+    Unavailable,
+    /// An answer withheld because its record was not stored.
+    Unaudited,
 }
 
-/// The `503` of a store that could not serve the request.
-fn unavailable() -> Answer<OperationOutcome> {
-    Answer::outcome(
-        StatusCode::SERVICE_UNAVAILABLE,
-        Severity::Error,
-        IssueType::Transient,
-        "the store could not serve the request",
-    )
-}
-
-/// The `503` of an answer withheld because its record was not stored.
-pub(super) fn unaudited() -> Answer<OperationOutcome> {
-    Answer::outcome(
-        StatusCode::SERVICE_UNAVAILABLE,
-        Severity::Error,
-        IssueType::Transient,
-        UNAUDITED,
-    )
+/// The `OperationOutcome` answer of `refusal`.
+pub(super) fn refused(refusal: Refusal) -> Answer<OperationOutcome> {
+    let (status, issue, text) = match refusal {
+        Refusal::NotFound => (
+            StatusCode::NOT_FOUND,
+            IssueType::NotFound,
+            "no subscription has this id",
+        ),
+        Refusal::Unavailable => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            IssueType::Transient,
+            "the store could not serve the request",
+        ),
+        Refusal::Unaudited => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            IssueType::Transient,
+            UNAUDITED,
+        ),
+    };
+    Answer::outcome(status, Severity::Error, issue, text)
 }
 
 /// Stores the request's record on `audit`, in the request's place in the
@@ -477,7 +504,7 @@ async fn send<T: Resource>(
 ) -> Response {
     match record(&face.audit, parts, &exchange).await {
         Ok(()) => written(answer, format, location),
-        Err(()) => written(&unaudited(), format, None),
+        Err(()) => written(&refused(Refusal::Unaudited), format, None),
     }
 }
 

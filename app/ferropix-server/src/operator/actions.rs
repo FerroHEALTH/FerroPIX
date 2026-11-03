@@ -13,6 +13,7 @@
 //! took it away. A cell that a spreadsheet would read as a formula is
 //! prefixed with `'`. These rules are our own design.
 
+use crate::fhir::outcome;
 use axum::body::Body;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
@@ -25,7 +26,7 @@ use uuid::Uuid;
 
 use crate::audit::records;
 use crate::operator::{Operator, OperatorError, Recorded, record_action, wire};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 
 /// The media type of an export (RFC 4180 §3).
 pub const CSV: &str = "text/csv; charset=utf-8";
@@ -119,7 +120,7 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     let Some(read) = Filter::of(&filter) else {
-        return unread_filter();
+        return problem::refuse(Kind::InvalidRequest, wire::NOT_THE_QUERY);
     };
     let limit = filter.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     match page(operator, &read, limit).await {
@@ -127,7 +128,7 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
             let next = more
                 .then(|| actions.last().map(|action| action.id.clone()))
                 .flatten();
-            wire::answer(&Actions { actions, next })
+            outcome::body(StatusCode::OK, &Actions { actions, next }, wire::JSON)
         }
         Err(error) => wire::failed(&error),
     }
@@ -141,7 +142,7 @@ pub async fn export(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     let Some(read) = Filter::of(&filter) else {
-        return unread_filter();
+        return problem::refuse(Kind::InvalidRequest, wire::NOT_THE_QUERY);
     };
     let limit = filter.limit.unwrap_or(EXPORT_LIMIT).clamp(1, EXPORT_LIMIT);
     let (actions, more) = match page(operator, &read, limit).await {
@@ -180,12 +181,6 @@ pub async fn export(operator: &Operator, request: Request) -> Response {
         headers.insert(EXPORT_NEXT, value);
     }
     response
-}
-
-/// Returns the `400` of a filter whose person, cursor or instant does not
-/// read.
-fn unread_filter() -> Response {
-    wire::refuse(Kind::InvalidRequest, wire::NOT_THE_QUERY)
 }
 
 /// Reads at most `limit` actions `filter` admits, the newest first, and

@@ -13,42 +13,33 @@
 use axum::Extension;
 use axum::response::{IntoResponse as _, Response};
 use http::header::CACHE_CONTROL;
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, Method, StatusCode};
 
 use crate::locale::messages::Msg;
 use crate::locale::{catalog, negotiated, tr_in};
 use crate::server::ConsoleState;
 use crate::session::COOKIE;
 
-/// Serves `GET` of the session route: what the session has left, read
-/// without touching its idle timeout.
-pub async fn read(Extension(state): Extension<ConsoleState>, headers: HeaderMap) -> Response {
-    answer(&state, &headers, false)
-}
-
-/// Serves `POST` of the session route: the steward's own activity, which
-/// starts the idle timeout again, answered with what the session has left.
-pub async fn extend(Extension(state): Extension<ConsoleState>, headers: HeaderMap) -> Response {
-    answer(&state, &headers, true)
-}
-
-/// What the session the request's cookie names has left, extended first
-/// when `extend`; `401` with no live session.
-fn answer(state: &ConsoleState, headers: &HeaderMap, extend: bool) -> Response {
-    let Some(id) = state.sessions().cookie_in(headers, COOKIE) else {
+/// Serves the session route: what the session the request's cookie names
+/// has left, `401` with no live session.
+///
+/// `GET` reads it without touching the idle timeout; `POST` first counts the
+/// steward's own activity, which starts the idle timeout again.
+pub async fn session(
+    method: Method,
+    Extension(state): Extension<ConsoleState>,
+    headers: HeaderMap,
+) -> Response {
+    let extend = method == Method::POST;
+    let Some(id) = state.sessions().cookie_in(&headers, COOKIE) else {
         return gone();
     };
-    let left = if extend {
-        state.sessions().extend(&id)
-    } else {
-        state.sessions().left(&id)
-    };
-    match left {
+    match state.sessions().left(&id, extend) {
         Ok(Some(left)) => ([(CACHE_CONTROL, "no-store")], axum::Json(left)).into_response(),
         Ok(None) => gone(),
         Err(error) => {
             tracing::error!(%error, "the session store could not be read");
-            let locale = negotiated(headers, state.settings().locale.clone());
+            let locale = negotiated(&headers, state.settings().locale.clone());
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 [(CACHE_CONTROL, "no-store")],

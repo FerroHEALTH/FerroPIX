@@ -23,6 +23,7 @@
 //! No log line, span or error carries a pseudonym or a reason. No
 //! specification governs these routes: our own design.
 
+use crate::fhir::outcome;
 use std::sync::Arc;
 
 use axum::extract::Request;
@@ -41,7 +42,7 @@ use crate::audit::records::{self, operator::Disclosed};
 use crate::auth::table::Route;
 use crate::config::section::domain::is_system;
 use crate::operator::{Operator, OperatorError, Recorded, count, record_action, wire};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 use crate::store::pseudonym;
 use crate::store::record::PersonId;
 
@@ -144,9 +145,13 @@ pub async fn list(operator: &Operator) -> Response {
     .fetch_all(operator.store.pool())
     .await;
     match rows {
-        Ok(rows) => wire::answer(&PseudonymDomains {
-            domains: rows.into_iter().map(PseudonymDomain::from).collect(),
-        }),
+        Ok(rows) => outcome::body(
+            StatusCode::OK,
+            &PseudonymDomains {
+                domains: rows.into_iter().map(PseudonymDomain::from).collect(),
+            },
+            wire::JSON,
+        ),
         Err(error) => wire::failed(&error.into()),
     }
 }
@@ -180,14 +185,14 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         .as_deref()
         .is_some_and(|client| client.trim().is_empty());
     if !is_system(&new.namespace) || new.name.trim().is_empty() || blank_consumer {
-        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
+        return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     if new
         .reason
         .as_deref()
         .is_some_and(|reason| !reasoned(reason))
     {
-        return wire::refuse(Kind::ReasonRequired, NO_REASON);
+        return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -209,7 +214,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
     let (transaction, id) = match outcome {
         Ok(Some(written)) => written,
         Ok(None) => {
-            return wire::refuse(Kind::AlreadyHeld, NAMESPACE_TAKEN);
+            return problem::refuse(Kind::AlreadyHeld, NAMESPACE_TAKEN);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -220,7 +225,7 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         reason: new.reason.as_deref(),
     };
     match finish(operator, &parts, transaction, &write).await {
-        Ok(domain) => crate::fhir::outcome::body(StatusCode::CREATED, &domain, wire::JSON),
+        Ok(domain) => outcome::body(StatusCode::CREATED, &domain, wire::JSON),
         Err(refused) => *refused,
     }
 }
@@ -229,18 +234,18 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
 pub async fn update(operator: &Operator, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let Some(id) = wire::path_id(&parts) else {
-        return no_such_domain();
+        return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN);
     };
     let (change, _bytes) = match wire::posted::<PseudonymDomainChange>(&parts, body).await {
         Ok(read) => read,
         Err(refused) => return *refused,
     };
     if !reasoned(&change.reason) {
-        return wire::refuse(Kind::ReasonRequired, NO_REASON);
+        return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let blank = |text: &Option<String>| text.as_deref().is_some_and(|text| text.trim().is_empty());
     if blank(&change.name) || blank(&change.consumer_client_id) {
-        return wire::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
+        return problem::refuse(Kind::InvalidRequest, NOT_A_DOMAIN);
     }
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -275,9 +280,9 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
     .await;
     let (transaction, namespace) = match outcome {
         Ok(Changed::Written(transaction, namespace)) => (transaction, namespace),
-        Ok(Changed::Missing) => return no_such_domain(),
+        Ok(Changed::Missing) => return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN),
         Ok(Changed::Retired) => {
-            return wire::refuse(Kind::Retired, RETIRED);
+            return problem::refuse(Kind::Retired, RETIRED);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -288,7 +293,7 @@ pub async fn update(operator: &Operator, request: Request) -> Response {
         reason: Some(&change.reason),
     };
     match finish(operator, &parts, transaction, &write).await {
-        Ok(domain) => wire::answer(&domain),
+        Ok(domain) => outcome::body(StatusCode::OK, &domain, wire::JSON),
         Err(refused) => *refused,
     }
 }
@@ -370,11 +375,6 @@ async fn finish(
     }
 }
 
-/// Returns the `404` of an id that names no domain.
-fn no_such_domain() -> Response {
-    wire::refuse(Kind::NotFound, NO_SUCH_DOMAIN)
-}
-
 /// Answers `POST {base}/operator/pseudonyms`: the survivor's pseudonym in
 /// the domain, minted when it has none.
 pub async fn mint(operator: &Operator, request: Request) -> Response {
@@ -384,10 +384,10 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     let Some(domain) = wire::uuid(&asked.domain) else {
-        return no_such_domain();
+        return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN);
     };
     let Some(person) = wire::uuid(&asked.person) else {
-        return wire::refuse(Kind::NotFound, NO_SUCH_PERSON);
+        return problem::refuse(Kind::NotFound, NO_SUCH_PERSON);
     };
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -413,12 +413,12 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
     .await;
     let (mut transaction, survivor, minted) = match outcome {
         Ok(Minting::Done(transaction, survivor, minted)) => (transaction, survivor, minted),
-        Ok(Minting::NoDomain) => return no_such_domain(),
+        Ok(Minting::NoDomain) => return problem::refuse(Kind::NotFound, NO_SUCH_DOMAIN),
         Ok(Minting::Retired) => {
-            return wire::refuse(Kind::Retired, RETIRED);
+            return problem::refuse(Kind::Retired, RETIRED);
         }
         Ok(Minting::NoPerson) => {
-            return wire::refuse(Kind::NotFound, NO_SUCH_PERSON);
+            return problem::refuse(Kind::NotFound, NO_SUCH_PERSON);
         }
         Err(error) => return wire::failed(&error),
     };
@@ -457,11 +457,15 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
     if let Err(error) = transaction.commit().await {
         return wire::failed(&error.into());
     }
-    wire::answer(&Minted {
-        person: survivor.uuid().to_string(),
-        domain: domain.to_string(),
-        created: minted,
-    })
+    outcome::body(
+        StatusCode::OK,
+        &Minted {
+            person: survivor.uuid().to_string(),
+            domain: domain.to_string(),
+            created: minted,
+        },
+        wire::JSON,
+    )
 }
 
 /// What a mint found.
@@ -497,10 +501,10 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
         Err(refused) => return *refused,
     };
     if !reasoned(&asked.reason) {
-        return wire::refuse(Kind::ReasonRequired, NO_REASON);
+        return problem::refuse(Kind::ReasonRequired, NO_REASON);
     }
     let Some(value) = wire::uuid(asked.pseudonym.trim()) else {
-        return not_resolved();
+        return problem::refuse(Kind::NotFound, NOT_RESOLVED);
     };
     let outcome = async {
         let mut transaction = operator.store.pool().begin().await?;
@@ -515,7 +519,7 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
     .await;
     let (mut transaction, person, domain) = match outcome {
         Ok((transaction, Some(person), domain)) => (transaction, person, domain),
-        Ok((_, None, _)) => return not_resolved(),
+        Ok((_, None, _)) => return problem::refuse(Kind::NotFound, NOT_RESOLVED),
         Err(error) => return wire::failed(&error),
     };
     let reason = asked.reason.trim();
@@ -549,13 +553,12 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
     if let Err(error) = transaction.commit().await {
         return wire::failed(&error.into());
     }
-    wire::answer(&Resolution {
-        person: person.uuid().to_string(),
-        action: action.to_string(),
-    })
-}
-
-/// Returns the `404` of a pseudonym that resolves to no person.
-fn not_resolved() -> Response {
-    wire::refuse(Kind::NotFound, NOT_RESOLVED)
+    outcome::body(
+        StatusCode::OK,
+        &Resolution {
+            person: person.uuid().to_string(),
+            action: action.to_string(),
+        },
+        wire::JSON,
+    )
 }

@@ -27,7 +27,7 @@ use ferropix_operator_api::actions::{Action, ActionFilter, Actions};
 
 use crate::app::AUDIT;
 use crate::locale::messages::Msg;
-use crate::markup::{h, hidden, t};
+use crate::markup::hidden;
 use crate::pages::or_dash;
 use crate::visit::Visit;
 
@@ -58,15 +58,15 @@ fn filter_field(
     value: Option<&String>,
     kind: &'static str,
 ) -> Html {
-    Field::new(id, visit.tr(words)).view(h(format!(
+    Field::new(id, visit.tr(words)).view(Html::raw(format!(
         "<input id=\"{id}\" name=\"{id}\" type=\"{kind}\" class=\"{INPUT}\" autocomplete=\"off\" value=\"{}\">",
-        t(value.cloned().unwrap_or_default())
+        Html::text(value.cloned().unwrap_or_default())
     )))
 }
 
 /// The filter form, its fields holding `filter`.
 fn filters(visit: &Visit, filter: &ActionFilter) -> Html {
-    h(format!(
+    Html::raw(format!(
         "<form method=\"post\" action=\"{AUDIT}\" class=\"fui-form\"><div class=\"fui-form-grid\">{}{}{}{}{}</div><div class=\"fui-form-foot\"><button type=\"submit\" class=\"{}\">{}</button><button type=\"submit\" formaction=\"{EXPORT}\" class=\"{}\">{}</button></div></form>",
         filter_field(visit, "actor", Msg::ColActor, filter.actor.as_ref(), TEXT),
         filter_field(visit, "kind", Msg::ColKind, filter.kind.as_ref(), TEXT),
@@ -122,10 +122,10 @@ fn table(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
         .actions
         .iter()
         .map(|action| {
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}{}{}</tr>",
                 title_cell(None, timestamp(locale, &action.at), None),
-                cell(actor, t(&action.actor)),
+                cell(actor, Html::text(&action.actor)),
                 cell(
                     kind,
                     badge(
@@ -134,7 +134,10 @@ fn table(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
                     )
                 ),
                 cell(person, person_link(visit, action)),
-                cell(reason, t(action.reason.clone().unwrap_or_default())),
+                cell(
+                    reason,
+                    Html::text(action.reason.clone().unwrap_or_default())
+                ),
                 cell(detail, details(visit, action)),
             ))
         })
@@ -151,7 +154,7 @@ fn table(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
         .into_iter()
         .filter_map(|(name, value)| value.map(|value| hidden(name, value)))
         .collect();
-        h(format!(
+        Html::raw(format!(
             "<form method=\"post\" action=\"{AUDIT}\">{kept}<button type=\"submit\" class=\"{}\">{}</button></form>",
             Variant::Secondary.class(),
             label(Some(Glyph::CHEVRON_RIGHT), visit.tr(Msg::OlderActions)),
@@ -182,10 +185,10 @@ fn person_link(visit: &Visit, action: &Action) -> Html {
     action.person.as_ref().map_or_else(
         || or_dash(&visit.locale, None),
         |person| {
-            h(format!(
+            Html::raw(format!(
                 "<a href=\"{}\"><code>{}</code></a>",
-                t(format!("/patients/{person}")),
-                t(person)
+                Html::text(format!("/patients/{person}")),
+                Html::text(person)
             ))
         },
     )
@@ -193,7 +196,7 @@ fn person_link(visit: &Visit, action: &Action) -> Html {
 
 /// The disclosure of an action's other references.
 fn details(visit: &Visit, action: &Action) -> Html {
-    let code = |value: &str| h(format!("<code>{}</code>", t(value)));
+    let code = |value: &str| Html::raw(format!("<code>{}</code>", Html::text(value)));
     let mut rows: Vec<(String, Html)> = Vec::new();
     for (words, value) in [
         (Msg::DetailRecord, &action.record),

@@ -22,6 +22,7 @@ use std::time::Duration;
 
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
 use ferropix_server::config::section::outbox::Outbox;
+use ferropix_server::feed::master::MasterChange;
 use ferropix_server::feed::merging::{self, MergeRequest};
 use ferropix_server::feed::{Context, Feeder};
 use ferropix_server::outbox::{self, Backoff, Channels, HttpChannel, Wake};
@@ -237,7 +238,13 @@ async fn each_matching_subscription_gets_its_messages_in_order_and_no_other() {
     .await;
     let feeder = Feeder::new(store.clone(), &harness.matching);
     feeder
-        .create_master(MASTER, person(FIRST), &patient(FIRST, "Anna"), &context())
+        .master(
+            MasterChange::Create,
+            MASTER,
+            person(FIRST),
+            &patient(FIRST, "Anna"),
+            &context(),
+        )
         .await
         .expect("created");
     let written = rows(&store).await;
@@ -252,7 +259,13 @@ async fn each_matching_subscription_gets_its_messages_in_order_and_no_other() {
         "written in the one transaction of the change"
     );
     feeder
-        .update_master(MASTER, person(FIRST), &patient(FIRST, "Annie"), &context())
+        .master(
+            MasterChange::Update,
+            MASTER,
+            person(FIRST),
+            &patient(FIRST, "Annie"),
+            &context(),
+        )
         .await
         .expect("updated");
     assert_eq!(4, rows(&store).await.len());
@@ -295,11 +308,23 @@ async fn a_refusing_subscriber_is_set_to_error_and_an_enable_resumes_from_the_ne
     let id = subscribe(&store, "Patient", &endpoint).await;
     let feeder = Feeder::new(store.clone(), &harness.matching);
     feeder
-        .create_master(MASTER, person(FIRST), &patient(FIRST, "Anna"), &context())
+        .master(
+            MasterChange::Create,
+            MASTER,
+            person(FIRST),
+            &patient(FIRST, "Anna"),
+            &context(),
+        )
         .await
         .expect("created");
     feeder
-        .update_master(MASTER, person(FIRST), &patient(FIRST, "Annie"), &context())
+        .master(
+            MasterChange::Update,
+            MASTER,
+            person(FIRST),
+            &patient(FIRST, "Annie"),
+            &context(),
+        )
         .await
         .expect("updated");
 
@@ -360,7 +385,13 @@ async fn no_identifier_or_name_of_a_message_reaches_the_log() {
     subscribe(&store, "Patient", &format!("{}/pmir", stub.uri())).await;
     let feeder = Feeder::new(store.clone(), &harness.matching);
     feeder
-        .create_master(MASTER, person(FIRST), &patient(FIRST, "Anna"), &context())
+        .master(
+            MasterChange::Create,
+            MASTER,
+            person(FIRST),
+            &patient(FIRST, "Anna"),
+            &context(),
+        )
         .await
         .expect("created");
     let _stop = sender(&store, &wake);
@@ -389,7 +420,7 @@ async fn a_steward_merge_and_its_revert_each_queue_one_message_per_matching_subs
         let mut fed = patient(id, given);
         fed.identifier.clear();
         feeder
-            .create_master(MASTER, person(id), &fed, &context())
+            .master(MasterChange::Create, MASTER, person(id), &fed, &context())
             .await
             .expect("created");
     }

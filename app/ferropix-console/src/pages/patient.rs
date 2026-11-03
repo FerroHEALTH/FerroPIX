@@ -41,7 +41,7 @@ use ferropix_operator_api::person::{
 use ferropix_operator_api::reveal::Revealed;
 
 use crate::locale::messages::Msg;
-use crate::markup::{h, hidden, t};
+use crate::markup::hidden;
 use crate::model::Read;
 use crate::pages::registry::channel;
 use crate::pages::{Needs, or_dash, server_state};
@@ -99,16 +99,16 @@ pub fn patient(
         _ => identifiers(visit, person),
     };
     let unmerge = crate::pages::merge::latest_merge(person).map_or_else(Html::empty, |_| {
-        h(format!(
+        Html::raw(format!(
             "<a href=\"{}\" class=\"{}\">{}</a>",
-            t(format!("{base}/unmerge")),
+            Html::text(format!("{base}/unmerge")),
             Variant::Secondary.class(),
             label(Some(Glyph::UNDO), visit.tr(Msg::PatientUnmerge))
         ))
     });
-    let actions = h(format!(
+    let actions = Html::raw(format!(
         "<div class=\"fui-actions\"><a href=\"{}\" class=\"{}\">{}</a>{unmerge}</div>",
-        t(format!("{base}/merge")),
+        Html::text(format!("{base}/merge")),
         Variant::Secondary.class(),
         label(Some(Glyph::GIT_COMPARE), visit.tr(Msg::PatientMergeInto))
     ));
@@ -162,10 +162,10 @@ fn summary(visit: &Visit, person: &Person) -> Html {
     if let Some(survivor) = &person.merged_into {
         rows.push((
             visit.tr(Msg::MergedInto),
-            h(format!(
+            Html::raw(format!(
                 "<a href=\"{}\"><code>{}</code></a>",
-                t(format!("/patients/{survivor}")),
-                t(survivor)
+                Html::text(format!("/patients/{survivor}")),
+                Html::text(survivor)
             )),
         ));
     }
@@ -180,11 +180,11 @@ fn reveal_answer(visit: &Visit, revealed: &Read<Revealed>) -> Html {
             Tone::Warn,
             Announce::Alert,
             None,
-            h(format!(
+            Html::raw(format!(
                 "<p><strong>{}</strong></p><p><code class=\"fui-wrap\">{}</code> <strong><code>{}</code></strong></p>{}<p class=\"fui-small fui-muted\">{}</p>",
-                t(visit.tr(Msg::Revealed)),
-                t(&revealed.system),
-                t(&revealed.value.0),
+                Html::text(visit.tr(Msg::Revealed)),
+                Html::text(&revealed.system),
+                Html::text(&revealed.value.0),
                 countdown(Countdown::new(
                     &visit.locale,
                     "reveal-countdown",
@@ -192,7 +192,7 @@ fn reveal_answer(visit: &Visit, revealed: &Read<Revealed>) -> Html {
                     revealed.seconds,
                     &visit.tr(Msg::RevealHidden),
                 )),
-                t(visit.tr_with(
+                Html::text(visit.tr_with(
                     Msg::RevealRecorded,
                     &[("action", revealed.action.clone().into())]
                 )),
@@ -211,13 +211,13 @@ fn reveal_answer(visit: &Visit, revealed: &Read<Revealed>) -> Html {
 /// and the submit.
 fn reveal_form(visit: &Visit, person: &str, kind: &'static str, id: &str, row: usize) -> Html {
     let field_id = format!("reason-{row}");
-    let reason = Field::new(field_id.clone(), visit.tr(Msg::RevealReason)).view(h(format!(
+    let reason = Field::new(field_id.clone(), visit.tr(Msg::RevealReason)).view(Html::raw(format!(
         "<input id=\"{}\" name=\"reason\" type=\"text\" class=\"{INPUT}\" required maxlength=\"500\" autocomplete=\"off\">",
-        t(&field_id)
+        Html::text(&field_id)
     )));
-    h(format!(
+    Html::raw(format!(
         "<form method=\"post\" action=\"{}\" class=\"fui-form fui-inline-form\">{}{}{reason}<button type=\"submit\" class=\"{}\">{}</button></form>",
-        t(format!("/patients/{person}/{REVEAL}")),
+        Html::text(format!("/patients/{person}/{REVEAL}")),
         hidden("target", kind),
         hidden("id", id),
         Variant::Secondary.class(),
@@ -294,9 +294,9 @@ fn identifiers(visit: &Visit, person: &Person) -> Html {
                 .last_fed
                 .as_ref()
                 .map_or_else(|| or_dash(locale, None), |at| timestamp(locale, at));
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}{}{}</tr>",
-                title_cell(None, t(&identifier.domain.name), None),
+                title_cell(None, Html::text(&identifier.domain.name), None),
                 cell(
                     value,
                     masked(
@@ -370,7 +370,7 @@ pub(crate) fn compare_record(
         sub,
         values: FIELDS
             .iter()
-            .map(|(field, _)| value_of(&visit.locale, demographics, field).map(t))
+            .map(|(field, _)| value_of(&visit.locale, demographics, field).map(Html::text))
             .collect(),
     }
 }
@@ -508,9 +508,9 @@ fn history(visit: &Visit, person: &Person) -> Html {
         })
         .collect();
     let truncated = if person.history_truncated {
-        h(format!(
+        Html::raw(format!(
             "<p class=\"fui-small fui-muted\">{}</p>",
-            t(visit.tr(Msg::HistoryTruncated))
+            Html::text(visit.tr(Msg::HistoryTruncated))
         ))
     } else {
         Html::empty()
@@ -540,7 +540,7 @@ fn pseudonyms(visit: &Visit, person: &Person) -> Html {
         .enumerate()
         .map(|(row, pseudonym)| {
             let shown = pseudonym.masked.as_ref().map_or_else(
-                || t(visit.tr(Msg::NoPseudonym)),
+                || Html::text(visit.tr(Msg::NoPseudonym)),
                 |held| masked(locale, &pseudonym.name, &pseudonym.namespace, &held.0),
             );
             let form = pseudonym.masked.as_ref().map_or_else(Html::empty, |_| {
@@ -552,14 +552,14 @@ fn pseudonyms(visit: &Visit, person: &Person) -> Html {
                     offset.saturating_add(row),
                 )
             });
-            h(format!(
+            Html::raw(format!(
                 "<tr>{}{}{}{}</tr>",
-                title_cell(None, t(&pseudonym.name), None),
+                title_cell(None, Html::text(&pseudonym.name), None),
                 cell(
                     namespace,
-                    h(format!(
+                    Html::raw(format!(
                         "<code class=\"fui-wrap\">{}</code>",
-                        t(&pseudonym.namespace)
+                        Html::text(&pseudonym.namespace)
                     ))
                 ),
                 cell(value, shown),
@@ -574,9 +574,9 @@ fn pseudonyms(visit: &Visit, person: &Person) -> Html {
         sorting: Sorting::default(),
         body: Body::Rows(rows),
     });
-    table.then(h(format!(
+    table.then(Html::raw(format!(
         "<p class=\"fui-small\"><a href=\"{}\">{}</a></p>",
         crate::app::PSEUDONYM_DOMAINS,
-        t(visit.tr(Msg::ResolveTitle))
+        Html::text(visit.tr(Msg::ResolveTitle))
     )))
 }

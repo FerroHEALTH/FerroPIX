@@ -30,41 +30,17 @@ pub(super) struct Identity {
     pub(super) known: bool,
 }
 
+/// Whether an ITI-93 message creates a master identity or updates one held
+/// already.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterChange {
+    /// A create.
+    Create,
+    /// An update of a held identity.
+    Update,
+}
+
 impl Feeder {
-    /// Applies an ITI-93 create of the master identity `id` in the master
-    /// domain `system`, with `patient` as its demographics.
-    ///
-    /// # Errors
-    /// Returns [`FeedError::Subsumed`] when the identity was merged, and
-    /// the errors of [`Feeder::revise`] otherwise; nothing is committed.
-    pub async fn create_master(
-        &self,
-        system: &str,
-        id: PersonId,
-        patient: &Patient,
-        context: &Context,
-    ) -> Result<Applied, FeedError> {
-        self.master(system, id, false, patient, context).await
-    }
-
-    /// Applies an ITI-93 update of the master identity `id` in the master
-    /// domain `system`, with `patient` as its demographics.
-    ///
-    /// # Errors
-    /// Returns [`FeedError::NotFound`] when the store holds no such master
-    /// record or removed it, [`FeedError::Subsumed`] when the identity was
-    /// merged, and the errors of [`Feeder::revise`] otherwise; nothing is
-    /// committed.
-    pub async fn update_master(
-        &self,
-        system: &str,
-        id: PersonId,
-        patient: &Patient,
-        context: &Context,
-    ) -> Result<Applied, FeedError> {
-        self.master(system, id, true, patient, context).await
-    }
-
     /// Applies an ITI-93 merge: the master identity `deprecated` is replaced
     /// by `survivor` in the master domain `system`, `patient` the deprecated
     /// Patient (§2:3.93.4.1.2.4).
@@ -104,15 +80,23 @@ impl Feeder {
             .await
     }
 
-    /// Writes the master identity `id`, held already when `known`.
-    async fn master(
+    /// Applies the ITI-93 `change` of the master identity `id` in the master
+    /// domain `system`, with `patient` as its demographics.
+    ///
+    /// # Errors
+    /// Returns [`FeedError::NotFound`] when an update finds no such master
+    /// record or a removed one, [`FeedError::Subsumed`] when the identity was
+    /// merged, and the errors of [`Feeder::revise`] otherwise; nothing is
+    /// committed.
+    pub async fn master(
         &self,
+        change: MasterChange,
         system: &str,
         id: PersonId,
-        known: bool,
         patient: &Patient,
         context: &Context,
     ) -> Result<Applied, FeedError> {
+        let known = matches!(change, MasterChange::Update);
         let value = id.uuid().to_string();
         let revising = Revising {
             system,

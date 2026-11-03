@@ -24,7 +24,6 @@ use http::Method;
 use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 
-use ferropix_operator_api::overview::Overview;
 use ferropix_operator_api::problem::{self, Problem};
 
 use crate::model::{Capability, Failure, Probe, Reach, ServerIssue};
@@ -39,9 +38,6 @@ pub const HEALTH: &str = "health/liveness";
 
 /// The FHIR capability route of the server, under its base.
 pub const METADATA: &str = "fhir/metadata";
-
-/// The operator API's dashboard route, under the server's base.
-pub const OVERVIEW: &str = "operator/overview";
 
 /// How many bytes of an answer the console reads at most: a
 /// `CapabilityStatement` is a few kilobytes, so a larger answer is refused
@@ -129,25 +125,15 @@ impl Pix {
 
     /// Asks the server's liveness route whether it answers.
     pub async fn probe(&self, token: &AccessToken) -> Probe {
-        self.get(HEALTH, token).await.0
+        self.send::<()>(Method::GET, HEALTH, None, token).await.0
     }
 
     /// Reads the server's `CapabilityStatement`.
     pub async fn capability_statement(&self, token: &AccessToken) -> Capability {
-        match self.get(METADATA, token).await {
+        match self.send::<()>(Method::GET, METADATA, None, token).await {
             (probe, Some(text)) if probe.is_up() => Capability::Declared(text),
             (probe, _) => Capability::Missing(probe),
         }
-    }
-
-    /// Reads the operator API's dashboard document, or the call that did not
-    /// bring one back.
-    ///
-    /// # Errors
-    /// Returns the [`Probe`] of a call that was refused, did not answer, or
-    /// answered with a body that is not the document.
-    pub async fn overview(&self, token: &AccessToken) -> Result<Overview, Probe> {
-        self.read(OVERVIEW, token).await
     }
 
     /// Reads the operator API document at `route`, under the server's base,
@@ -161,7 +147,7 @@ impl Pix {
         route: &str,
         token: &AccessToken,
     ) -> Result<T, Probe> {
-        match self.get(route, token).await {
+        match self.send::<()>(Method::GET, route, None, token).await {
             (probe, Some(text)) if probe.is_up() => document(&text, probe),
             (probe, _) => Err(probe),
         }
@@ -218,12 +204,6 @@ impl Pix {
             (probe, Some(text)) if probe.is_up() => Ok(text),
             (probe, _) => Err(probe),
         }
-    }
-
-    /// `GET {base}/{route}` with the steward's token: the call's [`Probe`]
-    /// and, for a `2xx` answer within [`BODY_LIMIT`], its body as text.
-    async fn get(&self, route: &str, token: &AccessToken) -> (Probe, Option<String>) {
-        self.send::<()>(Method::GET, route, None, token).await
     }
 
     /// `method {base}/{route}` with the steward's token and, for a body, the

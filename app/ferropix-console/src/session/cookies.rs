@@ -71,14 +71,6 @@ impl Sessions {
             .build()
     }
 
-    /// The prefix every preference cookie's name takes on this console:
-    /// [`PREFERENCE_PREFIX`], under [`HOST_PREFIX`] when the cookies are
-    /// `Secure`, so the library's `Preferences::read` finds each one.
-    #[must_use]
-    pub fn preference_prefix(&self) -> String {
-        self.cookie_name(PREFERENCE_PREFIX)
-    }
-
     /// The `Set-Cookie` value that keeps the preference `name` as `value`
     /// for one year, the family's rule for a personal preference.
     #[must_use]
@@ -145,7 +137,10 @@ mod tests {
             "__Host-ferropix_console_theme=dark; HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=31536000",
             sessions.preference_cookie("theme", "dark").to_string()
         );
-        assert_eq!("__Host-ferropix_console_", sessions.preference_prefix());
+        assert_eq!(
+            "__Host-ferropix_console_",
+            sessions.cookie_name(crate::session::PREFERENCE_PREFIX)
+        );
         assert!(
             sessions
                 .preference_removal("reveal")

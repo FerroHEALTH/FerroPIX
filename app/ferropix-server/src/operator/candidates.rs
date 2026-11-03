@@ -15,6 +15,7 @@
 //! commits. No
 //! specification governs the queue: our own design.
 
+use crate::fhir::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::candidate::{
@@ -22,6 +23,7 @@ use ferropix_operator_api::candidate::{
     Evidence, PAGE, PersonIdentifier, Side, Status, Thresholds, Verdict,
 };
 use ferropix_operator_api::patient::{DomainRef, Grade, PersonStatus};
+use http::StatusCode;
 use http::request::Parts;
 use ihe_atna::balp::Outcome;
 use secrecy::SecretString;
@@ -33,7 +35,7 @@ use crate::feed::Context;
 use crate::feed::steward::{self, DecideError};
 use crate::operator::person::{UTC, carried, records as person_records};
 use crate::operator::{Operator, OperatorError, demographics, domain_kind, grade, snapshot, wire};
-use crate::problem::Kind;
+use crate::problem::{self, Kind};
 use crate::store::record::Channel;
 
 /// The detail of an id that names no candidate.
@@ -88,18 +90,18 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
     if let Err(error) = wire::record(operator, &parts, exchanges).await {
         return wire::unaudited(&error);
     }
-    wire::answer(&page)
+    outcome::body(StatusCode::OK, &page, wire::JSON)
 }
 
 /// Answers the candidate the matched route's `{id}` names.
 pub async fn one(operator: &Operator, request: Request) -> Response {
     let (parts, _body) = request.into_parts();
     let Some(id) = wire::path_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NO_SUCH_CANDIDATE);
     };
     let candidate = match read_one(operator, id).await {
         Ok(Some(candidate)) => candidate,
-        Ok(None) => return not_found(),
+        Ok(None) => return problem::refuse(Kind::NotFound, NO_SUCH_CANDIDATE),
         Err(error) => return wire::failed(&error),
     };
     let call = wire::call(operator, &parts);
@@ -119,7 +121,7 @@ pub async fn one(operator: &Operator, request: Request) -> Response {
     if let Err(error) = wire::record(operator, &parts, exchanges).await {
         return wire::unaudited(&error);
     }
-    wire::answer(&candidate)
+    outcome::body(StatusCode::OK, &candidate, wire::JSON)
 }
 
 /// Makes the decision the request posts on the candidate the matched
@@ -127,7 +129,7 @@ pub async fn one(operator: &Operator, request: Request) -> Response {
 pub async fn decide(operator: &Operator, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let Some(id) = wire::path_id(&parts) else {
-        return not_found();
+        return problem::refuse(Kind::NotFound, NO_SUCH_CANDIDATE);
     };
     let (decision, _bytes) = match wire::posted::<Decision>(&parts, body).await {
         Ok(posted) => posted,
@@ -144,9 +146,9 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
     };
     let (transaction, decided) = match steward::decide(&operator.store, &decision, &context).await {
         Ok(made) => made,
-        Err(DecideError::NotFound) => return not_found(),
+        Err(DecideError::NotFound) => return problem::refuse(Kind::NotFound, NO_SUCH_CANDIDATE),
         Err(DecideError::Stale) => {
-            return wire::refuse(Kind::Stale, STALE);
+            return problem::refuse(Kind::Stale, STALE);
         }
         Err(DecideError::Feed(error)) => {
             return wire::failed(&OperatorError::Unadmitted(feed_error(&error)));
@@ -180,18 +182,22 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
         Ok(next) => next,
         Err(error) => return wire::failed(&error),
     };
-    wire::answer(&Decided {
-        candidate: id.to_string(),
-        status: match decision.verdict {
-            steward::Verdict::Link => Status::Linked,
-            steward::Verdict::NotAMatch => Status::NotAMatch,
-            steward::Verdict::Defer { .. } => Status::Deferred,
+    outcome::body(
+        StatusCode::OK,
+        &Decided {
+            candidate: id.to_string(),
+            status: match decision.verdict {
+                steward::Verdict::Link => Status::Linked,
+                steward::Verdict::NotAMatch => Status::NotAMatch,
+                steward::Verdict::Defer { .. } => Status::Deferred,
+            },
+            action: decided.action.to_string(),
+            merge: decided.merge.map(|merge| merge.to_string()),
+            person: decided.person.map(|person| person.uuid().to_string()),
+            next,
         },
-        action: decided.action.to_string(),
-        merge: decided.merge.map(|merge| merge.to_string()),
-        person: decided.person.map(|person| person.uuid().to_string()),
-        next,
-    })
+        wire::JSON,
+    )
 }
 
 /// Returns the decision of `posted` on the candidate `id`, refusing a
@@ -200,9 +206,9 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
 fn checked(id: Uuid, posted: &Decision) -> Result<steward::Decision, Box<Response>> {
     let reason = posted.reason.trim();
     if reason.is_empty() || reason.chars().count() > REASON {
-        return Err(Box::new(wire::refuse(Kind::ReasonRequired, NO_REASON)));
+        return Err(Box::new(problem::refuse(Kind::ReasonRequired, NO_REASON)));
     }
-    let no_day = || Box::new(wire::refuse(Kind::InvalidRequest, NO_DAY));
+    let no_day = || Box::new(problem::refuse(Kind::InvalidRequest, NO_DAY));
     let verdict = match (posted.verdict, posted.until.as_deref()) {
         (Verdict::Link, None) => steward::Verdict::Link,
         (Verdict::NotAMatch, None) => steward::Verdict::NotAMatch,
@@ -240,11 +246,6 @@ const fn verdict_name(verdict: steward::Verdict) -> &'static str {
 fn feed_error(error: &crate::feed::FeedError) -> &'static str {
     tracing::error!(error = %crate::chain(error), "a steward decision could not be made");
     "decision"
-}
-
-/// Returns the `404` of an id that names no candidate.
-fn not_found() -> Response {
-    wire::refuse(Kind::NotFound, NO_SUCH_CANDIDATE)
 }
 
 /// The raw request of a queue read, for its audit record.

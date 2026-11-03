@@ -7,6 +7,7 @@
 //! calls the FerroPIX server once before it is drawn. No specification
 //! governs the console's HTTP surface: our own design.
 
+use crate::session::PREFERENCE_PREFIX;
 use axum::Extension;
 use axum::extract::Request;
 use axum::middleware::Next;
@@ -61,7 +62,7 @@ pub async fn page_for(
     path: &str,
 ) -> Result<PageContext, crate::session::SessionError> {
     let route = path.split(['?', '#']).next().unwrap_or_default().to_owned();
-    let prefix = state.sessions().preference_prefix();
+    let prefix = state.sessions().cookie_name(PREFERENCE_PREFIX);
     let signed_out = surrounded(
         PageContext {
             path: path.to_owned(),
@@ -101,7 +102,7 @@ pub async fn page_for(
         }
     };
     let session = match state.sessions().cookie_in(headers, COOKIE) {
-        Some(id) => state.sessions().left(&id)?,
+        Some(id) => state.sessions().left(&id, false)?,
         None => None,
     };
     let probe = state.pix().probe(&token).await;
@@ -134,7 +135,7 @@ pub fn surrounded(
     state: &ConsoleState,
     headers: &http::HeaderMap,
 ) -> PageContext {
-    let prefix = state.sessions().preference_prefix();
+    let prefix = state.sessions().cookie_name(PREFERENCE_PREFIX);
     let preferences = crate::preferences::kept_cookies(headers, &prefix);
     let configured = state.settings().locale.clone();
     let chosen = crate::locale::chosen(
@@ -233,7 +234,7 @@ fn refused(
     headers: &http::HeaderMap,
     path: &str,
 ) -> Result<PageContext, crate::session::SessionError> {
-    let mut page = PageContext::signed_out(state.sessions().preference_prefix());
+    let mut page = PageContext::signed_out(state.sessions().cookie_name(PREFERENCE_PREFIX));
     if is_sign_in(path) {
         return Ok(page);
     }

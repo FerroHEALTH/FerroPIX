@@ -33,7 +33,7 @@ use ferrohealth_ui::view::toast::toast_region;
 use http::StatusCode;
 
 use crate::locale::messages::Msg;
-use crate::markup::{h, t};
+
 use crate::model::PageContext;
 use crate::pages::Drawn;
 use crate::visit::Visit;
@@ -173,8 +173,8 @@ fn drawn(route: Route, visit: &Visit) -> Drawn {
         Route::Pair => screens::pair(visit),
         Route::Search => search::search_page(visit),
         Route::Patient => screens::patient(visit),
-        Route::Merge => screens::merge(visit),
-        Route::Unmerge => screens::unmerge(visit),
+        Route::Merge => screens::merge(visit, false),
+        Route::Unmerge => screens::merge(visit, true),
         Route::Sources => screens::sources(visit),
         Route::Source => screens::source(visit),
         Route::Domains => screens::domains(visit),
@@ -222,9 +222,9 @@ pub fn page(page: PageContext) -> (StatusCode, Html) {
         title,
         assets: Assets::of(Brand::Pix),
         nonce: None,
-        head: h(format!(
+        head: Html::raw(format!(
             "<link rel=\"icon\" type=\"image/svg+xml\" href=\"{}\">",
-            t(crate::paths::FAVICON)
+            Html::text(crate::paths::FAVICON)
         )),
         body,
     });

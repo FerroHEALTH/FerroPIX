@@ -5,8 +5,10 @@
 //! scorer run with, every field's weights included, the configured ones
 //! marked.
 
+use crate::fhir::outcome;
 use axum::response::Response;
 use ferropix_operator_api::matching::{FieldWeights, Matching};
+use http::StatusCode;
 
 use crate::config::section::matching::BlockingKey;
 use crate::matching::scorer::{FIELDS, default_weights};
@@ -15,7 +17,7 @@ use crate::operator::{Operator, wire};
 /// Answers the matching configuration in effect.
 #[must_use]
 pub fn answer(operator: &Operator) -> Response {
-    wire::answer(&document(&operator.matching))
+    outcome::body(StatusCode::OK, &document(&operator.matching), wire::JSON)
 }
 
 /// Returns the document of `matching`.

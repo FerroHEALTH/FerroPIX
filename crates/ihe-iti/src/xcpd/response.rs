@@ -8,10 +8,11 @@
 use http::StatusCode;
 use secrecy::SecretString;
 
+use super::REQUEST_SYSTEM;
 use super::discovery::{Discovery, Match, RequestedAttribute};
 use super::error::{DetectedIssue, Malformation, XcpdError};
 use super::identifier::{CommunityPatientId, HomeCommunityId, Oid};
-use super::{HL7, REQUEST_SYSTEM};
+use super::v3::{self, Ns};
 use crate::soap::{self, Answer, Element, Visitor};
 
 /// The most bytes of an answer the client reads (no specification governs
@@ -40,15 +41,6 @@ struct Read {
     events: Vec<Event1>,
     requested: Vec<RequestedAttribute>,
     issues: Vec<DetectedIssue>,
-}
-
-/// Which namespace an element is in, of the ones the reader looks at.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Ns {
-    Soap,
-    Wsa,
-    Hl7,
-    Other,
 }
 
 /// Reads the answer with `status`, media type `media` and `body` to the
@@ -141,8 +133,7 @@ impl Visitor for Read {
     type Namespace = Ns;
     type Error = Malformation;
     const SOAP: Ns = Ns::Soap;
-    const NAMESPACES: &'static [(&'static str, Ns)] =
-        &[(soap::ADDRESSING, Ns::Wsa), (HL7, Ns::Hl7)];
+    const NAMESPACES: &'static [(&'static str, Ns)] = v3::NAMESPACES;
     const OTHER: Ns = Ns::Other;
 
     fn media(media: Option<&str>) -> Result<(), Malformation> {

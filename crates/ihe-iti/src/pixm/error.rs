@@ -10,8 +10,9 @@
 
 use http::StatusCode;
 
-use crate::authorizer::Unsent;
-use crate::outcome::IssueType;
+use crate::authorizer::{AuthorizerError, Unauthenticated};
+use crate::exchange::Unanswered;
+use crate::outcome::{IssueType, Unreadable};
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -60,7 +61,7 @@ pub enum PixmError {
     /// The authorizer made no headers for the request, so nothing was sent
     /// (IUA ITI-72 §3.72.4.2).
     #[error("the request to the PIX Manager could not be authenticated")]
-    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
+    Unauthenticated(#[source] AuthorizerError),
     /// The answer does not hold to ITI-83.
     #[error("the PIX Manager's answer does not hold to ITI-83")]
     Malformed(#[from] Malformation),
@@ -83,35 +84,12 @@ pub enum PixmError {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum Malformation {
-    /// The answer's media type is not FHIR JSON.
-    #[error("the answer is not application/fhir+json")]
-    NotFhirJson,
-    /// The answer is longer than the client reads.
-    #[error("the answer exceeds {limit} bytes")]
-    TooLarge {
-        /// The limit, in bytes.
-        limit: usize,
-    },
-    /// The answer is not JSON.
-    #[error("the answer is not JSON (line {line}, column {column})")]
-    NotJson {
-        /// The line of the syntax error.
-        line: usize,
-        /// The column of the syntax error.
-        column: usize,
-    },
-    /// The answer is not a JSON object with a `resourceType`.
-    #[error("the answer is not a FHIR resource")]
-    NotAResource,
+    /// The answer is not a FHIR JSON resource.
+    #[error(transparent)]
+    Unreadable(#[from] Unreadable),
     /// The answer is a resource ITI-83 does not answer with.
     #[error("the answer is a resource ITI-83 does not answer with")]
     UnexpectedResource,
-    /// The resource does not decode as FHIR R4.
-    #[error("the resource does not decode as FHIR R4: {kind}")]
-    Decode {
-        /// Why it was refused.
-        kind: fhir_types::codec::DecodeErrorKind,
-    },
     /// A Bundle answer holds entries, which the profile's post-merge answer
     /// does not (§2:3.83.4.2.2.5).
     #[error("the Bundle answer holds entries")]
@@ -168,23 +146,18 @@ pub enum Malformation {
     },
 }
 
-/// A transport failure, with the request URL removed: it holds the source
-/// identifier (§2:3.83.4.1.2.1).
-pub(super) fn transport(error: reqwest::Error) -> PixmError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        PixmError::Timeout
-    } else {
-        PixmError::Transport(error)
+impl Unanswered for PixmError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
     }
 }
 
-/// A send that produced no answer, a transport failure read as [`transport`]
-/// reads it.
-pub(super) fn unsent(error: Unsent) -> PixmError {
-    match error {
-        Unsent::Unauthenticated(source) => PixmError::Unauthenticated(source),
-        Unsent::Timeout => PixmError::Timeout,
-        Unsent::Transport(source) => transport(source),
+impl Unauthenticated for PixmError {
+    fn unauthenticated(source: AuthorizerError) -> Self {
+        Self::Unauthenticated(source)
     }
 }

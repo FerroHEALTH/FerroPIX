@@ -36,6 +36,8 @@ use std::time::{Duration, Instant};
 use http::{HeaderMap, Method, StatusCode};
 use url::Url;
 
+use crate::exchange::Unanswered;
+
 /// The headers an [`Authorizer`] gives one request, once they are made.
 pub type Authorized<'a> =
     Pin<Box<dyn Future<Output = Result<HeaderMap, AuthorizerError>> + Send + 'a>>;
@@ -93,15 +95,12 @@ impl AuthorizerError {
     }
 }
 
-/// Why [`send`] produced no answer.
-#[derive(Debug)]
-pub enum Unsent {
-    /// The authorizer made no headers, so nothing was sent.
-    Unauthenticated(AuthorizerError),
-    /// The timeout ran out before the request could be sent once more.
-    Timeout,
-    /// The request could not be sent, or no answer arrived.
-    Transport(reqwest::Error),
+/// A client error that a request [`send`] could not send becomes: the
+/// failures of [`Unanswered`], and the authorizer that made no headers.
+pub trait Unauthenticated: Unanswered {
+    /// The authorizer made no headers, so nothing was sent (IUA ITI-72
+    /// §3.72.4.2).
+    fn unauthenticated(source: AuthorizerError) -> Self;
 }
 
 /// Sends `request` over `http` within `timeout`, with the headers of
@@ -114,17 +113,18 @@ pub enum Unsent {
 ///
 /// # Errors
 ///
-/// [`Unsent`] when the authorizer makes no headers, the timeout runs out
-/// before a resend, or no answer arrives.
-pub async fn send(
+/// [`Unauthenticated::unauthenticated`] when the authorizer makes no
+/// headers, [`Unanswered::timeout`] when the timeout runs out before a
+/// resend, and [`Unanswered::failed`] when no answer arrives.
+pub async fn send<E: Unauthenticated>(
     http: &reqwest::Client,
     authorizer: Option<&dyn Authorizer>,
     mut request: reqwest::Request,
     timeout: Duration,
-) -> Result<reqwest::Response, Unsent> {
+) -> Result<reqwest::Response, E> {
     let Some(authorizer) = authorizer else {
         *request.timeout_mut() = Some(timeout);
-        return http.execute(request).await.map_err(Unsent::Transport);
+        return http.execute(request).await.map_err(E::failed);
     };
     let deadline = Instant::now().checked_add(timeout);
     let mut target = request.url().clone();
@@ -136,14 +136,14 @@ pub async fn send(
         let headers = authorizer
             .authorize(request.method(), &target)
             .await
-            .map_err(Unsent::Unauthenticated)?;
+            .map_err(E::unauthenticated)?;
         request.headers_mut().extend(headers);
         let remaining = deadline
             .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
             .filter(|remaining| !remaining.is_zero())
-            .ok_or(Unsent::Timeout)?;
+            .ok_or_else(E::timeout)?;
         *request.timeout_mut() = Some(remaining);
-        let response = http.execute(request).await.map_err(Unsent::Transport)?;
+        let response = http.execute(request).await.map_err(E::failed)?;
         let retry = authorizer.answered(&target, response.status(), response.headers());
         match (retry, spare) {
             (Retry::Resend, Some(spare)) => {

@@ -66,12 +66,13 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use http::header::{ACCEPT, CONTENT_TYPE};
+use http::header::ACCEPT;
 use url::Url;
 
 use crate::identification::{PseudoBsn, Ura};
 use error::{InvalidInput, Malformation, NviError};
-use ihe_iti::authorizer::{self, Authorizer, Unsent};
+use ihe_iti::authorizer::{self, Authorizer};
+use ihe_iti::exchange::{self, Unanswered};
 
 /// The system of the localization record type the IG fixes (LOINC).
 pub const LOINC_SYSTEM: &str = "http://loinc.org";
@@ -185,14 +186,13 @@ impl NviClient {
         let mut custodians = BTreeSet::new();
         for _page in 0..PAGES {
             let response = self.send(&url, deadline).await?;
-            let status = response.status();
-            let media = response
-                .headers()
-                .get(CONTENT_TYPE)
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned);
-            let body = response::body(response).await?;
-            let page = response::page(status, media.as_deref(), &body, patient)?;
+            let answer = exchange::read(response, response::LIMIT, response::too_large).await?;
+            let page = response::page(
+                answer.status,
+                answer.media.as_deref(),
+                &answer.body,
+                patient,
+            )?;
             custodians.extend(page.custodians);
             match page.next {
                 None => return Ok(Localization { custodians }),
@@ -218,14 +218,8 @@ impl NviClient {
             .get(url.clone())
             .header(ACCEPT, FHIR_JSON)
             .build()
-            .map_err(error::transport)?;
-        authorizer::send(&self.http, self.authorizer.as_deref(), request, remaining)
-            .await
-            .map_err(|unsent| match unsent {
-                Unsent::Unauthenticated(source) => NviError::Unauthenticated(source),
-                Unsent::Timeout => NviError::Timeout,
-                Unsent::Transport(source) => error::transport(source),
-            })
+            .map_err(NviError::failed)?;
+        authorizer::send(&self.http, self.authorizer.as_deref(), request, remaining).await
     }
 }
 

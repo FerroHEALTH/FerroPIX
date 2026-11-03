@@ -14,10 +14,15 @@
 //! element: XCPD's HL7 v3 messages (feature `xcpd`) are read this way, and so
 //! is any other Appendix V transaction a crate defines.
 
+use std::time::Duration;
+
 use http::StatusCode;
+use http::header::{ACCEPT, CONTENT_TYPE};
 use quick_xml::events::{BytesDecl, BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::{NsReader, Writer};
+
+use crate::exchange::{self, Unanswered};
 
 /// The SOAP 1.2 envelope namespace (SOAP 1.2 Part 1 §5).
 pub const ENVELOPE: &str = "http://www.w3.org/2003/05/soap-envelope";
@@ -303,6 +308,51 @@ pub fn write(
             Ok(())
         })?;
     Ok(writer.into_inner())
+}
+
+/// A client error that a SOAP 1.2 exchange over HTTP ends in, besides the
+/// failures of [`Unanswered`].
+pub trait Refusal: Unanswered {
+    /// The endpoint answered `status`, a status other than `200`, with a
+    /// body longer than the client reads.
+    fn rejected(status: StatusCode) -> Self;
+
+    /// The endpoint answered `200` with a body longer than `limit` bytes.
+    fn too_large(limit: usize) -> Self;
+}
+
+/// Posts the SOAP 1.2 message `body` with the media type `media_type`, its
+/// action parameter included (RFC 3902), through `request` within `timeout`,
+/// and reads the answer whole up to `limit` bytes.
+///
+/// # Errors
+///
+/// [`Refusal::too_large`] for a `200` longer than `limit`,
+/// [`Refusal::rejected`] for any other status that is, and
+/// [`Unanswered::failed`] when no answer arrives.
+pub async fn post<E: Refusal>(
+    request: reqwest::RequestBuilder,
+    media_type: &'static str,
+    body: Vec<u8>,
+    timeout: Duration,
+    limit: usize,
+) -> Result<exchange::Answer, E> {
+    let response = request
+        .header(CONTENT_TYPE, media_type)
+        .header(ACCEPT, MEDIA_TYPE)
+        .timeout(timeout)
+        .body(body)
+        .send()
+        .await
+        .map_err(E::failed)?;
+    exchange::read(response, limit, |status| {
+        if status == StatusCode::OK {
+            E::too_large(limit)
+        } else {
+            E::rejected(status)
+        }
+    })
+    .await
 }
 
 /// The type and subtype of the media type `header`, lowercased, without

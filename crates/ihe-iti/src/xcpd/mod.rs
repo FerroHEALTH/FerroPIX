@@ -84,16 +84,16 @@ pub mod request;
 pub mod responding;
 mod response;
 pub mod security;
+mod v3;
 
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use http::header::{ACCEPT, CONTENT_TYPE};
-
+use crate::soap;
 use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
-use error::{Malformation, XcpdError};
+use error::XcpdError;
 use ihe_atna::balp::recording::{Late, Recorded, within};
 use ihe_atna::user::OnBehalfOf;
 use request::{DiscoveryQuery, Ids, RespondingGateway};
@@ -213,59 +213,25 @@ impl XcpdClient {
         ids: &Ids,
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
-        let response = self
-            .http
-            .post(gateway.endpoint().clone())
-            .header(CONTENT_TYPE, SOAP_REQUEST)
-            .header(ACCEPT, "application/soap+xml")
-            .timeout(timeout)
-            .body(body)
-            .send()
-            .await
-            .map_err(transport)?;
-        let status = response.status();
-        let media = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let answer = body_of(response).await?;
-        response::read(status, media.as_deref(), &answer, &ids.message_urn())
+        let answer = soap::post::<XcpdError>(
+            self.http.post(gateway.endpoint().clone()),
+            SOAP_REQUEST,
+            body,
+            timeout,
+            response::LIMIT,
+        )
+        .await?;
+        response::read(
+            answer.status,
+            answer.media.as_deref(),
+            &answer.body,
+            &ids.message_urn(),
+        )
     }
 }
 
 impl fmt::Debug for XcpdClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("XcpdClient").finish_non_exhaustive()
-    }
-}
-
-/// The answer's body, up to [`response::LIMIT`] bytes.
-async fn body_of(mut response: reqwest::Response) -> Result<Vec<u8>, XcpdError> {
-    let status = response.status();
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(transport)? {
-        if body.len().saturating_add(chunk.len()) > response::LIMIT {
-            if status != http::StatusCode::OK {
-                return Err(XcpdError::Rejected { status });
-            }
-            return Err(Malformation::TooLarge {
-                limit: response::LIMIT,
-            }
-            .into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
-}
-
-/// A transport failure, with the request URL removed: the URL is the
-/// gateway's, and may carry a credential in its userinfo.
-fn transport(error: reqwest::Error) -> XcpdError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        XcpdError::Timeout
-    } else {
-        XcpdError::Transport(error)
     }
 }

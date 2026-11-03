@@ -17,51 +17,65 @@ use url::Url;
 use super::error::InvalidInput;
 use ihe_atna::redact::REDACTED;
 
-/// The patient identifier the Consumer asks about: the Patient Identifier
-/// Domain (assigning authority) and the identifier value of the
-/// `sourceIdentifier` parameter (§2:3.83.4.1.2.1).
-#[derive(Clone)]
-pub struct SourceIdentifier {
-    system: String,
-    value: SecretString,
-}
-
-impl SourceIdentifier {
-    /// Creates the identifier `value` in the domain whose assigning authority
-    /// is `system`, an absolute URI such as `urn:oid:2.999.1`.
-    ///
-    /// # Errors
-    /// [`InvalidInput::System`] when `system` is not an absolute URI, and
-    /// [`InvalidInput::EmptyValue`] when `value` is empty.
-    pub fn new(system: impl Into<String>, value: SecretString) -> Result<Self, InvalidInput> {
-        let system = absolute_uri(system.into())?;
-        if value.expose_secret().is_empty() {
-            return Err(InvalidInput::EmptyValue);
+// NOTE: no specification governs this: our own design, a source and a target identifier
+// are the same shape kept apart by type, so one macro writes both.
+macro_rules! domain_identifier {
+    ($(#[$meta:meta])* $name:ident, $what:literal) => {
+        $(#[$meta])*
+        #[derive(Clone)]
+        pub struct $name {
+            system: String,
+            value: SecretString,
         }
-        Ok(Self { system, value })
-    }
 
-    /// Returns the assigning authority of the identifier's domain.
-    #[must_use]
-    pub fn system(&self) -> &str {
-        &self.system
-    }
+        impl $name {
+            #[doc = concat!("Creates the identifier `value` in the domain whose assigning authority\nis `system`, an absolute URI such as `urn:oid:2.999.1`: ", $what, ".")]
+            ///
+            /// # Errors
+            /// [`InvalidInput::System`] when `system` is not an absolute URI, and
+            /// [`InvalidInput::EmptyValue`] when `value` is empty.
+            pub fn new(
+                system: impl Into<String>,
+                value: SecretString,
+            ) -> Result<Self, InvalidInput> {
+                let system = absolute_uri(system.into())?;
+                if value.expose_secret().is_empty() {
+                    return Err(InvalidInput::EmptyValue);
+                }
+                Ok(Self { system, value })
+            }
 
-    /// Returns the identifier value.
-    #[must_use]
-    pub fn value(&self) -> &SecretString {
-        &self.value
-    }
+            /// Returns the assigning authority of the identifier's domain.
+            #[must_use]
+            pub fn system(&self) -> &str {
+                &self.system
+            }
+
+            /// Returns the identifier value.
+            #[must_use]
+            pub fn value(&self) -> &SecretString {
+                &self.value
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_struct(stringify!($name))
+                    .field("system", &self.system)
+                    .field("value", &REDACTED)
+                    .finish()
+            }
+        }
+    };
 }
 
-impl fmt::Debug for SourceIdentifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SourceIdentifier")
-            .field("system", &self.system)
-            .field("value", &REDACTED)
-            .finish()
-    }
-}
+domain_identifier!(
+    /// The patient identifier the Consumer asks about: the Patient Identifier
+    /// Domain (assigning authority) and the identifier value of the
+    /// `sourceIdentifier` parameter (§2:3.83.4.1.2.1).
+    SourceIdentifier,
+    "the identifier a Consumer asks about"
+);
 
 /// A Patient Identifier Domain the answer's identifiers are selected from:
 /// one `targetSystem` parameter (§2:3.83.4.1.2.2).
@@ -85,56 +99,19 @@ impl TargetSystem {
     }
 }
 
-/// One `targetIdentifier` of the answer: an identifier another domain holds
-/// for the patient, with its assigning authority (§2:3.83.4.2.2.1, ITI TF-2
-/// Appendix E.3).
-#[derive(Clone)]
-pub struct TargetIdentifier {
-    system: String,
-    value: SecretString,
-}
+domain_identifier!(
+    /// One `targetIdentifier` of the answer: an identifier another domain holds
+    /// for the patient, with its assigning authority (§2:3.83.4.2.2.1, ITI TF-2
+    /// Appendix E.3).
+    TargetIdentifier,
+    "one identifier a PIX Manager answers with (ITI TF-2 Appendix E.3)"
+);
 
 impl TargetIdentifier {
-    /// Creates the identifier `value` in the domain whose assigning authority
-    /// is `system`, an absolute URI: one identifier a PIX Manager answers
-    /// with (ITI TF-2 Appendix E.3).
-    ///
-    /// # Errors
-    /// [`InvalidInput::System`] when `system` is not an absolute URI, and
-    /// [`InvalidInput::EmptyValue`] when `value` is empty.
-    pub fn new(system: impl Into<String>, value: SecretString) -> Result<Self, InvalidInput> {
-        let system = absolute_uri(system.into())?;
-        if value.expose_secret().is_empty() {
-            return Err(InvalidInput::EmptyValue);
-        }
-        Ok(Self { system, value })
-    }
-
     /// The identifier as a Manager's answer carries it, already held to the
     /// `$ihe-pix` out parameters.
     pub(super) fn read(system: String, value: SecretString) -> Self {
         Self { system, value }
-    }
-
-    /// Returns the assigning authority of the domain the identifier belongs to.
-    #[must_use]
-    pub fn system(&self) -> &str {
-        &self.system
-    }
-
-    /// Returns the identifier value.
-    #[must_use]
-    pub fn value(&self) -> &SecretString {
-        &self.value
-    }
-}
-
-impl fmt::Debug for TargetIdentifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TargetIdentifier")
-            .field("system", &self.system)
-            .field("value", &REDACTED)
-            .finish()
     }
 }
 

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use http::StatusCode;
 use ihe_atna::user::OnBehalfOf;
-use ihe_iti::outcome::IssueType;
+use ihe_iti::outcome::{IssueType, Unreadable};
 use ihe_iti::pixm::error::{Malformation, PixmError};
 use ihe_iti::pixm::identifier::{CrossReference, CrossReferences};
 use secrecy::ExposeSecret;
@@ -332,12 +332,12 @@ async fn an_answer_off_the_operation_definition_is_refused() {
         ),
         (
             r#"["not","a","resource"]"#,
-            Malformation::NotAResource,
+            Malformation::Unreadable(Unreadable::NotAResource),
             "a resource is a JSON object",
         ),
         (
             "{",
-            Malformation::NotJson { line: 1, column: 1 },
+            Malformation::Unreadable(Unreadable::NotJson { line: 1, column: 1 }),
             "a JSON syntax error",
         ),
     ];
@@ -352,7 +352,7 @@ async fn an_answer_that_is_not_fhir_json_or_too_long_is_refused() {
     let server = manager(200, "text/html", vendored(ALL)).await;
     assert_eq!(
         malformation(ask(&server, &[]).await),
-        Malformation::NotFhirJson,
+        Malformation::Unreadable(Unreadable::NotFhirJson),
         "ITI TF-2 Appendix Z.6"
     );
     let server = manager(200, "application/fhir+json; charset=utf-8", vendored(ALL)).await;
@@ -368,7 +368,7 @@ async fn an_answer_that_is_not_fhir_json_or_too_long_is_refused() {
     assert!(
         matches!(
             malformation(ask(&server, &[]).await),
-            Malformation::TooLarge { .. }
+            Malformation::Unreadable(Unreadable::TooLarge { .. })
         ),
         "the client stops reading at its limit"
     );
@@ -385,7 +385,7 @@ async fn a_resource_that_does_not_decode_is_refused() {
     assert!(
         matches!(
             malformation(ask(&server, &[]).await),
-            Malformation::Decode { .. }
+            Malformation::Unreadable(Unreadable::Decode { .. })
         ),
         "an unknown property is not FHIR R4"
     );

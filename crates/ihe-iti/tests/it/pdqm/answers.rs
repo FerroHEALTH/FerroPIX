@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use http::StatusCode;
 use ihe_atna::user::OnBehalfOf;
-use ihe_iti::outcome::IssueType;
+use ihe_iti::outcome::{IssueType, Unreadable};
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::matches::{MatchGrade, SearchResult};
 use ihe_iti::pdqm::query::PatientQuery;
@@ -288,17 +288,21 @@ async fn an_answer_that_is_no_fhir_json_bundle_is_malformed() {
         (
             "text/plain",
             searchset(0, &[], &[]),
-            Malformation::NotFhirJson,
+            Malformation::Unreadable(Unreadable::NotFhirJson),
         ),
         (
             FHIR_JSON,
             "{\"resourceType\"".to_owned(),
-            Malformation::NotJson {
+            Malformation::Unreadable(Unreadable::NotJson {
                 line: 1,
                 column: 15,
-            },
+            }),
         ),
-        (FHIR_JSON, "[]".to_owned(), Malformation::NotAResource),
+        (
+            FHIR_JSON,
+            "[]".to_owned(),
+            Malformation::Unreadable(Unreadable::NotAResource),
+        ),
         (
             FHIR_JSON,
             outcome("information", "informational", "ok"),
@@ -385,7 +389,7 @@ async fn a_patient_off_fhir_r4_is_malformed() {
     assert!(
         matches!(
             malformation(ask(&server, &schmidt()).await),
-            Malformation::Decode { .. }
+            Malformation::Unreadable(Unreadable::Decode { .. })
         ),
         "a birthDate that is no FHIR date"
     );
@@ -399,7 +403,7 @@ async fn an_answer_beyond_the_limit_is_refused() {
     assert!(
         matches!(
             malformation(ask(&server, &schmidt()).await),
-            Malformation::TooLarge { .. }
+            Malformation::Unreadable(Unreadable::TooLarge { .. })
         ),
         "an answer longer than the client reads"
     );

@@ -10,8 +10,9 @@
 
 use http::StatusCode;
 
-use crate::authorizer::Unsent;
-use crate::outcome::IssueType;
+use crate::authorizer::{AuthorizerError, Unauthenticated};
+use crate::exchange::Unanswered;
+use crate::outcome::{IssueType, Unreadable};
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -68,7 +69,7 @@ pub enum PdqmError {
     /// The authorizer made no headers for the request, so nothing was sent
     /// (IUA ITI-72 §3.72.4.2).
     #[error("the request to the Supplier could not be authenticated")]
-    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
+    Unauthenticated(#[source] AuthorizerError),
     /// The answer does not hold to ITI-78, or to ITI-119 for a match.
     #[error("the Supplier's answer does not hold to the transaction")]
     Malformed(#[from] Malformation),
@@ -90,35 +91,12 @@ pub enum PdqmError {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum Malformation {
-    /// The answer's media type is not FHIR JSON.
-    #[error("the answer is not application/fhir+json")]
-    NotFhirJson,
-    /// The answer is longer than the client reads.
-    #[error("the answer exceeds {limit} bytes")]
-    TooLarge {
-        /// The limit, in bytes.
-        limit: usize,
-    },
-    /// The answer is not JSON.
-    #[error("the answer is not JSON (line {line}, column {column})")]
-    NotJson {
-        /// The line of the syntax error.
-        line: usize,
-        /// The column of the syntax error.
-        column: usize,
-    },
-    /// The answer is not a JSON object with a `resourceType`.
-    #[error("the answer is not a FHIR resource")]
-    NotAResource,
+    /// The answer is not a FHIR JSON resource.
+    #[error(transparent)]
+    Unreadable(#[from] Unreadable),
     /// The answer is a resource other than a Bundle.
     #[error("the answer is not a Bundle")]
     UnexpectedResource,
-    /// The resource does not decode as FHIR R4.
-    #[error("the resource does not decode as FHIR R4: {kind}")]
-    Decode {
-        /// Why it was refused.
-        kind: fhir_types::codec::DecodeErrorKind,
-    },
     /// The Bundle's `type` is not `searchset`.
     #[error("the Bundle is not a searchset")]
     NotSearchset,
@@ -192,23 +170,18 @@ pub enum Malformation {
     },
 }
 
-/// A transport failure, with the request URL removed: a page link may hold
-/// the query (§2:3.78.4.2.2.4).
-pub(super) fn transport(error: reqwest::Error) -> PdqmError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        PdqmError::Timeout
-    } else {
-        PdqmError::Transport(error)
+impl Unanswered for PdqmError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
     }
 }
 
-/// A send that produced no answer, a transport failure read as [`transport`]
-/// reads it.
-pub(super) fn unsent(error: Unsent) -> PdqmError {
-    match error {
-        Unsent::Unauthenticated(source) => PdqmError::Unauthenticated(source),
-        Unsent::Timeout => PdqmError::Timeout,
-        Unsent::Transport(source) => transport(source),
+impl Unauthenticated for PdqmError {
+    fn unauthenticated(source: AuthorizerError) -> Self {
+        Self::Unauthenticated(source)
     }
 }

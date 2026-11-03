@@ -24,32 +24,70 @@ use ihe_atna::redact::RedactedUrl;
 /// The default is the content of an empty Bundle.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Directory {
-    organizations: Vec<DirectoryOrganization>,
-    endpoints: Vec<DirectoryEndpoint>,
+    organizations: Vec<DirectoryEntry<Organization>>,
+    endpoints: Vec<DirectoryEntry<Endpoint>>,
 }
 
-/// One `Organization` of the directory.
+/// One `Organization` or `Endpoint` of the directory, with its entry's
+/// position and `fullUrl`.
 ///
-/// `Debug` shows the `fullUrl` with its userinfo and query replaced by `***`,
-/// and the resource by its logical id, name and `active` flag.
-#[derive(Clone, PartialEq, Eq)]
-pub struct DirectoryOrganization {
-    entry: usize,
-    full_url: Option<String>,
-    resource: Organization,
-}
-
-/// One `Endpoint` of the directory.
-///
-/// `Debug` shows the `fullUrl` and the `address` with their userinfo and
-/// query replaced by `***`, and leaves out the rest of the resource, whose
+/// `Debug` shows the `fullUrl` with its userinfo and query replaced by `***`;
+/// it shows an organisation by its logical id, name and `active` flag, and
+/// an endpoint by its logical id, status, connection type and `address`, the
+/// address as the `fullUrl` is, leaving out the rest of the endpoint, whose
 /// `header` list may hold a credential.
 #[derive(Clone, PartialEq, Eq)]
-pub struct DirectoryEndpoint {
+pub struct DirectoryEntry<R> {
     entry: usize,
     full_url: Option<String>,
-    resource: Endpoint,
+    resource: R,
 }
+
+/// A resource directory content holds: `Organization` or `Endpoint`. The
+/// trait is sealed.
+pub trait DirectoryResource: sealed::Sealed {
+    /// The `resourceType`.
+    const KIND: &'static str;
+
+    /// The resource's logical id.
+    fn logical_id(&self) -> Option<&str>;
+
+    /// The resource's identifiers.
+    fn identifiers(&self) -> &[Identifier];
+
+    /// Whether the resource carries a `modifierExtension`.
+    fn modified(&self) -> bool;
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+// NOTE: no specification governs this: our own design, the generated resources share
+// these fields under no trait of `fhir-types`, so one macro writes the impl for each.
+macro_rules! directory_resource {
+    ($($resource:ident),+) => {$(
+        impl sealed::Sealed for $resource {}
+
+        impl DirectoryResource for $resource {
+            const KIND: &'static str = stringify!($resource);
+
+            fn logical_id(&self) -> Option<&str> {
+                self.id.as_deref()
+            }
+
+            fn identifiers(&self) -> &[Identifier] {
+                &self.identifier
+            }
+
+            fn modified(&self) -> bool {
+                !self.modifier_extension.is_empty()
+            }
+        }
+    )+};
+}
+
+directory_resource!(Organization, Endpoint);
 
 /// What a reference from one directory resource to another answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,13 +180,13 @@ impl Directory {
 
     /// Every `Organization`, in entry order.
     #[must_use]
-    pub fn organizations(&self) -> &[DirectoryOrganization] {
+    pub fn organizations(&self) -> &[DirectoryEntry<Organization>] {
         &self.organizations
     }
 
     /// Every `Endpoint`, in entry order.
     #[must_use]
-    pub fn endpoints(&self) -> &[DirectoryEndpoint] {
+    pub fn endpoints(&self) -> &[DirectoryEntry<Endpoint>] {
         &self.endpoints
     }
 
@@ -157,8 +195,8 @@ impl Directory {
     #[must_use]
     pub fn managing_organization<'a>(
         &'a self,
-        endpoint: &'a DirectoryEndpoint,
-    ) -> Option<Resolution<'a, DirectoryOrganization>> {
+        endpoint: &'a DirectoryEntry<Endpoint>,
+    ) -> Option<Resolution<'a, DirectoryEntry<Organization>>> {
         let reference = endpoint.resource.managing_organization.as_ref()?;
         Some(resolve(reference, endpoint, &self.organizations))
     }
@@ -167,8 +205,8 @@ impl Directory {
     /// list order.
     pub fn endpoints_of<'a>(
         &'a self,
-        organization: &'a DirectoryOrganization,
-    ) -> impl Iterator<Item = Resolution<'a, DirectoryEndpoint>> {
+        organization: &'a DirectoryEntry<Organization>,
+    ) -> impl Iterator<Item = Resolution<'a, DirectoryEntry<Endpoint>>> {
         organization
             .resource
             .endpoint
@@ -183,8 +221,7 @@ impl Directory {
 struct Builder {
     directory: Directory,
     full_urls: BTreeSet<String>,
-    organization_ids: BTreeSet<String>,
-    endpoint_ids: BTreeSet<String>,
+    ids: BTreeSet<(&'static str, String)>,
 }
 
 impl Builder {
@@ -195,20 +232,8 @@ impl Builder {
         full_url: Option<String>,
         resource: Organization,
     ) -> Result<(), DirectoryError> {
-        self.full_url(index, full_url.as_ref())?;
-        if !resource.modifier_extension.is_empty() {
-            return Err(DirectoryError::ModifierExtension { index });
-        }
-        if let Some(id) = &resource.id
-            && !self.organization_ids.insert(id.clone())
-        {
-            return Err(DirectoryError::DuplicateId { index });
-        }
-        self.directory.organizations.push(DirectoryOrganization {
-            entry: index,
-            full_url,
-            resource,
-        });
+        let entry = self.entry(index, full_url, resource)?;
+        self.directory.organizations.push(entry);
         Ok(())
     }
 
@@ -219,21 +244,33 @@ impl Builder {
         full_url: Option<String>,
         resource: Endpoint,
     ) -> Result<(), DirectoryError> {
+        let entry = self.entry(index, full_url, resource)?;
+        self.directory.endpoints.push(entry);
+        Ok(())
+    }
+
+    /// The entry `index` holding `resource`, refusing a modifier extension
+    /// and a `fullUrl` or a logical id of its type an earlier entry carries.
+    fn entry<R: DirectoryResource>(
+        &mut self,
+        index: usize,
+        full_url: Option<String>,
+        resource: R,
+    ) -> Result<DirectoryEntry<R>, DirectoryError> {
         self.full_url(index, full_url.as_ref())?;
-        if !resource.modifier_extension.is_empty() {
+        if resource.modified() {
             return Err(DirectoryError::ModifierExtension { index });
         }
-        if let Some(id) = &resource.id
-            && !self.endpoint_ids.insert(id.clone())
+        if let Some(id) = resource.logical_id()
+            && !self.ids.insert((R::KIND, id.to_owned()))
         {
             return Err(DirectoryError::DuplicateId { index });
         }
-        self.directory.endpoints.push(DirectoryEndpoint {
+        Ok(DirectoryEntry {
             entry: index,
             full_url,
             resource,
-        });
-        Ok(())
+        })
     }
 
     /// Refuses a `fullUrl` an earlier entry carries.
@@ -247,7 +284,7 @@ impl Builder {
     }
 }
 
-impl DirectoryOrganization {
+impl<R: DirectoryResource> DirectoryEntry<R> {
     /// The entry's position in the Bundle.
     #[must_use]
     pub fn entry(&self) -> usize {
@@ -263,7 +300,7 @@ impl DirectoryOrganization {
     /// The resource's logical id.
     #[must_use]
     pub fn logical_id(&self) -> Option<&str> {
-        self.resource.id.as_deref()
+        self.resource.logical_id()
     }
 
     /// The value of each identifier in `system`, in resource order; `None`
@@ -272,9 +309,17 @@ impl DirectoryOrganization {
         &'a self,
         system: &'a str,
     ) -> impl Iterator<Item = Option<&'a str>> {
-        values(&self.resource.identifier, system)
+        values(self.resource.identifiers(), system)
     }
 
+    /// The resource as decoded.
+    #[must_use]
+    pub fn resource(&self) -> &R {
+        &self.resource
+    }
+}
+
+impl DirectoryEntry<Organization> {
     /// The `system` and the `value` of every identifier, in resource order;
     /// `None` for a half the identifier does not carry.
     pub fn identifiers(&self) -> impl Iterator<Item = (Option<&str>, Option<&str>)> {
@@ -303,42 +348,9 @@ impl DirectoryOrganization {
     pub fn active(&self) -> Option<bool> {
         self.resource.active.as_ref()?.value
     }
-
-    /// The resource as decoded.
-    #[must_use]
-    pub fn resource(&self) -> &Organization {
-        &self.resource
-    }
 }
 
-impl DirectoryEndpoint {
-    /// The entry's position in the Bundle.
-    #[must_use]
-    pub fn entry(&self) -> usize {
-        self.entry
-    }
-
-    /// The entry's `fullUrl`.
-    #[must_use]
-    pub fn full_url(&self) -> Option<&str> {
-        self.full_url.as_deref()
-    }
-
-    /// The resource's logical id.
-    #[must_use]
-    pub fn logical_id(&self) -> Option<&str> {
-        self.resource.id.as_deref()
-    }
-
-    /// The value of each identifier in `system`, in resource order; `None`
-    /// for one that carries the system and no value.
-    pub fn identifier_values<'a>(
-        &'a self,
-        system: &'a str,
-    ) -> impl Iterator<Item = Option<&'a str>> {
-        values(&self.resource.identifier, system)
-    }
-
+impl DirectoryEntry<Endpoint> {
     /// The endpoint's `status` code.
     #[must_use]
     pub fn status(&self) -> Option<&str> {
@@ -434,17 +446,12 @@ impl DirectoryEndpoint {
     pub fn address(&self) -> Option<&str> {
         self.resource.address.value.as_deref()
     }
-
-    /// The resource as decoded.
-    #[must_use]
-    pub fn resource(&self) -> &Endpoint {
-        &self.resource
-    }
 }
 
-impl fmt::Debug for DirectoryOrganization {
+impl fmt::Debug for DirectoryEntry<Organization> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DirectoryOrganization")
+        f.debug_struct("DirectoryEntry")
+            .field("kind", &Organization::KIND)
             .field("entry", &self.entry)
             .field("full_url", &self.full_url.as_deref().map(RedactedUrl))
             .field("logical_id", &self.logical_id())
@@ -454,9 +461,10 @@ impl fmt::Debug for DirectoryOrganization {
     }
 }
 
-impl fmt::Debug for DirectoryEndpoint {
+impl fmt::Debug for DirectoryEntry<Endpoint> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DirectoryEndpoint")
+        f.debug_struct("DirectoryEntry")
+            .field("kind", &Endpoint::KIND)
             .field("entry", &self.entry)
             .field("full_url", &self.full_url.as_deref().map(RedactedUrl))
             .field("logical_id", &self.logical_id())
@@ -471,11 +479,11 @@ impl fmt::Debug for DirectoryEndpoint {
 /// The resource among `held` that `reference`, made by `referrer`, names.
 // NOTE: FHIR R4 §2.36.4.1: a relative `[type]/[id]` is made absolute on the
 // root of the referrer's RESTful fullUrl, and an absolute one matches a fullUrl.
-fn resolve<'a, T: Held>(
+fn resolve<'a, R: DirectoryResource, T: DirectoryResource>(
     reference: &'a Reference,
-    referrer: &impl Held,
-    held: &'a [T],
-) -> Resolution<'a, T> {
+    referrer: &DirectoryEntry<R>,
+    held: &'a [DirectoryEntry<T>],
+) -> Resolution<'a, DirectoryEntry<T>> {
     let Some(literal) = reference
         .reference
         .as_ref()
@@ -488,7 +496,7 @@ fn resolve<'a, T: Held>(
     } else if is_relative(literal) {
         referrer
             .full_url()
-            .and_then(|full_url| restful_root(full_url, referrer.kind()))
+            .and_then(|full_url| restful_root(full_url, R::KIND))
             .map(|root| format!("{root}/{literal}"))
     } else {
         None
@@ -517,32 +525,6 @@ fn restful_root<'a>(full_url: &'a str, kind: &str) -> Option<&'a str> {
         && !id.is_empty()
         && (root.starts_with("https://") || root.starts_with("http://"));
     restful.then_some(root)
-}
-
-/// The two kinds of directory resource a reference is made by or names.
-trait Held {
-    fn full_url(&self) -> Option<&str>;
-    fn kind(&self) -> &'static str;
-}
-
-impl Held for DirectoryOrganization {
-    fn full_url(&self) -> Option<&str> {
-        self.full_url.as_deref()
-    }
-
-    fn kind(&self) -> &'static str {
-        "Organization"
-    }
-}
-
-impl Held for DirectoryEndpoint {
-    fn full_url(&self) -> Option<&str> {
-        self.full_url.as_deref()
-    }
-
-    fn kind(&self) -> &'static str {
-        "Endpoint"
-    }
 }
 
 fn values<'a>(

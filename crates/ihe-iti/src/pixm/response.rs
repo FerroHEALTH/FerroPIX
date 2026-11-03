@@ -4,15 +4,15 @@
 //! The ITI-83 response: a `Parameters` resource on success, an
 //! `OperationOutcome` on failure (§2:3.83.4.2.2).
 
-use fhir_types::codec::{DecodeError, Json, Object, Path, Value};
+use fhir_types::codec::{Json, Object, Path};
 use fhir_types::r4::bundle::Bundle;
 use fhir_types::r4::parameters::{Parameters, ParametersParameter, ParametersParameterValue};
 use http::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::outcome::{self, IssueType};
+use crate::outcome::{self, IssueType, Unreadable};
 
-use super::error::{self, Malformation, PixmError};
+use super::error::{Malformation, PixmError};
 use super::identifier::{
     CrossReference, CrossReferences, PatientReference, SourceIdentifier, TargetIdentifier,
     TargetSystem,
@@ -22,16 +22,9 @@ use super::identifier::{
 /// resource with an identifier per domain, a few kilobytes at most.
 pub(super) const LIMIT: usize = 1 << 20;
 
-/// Reads the answer's body, refusing one longer than [`LIMIT`].
-pub(super) async fn body(mut response: reqwest::Response) -> Result<Vec<u8>, PixmError> {
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(error::transport)? {
-        if body.len().saturating_add(chunk.len()) > LIMIT {
-            return Err(Malformation::TooLarge { limit: LIMIT }.into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+/// The refusal of an answer longer than [`LIMIT`], whatever its status.
+pub(super) fn too_large(_status: StatusCode) -> PixmError {
+    Malformation::from(Unreadable::TooLarge { limit: LIMIT }).into()
 }
 
 /// What the answer with `status`, media type `media` and `body` means for the
@@ -44,12 +37,9 @@ pub(super) fn read(
     targets: &[TargetSystem],
 ) -> Result<CrossReference, PixmError> {
     if status == StatusCode::OK {
-        if !outcome::fhir_json(media) {
-            return Err(Malformation::NotFhirJson.into());
-        }
-        let value = json(body)?;
-        let object = value.as_object().ok_or(Malformation::NotAResource)?;
-        return match resource_type(object)? {
+        let received = outcome::resource(media, body).map_err(Malformation::from)?;
+        let object = &received.object;
+        return match received.resource_type.as_str() {
             "Parameters" => Ok(CrossReference::Matched(matched(object, source, targets)?)),
             "Bundle" => post_merge(object),
             _ => Err(Malformation::UnexpectedResource.into()),
@@ -68,24 +58,6 @@ pub(super) fn read(
     Err(PixmError::Rejected { status, issues })
 }
 
-fn json(body: &[u8]) -> Result<Value, Malformation> {
-    serde_json::from_slice(body).map_err(|error| Malformation::NotJson {
-        line: error.line(),
-        column: error.column(),
-    })
-}
-
-fn resource_type(object: &Object) -> Result<&str, Malformation> {
-    object
-        .get("resourceType")
-        .and_then(Value::as_str)
-        .ok_or(Malformation::NotAResource)
-}
-
-fn decode(error: DecodeError) -> Malformation {
-    Malformation::Decode { kind: error.kind }
-}
-
 /// The identifiers of a success answer, held to the `$ihe-pix` out parameters
 /// and to the request (§2:3.83.4.2.2.1).
 fn matched(
@@ -94,7 +66,7 @@ fn matched(
     targets: &[TargetSystem],
 ) -> Result<CrossReferences, Malformation> {
     let parameters =
-        Parameters::from_json(object, &mut Path::root("Parameters")).map_err(decode)?;
+        Parameters::from_json(object, &mut Path::root("Parameters")).map_err(Unreadable::from)?;
     let mut identifiers = Vec::new();
     let mut patients = Vec::new();
     for (index, parameter) in parameters.parameter.iter().enumerate() {
@@ -168,7 +140,9 @@ fn patient(
 /// deprecated or deleted: no Patient in it, so the source is not found
 /// (§2:3.83.4.2.2.5).
 fn post_merge(object: &Object) -> Result<CrossReference, PixmError> {
-    let bundle = Bundle::from_json(object, &mut Path::root("Bundle")).map_err(decode)?;
+    let bundle = Bundle::from_json(object, &mut Path::root("Bundle"))
+        .map_err(Unreadable::from)
+        .map_err(Malformation::from)?;
     if bundle.entry.is_empty() {
         Ok(CrossReference::SourceNotFound)
     } else {

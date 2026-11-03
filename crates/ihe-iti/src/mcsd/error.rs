@@ -6,6 +6,8 @@
 
 use fhir_types::codec::DecodeError;
 
+use crate::authorizer::{AuthorizerError, Unauthenticated};
+use crate::exchange::Unanswered;
 use crate::outcome::IssueType;
 
 /// A Bundle that does not read as `Organization` and `Endpoint` resources.
@@ -123,7 +125,7 @@ pub enum McsdError {
     /// The authorizer made no headers for the request, so nothing was sent
     /// (IUA ITI-72 §3.72.4.2).
     #[error("the request to the directory could not be authenticated")]
-    Unauthenticated(#[source] crate::authorizer::AuthorizerError),
+    Unauthenticated(#[source] AuthorizerError),
     /// The answer does not hold to ITI-90 or ITI-91.
     #[error("the directory's answer does not hold to mCSD")]
     Malformed(#[from] Malformation),
@@ -258,4 +260,20 @@ pub enum Malformation {
     /// The `next` link is not a URL.
     #[error("the next link is not a URL")]
     NextLink,
+}
+
+impl Unanswered for McsdError {
+    fn timeout() -> Self {
+        Self::Timeout
+    }
+
+    fn transport(source: reqwest::Error) -> Self {
+        Self::Transport(source)
+    }
+}
+
+impl Unauthenticated for McsdError {
+    fn unauthenticated(source: AuthorizerError) -> Self {
+        Self::Unauthenticated(source)
+    }
 }

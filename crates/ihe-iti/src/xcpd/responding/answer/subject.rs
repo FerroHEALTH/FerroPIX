@@ -9,8 +9,9 @@ use secrecy::ExposeSecret as _;
 
 use super::super::super::discovery::RequestedAttribute;
 use super::super::super::error::DetectedIssue;
+use super::super::super::v3::{Out, code, ii};
 use super::super::super::{ISSUE_SYSTEM, REQUEST_SYSTEM};
-use super::{ACT_CODE, Candidate, LOCATOR_SYSTEM, Out, Outcome, code, ii};
+use super::{ACT_CODE, Candidate, LOCATOR_SYSTEM, Outcome};
 
 /// One `RegistrationEvent` with its `Patient` and its custodian's
 /// `homeCommunityId` (§3.55.4.2.2.2, §3.55.4.2.2.4, §3.55.4.2.2.5).

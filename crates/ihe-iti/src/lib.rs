@@ -10,8 +10,9 @@
 //! - `pmir`: Patient Master Identity Registry, ITI-93 and ITI-94.
 //! - `xcpd`: Cross-Community Patient Discovery, ITI-55, the one profile on
 //!   SOAP 1.2 with HL7 v3 and SAML XUA.
-//! - `soap`: the SOAP 1.2 envelope reader of ITI TF-2 Appendix V, which XCPD
-//!   reads through and any other Appendix V transaction can, with no profile.
+//! - `soap`: the SOAP 1.2 envelope reader of ITI TF-2 Appendix V and the HTTP
+//!   post it travels on, which XCPD sends and reads through and any other
+//!   Appendix V transaction can, with no profile.
 //! - `authorizer`: the authorizer that makes each request's headers and the
 //!   send that resends once when it asks (IUA ITI-72), with no FHIR model.
 //! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
@@ -48,6 +49,8 @@
 
 #[cfg(feature = "authorizer")]
 pub mod authorizer;
+#[cfg(any(feature = "authorizer", feature = "soap"))]
+pub mod exchange;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]

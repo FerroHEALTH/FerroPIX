@@ -73,6 +73,7 @@ use http::header::{ACCEPT, CONTENT_TYPE, LOCATION};
 use url::Url;
 
 use crate::authorizer::{self, Authorizer};
+use crate::exchange::{self, Answer, Unanswered};
 use crate::outcome;
 use error::{InvalidInput, SubscribeError, SubscriptionMalformation};
 use ihe_atna::redact::RedactedUrl;
@@ -131,16 +132,28 @@ impl PmirSubscriber {
         self
     }
 
-    /// Sends `request` within `timeout`, authenticated by the authorizer when
-    /// there is one.
+    /// Sends the request `request` builds, asking for FHIR JSON, within
+    /// `timeout`, authenticated by the authorizer when there is one.
     async fn send(
         &self,
-        request: reqwest::Request,
+        request: reqwest::RequestBuilder,
         timeout: Duration,
     ) -> Result<reqwest::Response, SubscribeError> {
-        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout)
-            .await
-            .map_err(error::unsent)
+        let request = request
+            .header(ACCEPT, FHIR_JSON)
+            .build()
+            .map_err(SubscribeError::failed)?;
+        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout).await
+    }
+
+    /// Sends the request `request` builds as [`PmirSubscriber::send`] does,
+    /// and reads its answer whole.
+    async fn exchange(
+        &self,
+        request: reqwest::RequestBuilder,
+        timeout: Duration,
+    ) -> Result<Answer, SubscribeError> {
+        exchange::read(self.send(request, timeout).await?, LIMIT, too_large).await
     }
 
     /// This subscriber, recording the audit record of every exchange with
@@ -219,25 +232,19 @@ impl PmirSubscriber {
         request: &SubscriptionRequest,
         timeout: Duration,
     ) -> Result<subscription::Search, SubscribeError> {
-        let built = self
-            .http
-            .get(url.clone())
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(error::transport)?;
-        let response = self.send(built, timeout).await?;
-        let status = response.status();
-        let media = media(&response);
-        let body = read_body(response).await?;
-        if matches!(status, StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND) {
+        let answer = self.exchange(self.http.get(url.clone()), timeout).await?;
+        if matches!(
+            answer.status,
+            StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND
+        ) {
             return Ok(subscription::Search::Unsupported);
         }
-        if status != StatusCode::OK {
-            return Err(rejected(status, media.as_deref(), &body));
+        if answer.status != StatusCode::OK {
+            return Err(rejected(&answer));
         }
         Ok(subscription::Search::Found(subscription::listed(
-            media.as_deref(),
-            &body,
+            answer.media.as_deref(),
+            &answer.body,
             request,
             &self.endpoint,
         )?))
@@ -292,21 +299,16 @@ impl PmirSubscriber {
             .http
             .post(self.endpoint.clone())
             .header(CONTENT_TYPE, FHIR_JSON)
-            .header(ACCEPT, FHIR_JSON)
-            .body(body)
-            .build()
-            .map_err(error::transport)?;
+            .body(body);
         let response = self.send(built, timeout).await?;
-        let status = response.status();
         let location = response
             .headers()
             .get(LOCATION)
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned);
-        let media = media(&response);
-        let body = read_body(response).await?;
-        if status != StatusCode::CREATED {
-            return Err(rejected(status, media.as_deref(), &body));
+        let answer = exchange::read(response, LIMIT, too_large).await?;
+        if answer.status != StatusCode::CREATED {
+            return Err(rejected(&answer));
         }
         let location = location.ok_or(SubscriptionMalformation::NoLocation)?;
         Ok(Subscribed::at(&self.endpoint, &location)?)
@@ -350,20 +352,13 @@ impl PmirSubscriber {
         subscribed: &Subscribed,
         timeout: Duration,
     ) -> Result<SubscriptionStatus, SubscribeError> {
-        let built = self
-            .http
-            .get(subscribed.location().clone())
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(error::transport)?;
-        let response = self.send(built, timeout).await?;
-        let status = response.status();
-        let media = media(&response);
-        let body = read_body(response).await?;
-        if status != StatusCode::OK {
-            return Err(rejected(status, media.as_deref(), &body));
+        let answer = self
+            .exchange(self.http.get(subscribed.location().clone()), timeout)
+            .await?;
+        if answer.status != StatusCode::OK {
+            return Err(rejected(&answer));
         }
-        Ok(subscription::status(media.as_deref(), &body)?)
+        Ok(subscription::status(answer.media.as_deref(), &answer.body)?)
     }
 
     /// Deletes `subscribed`, so the Registry stops sending the feed: an HTTP
@@ -406,18 +401,11 @@ impl PmirSubscriber {
         subscribed: &Subscribed,
         timeout: Duration,
     ) -> Result<(), SubscribeError> {
-        let built = self
-            .http
-            .delete(subscribed.location().clone())
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(error::transport)?;
-        let response = self.send(built, timeout).await?;
-        let status = response.status();
-        let media = media(&response);
-        let body = read_body(response).await?;
+        let answer = self
+            .exchange(self.http.delete(subscribed.location().clone()), timeout)
+            .await?;
         if matches!(
-            status,
+            answer.status,
             StatusCode::OK
                 | StatusCode::ACCEPTED
                 | StatusCode::NO_CONTENT
@@ -426,7 +414,7 @@ impl PmirSubscriber {
         ) {
             return Ok(());
         }
-        Err(rejected(status, media.as_deref(), &body))
+        Err(rejected(&answer))
     }
 }
 
@@ -439,32 +427,16 @@ impl fmt::Debug for PmirSubscriber {
     }
 }
 
-/// The media type of `response`, when it names one.
-fn media(response: &reqwest::Response) -> Option<String> {
-    response
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned)
-}
-
-/// The refusal of an answer with `status`, with the issue types of the
-/// `OperationOutcome` it carries, if any.
-fn rejected(status: StatusCode, media: Option<&str>, body: &[u8]) -> SubscribeError {
+/// The refusal of `answer`, with the issue types of the `OperationOutcome`
+/// it carries, if any.
+fn rejected(answer: &Answer) -> SubscribeError {
     SubscribeError::Rejected {
-        status,
-        issues: outcome::issues(media, body),
+        status: answer.status,
+        issues: outcome::issues(answer.media.as_deref(), &answer.body),
     }
 }
 
-/// Reads the answer's body, refusing one longer than [`LIMIT`].
-async fn read_body(mut response: reqwest::Response) -> Result<Vec<u8>, SubscribeError> {
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(error::transport)? {
-        if body.len().saturating_add(chunk.len()) > LIMIT {
-            return Err(SubscriptionMalformation::TooLarge { limit: LIMIT }.into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+/// The refusal of an answer longer than [`LIMIT`], whatever its status.
+fn too_large(_status: StatusCode) -> SubscribeError {
+    SubscriptionMalformation::TooLarge { limit: LIMIT }.into()
 }

@@ -17,13 +17,10 @@ use uuid::Uuid;
 use super::error::{InvalidInput, XcpdError};
 use super::identifier::{HomeCommunityId, Oid, PatientIdentifier};
 use super::security::XuaAssertion;
+use super::v3::{self, Out};
 use super::{ACTION, HL7, WSSE};
 use crate::soap::{self, ANONYMOUS};
 use ihe_atna::redact::RedactedUrl;
-
-/// The OID of the HL7 interaction and trigger event identifiers
-/// (Table 3.55.4.1.2.3-1).
-const HL7_INTERACTION: &str = "2.16.840.1.113883.1.6";
 
 /// Whether a message belongs to production, training or debugging
 /// (`processingCode`, Appendix O Table O.1.1-1).
@@ -39,7 +36,7 @@ pub enum ProcessingCode {
 }
 
 impl ProcessingCode {
-    fn code(self) -> &'static str {
+    pub(super) fn code(self) -> &'static str {
         match self {
             Self::Production => "P",
             Self::Training => "T",
@@ -243,8 +240,6 @@ pub(super) struct Written {
     pub(super) query: SecretString,
 }
 
-type Out = Writer<Vec<u8>>;
-
 /// The WS-Addressing headers Appendix V.3.2.2 requires, and the XUA
 /// assertion.
 fn header(
@@ -295,40 +290,27 @@ fn message(
     ids: &Ids,
     segment: &str,
 ) -> std::io::Result<()> {
-    let message_id = ids.message.to_string();
-    let created = ids.created.strftime("%Y%m%d%H%M%S+0000").to_string();
     writer
         .create_element("PRPA_IN201305UV02")
         .with_attributes([("xmlns", HL7), ("ITSVersion", "XML_1.0")])
         .write_inner_content(|writer| {
-            writer
-                .create_element("id")
-                .with_attribute(("root", message_id.as_str()))
-                .write_empty()?;
-            writer
-                .create_element("creationTime")
-                .with_attribute(("value", created.as_str()))
-                .write_empty()?;
-            writer
-                .create_element("interactionId")
-                .with_attributes([
-                    ("root", HL7_INTERACTION),
-                    ("extension", "PRPA_IN201305UV02"),
-                ])
-                .write_empty()?;
-            code(writer, "processingCode", query.processing.code())?;
-            code(writer, "processingModeCode", "T")?;
-            code(writer, "acceptAckCode", "AL")?;
-            device(
+            v3::transmission(
+                writer,
+                (ids.message, ids.created),
+                "PRPA_IN201305UV02",
+                query.processing.code(),
+                "AL",
+            )?;
+            v3::device(
                 writer,
                 ("receiver", "RCV"),
-                &gateway.device,
+                Some(gateway.device.as_str()),
                 gateway.community.as_ref(),
             )?;
-            device(
+            v3::device(
                 writer,
                 ("sender", "SND"),
-                &query.sender,
+                Some(query.sender.as_str()),
                 query.community.as_ref(),
             )?;
             control_act(writer, segment)?;
@@ -348,7 +330,7 @@ fn control_act(writer: &mut Out, segment: &str) -> std::io::Result<()> {
                 .create_element("code")
                 .with_attributes([
                     ("code", "PRPA_TE201305UV02"),
-                    ("codeSystem", HL7_INTERACTION),
+                    ("codeSystem", v3::INTERACTION),
                 ])
                 .write_empty()?;
             // NOTE: the segment is this module's own writer output, well formed and
@@ -374,9 +356,9 @@ fn query_by_parameter(query: &DiscoveryQuery, ids: &Ids) -> std::io::Result<Stri
                     .create_element("queryId")
                     .with_attribute(("root", query_id.as_str()))
                     .write_empty()?;
-                code(writer, "statusCode", "new")?;
-                code(writer, "responseModalityCode", "R")?;
-                code(writer, "responsePriorityCode", "I")?;
+                v3::code(writer, "statusCode", "new")?;
+                v3::code(writer, "responseModalityCode", "R")?;
+                v3::code(writer, "responsePriorityCode", "I")?;
                 writer
                     .create_element("parameterList")
                     .write_inner_content(|writer| {
@@ -403,61 +385,4 @@ fn query_by_parameter(query: &DiscoveryQuery, ids: &Ids) -> std::io::Result<Stri
             })?;
     }
     String::from_utf8(out.into_inner()).map_err(std::io::Error::other)
-}
-
-/// An element with one `code` attribute.
-fn code(writer: &mut Out, name: &str, value: &str) -> std::io::Result<()> {
-    writer
-        .create_element(name)
-        .with_attribute(("code", value))
-        .write_empty()?;
-    Ok(())
-}
-
-/// A `receiver` or `sender` with its device, and the device's organization
-/// when a community is named (Appendix O.1.1, §3.55.4.1.2.4, §3.55.4.1.2.5).
-fn device(
-    writer: &mut Out,
-    (role, type_code): (&str, &str),
-    device: &Oid,
-    community: Option<&HomeCommunityId>,
-) -> std::io::Result<()> {
-    writer
-        .create_element(role)
-        .with_attribute(("typeCode", type_code))
-        .write_inner_content(|writer| {
-            writer
-                .create_element("device")
-                .with_attributes([("classCode", "DEV"), ("determinerCode", "INSTANCE")])
-                .write_inner_content(|writer| {
-                    writer
-                        .create_element("id")
-                        .with_attribute(("root", device.as_str()))
-                        .write_empty()?;
-                    if let Some(community) = community {
-                        writer
-                            .create_element("asAgent")
-                            .with_attribute(("classCode", "AGNT"))
-                            .write_inner_content(|writer| {
-                                writer
-                                    .create_element("representedOrganization")
-                                    .with_attributes([
-                                        ("classCode", "ORG"),
-                                        ("determinerCode", "INSTANCE"),
-                                    ])
-                                    .write_inner_content(|writer| {
-                                        writer
-                                            .create_element("id")
-                                            .with_attribute(("root", community.oid().as_str()))
-                                            .write_empty()?;
-                                        Ok(())
-                                    })?;
-                                Ok(())
-                            })?;
-                    }
-                    Ok(())
-                })?;
-            Ok(())
-        })?;
-    Ok(())
 }

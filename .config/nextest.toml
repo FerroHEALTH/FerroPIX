@@ -11,12 +11,18 @@
 # The slowest offline test waits on a 10-second timeout of its own.
 slow-timeout = { period = "30s", terminate-after = 2 }
 
-# The ihe-iti feature tests run a cargo tree per feature, one or two each,
-# so they get three minutes, and their child cargo takes a package cache lock
-# of its own.
+# The tests that run a child cargo: the ihe-iti feature tests, a cargo tree
+# per feature, and the console's dependency boundary, a cargo metadata. Each
+# child takes the package cache lock, so beside a full parallel run on a
+# laptop it waits on that lock and the CPU (#416): they share one group that
+# runs two at a time, and each gets three minutes.
+[test-groups]
+cargo = { max-threads = 2 }
+
 [[profile.default.overrides]]
-filter = 'package(ihe-iti) & test(/^features::/)'
+filter = '(package(ihe-iti) & test(/^features::/)) | (package(ferropix-console) & test(/^boundary::/))'
 slow-timeout = { period = "30s", terminate-after = 6 }
+test-group = "cargo"
 
 # The console's browser journeys walk every screen in a real browser, the
 # battery in two themes, so each gets ten minutes; each starts a Chrome of

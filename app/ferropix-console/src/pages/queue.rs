@@ -16,18 +16,17 @@
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::table::view::{
-    ACTIONS, Body, Column, DataTable, EXCLUDED, Role, Sorting, cell, data_table, title_cell,
+    ACTIONS, Body, Column, DataTable, EXCLUDED, Role, cell, data_table, title_cell,
 };
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT, SELECT, check_field, help_id};
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::score::score_bar;
-use ferrohealth_ui::view::side_panel::{
-    Opener, SidePanel, SidePanelWords, side_panel_with_shortcut,
-};
+use ferrohealth_ui::view::side_panel::{Opener, SidePanel, SidePanelWords, side_panel};
 use ferrohealth_ui::view::status::pill;
-use ferrohealth_ui::view::surface::{card, definitions, stack};
+use ferrohealth_ui::view::surface::{card, definitions};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
 use ferrohealth_ui::view::time::timestamp;
 use ferrohealth_ui::view::worklist::{WorkRow, row, worklist, worklist_foot};
@@ -111,11 +110,14 @@ pub fn queue(
     candidates: &Candidates,
     deferred: Option<&Read<()>>,
 ) -> Html {
-    stack(Html::join([
-        deferred_notice(visit, deferred),
-        card(visit.tr(Msg::Filters), filters(visit, filter)),
-        list(visit, filter, candidates),
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            deferred_notice(visit, deferred),
+            card(visit.tr(Msg::Filters), filters(visit, filter)),
+            list(visit, filter, candidates),
+        ]),
+    )
 }
 
 /// The outcome of a deferral just posted.
@@ -301,6 +303,7 @@ fn candidate_row(
         class,
         cells: Html::join([
             title_cell(
+                None,
                 Some(&format!("{QUEUE}/{}", candidate.id)),
                 Html::text(pair_name(visit, candidate)),
                 None,
@@ -362,12 +365,7 @@ fn list(visit: &Visit, filter: &CandidateQuery, candidates: &Candidates) -> Html
         .map(|(index, candidate)| candidate_row(visit, filter, &columns, index == 0, candidate))
         .collect();
     let caption = visit.tr(Msg::Queue);
-    let table = data_table(DataTable {
-        caption: &caption,
-        columns: &columns,
-        sorting: Sorting::default(),
-        body: Body::Rows(rows),
-    });
+    let table = data_table(DataTable::new(&caption, &columns, Body::Rows(rows)));
     let first = u64::from(candidates.offset).saturating_add(1);
     let shown = u64::try_from(candidates.rows.len()).unwrap_or(u64::MAX);
     let range = visit.tr_with(
@@ -471,7 +469,7 @@ fn glance(visit: &Visit, filter: &CandidateQuery, candidate: &CandidateRow) -> H
         Variant::Secondary.class(),
         label(Some(Glyph::CLOCK), visit.tr(Msg::Defer)),
     ));
-    side_panel_with_shortcut(
+    side_panel(
         SidePanel {
             id: format!("glance-{id}"),
             title: pair_name(visit, candidate),
@@ -484,7 +482,7 @@ fn glance(visit: &Visit, filter: &CandidateQuery, candidate: &CandidateRow) -> H
             body,
             words: SidePanelWords::of(locale),
         },
-        GLANCE_KEYS,
+        Some(GLANCE_KEYS),
     )
 }
 

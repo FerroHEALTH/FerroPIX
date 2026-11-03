@@ -13,15 +13,14 @@
 
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::table::view::{
-    Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
-};
+use ferrohealth_ui::table::view::{Body, Column, DataTable, Role, cell, data_table, title_cell};
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT, SELECT, check_field, help_id};
 
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, definitions, disclosure, stack};
+use ferrohealth_ui::view::surface::{card, definitions, disclosure};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
 use ferrohealth_ui::view::template::settings::{
     How, Setting, ValueSource, file_line, setting_row, settings_panel,
@@ -136,6 +135,7 @@ pub fn sources(visit: &Visit, sources: &Sources) -> Html {
             Html::raw(format!(
                 "<tr>{}{}{}{}{}</tr>",
                 title_cell(
+                    None,
                     Some(&format!("{SOURCES}/{}", source.id)),
                     Html::text(&source.name),
                     None
@@ -151,12 +151,7 @@ pub fn sources(visit: &Visit, sources: &Sources) -> Html {
         })
         .collect();
     let caption = visit.tr(Msg::Sources);
-    let table = data_table(DataTable {
-        caption: &caption,
-        columns: &columns,
-        sorting: Sorting::default(),
-        body: Body::Rows(rows),
-    });
+    let table = data_table(DataTable::new(&caption, &columns, Body::Rows(rows)));
     let file = sources.file.as_ref().map_or_else(Html::empty, |file| {
         Html::raw(format!(
             "<p class=\"fui-small fui-muted\">{}</p>",
@@ -167,7 +162,10 @@ pub fn sources(visit: &Visit, sources: &Sources) -> Html {
             )
         ))
     });
-    stack(listed(visit, Msg::Sources, sources.sources.len(), table).then(file))
+    stack_at(
+        Gap::Loose,
+        listed(visit, Msg::Sources, sources.sources.len(), table).then(file),
+    )
 }
 
 /// The words of how a source is admitted.
@@ -223,7 +221,10 @@ pub fn source(visit: &Visit, page: &SourcePage) -> Html {
             when(visit, source.last_activity.as_ref()),
         ),
     ]);
-    stack(card(visit.tr(Msg::SourceDefinition), facts).then(messages(visit, &page.messages)))
+    stack_at(
+        Gap::Loose,
+        card(visit.tr(Msg::SourceDefinition), facts).then(messages(visit, &page.messages)),
+    )
 }
 
 /// The table of a source's last messages.
@@ -248,7 +249,7 @@ fn messages(visit: &Visit, messages: &[Message]) -> Html {
         .map(|message| {
             Html::raw(format!(
                 "<tr>{}{}{}{}</tr>",
-                title_cell(None, timestamp(&visit.locale, &message.at), None),
+                title_cell(None, None, timestamp(&visit.locale, &message.at), None),
                 cell(channel_column, Html::text(channel(visit, message.channel))),
                 cell(
                     action_column,
@@ -263,12 +264,7 @@ fn messages(visit: &Visit, messages: &[Message]) -> Html {
         visit,
         Msg::LastMessages,
         messages.len(),
-        data_table(DataTable {
-            caption: &caption,
-            columns: &columns,
-            sorting: Sorting::default(),
-            body: Body::Rows(rows),
-        }),
+        data_table(DataTable::new(&caption, &columns, Body::Rows(rows))),
     )
 }
 
@@ -382,11 +378,14 @@ pub fn domains(visit: &Visit, domains: &Domains, written: Option<&Read<()>>, adm
     } else {
         admin_only(visit)
     };
-    stack(Html::join([
-        written_notice(visit, written, "POST /operator/domains"),
-        domain_table(visit, domains),
-        editor,
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            written_notice(visit, written, "POST /operator/domains"),
+            domain_table(visit, domains),
+            editor,
+        ]),
+    )
 }
 
 /// Whether a domain is sealed, in words.
@@ -431,6 +430,7 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
             Html::raw(format!(
                 "<tr>{}{}{}{}{}{}{}{}</tr>",
                 title_cell(
+                    None,
                     Some(&format!("{DOMAINS}/{}", domain.id)),
                     Html::text(&domain.name),
                     None
@@ -450,12 +450,7 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
         visit,
         Msg::Domains,
         domains.domains.len(),
-        data_table(DataTable {
-            caption: &caption,
-            columns: &columns,
-            sorting: Sorting::default(),
-            body: Body::Rows(rows),
-        }),
+        data_table(DataTable::new(&caption, &columns, Body::Rows(rows))),
     )
 }
 
@@ -506,7 +501,7 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
             .map(|feed| {
                 Html::raw(format!(
                     "<tr>{}{}{}</tr>",
-                    title_cell(None, timestamp(&visit.locale, &feed.at), None),
+                    title_cell(None, None, timestamp(&visit.locale, &feed.at), None),
                     cell(channel_column, Html::text(channel(visit, feed.channel))),
                     cell(
                         outcome_column,
@@ -519,12 +514,7 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
             })
             .collect();
         let caption = visit.tr(Msg::LastFeeds);
-        data_table(DataTable {
-            caption: &caption,
-            columns: &columns,
-            sorting: Sorting::default(),
-            body: Body::Rows(rows),
-        })
+        data_table(DataTable::new(&caption, &columns, Body::Rows(rows)))
     };
     let change = if domain.retired_at.is_some() {
         Html::empty()
@@ -533,12 +523,15 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
     } else {
         admin_only(visit)
     };
-    stack(Html::join([
-        written_notice(visit, written, "POST /operator/domains"),
-        card(visit.tr(Msg::DomainDefinition), facts),
-        change,
-        listed(visit, Msg::LastFeeds, page.feeds.len(), feeds),
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            written_notice(visit, written, "POST /operator/domains"),
+            card(visit.tr(Msg::DomainDefinition), facts),
+            change,
+            listed(visit, Msg::LastFeeds, page.feeds.len(), feeds),
+        ]),
+    )
 }
 
 /// The configuration in file mode: each section a panel of setting rows,
@@ -560,9 +553,12 @@ pub fn configuration(visit: &Visit, configuration: &Configuration) -> Html {
         .iter()
         .map(|section| card(section_title(visit, section), section_panel(visit, section)))
         .collect();
-    stack(Html::raw(format!(
-        "<p class=\"fui-small fui-muted\">{line}</p>{panels}"
-    )))
+    stack_at(
+        Gap::Loose,
+        Html::raw(format!(
+            "<p class=\"fui-small fui-muted\">{line}</p>{panels}"
+        )),
+    )
 }
 
 /// The title of a configuration section.

@@ -20,11 +20,12 @@ use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
-use ferrohealth_ui::view::dialog::{ConfirmForm, Confirmation, danger_form_dialog};
+use ferrohealth_ui::view::dialog::{ConfirmForm, Confirmation, Stakes, confirm_dialog};
 use ferrohealth_ui::view::form::{Field, INPUT};
 use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::notice::{Announce, notice};
-use ferrohealth_ui::view::surface::{card, definitions, stack};
+use ferrohealth_ui::view::surface::{card, definitions};
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::candidate::PersonIdentifier;
 use ferropix_operator_api::merge::{Party, Preview};
@@ -231,11 +232,14 @@ pub fn merge(
             "GET /operator/merges/preview",
         ),
     });
-    stack(Html::join([
-        refused_notice(visit, refused, "POST /operator/merges"),
-        pick,
-        shown,
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            refused_notice(visit, refused, "POST /operator/merges"),
+            pick,
+            shown,
+        ]),
+    )
 }
 
 /// A merge's preview: the survivor choice, the effect, and the dialog that
@@ -266,7 +270,7 @@ fn previewed(visit: &Visit, person: &str, action: &str, preview: &Preview) -> Ht
         hidden("merged_version", &merged.version),
         reason_field(visit, "merge-reason"),
     ]);
-    let dialog = danger_form_dialog(
+    let dialog = confirm_dialog(
         &visit.locale,
         Confirmation {
             id: MERGE_DIALOG.into(),
@@ -275,10 +279,11 @@ fn previewed(visit: &Visit, person: &str, action: &str, preview: &Preview) -> Ht
                 .tr_with(Msg::MergeConfirmMessage, &[("count", moved.into())])
                 .into(),
         },
-        ConfirmForm {
+        Stakes::Danger,
+        Some(ConfirmForm {
             action: action.to_owned(),
             fields,
-        },
+        }),
         confirms(Glyph::GIT_COMPARE, &visit.tr(Msg::Merge)),
     );
     let parties = definitions(vec![
@@ -330,7 +335,10 @@ pub fn unmerge(
             Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::UnmergeNone)))),
         ),
     };
-    stack(refused_notice(visit, refused, "POST /operator/merges/{id}/revert").then(body))
+    stack_at(
+        Gap::Loose,
+        refused_notice(visit, refused, "POST /operator/merges/{id}/revert").then(body),
+    )
 }
 
 /// A revert's preview: the merge with its reason, what moves back, and the
@@ -374,7 +382,7 @@ fn reverted(visit: &Visit, action: &str, merge: &str, preview: &Preview) -> Html
             hidden("survivor_version", &preview.survivor.version),
             reason_field(visit, "revert-reason"),
         ]);
-        let dialog = danger_form_dialog(
+        let dialog = confirm_dialog(
             &visit.locale,
             Confirmation {
                 id: REVERT_DIALOG.into(),
@@ -383,10 +391,11 @@ fn reverted(visit: &Visit, action: &str, merge: &str, preview: &Preview) -> Html
                     .tr_with(Msg::UnmergeConfirmMessage, &[("count", moved.into())])
                     .into(),
             },
-            ConfirmForm {
+            Stakes::Danger,
+            Some(ConfirmForm {
                 action: action.to_owned(),
                 fields,
-            },
+            }),
             confirms(Glyph::UNDO, &visit.tr(Msg::Unmerge)),
         );
         asks(REVERT_DIALOG, Glyph::UNDO, &visit.tr(Msg::UnmergeAsk)).then(dialog)

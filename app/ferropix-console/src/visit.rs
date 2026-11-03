@@ -106,7 +106,7 @@ pub fn locale_of(page: &PageContext) -> Locale {
     crate::locale::choices()
         .into_iter()
         .find(|locale| locale.tag() == page.locale)
-        .unwrap_or_else(Locale::english)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

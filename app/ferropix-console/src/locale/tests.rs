@@ -94,7 +94,7 @@ fn every_catalog_directory_is_a_language_holding_every_message_and_no_other() {
 
 #[test]
 fn a_throwaway_catalog_changes_the_words_with_no_code_change() {
-    let english = Locale::english();
+    let english = Locale::default();
     assert_eq!(
         "Page not found",
         tr_in(catalog(), &english, Msg::NotFoundTitle)
@@ -146,7 +146,7 @@ fn only_a_language_cookie_naming_the_pseudo_locale_chooses_it() {
     );
     assert_eq!(
         "en",
-        negotiated(&asking, Locale::english()).tag(),
+        negotiated(&asking, Locale::default()).tag(),
         "a browser asking for it is drawn in the configured language"
     );
     let cookie = Preferences {
@@ -155,6 +155,6 @@ fn only_a_language_cookie_naming_the_pseudo_locale_chooses_it() {
     };
     assert_eq!(
         PSEUDO_TAG,
-        chosen(&cookie, &http::HeaderMap::new(), Locale::english()).tag()
+        chosen(&cookie, &http::HeaderMap::new(), Locale::default()).tag()
     );
 }

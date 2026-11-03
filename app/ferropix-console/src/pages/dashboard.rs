@@ -18,11 +18,10 @@ use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::chart::{BAD, ChartWords, INFO, LineChart, OK, Series, WARN, line_chart};
+use ferrohealth_ui::view::layout::{Arrangement, Gap, stack_at};
 use ferrohealth_ui::view::state::{Mark, state};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{
-    Stat, card, card_action, grid, stack, stat_card_marked, stat_grid,
-};
+use ferrohealth_ui::view::surface::{Stat, card, card_action, stat_card_marked};
 use ferrohealth_ui::view::template::list::list_empty;
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::health::{Dependencies, FEED_SENDER, MLLP_LISTENER};
@@ -50,18 +49,18 @@ pub fn dashboard(
     let body = match overview {
         Ok(overview) => Html::join([
             stats(visit, overview),
-            grid(
+            Arrangement::Grid.wrap(
                 card(visit.tr(Msg::QueueDepth), queue_chart(visit, overview)).then(card(
                     visit.tr(Msg::FeedsPerHour),
                     feeds_chart(visit, overview),
                 )),
             ),
-            grid(listeners(visit, dependencies).then(oldest(visit, overview))),
+            Arrangement::Grid.wrap(listeners(visit, dependencies).then(oldest(visit, overview))),
         ]),
         Err(probe) => server_state(visit, Some(probe), needs, "GET /operator/overview")
             .then(listeners(visit, dependencies)),
     };
-    stack(body)
+    stack_at(Gap::Loose, body)
 }
 
 /// The four stat cards.
@@ -135,7 +134,7 @@ fn stats(visit: &Visit, overview: &Overview) -> Html {
             Html::empty()
         },
     );
-    stat_grid(Html::join([queue, linked, fed, subscriptions]))
+    Arrangement::StatGrid.wrap(Html::join([queue, linked, fed, subscriptions]))
 }
 
 /// The queue's depth over the last days as a line chart.

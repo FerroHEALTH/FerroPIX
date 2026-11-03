@@ -16,19 +16,18 @@ use ferrohealth_ui::calendar::{Bounds, Day, Weekday};
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::i18n::Locale;
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::table::view::{
-    Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
-};
+use ferrohealth_ui::table::view::{Body, Column, DataTable, Role, cell, data_table, title_cell};
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::action::ActionGroup;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::date::{DateField, DateWords, date_field};
 use ferrohealth_ui::view::form::{Field, INPUT, Inner, SELECT, check_field, help_id, masked_input};
 use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::masked::HoldWords;
 use ferrohealth_ui::view::segmented::segmented_links;
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, page_header, stack};
+use ferrohealth_ui::view::surface::{card, page_header};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
 use ferrohealth_ui::view::worklist::{WorkRow, row, worklist};
 use ferropix_operator_api::domain::Domains;
@@ -281,13 +280,16 @@ pub fn search_page(visit: &Visit) -> Drawn {
         &visit.locale,
         visit.tr(Msg::Search),
         Some(visit.tr(Msg::SearchSub)),
-        ActionGroup::none(),
+        ActionGroup::default(),
     )
-    .then(stack(Html::join([
-        card(visit.tr(Msg::FindPatient), segments.then(form)),
-        answered.unwrap_or_default(),
-        outcome,
-    ])));
+    .then(stack_at(
+        Gap::Loose,
+        Html::join([
+            card(visit.tr(Msg::FindPatient), segments.then(form)),
+            answered.unwrap_or_default(),
+            outcome,
+        ]),
+    ));
     Drawn::new(visit.tr(Msg::Search), body)
 }
 
@@ -326,12 +328,7 @@ pub fn results_table(visit: &Visit, segment: Segment, results: &Results) -> Html
         .map(|(index, hit)| result_row(visit, segment, &columns, index == 0, hit))
         .collect();
     let caption = visit.tr(Msg::Results);
-    let table = data_table(DataTable {
-        caption: &caption,
-        columns: &columns,
-        sorting: Sorting::default(),
-        body: Body::Rows(rows),
-    });
+    let table = data_table(DataTable::new(&caption, &columns, Body::Rows(rows)));
     list_card(
         locale,
         ListCard {
@@ -407,6 +404,7 @@ fn result_row(
         class: None,
         cells: Html::join([
             title_cell(
+                None,
                 Some(&format!("/patients/{}", hit.id)),
                 Html::text(name),
                 None,

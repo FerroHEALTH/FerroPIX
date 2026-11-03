@@ -18,18 +18,19 @@
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::i18n::Locale;
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::table::view::{
-    Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
-};
+use ferrohealth_ui::table::view::{Body, Column, DataTable, Role, cell, data_table, title_cell};
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
-use ferrohealth_ui::view::compare::{Compare, CompareField, CompareRecord, Verdict, compare};
+use ferrohealth_ui::view::compare::{
+    Compare, CompareField, CompareRecord, Presentation, Verdict, compare,
+};
 use ferrohealth_ui::view::countdown::{Countdown, countdown};
 use ferrohealth_ui::view::form::{Field, INPUT};
 use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_static};
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, definitions, stack};
+use ferrohealth_ui::view::surface::{card, definitions};
 use ferrohealth_ui::view::tabs::{Tab, binder};
 use ferrohealth_ui::view::template::list::list_empty;
 use ferrohealth_ui::view::time::timestamp;
@@ -112,18 +113,21 @@ pub fn patient(
         Variant::Secondary.class(),
         label(Some(Glyph::GIT_COMPARE), visit.tr(Msg::PatientMergeInto))
     ));
-    stack(Html::join([
-        actions,
-        summary(visit, person),
-        revealed.map_or_else(Html::empty, |revealed| reveal_answer(visit, revealed)),
-        binder(
-            &visit.locale,
-            visit.tr(Msg::PatientTabs),
-            tabs,
-            current,
-            panel,
-        ),
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            actions,
+            summary(visit, person),
+            revealed.map_or_else(Html::empty, |revealed| reveal_answer(visit, revealed)),
+            binder(
+                &visit.locale,
+                visit.tr(Msg::PatientTabs),
+                tabs,
+                current,
+                panel,
+            ),
+        ]),
+    )
 }
 
 /// The leading demographics and the person's state.
@@ -296,7 +300,7 @@ fn identifiers(visit: &Visit, person: &Person) -> Html {
                 .map_or_else(|| or_dash(locale, None), |at| timestamp(locale, at));
             Html::raw(format!(
                 "<tr>{}{}{}{}{}{}</tr>",
-                title_cell(None, Html::text(&identifier.domain.name), None),
+                title_cell(None, None, Html::text(&identifier.domain.name), None),
                 cell(
                     value,
                     masked(
@@ -314,12 +318,7 @@ fn identifiers(visit: &Visit, person: &Person) -> Html {
         })
         .collect();
     let caption = visit.tr(Msg::TabIdentifiers);
-    data_table(DataTable {
-        caption: &caption,
-        columns: &columns,
-        sorting: Sorting::default(),
-        body: Body::Rows(rows),
-    })
+    data_table(DataTable::new(&caption, &columns, Body::Rows(rows)))
 }
 
 /// The compared fields of a record: name, birth date, gender, address and
@@ -441,6 +440,7 @@ fn records(visit: &Visit, person: &Person) -> Html {
             verdict: &verdict,
             differ_first: false,
         },
+        Presentation::Table,
     )
 }
 
@@ -554,7 +554,7 @@ fn pseudonyms(visit: &Visit, person: &Person) -> Html {
             });
             Html::raw(format!(
                 "<tr>{}{}{}{}</tr>",
-                title_cell(None, Html::text(&pseudonym.name), None),
+                title_cell(None, None, Html::text(&pseudonym.name), None),
                 cell(
                     namespace,
                     Html::raw(format!(
@@ -568,12 +568,7 @@ fn pseudonyms(visit: &Visit, person: &Person) -> Html {
         })
         .collect();
     let caption = visit.tr(Msg::TabPseudonyms);
-    let table = data_table(DataTable {
-        caption: &caption,
-        columns: &columns,
-        sorting: Sorting::default(),
-        body: Body::Rows(rows),
-    });
+    let table = data_table(DataTable::new(&caption, &columns, Body::Rows(rows)));
     table.then(Html::raw(format!(
         "<p class=\"fui-small\"><a href=\"{}\">{}</a></p>",
         crate::app::PSEUDONYM_DOMAINS,

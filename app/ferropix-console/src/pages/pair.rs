@@ -20,17 +20,20 @@ use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
-use ferrohealth_ui::view::compare::{Compare, CompareField, CompareRecord, Verdict, compare_pair};
-use ferrohealth_ui::view::dialog::{ConfirmForm, Confirmation, danger_form_dialog};
+use ferrohealth_ui::view::compare::{
+    Compare, CompareField, CompareRecord, Presentation, Verdict, compare,
+};
+use ferrohealth_ui::view::dialog::{ConfirmForm, Confirmation, Stakes, confirm_dialog};
 use ferrohealth_ui::view::dock::{
     Decision, DecisionBar, DockField, DockForm, DockLine, DockLink, decision_bar,
 };
 use ferrohealth_ui::view::form::{Field, INPUT};
 use ferrohealth_ui::view::identifier::{Domain, Masked, identifier_list};
 use ferrohealth_ui::view::kbd::aria_keys;
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::score::{Contribution, Score, Threshold, score_breakdown};
-use ferrohealth_ui::view::surface::{card, definitions, stack};
+use ferrohealth_ui::view::surface::{card, definitions};
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::candidate::{
     Agreement, Candidate, CandidateRecord, FieldEvidence, Status,
@@ -73,36 +76,39 @@ pub fn pair(
         _ => Html::empty(),
     };
     let when = |shown: bool, part: Html| if shown { part } else { Html::empty() };
-    let body = neighbours(visit, candidate).then(stack(Html::join([
-        if decided {
-            decided_notice(visit, candidate)
-        } else {
-            Html::empty()
-        },
-        when(
-            changed,
-            notice(
-                Tone::Warn,
-                Announce::Status,
-                None,
-                Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::PairChanged)))),
+    let body = neighbours(visit, candidate).then(stack_at(
+        Gap::Loose,
+        Html::join([
+            if decided {
+                decided_notice(visit, candidate)
+            } else {
+                Html::empty()
+            },
+            when(
+                changed,
+                notice(
+                    Tone::Warn,
+                    Announce::Status,
+                    None,
+                    Html::raw(format!("<p>{}</p>", Html::text(visit.tr(Msg::PairChanged)))),
+                ),
             ),
-        ),
-        refused,
-        card(visit.tr(Msg::PairCompare), records(visit, candidate)),
-        card(visit.tr(Msg::PairBreakdown), breakdown(visit, candidate)),
-        card(visit.tr(Msg::PairPersons), persons(visit, candidate)),
-        if !decided && candidate.merges {
-            merge_card(visit, candidate)
-        } else {
-            Html::empty()
-        },
-        if decided {
-            Html::empty()
-        } else {
-            versions(candidate)
-        },
-    ])));
+            refused,
+            card(visit.tr(Msg::PairCompare), records(visit, candidate)),
+            card(visit.tr(Msg::PairBreakdown), breakdown(visit, candidate)),
+            card(visit.tr(Msg::PairPersons), persons(visit, candidate)),
+            if !decided && candidate.merges {
+                merge_card(visit, candidate)
+            } else {
+                Html::empty()
+            },
+            if decided {
+                Html::empty()
+            } else {
+                versions(candidate)
+            },
+        ]),
+    ));
     let dock = (!decided).then(|| bar(visit, candidate, outcome));
     (body, dock)
 }
@@ -220,7 +226,7 @@ fn records(visit: &Visit, candidate: &Candidate) -> Html {
         (None, _) => Verdict::Unmarked,
     };
     let caption = visit.tr(Msg::PairCompare);
-    compare_pair(
+    compare(
         &visit.locale,
         Compare {
             id: "pair",
@@ -231,7 +237,7 @@ fn records(visit: &Visit, candidate: &Candidate) -> Html {
             verdict: &verdict,
             differ_first: true,
         },
-        0,
+        Presentation::Pair { shown: 0 },
     )
 }
 
@@ -377,7 +383,7 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
         Variant::Destructive.class(),
         label(Some(Glyph::LINK), visit.tr(Msg::PairLinkMerge))
     ));
-    let dialog = danger_form_dialog(
+    let dialog = confirm_dialog(
         &visit.locale,
         Confirmation {
             id: MERGE_DIALOG.into(),
@@ -392,7 +398,8 @@ fn merge_card(visit: &Visit, candidate: &Candidate) -> Html {
                 )
                 .into(),
         },
-        ConfirmForm { action, fields },
+        Stakes::Danger,
+        Some(ConfirmForm { action, fields }),
         confirm,
     );
     card(

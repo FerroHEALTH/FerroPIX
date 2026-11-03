@@ -4,7 +4,7 @@
 //! The HL7 v2 messages written and read below the lanes that use them.
 //!
 //! They are the PID segment both ways ([`pid`]), the segment writer
-//! ([`write`]), the stamp of a message ([`stamped`]), and ITI-10's ADT^A31
+//! ([`mod`]), the stamp of a message ([`stamped`]), and ITI-10's ADT^A31
 //! with its acknowledgement ([`notification`]).
 //!
 //! The HL7 v2 face (`crate::hl7v2`) answers ITI-8, ITI-9 and ITI-21 with

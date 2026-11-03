@@ -237,10 +237,7 @@ pub fn router(state: ConsoleState) -> axum::Router {
             state.sign_in().clone(),
             keep_session::<pages::SignInPages>,
         ))
-        .merge(
-            ferrohealth_session::routes::router(state.sign_in().clone())
-                .layer(axum::middleware::from_fn(no_sign_in_return)),
-        )
+        .merge(ferrohealth_session::routes::router(state.sign_in().clone()))
         .layer(axum::middleware::from_fn(move |request, next| {
             same_origin::only(check.clone(), request, next)
         }))
@@ -254,26 +251,6 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .layer(axum::middleware::from_fn(move |request, next| {
             console::headers(headers.clone(), request, next)
         }))
-}
-
-/// Drops the `return` of a `GET /login` that names one of the console's
-/// sign-in pages, so a completed sign-in never lands on a page that says
-/// the session ended.
-async fn no_sign_in_return(mut request: Request, next: axum::middleware::Next) -> Response {
-    let login = ferrohealth_session::paths::LOGIN;
-    // NOTE: no specification governs this: our own design; `ferrohealth-session` refuses
-    // the sign-in page itself as a return, and every page under it is the console's too.
-    let names_sign_in = request.uri().path() == login
-        && request.uri().query().is_some_and(|query| {
-            url::form_urlencoded::parse(query.as_bytes()).any(|(name, back)| {
-                name == ferrohealth_session::paths::RETURN
-                    && crate::paths::is_sign_in(back.split(['?', '#']).next().unwrap_or_default())
-            })
-        });
-    if names_sign_in {
-        *request.uri_mut() = http::Uri::from_static(ferrohealth_session::paths::LOGIN);
-    }
-    next.run(request).await
 }
 
 /// The routes a page's forms post to, each answered by

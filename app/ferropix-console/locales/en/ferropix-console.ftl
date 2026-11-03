@@ -338,6 +338,8 @@ not-found-search = Find a patient
 
 # The answer when the session store cannot be read.
 session-unreadable = The console's session store cannot be read; try again in a moment.
+# The detail of the session route's answer once the session is gone.
+session-gone = Your session ended. Sign in again to go on.
 # The answer when sign-in is not configured.
 sign-in-not-configured = sign-in is not configured on this console
 # The answer when no sign-in is pending.

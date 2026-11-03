@@ -8,7 +8,6 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use ferrohealth_session::config::{OidcSection, SessionSettings};
-use ferrohealth_smart::oidc::{OFFLINE_ACCESS, OPENID};
 use ferrohealth_ui::i18n::Locale;
 use url::Url;
 
@@ -139,55 +138,15 @@ impl Config {
     }
 }
 
-/// Resolves `[oidc]`: the console's own rules for its provider and its
-/// redirection endpoint, then the section's check, which reads its client
-/// secret.
+/// Resolves `[oidc]`: the section's check, which holds the provider, the
+/// redirection endpoint and the scopes to their rules and reads the client
+/// secret, and the console's own rule for a post-logout redirect.
 fn resolve_oidc(oidc: &OidcSection) -> Result<OidcSettings, Error> {
-    provider_url("oidc.issuer", &oidc.issuer)?;
-    let endpoints = [
-        ("oidc.authorization_endpoint", &oidc.authorization_endpoint),
-        ("oidc.token_endpoint", &oidc.token_endpoint),
-        ("oidc.jwks_uri", &oidc.jwks_uri),
-        ("oidc.end_session_endpoint", &oidc.end_session_endpoint),
-        ("oidc.revocation_endpoint", &oidc.revocation_endpoint),
-    ];
-    for (key, endpoint) in endpoints {
-        if let Some(text) = endpoint {
-            provider_url(key, text)?;
-        }
-    }
-    let redirect_uri = web_url("oidc.redirect_uri", &oidc.redirect_uri)?;
-    // NOTE: RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a
-    // fragment component.
-    if redirect_uri.fragment().is_some() {
-        return Err(Error::UrlShape {
-            key: String::from("oidc.redirect_uri"),
-            reason: "must not carry a fragment",
-        });
-    }
-    if oidc.client_id.trim().is_empty() {
-        return Err(Error::Missing {
-            key: String::from("oidc.client_id"),
-        });
-    }
-    // NOTE: OpenID Connect Core 1.0 §3.1.2.1: an OpenID Connect request MUST
-    // carry the `openid` scope value.
-    if !oidc.scopes.iter().any(|scope| scope == OPENID) {
-        return Err(Error::Missing {
-            key: String::from("oidc.scopes (openid)"),
-        });
-    }
-    // NOTE: OpenID Connect Core 1.0 §11: `offline_access` goes with `prompt`
-    // `consent`, which the console sends only for `oidc.offline_access`.
-    if oidc.scopes.iter().any(|scope| scope == OFFLINE_ACCESS) {
-        return Err(Error::Scope {
-            key: String::from("oidc.scopes"),
-            reason: "must not list offline_access; set oidc.offline_access = true",
-        });
-    }
-    if let Some(text) = &oidc.post_logout_redirect_uri {
-        web_url("oidc.post_logout_redirect_uri", text)?;
-    }
+    let checked = oidc.check()?;
+    let redirect_uri = Url::parse(&oidc.redirect_uri).map_err(|source| Error::Url {
+        key: String::from("oidc.redirect_uri"),
+        source,
+    })?;
     let endpoints_given = oidc.authorization_endpoint.is_some()
         && oidc.token_endpoint.is_some()
         && oidc.jwks_uri.is_some();
@@ -202,7 +161,7 @@ fn resolve_oidc(oidc: &OidcSection) -> Result<OidcSettings, Error> {
         });
     }
     Ok(OidcSettings {
-        checked: oidc.check()?,
+        checked,
         redirect_uri,
         endpoints_given,
     })
@@ -244,21 +203,6 @@ fn web_url(key: &str, text: &str) -> Result<Url, Error> {
         return Err(shape("must not carry userinfo"));
     }
     Ok(url)
-}
-
-/// Parses an OpenID Provider URL: `https`, or `http` on a loopback host.
-fn provider_url(key: &str, text: &str) -> Result<Url, Error> {
-    let url = web_url(key, text)?;
-    // NOTE: RFC 6749 §3.1: the authorization server MUST require TLS at its
-    // authorization endpoint, so plain `http` is admitted only on loopback.
-    if url.scheme() == "https" || is_loopback(&url) {
-        Ok(url)
-    } else {
-        Err(Error::UrlShape {
-            key: key.to_owned(),
-            reason: "must be an https URL unless its host is loopback",
-        })
-    }
 }
 
 /// Parses an `http` or `https` URL with a host, no userinfo, no query and no

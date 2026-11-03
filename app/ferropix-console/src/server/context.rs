@@ -104,9 +104,6 @@ pub async fn page_for(
             url::form_urlencoded::parse(query.as_bytes())
                 .find(|(name, _)| name == ferrohealth_ui::view::session::RETURN)
                 .and_then(|(_, back)| ReturnPath::parse(&back, SIGN_IN))
-                .filter(|back| {
-                    !is_sign_in(back.as_str().split(['?', '#']).next().unwrap_or_default())
-                })
                 .map(|back| back.as_str().to_owned())
         });
         return PageContext { back, ..signed_out };

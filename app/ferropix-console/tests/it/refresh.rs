@@ -10,14 +10,12 @@
 use std::error::Error;
 
 use ferropix_console::server::ConsoleState;
-use ferropix_console::session::SessionId;
 use ferropix_testkit::oidc::{Provider, TokenAnswer};
 use http::StatusCode;
-use secrecy::ExposeSecret as _;
 
 use crate::support::{
-    Captured, OPERATOR_REFRESH, OPERATOR_TOKEN, configuration, console, get_with, send,
-    set_cookies, sign_in,
+    Captured, OPERATOR_REFRESH, OPERATOR_TOKEN, configuration, console, get, get_with, held_token,
+    occupancy, post_form, send, set_cookies, sign_in,
 };
 
 /// The server address of a console whose tests never need the server.
@@ -33,7 +31,7 @@ async fn due_session(
     session: &str,
 ) -> Result<(Provider, ConsoleState, axum::Router, String), Box<dyn Error>> {
     let provider = Provider::start().await?;
-    let (state, service) = console(&configuration(&provider, NO_SERVER, "", session))?;
+    let (state, service) = console(&configuration(&provider, NO_SERVER, "", session)).await?;
     let cookie = sign_in(
         &service,
         &provider,
@@ -46,15 +44,6 @@ async fn due_session(
     .await?;
     provider.reset().await?;
     Ok((provider, state, service, cookie))
-}
-
-/// The access token the session `cookie` names now holds.
-fn held(state: &ConsoleState, cookie: &str) -> Result<Option<String>, Box<dyn Error>> {
-    let id = SessionId::from_cookie(cookie.split_once('=').map(|(_, id)| id).unwrap_or_default());
-    Ok(state
-        .sessions()
-        .access_token(&id)?
-        .map(|token| token.expose_secret().to_owned()))
 }
 
 /// A refreshed answer carrying `access` and, when given, the rotated
@@ -70,14 +59,14 @@ fn refreshed(access: &str, rotated: Option<&str>) -> TokenAnswer {
 #[tokio::test]
 async fn a_session_outlives_its_access_token_by_refreshing_it() -> Result<(), Box<dyn Error>> {
     let (provider, state, service, cookie) = due_session("").await?;
-    assert_eq!(None, held(&state, &cookie)?);
+    assert_eq!(None, held_token(&state, &cookie)?);
     provider
         .answer_refresh(OPERATOR_REFRESH, &refreshed("synthetic-access-2", None))
         .await?;
     send(&service, get_with(PAGE, &cookie)?).await?;
     assert_eq!(
         Some(String::from("synthetic-access-2")),
-        held(&state, &cookie)?
+        held_token(&state, &cookie)?
     );
     let requests = provider.token_requests().await.ok_or("recorded")?;
     assert_eq!(1, requests.len());
@@ -106,7 +95,7 @@ async fn a_rotated_refresh_token_is_the_one_sent_next() -> Result<(), Box<dyn Er
     send(&service, get_with(PAGE, &cookie)?).await?;
     assert_eq!(
         Some(String::from("synthetic-access-3")),
-        held(&state, &cookie)?
+        held_token(&state, &cookie)?
     );
     let requests = provider.token_requests().await.ok_or("recorded")?;
     let sent: Vec<String> = requests
@@ -148,7 +137,7 @@ async fn requests_that_arrive_together_refresh_once() -> Result<(), Box<dyn Erro
     assert_eq!(1, asked.len(), "one refresh for the eight requests");
     assert_eq!(
         Some(String::from("synthetic-access-2")),
-        held(&state, &cookie)?
+        held_token(&state, &cookie)?
     );
     Ok(())
 }
@@ -167,7 +156,7 @@ async fn a_refused_refresh_ends_the_session_and_drops_its_cookie() -> Result<(),
             .any(|set| set.starts_with("ferropix_console_session=;") && set.contains("Max-Age=0")),
         "{cookies:?}"
     );
-    assert_eq!(0, state.sessions().occupancy()?.sessions);
+    assert_eq!(0, occupancy(&state)?.sessions);
     let (page, _body) = send(&service, get_with("/", &cookie)?).await?;
     assert_eq!(StatusCode::SEE_OTHER, page.status());
     assert_eq!(
@@ -184,7 +173,7 @@ async fn a_provider_that_fails_on_its_side_leaves_the_session_to_try_again()
     provider.refuse(503, "temporarily_unavailable").await;
     let (response, _body) = send(&service, get_with(PAGE, &cookie)?).await?;
     assert_eq!(set_cookies(&response), Vec::<String>::new());
-    assert_eq!(1, state.sessions().occupancy()?.sessions);
+    assert_eq!(1, occupancy(&state)?.sessions);
     provider.reset().await?;
     provider
         .answer_refresh(OPERATOR_REFRESH, &refreshed("synthetic-access-2", None))
@@ -192,7 +181,29 @@ async fn a_provider_that_fails_on_its_side_leaves_the_session_to_try_again()
     send(&service, get_with(PAGE, &cookie)?).await?;
     assert_eq!(
         Some(String::from("synthetic-access-2")),
-        held(&state, &cookie)?
+        held_token(&state, &cookie)?
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_session_whose_token_was_not_renewed_is_sent_to_the_sign_in_that_says_so()
+-> Result<(), Box<dyn Error>> {
+    let (provider, _state, service, cookie) = due_session("").await?;
+    provider.refuse(503, "temporarily_unavailable").await;
+    let (page, _body) = send(&service, get_with("/audit?page=2", &cookie)?).await?;
+    assert_eq!(StatusCode::SEE_OTHER, page.status());
+    let location = crate::support::header(&page, "location").to_owned();
+    assert_eq!("/sign-in/unrenewed?return=/audit%3Fpage%3D2", location);
+    let (drawn, body) = send(&service, get(&location)?).await?;
+    assert_eq!(StatusCode::OK, drawn.status(), "{body}");
+    assert!(
+        body.contains("could not renew your access"),
+        "the sign-in says why: {body}"
+    );
+    assert!(
+        body.contains(r#"href="/login?return=/audit%3Fpage%3D2""#),
+        "signing in again leads back: {body}"
     );
     Ok(())
 }
@@ -200,13 +211,21 @@ async fn a_provider_that_fails_on_its_side_leaves_the_session_to_try_again()
 #[tokio::test]
 async fn the_absolute_timeout_ends_a_session_whatever_its_refresh_token()
 -> Result<(), Box<dyn Error>> {
-    let (provider, state, service, cookie) = due_session("absolute_timeout_s = 1").await?;
+    let (provider, state, service, cookie) =
+        due_session("idle_timeout_s = 3\nabsolute_timeout_s = 4").await?;
     provider
         .answer_refresh(OPERATOR_REFRESH, &refreshed("synthetic-access-2", None))
         .await?;
-    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    // NOTE: no specification governs this: our own design; the session watch's extension
+    // keeps the idle timeout from ending the session and sends no refresh.
+    for _ in 0..2 {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        let (extended, _body) = send(&service, post_form("/session", &cookie, "")?).await?;
+        assert_eq!(StatusCode::OK, extended.status(), "the session lives");
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(1600)).await;
     send(&service, get_with(PAGE, &cookie)?).await?;
-    assert_eq!(None, held(&state, &cookie)?);
+    assert_eq!(None, held_token(&state, &cookie)?);
     assert_eq!(
         Some(0),
         provider.token_requests().await.map(|asked| asked.len())

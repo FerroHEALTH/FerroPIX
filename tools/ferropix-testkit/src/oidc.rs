@@ -573,6 +573,10 @@ pub struct TokenAnswer {
     /// `id_token`, when set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_token: Option<String>,
+    /// `scope`, the scopes granted, when they are not the ones asked for
+    /// (RFC 6749 §5.1).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 impl TokenAnswer {
@@ -585,6 +589,7 @@ impl TokenAnswer {
             expires_in: None,
             refresh_token: None,
             id_token: None,
+            scope: None,
         }
     }
 }

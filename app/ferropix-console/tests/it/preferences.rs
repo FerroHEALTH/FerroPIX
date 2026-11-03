@@ -8,7 +8,7 @@ use std::error::Error;
 
 use http::StatusCode;
 
-use crate::support::{console, get_with, offline, post_form, send, set_cookies, steward_session};
+use crate::support::{get_with, post_form, send, set_cookies, steward};
 
 /// An address nothing listens on.
 const NOWHERE: &str = "http://127.0.0.1:9/";
@@ -16,8 +16,7 @@ const NOWHERE: &str = "http://127.0.0.1:9/";
 #[tokio::test]
 async fn a_preference_post_keeps_its_cookie_and_the_next_page_is_drawn_in_it()
 -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     let (response, _) = send(
         &service,
         post_form("/preference", &cookie, "back=%2Fpreferences&theme=dark")?,
@@ -54,8 +53,7 @@ async fn a_preference_post_keeps_its_cookie_and_the_next_page_is_drawn_in_it()
 
 #[tokio::test]
 async fn a_value_the_console_does_not_offer_is_refused() -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     for body in [
         "back=%2F&theme=sepia",
         "back=%2F&reveal=300",
@@ -70,8 +68,7 @@ async fn a_value_the_console_does_not_offer_is_refused() -> Result<(), Box<dyn E
 
 #[tokio::test]
 async fn reset_clears_every_preference_and_the_consoles_own() -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     let (response, _) = send(
         &service,
         post_form("/preferences/reset", &cookie, "back=%2Fpreferences")?,
@@ -102,8 +99,7 @@ async fn reset_clears_every_preference_and_the_consoles_own() -> Result<(), Box<
 
 #[tokio::test]
 async fn each_tab_is_its_own_route() -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     for route in [
         "/preferences",
         "/preferences/language",

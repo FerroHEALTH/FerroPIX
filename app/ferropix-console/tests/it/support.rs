@@ -15,6 +15,8 @@ use http::{Request, Response, StatusCode};
 use tower::ServiceExt as _;
 use url::Url;
 
+use ferrohealth_session::record::{Credential, Held};
+use ferrohealth_session::sessions::Occupancy;
 use ferropix_console::config::Config;
 use ferropix_console::config::settings::Settings;
 use ferropix_console::server::{ConsoleState, router};
@@ -78,8 +80,8 @@ pub(crate) fn resolve(text: &str) -> Result<Settings, Box<dyn Error>> {
 }
 
 /// The state and the service for the configuration `text` writes.
-pub(crate) fn console(text: &str) -> Result<(ConsoleState, axum::Router), Box<dyn Error>> {
-    let state = ConsoleState::new(resolve(text)?)?;
+pub(crate) async fn console(text: &str) -> Result<(ConsoleState, axum::Router), Box<dyn Error>> {
+    let state = ConsoleState::new(resolve(text)?).await?;
     let service = router(state.clone());
     Ok((state, service))
 }
@@ -222,6 +224,72 @@ pub(crate) async fn sign_in(
     session_cookie(&response)
 }
 
+/// The `Authorization` header of the token request a sign-in sends from a
+/// console configured with the `[oidc]` lines `oidc`, at a test provider:
+/// a confidential client's Basic credentials, `None` for a public client
+/// (RFC 6749 §2.3.1).
+pub(crate) async fn client_authentication(oidc: &str) -> Result<Option<String>, Box<dyn Error>> {
+    let provider = Provider::start().await?;
+    let (_state, service) =
+        console(&configuration(&provider, "http://127.0.0.1:9/", oidc, "")).await?;
+    sign_in(&service, &provider, TokenAnswer::bearer(OPERATOR_TOKEN)).await?;
+    let requests = provider.token_requests().await.ok_or("recorded")?;
+    let request = requests.first().ok_or("a token request")?;
+    Ok(request
+        .headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned))
+}
+
+/// The Basic credentials of the console's client with `secret`.
+pub(crate) fn basic(secret: &str) -> String {
+    use base64::Engine as _;
+    format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode(format!("{CLIENT_ID}:{secret}"))
+    )
+}
+
+/// How many pending sign-ins and sessions `state`'s memory store holds.
+pub(crate) fn occupancy(state: &ConsoleState) -> Result<Occupancy, Box<dyn Error>> {
+    state
+        .sessions()
+        .occupancy()?
+        .ok_or_else(|| "a memory store".into())
+}
+
+/// The access token the session `cookie` names holds now, its activity
+/// counted as a page's request counts it; `None` when the request holds no
+/// live session with a valid token.
+pub(crate) fn held_token(
+    state: &ConsoleState,
+    cookie: &str,
+) -> Result<Option<String>, Box<dyn Error>> {
+    let mut headers = http::HeaderMap::new();
+    headers.insert(http::header::COOKIE, http::HeaderValue::from_str(cookie)?);
+    Ok(match state.sessions().held(&headers)?.value {
+        Held::SignedIn(session) => match session.credential() {
+            Credential::Bearer(token) => Some(token.expose().to_owned()),
+            Credential::Basic { .. } => None,
+        },
+        _ => None,
+    })
+}
+
+/// The steward's name the session `cookie` names holds.
+pub(crate) fn held_operator(
+    state: &ConsoleState,
+    cookie: &str,
+) -> Result<Option<String>, Box<dyn Error>> {
+    let mut headers = http::HeaderMap::new();
+    headers.insert(http::header::COOKIE, http::HeaderValue::from_str(cookie)?);
+    Ok(match state.sessions().held(&headers)?.value {
+        Held::SignedIn(session) => session.operator().map(str::to_owned),
+        _ => None,
+    })
+}
+
 /// Every line the console logs while it is captured.
 #[derive(Clone, Default)]
 pub(crate) struct Captured(Arc<Mutex<Vec<u8>>>);
@@ -260,40 +328,52 @@ impl Write for Captured {
     }
 }
 
-/// The configuration of a console that calls the FerroPIX server at
-/// `server` and signs in nowhere: its sessions are begun by
-/// [`steward_session`] in the store itself.
-pub(crate) fn offline(server: &str) -> String {
-    format!(
-        "[pix]\nbase_url = \"{server}\"\ntimeout_ms = 2000\n\n[session]\nsecure_cookie = false\n"
-    )
-}
-
 /// The administrator scope the console's default `[pix] admin_scope` names.
 pub(crate) const ADMIN_SCOPE: &str = "__ferropix.admin";
 
-/// Begins a signed-in session for the synthetic steward in `state`'s store,
-/// as a completed sign-in granting the administrator scope would, and
-/// returns its `name=value` cookie.
-pub(crate) fn steward_session(state: &ConsoleState) -> String {
-    session_with(state, &["openid", "__ferropix.steward", ADMIN_SCOPE])
+/// The scopes a steward's sign-in asks for, the administrator's among them.
+const STEWARD_SCOPES: [&str; 3] = ["openid", "__ferropix.steward", ADMIN_SCOPE];
+
+/// A console that calls the FerroPIX server at `server` and signs in at a
+/// test provider, with the synthetic steward signed in through it as a
+/// sign-in granting the administrator scope: the provider, the state, the
+/// service and the session's `name=value` cookie.
+pub(crate) async fn steward(
+    server: &str,
+) -> Result<(Provider, ConsoleState, axum::Router, String), Box<dyn Error>> {
+    let provider = Provider::start().await?;
+    let scopes = STEWARD_SCOPES
+        .iter()
+        .map(|scope| format!("{scope:?}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let text = configuration(&provider, server, &format!("scopes = [{scopes}]"), "").replacen(
+        "[pix]\n",
+        "[pix]\ntimeout_ms = 2000\n",
+        1,
+    );
+    let (state, service) = console(&text).await?;
+    let cookie = granted(&service, &provider, &STEWARD_SCOPES).await?;
+    Ok((provider, state, service, cookie))
 }
 
-/// Begins a signed-in session whose sign-in granted `scopes`, and returns
-/// its `name=value` cookie.
-pub(crate) fn session_with(state: &ConsoleState, scopes: &[&str]) -> String {
-    let id = state
-        .sessions()
-        .establish(ferropix_console::session::SignedIn {
-            access_token: secrecy::SecretString::from(OPERATOR_TOKEN),
-            expires_in: None,
-            refresh_token: None,
-            id_token: None,
-            operator: Some(String::from(OPERATOR_NAME)),
-            scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
-        })
-        .expect("a session begins");
-    format!("ferropix_console_session={}", id.as_str())
+/// Signs the synthetic steward in at `service` through `provider` once
+/// more, as a sign-in granting `scopes`, and returns its `name=value`
+/// cookie.
+pub(crate) async fn granted(
+    service: &axum::Router,
+    provider: &Provider,
+    scopes: &[&str],
+) -> Result<String, Box<dyn Error>> {
+    sign_in(
+        service,
+        provider,
+        TokenAnswer {
+            scope: Some(scopes.join(" ")),
+            ..TokenAnswer::bearer(OPERATOR_TOKEN)
+        },
+    )
+    .await
 }
 
 /// A `POST` of the form `body` to `path`, from the console's own page,

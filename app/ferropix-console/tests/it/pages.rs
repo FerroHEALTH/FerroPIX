@@ -13,10 +13,7 @@ use http::StatusCode;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::support::{
-    Captured, OPERATOR_NAME, OPERATOR_TOKEN, console, get_with, offline, post_form, send,
-    steward_session,
-};
+use crate::support::{Captured, OPERATOR_NAME, OPERATOR_TOKEN, get_with, post_form, send, steward};
 
 /// An address nothing listens on, so a call is refused at once.
 const NOWHERE: &str = "http://127.0.0.1:9/";
@@ -57,8 +54,7 @@ const PAGES: [(&str, &str); 13] = [
 #[tokio::test]
 async fn every_page_says_the_server_refused_the_connection_with_the_way_on()
 -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     for (route, words) in PAGES {
         let (response, page) = send(&service, get_with(route, &cookie)?).await?;
         assert_eq!(StatusCode::OK, response.status(), "{route}");
@@ -99,8 +95,7 @@ async fn every_page_says_the_server_refused_the_connection_with_the_way_on()
 #[tokio::test]
 async fn the_dashboard_says_what_the_console_keeps_while_the_server_is_away()
 -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     let (_, page) = send(&service, get_with("/", &cookie)?).await?;
     assert!(page.contains("While the server is away"));
     assert!(page.contains("This console keeps no patient data"));
@@ -140,8 +135,7 @@ async fn a_server_whose_operator_api_refuses_a_page_is_named_and_an_unserved_pag
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", server.uri())).await?;
     for (route, _) in PAGES {
         let (response, page) = send(&service, get_with(route, &cookie)?).await?;
         assert_eq!(StatusCode::OK, response.status(), "{route}");
@@ -183,8 +177,7 @@ async fn a_server_that_refuses_the_steward_is_named_with_its_status() -> Result<
         .respond_with(ResponseTemplate::new(401))
         .mount(&server)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", server.uri())).await?;
     let (_, page) = send(&service, get_with("/domains", &cookie)?).await?;
     assert!(page.contains("401: The FerroPIX server refused the console"));
     assert!(page.contains("Refused 401"), "the status pill says so");
@@ -194,8 +187,7 @@ async fn a_server_that_refuses_the_steward_is_named_with_its_status() -> Result<
 #[tokio::test]
 async fn an_id_in_a_route_that_is_no_uuid_or_name_is_the_not_found_page()
 -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     for route in [
         "/patients/123456789",
         "/queue/not-a-candidate",
@@ -226,8 +218,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
         .respond_with(ResponseTemplate::new(200).set_body_string(statement))
         .mount(&server)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", server.uri())).await?;
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("FerroPIX 0.0.3"), "the server's version");
     assert!(page.contains("4.0.1"), "the FHIR version");
@@ -256,8 +247,7 @@ async fn about_shows_the_versions_the_maker_and_the_capability_statement_as_sent
 
 #[tokio::test]
 async fn about_without_a_server_says_its_version_is_not_known() -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     let (_, page) = send(&service, get_with("/about", &cookie)?).await?;
     assert!(page.contains("Not known"));
     assert!(page.contains("its CapabilityStatement cannot be shown"));
@@ -287,8 +277,7 @@ async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_th
         )
         .mount(&server)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", server.uri())).await?;
     let captured = Captured::default();
     let logging = captured.logging();
     // A synthetic identifier that fails the eleven-proof of every scheme it could resemble.
@@ -368,8 +357,7 @@ async fn a_search_posts_its_fields_in_the_body_and_carries_nothing_typed_into_th
 #[tokio::test]
 async fn the_shell_draws_the_navigation_the_search_and_the_menu_with_no_theme_toggle_in_the_top_bar()
 -> Result<(), Box<dyn Error>> {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     let (_, page) = send(&service, get_with("/queue", &cookie)?).await?;
     for words in [
         "Dashboard",
@@ -402,8 +390,7 @@ async fn the_shell_draws_the_navigation_the_search_and_the_menu_with_no_theme_to
 #[tokio::test]
 async fn the_search_entry_of_the_navigation_draws_user_round_search() -> Result<(), Box<dyn Error>>
 {
-    let (state, service) = console(&offline(NOWHERE))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(NOWHERE).await?;
     let (_, page) = send(&service, get_with("/queue", &cookie)?).await?;
     let start = page
         .find("href=\"/search\"")
@@ -434,14 +421,13 @@ async fn the_search_panel_offers_pages_and_domains_and_refuses_a_reader_with_no_
         ))
         .mount(&server)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", server.uri())))?;
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", server.uri())).await?;
     let (response, _) = send(&service, post_form("/search/answer", "", "q=audit")?).await?;
     assert_eq!(
         StatusCode::UNAUTHORIZED,
         response.status(),
         "the panel loads the sign-in on a 401"
     );
-    let cookie = steward_session(&state);
     let (response, answer) = send(
         &service,
         post_form("/search/answer", &cookie, "q=synthetic")?,

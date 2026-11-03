@@ -322,6 +322,8 @@ sign-in-caption = The console for the data stewards of the patient index. No pat
 signed-out = You are signed out of this browser.
 # The notice after a session ended.
 session-expired = Your session ended. Sign in again to go on where you were.
+# The notice when the session lives on but its access token was not renewed.
+token-not-renewed = Your identity provider could not renew your access just now. Sign in again, or try again in a moment.
 # The notice when sign-in is not configured.
 sign-in-unavailable = Sign-in is not set up on this console. Ask your administrator to configure an identity provider.
 
@@ -338,8 +340,6 @@ not-found-search = Find a patient
 session-unreadable = The console's session store cannot be read; try again in a moment.
 # The answer when sign-in is not configured.
 sign-in-not-configured = sign-in is not configured on this console
-# The answer when the sign-in redirect cannot be written.
-sign-in-redirect-unwritten = the sign-in redirect could not be written
 # The answer when no sign-in is pending.
 no-sign-in-pending = no sign-in is pending for this browser
 # The answer when the returned `state` does not match.
@@ -352,16 +352,12 @@ redirect-carries-no-code = the redirect carries no authorization code
 id-token-did-not-verify = the identity provider's ID Token did not verify
 # The answer when the sign-in could not be completed.
 sign-in-not-completed = the sign-in could not be completed at the identity provider
-# The answer when the session cookie cannot be written.
-session-not-begun = the session could not be begun
 # The answer when the session pool is full.
 sessions-full = the console holds as many sessions as it allows; try again later
 # The answer when a sign-in session cannot be begun.
 sign-in-session-not-begun = the sign-in could not be begun
 # The answer when a session cannot be ended.
 session-not-ended = the session could not be ended
-# The answer when the sign-out redirect cannot be written.
-sign-out-redirect-unwritten = the sign-out redirect could not be written
 # The answer to a state-changing request from outside the console's pages.
 foreign-request-refused = the console takes this request only from its own pages
 # The answer to a preference post that names no preference the console offers.

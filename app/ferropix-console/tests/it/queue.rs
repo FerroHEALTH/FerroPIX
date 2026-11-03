@@ -15,7 +15,7 @@ use wiremock::matchers::{body_string_contains, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::filled::{page, server};
-use crate::support::{console, offline, post_form, send, steward_session};
+use crate::support::{post_form, send, steward};
 
 /// The first candidate of the queue.
 const CANDIDATE: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01";
@@ -130,8 +130,7 @@ async fn the_filters_post_their_fields_to_the_server_and_keep_them_out_of_the_ad
         .expect(1)
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let (response, drawn) = send(
         &service,
         post_form(
@@ -183,8 +182,7 @@ async fn a_deferral_posts_the_candidate_s_versions_and_a_refusal_is_drawn_in_pla
         ))
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let body = format!(
         "form=defer&candidate={CANDIDATE}&until=2099-12-01&reason=Synthetic+ward+call&grade=&domain=&older="
     );

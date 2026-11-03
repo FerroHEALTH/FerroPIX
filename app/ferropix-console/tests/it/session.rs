@@ -24,7 +24,7 @@ use crate::support::{
 const NO_SERVER: &str = "http://127.0.0.1:9/";
 
 /// The session route.
-const SESSION: &str = ferropix_console::paths::SESSION;
+const SESSION: &str = ferrohealth_session::paths::SESSION;
 
 /// The idle timeout of these tests' sessions, in seconds.
 const IDLE: u32 = 120;
@@ -38,7 +38,8 @@ async fn signed_in() -> Result<(Provider, axum::Router, String), Box<dyn Error>>
         NO_SERVER,
         "",
         &format!("idle_timeout_s = {IDLE}\nabsolute_timeout_s = 3600"),
-    ))?;
+    ))
+    .await?;
     let cookie = sign_in(&service, &provider, TokenAnswer::bearer(OPERATOR_TOKEN)).await?;
     Ok((provider, service, cookie))
 }

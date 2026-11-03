@@ -1,9 +1,12 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The addresses the console serves beside its pages: the marks, the
-//! sign-in and session routes, and which pages draw for a reader with no
-//! session. No specification governs the console: our own design.
+//! The addresses the console serves beside its pages.
+//!
+//! They are the marks, and which pages draw for a reader with no session.
+//! The sign-in, callback, sign-out and session routes are
+//! `ferrohealth_session::paths`. No specification governs the console: our
+//! own design.
 
 use crate::app::SIGN_IN;
 
@@ -12,15 +15,6 @@ pub const FAVICON: &str = "/favicon.svg";
 
 /// The path of the brand mark in the light theme.
 pub const MARK_LIGHT: &str = "/ferropix-icon.svg";
-
-/// The path of the sign-in route, which sends the steward to the OpenID
-/// Provider.
-pub const LOGIN: &str = "/login";
-
-/// The session route the page's session watch asks: `GET` reads what the
-/// session has left, `POST` extends it (FerroUI `docs/consoles.md`, "The
-/// session's end").
-pub const SESSION: &str = "/session";
 
 /// The path of the brand mark in the dark theme.
 pub const MARK_DARK: &str = "/ferropix-icon-dark.svg";

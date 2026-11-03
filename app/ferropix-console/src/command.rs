@@ -73,7 +73,7 @@ where
         Common::Healthcheck => runtime_then(|| healthcheck(&settings)),
         Common::Config {
             command: ConfigCommand::Check,
-        } => config_check(&loaded, settings),
+        } => runtime_then(|| config_check(&loaded, settings)),
         Common::Serve => {
             let telemetry = loaded.settings().telemetry.clone();
             runtime_then(|| serve(settings, telemetry))
@@ -106,6 +106,10 @@ where
 /// Runs `config check`: every key printed with where it came from and every
 /// secret masked, the state the server would start with built, and nothing
 /// bound.
+///
+/// The check calls no other server: a console whose `[oidc]` leaves the
+/// provider's endpoints to discovery builds its client of the FerroPIX
+/// server alone, and its relying party when it starts.
 #[expect(
     clippy::print_stdout,
     reason = "the job's one answer goes to standard output"
@@ -114,7 +118,7 @@ where
     clippy::print_stderr,
     reason = "the job's refusal goes to standard error"
 )]
-fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
+async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
     match ferrohealth_config::report::check_report(loaded) {
         Ok(report) => println!("{report}"),
         Err(error) => {
@@ -125,8 +129,19 @@ fn config_check(loaded: &Loaded<Config>, settings: Settings) -> ExitCode {
             return ExitCode::from(EXIT_CONFIG);
         }
     }
-    match ConsoleState::new(settings) {
-        Ok(_state) => {
+    let built = if settings
+        .oidc
+        .as_ref()
+        .is_none_or(crate::config::settings::OidcSettings::endpoints_given)
+    {
+        ConsoleState::new(settings).await.map(drop)
+    } else {
+        crate::pix::Pix::new(&settings.pix)
+            .map(drop)
+            .map_err(crate::server::StateError::from)
+    };
+    match built {
+        Ok(()) => {
             println!("ferropix-console: the configuration is valid");
             ExitCode::SUCCESS
         }
@@ -190,7 +205,7 @@ async fn serve(settings: Settings, section: TelemetrySection) -> ExitCode {
 /// `SIGINT`.
 async fn listen_and_serve(settings: Settings) -> ExitCode {
     let listen = settings.listen;
-    let state = match ConsoleState::new(settings) {
+    let state = match ConsoleState::new(settings).await {
         Ok(state) => state,
         Err(error) => {
             tracing::error!(error = %chain(&error), "cannot start");

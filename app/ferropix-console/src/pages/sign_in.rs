@@ -9,7 +9,10 @@
 //!
 //! `/sign-in/signed-out` is where a sign-out leads, and
 //! `/sign-in/expired` where a request with an ended session is sent; both
-//! tell every other tab of the console that the session has ended. A
+//! tell every other tab of the console that the session has ended.
+//! `/sign-in/unrenewed` is where a request is sent whose session lives on
+//! but whose access token the provider could not renew yet: it says so and
+//! leaves the other tabs alone. A
 //! `return` in the query, one of the console's own pages, rides the
 //! provider's action, so the sign-in leads back to it. A console with no
 //! identity provider configured draws the card with its action disabled and
@@ -39,13 +42,16 @@ pub fn sign_in_page(visit: &Visit) -> Drawn {
         Html::empty()
     };
     let login = page.back.as_deref().map_or_else(
-        || String::from(crate::paths::LOGIN),
-        |back| sign_in_address(crate::paths::LOGIN, back),
+        || String::from(ferrohealth_session::paths::LOGIN),
+        |back| sign_in_address(ferrohealth_session::paths::LOGIN, back),
     );
     let state = if page.sign_in {
         match named.as_deref() {
             Some("signed-out") => State::SignedOut(Notice::new(visit.tr(Msg::SignedOut))),
             Some("expired") => State::Expired(Notice::new(visit.tr(Msg::SessionExpired))),
+            Some("unrenewed") => {
+                State::ProviderUnreachable(Notice::new(visit.tr(Msg::TokenNotRenewed)))
+            }
             _ => State::Ready,
         }
     } else {

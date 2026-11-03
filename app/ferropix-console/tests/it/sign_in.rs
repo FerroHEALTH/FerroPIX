@@ -12,18 +12,18 @@
 use std::error::Error;
 
 use base64::Engine as _;
+use ferrohealth_session::sessions::Occupancy;
 use ferrohealth_ui::i18n::Locale;
 use ferropix_console::locale::messages::Msg;
 use ferropix_console::locale::{catalog, tr_in};
-use ferropix_console::session::Occupancy;
 use ferropix_testkit::oidc::{CODE_GRANT, IdTokenClaims, Provider, TokenAnswer};
 use http::StatusCode;
 use jsonwebtoken::{Algorithm, Header};
-use secrecy::ExposeSecret as _;
 
 use crate::support::{
     CLIENT_ID, Captured, OPERATOR_NAME, OPERATOR_TOKEN, REDIRECT_URI, begin, complete,
-    configuration, console, get, get_with, header, send, session_cookie, set_cookies, sign_in,
+    configuration, console, get, get_with, header, held_operator, held_token, occupancy, send,
+    session_cookie, set_cookies, sign_in,
 };
 
 /// The server address of a console whose tests never reach the server.
@@ -42,7 +42,7 @@ async fn provider_console(
     Box<dyn Error>,
 > {
     let provider = Provider::start().await?;
-    let (state, service) = console(&configuration(&provider, NO_SERVER, oidc, session))?;
+    let (state, service) = console(&configuration(&provider, NO_SERVER, oidc, session)).await?;
     Ok((provider, state, service))
 }
 
@@ -60,7 +60,7 @@ async fn answers(provider: &Provider, claims: &IdTokenClaims) -> Result<(), Box<
 #[tokio::test]
 async fn a_sign_in_refusal_reads_its_words_from_the_catalog_in_the_requested_locale()
 -> Result<(), Box<dyn Error>> {
-    let (_state, service) = console("")?;
+    let (_state, service) = console("").await?;
     let mut request = get("/login")?;
     request.headers_mut().insert(
         http::header::ACCEPT_LANGUAGE,
@@ -77,7 +77,7 @@ async fn a_sign_in_refusal_reads_its_words_from_the_catalog_in_the_requested_loc
 #[tokio::test]
 async fn sign_in_answers_unavailable_when_no_provider_is_configured() -> Result<(), Box<dyn Error>>
 {
-    let (state, service) = console("")?;
+    let (state, service) = console("").await?;
     let (response, _body) = send(&service, get("/login")?).await?;
     assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
     assert_eq!(
@@ -85,7 +85,7 @@ async fn sign_in_answers_unavailable_when_no_provider_is_configured() -> Result<
             sign_ins: 0,
             sessions: 0
         },
-        state.sessions().occupancy()?
+        occupancy(&state)?
     );
     Ok(())
 }
@@ -151,7 +151,7 @@ async fn sign_in_holds_its_state_on_the_server_and_creates_no_session() -> Resul
             sign_ins: 1,
             sessions: 0
         },
-        state.sessions().occupancy()?
+        occupancy(&state)?
     );
     Ok(())
 }
@@ -177,21 +177,12 @@ async fn a_verified_sign_in_begins_a_session_and_returns_to_the_console()
     );
     let session = session_cookie(&response)?;
     assert!(!cookies.iter().any(|cookie| cookie.contains(OPERATOR_TOKEN)));
-    assert_eq!(1, state.sessions().occupancy()?.sessions);
-    let id = ferropix_console::session::SessionId::from_cookie(
-        session
-            .split_once('=')
-            .map(|(_, id)| id)
-            .unwrap_or_default(),
-    );
-    let token = state
-        .sessions()
-        .access_token(&id)?
-        .ok_or("a live session")?;
-    assert_eq!(OPERATOR_TOKEN, token.expose_secret());
+    assert_eq!(1, occupancy(&state)?.sessions);
+    let token = held_token(&state, &session)?.ok_or("a live session")?;
+    assert_eq!(OPERATOR_TOKEN, token);
     assert_eq!(
         Some(String::from(OPERATOR_NAME)),
-        state.sessions().operator(&id)?
+        held_operator(&state, &session)?
     );
     Ok(())
 }
@@ -273,7 +264,7 @@ async fn completed_with(
     );
     answers(&provider, &claims).await?;
     let (response, _body) = complete(&service, &begun).await?;
-    Ok((response.status(), state.sessions().occupancy()?.sessions))
+    Ok((response.status(), occupancy(&state)?.sessions))
 }
 
 // OpenID Connect Core 1.0 §3.1.3.7 item 11: the nonce is the sign-in's.
@@ -384,7 +375,7 @@ async fn an_id_token_not_signed_by_a_published_key_is_refused() -> Result<(), Bo
         .await?;
     let (response, _body) = complete(&service, &begun).await?;
     assert_eq!(StatusCode::UNAUTHORIZED, response.status());
-    assert_eq!(0, state.sessions().occupancy()?.sessions);
+    assert_eq!(0, occupancy(&state)?.sessions);
     Ok(())
 }
 
@@ -404,7 +395,7 @@ async fn an_answer_without_an_id_token_or_a_refusing_endpoint_is_a_bad_gateway()
     let begun = begin(&service).await?;
     let (response, _body) = complete(&service, &begun).await?;
     assert_eq!(StatusCode::BAD_GATEWAY, response.status());
-    assert_eq!(0, state.sessions().occupancy()?.sessions);
+    assert_eq!(0, occupancy(&state)?.sessions);
     Ok(())
 }
 
@@ -471,7 +462,7 @@ async fn a_flood_of_sign_ins_stays_bounded_and_leaves_signed_in_sessions_alone()
     let first = begin(&service).await?;
     for _ in 0..50 {
         begin(&service).await?;
-        let occupancy = state.sessions().occupancy()?;
+        let occupancy = occupancy(&state)?;
         assert!(occupancy.sign_ins <= 4, "{occupancy:?}");
         assert_eq!(1, occupancy.sessions, "{occupancy:?}");
     }
@@ -499,7 +490,7 @@ async fn a_new_sign_in_ends_the_session_it_replaces() -> Result<(), Box<dyn Erro
     .body(axum::body::Body::empty())?;
     let (response, _body) = send(&service, request).await?;
     assert_eq!(StatusCode::SEE_OTHER, response.status());
-    assert_eq!(1, state.sessions().occupancy()?.sessions);
+    assert_eq!(1, occupancy(&state)?.sessions);
     Ok(())
 }
 

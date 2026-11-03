@@ -36,16 +36,14 @@ ferropix-operator-api = { path = "../ferropix-operator-api" }
 # routes' registry and lifecycle.
 ferrohealth-health = { workspace = true, features = ["registry"] }
 # The random session ids.
-aws-lc-rs.workspace = true
 axum.workspace = true
-base64.workspace = true
 clap.workspace = true
-cookie.workspace = true
 # The time of a call to the server, shown beside its outcome.
 jiff.workspace = true
 # The OpenID Connect relying party the operator signs in with: the
 # authorization request with PKCE, the code exchange, the ID Token check, the
 # refresh grant and the end-session URL.
+ferrohealth-session = { workspace = true, features = ["axum"] }
 ferrohealth-smart = { workspace = true, features = ["oidc"] }
 # The configuration loader, the secret types and the `--config` and `--set`
 # arguments the family shares.
@@ -71,6 +69,8 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+aws-lc-rs.workspace = true
+base64.workspace = true
 # The test OpenID Provider the sign-in, refresh and sign-out tests sign in at.
 ferropix-testkit = { path = "../../tools/ferropix-testkit" }
 jiff.workspace = true

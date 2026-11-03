@@ -50,6 +50,8 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ihe-atna" },
   { allow = ["BUSL-1.1"], crate = "nl-generic-functions" },
   { allow = ["BUSL-1.1"], crate = "ferrohealth-smart" },
+  # FerroAUTH's console sign-in and session, which the operator console takes.
+  { allow = ["BUSL-1.1"], crate = "ferrohealth-session" },
   # FerroSYS's secret wrapper, which ferrohealth-smart, ihe-atna and the
   # operator console take.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-secret" },

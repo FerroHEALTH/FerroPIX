@@ -17,7 +17,7 @@ use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::filled::{page, server};
-use crate::support::{console, offline, post_form, send, steward_session};
+use crate::support::{post_form, send, steward};
 
 /// The candidate every case reads.
 const CANDIDATE: &str = "0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01";
@@ -178,8 +178,7 @@ async fn a_decision_posts_the_versions_and_the_reason_and_leads_to_the_next_pair
         .expect(1)
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let (response, _) = send(
         &service,
         post_form(
@@ -214,8 +213,7 @@ async fn a_stale_decision_is_drawn_in_the_bar_and_one_without_a_reason_is_never_
         .expect(1)
         .mount(&filled)
         .await;
-    let (state, service) = console(&offline(&format!("{}/", filled.uri())))?;
-    let cookie = steward_session(&state);
+    let (_provider, _state, service, cookie) = steward(&format!("{}/", filled.uri())).await?;
     let (response, drawn) = send(
         &service,
         post_form(

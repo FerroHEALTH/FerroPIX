@@ -8,10 +8,11 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ferrohealth_secret::file::SecretError;
-use secrecy::ExposeSecret as _;
 
 use ferropix_console::config::Config;
 use ferropix_console::config::error::Error;
+
+use crate::support::{basic, client_authentication};
 
 fn environment(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs
@@ -139,8 +140,9 @@ const OIDC: &str = "[oidc]\nissuer = \"http://127.0.0.1:8081/realm\"\n\
     jwks_uri = \"http://127.0.0.1:8081/jwks\"\nclient_id = \"ferropix-console\"\n\
     redirect_uri = \"https://console.example.org/auth/callback\"\n";
 
-#[test]
-fn a_complete_oidc_section_resolves_and_reads_its_secret_file() {
+#[tokio::test]
+async fn a_complete_oidc_section_resolves_and_reads_its_secret_file()
+-> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let path = dir.path().join("client-secret");
     std::fs::write(&path, "s3cret\n").expect("the secret file");
@@ -150,17 +152,18 @@ fn a_complete_oidc_section_resolves_and_reads_its_secret_file() {
         .resolve()
         .expect("the section resolves");
     let oidc = settings.oidc.expect("sign-in is configured");
-    assert_eq!("http://127.0.0.1:8081/realm", oidc.issuer);
-    assert_eq!("https://console.example.org", oidc.origin());
-    assert_eq!(
-        Some("s3cret"),
-        oidc.client_secret
-            .as_ref()
-            .map(secrecy::ExposeSecret::expose_secret)
-    );
-    assert!(settings.session.secure_cookie);
     let shown = format!("{oidc:?}");
+    assert!(shown.contains("\"http://127.0.0.1:8081/realm\""), "{shown}");
+    assert_eq!("https://console.example.org", oidc.origin());
+    assert!(oidc.endpoints_given(), "no discovery");
+    assert!(settings.session.secure_cookie());
     assert!(!shown.contains("s3cret"), "{shown}");
+    assert_eq!(
+        Some(basic("s3cret")),
+        client_authentication(&format!("client_secret_file = {path:?}")).await?,
+        "the secret the file holds authenticates the client"
+    );
+    Ok(())
 }
 
 #[test]
@@ -225,33 +228,28 @@ fn oidc_with(lines: &str) -> Result<ferropix_console::config::settings::Settings
     Config::from_sources(Some(&format!("{OIDC}{lines}")), &BTreeMap::new())?.resolve()
 }
 
-#[test]
-fn a_secret_is_read_from_its_file_without_its_line_ending() {
+#[tokio::test]
+async fn a_secret_is_read_from_its_file_without_its_line_ending()
+-> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let path = dir.path().join("secret");
     std::fs::write(&path, "s3cret\n").expect("the secret file");
-    let settings = oidc_with(&format!(
-        "client_secret_file = {:?}\n",
-        path.display().to_string()
-    ))
-    .expect("the secret reads");
-    let secret = settings
-        .oidc
-        .and_then(|oidc| oidc.client_secret)
-        .expect("a secret");
-    assert_eq!("s3cret", secret.expose_secret());
+    let lines = format!("client_secret_file = {:?}\n", path.display().to_string());
+    oidc_with(&lines).expect("the secret reads");
+    assert_eq!(Some(basic("s3cret")), client_authentication(&lines).await?);
+    Ok(())
 }
 
-#[test]
-fn an_inline_secret_stands_and_no_secret_is_none() {
-    let settings = oidc_with("client_secret = \"inline\"\n").expect("the secret stands");
-    let secret = settings.oidc.and_then(|oidc| oidc.client_secret);
+#[tokio::test]
+async fn an_inline_secret_stands_and_no_secret_is_none() -> Result<(), Box<dyn std::error::Error>> {
+    oidc_with("client_secret = \"inline\"\n").expect("the secret stands");
     assert_eq!(
-        Some("inline"),
-        secret.as_ref().map(secrecy::ExposeSecret::expose_secret)
+        Some(basic("inline")),
+        client_authentication("client_secret = \"inline\"").await?
     );
-    let settings = oidc_with("").expect("nothing to read");
-    assert!(settings.oidc.and_then(|oidc| oidc.client_secret).is_none());
+    oidc_with("").expect("nothing to read");
+    assert_eq!(None, client_authentication("").await?, "a public client");
+    Ok(())
 }
 
 #[test]
@@ -308,7 +306,7 @@ fn cookies_without_secure_are_admitted_only_on_plain_http_on_loopback() {
             .unwrap_or_else(|error| {
                 panic!("{listen}: a loopback console signing in nowhere: {error}")
             });
-        assert!(!settings.session.secure_cookie, "{listen}");
+        assert!(!settings.session.secure_cookie(), "{listen}");
     }
     for listen in ["0.0.0.0:3000", "192.0.2.10:3000", "[::]:3000"] {
         let error = resolved(&format!("[server]\nlisten = \"{listen}\"\n\n{insecure}"))
@@ -326,7 +324,7 @@ fn cookies_without_secure_are_admitted_only_on_plain_http_on_loopback() {
         "[server]\nlisten = \"0.0.0.0:3000\"\n\n{insecure}\n{loopback_redirect}"
     ))
     .expect("a console whose redirect is http on loopback");
-    assert!(!settings.session.secure_cookie);
+    assert!(!settings.session.secure_cookie());
     let error = resolved(&format!(
         "[server]\nlisten = \"127.0.0.1:3000\"\n\n{insecure}\n{OIDC}"
     ))

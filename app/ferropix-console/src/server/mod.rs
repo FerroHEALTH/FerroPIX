@@ -15,10 +15,13 @@
 //! origin alone, with no nonce. Only FerroUI's assets are
 //! compressed. A request that is not a
 //! safe method is taken only from the console's own pages (`same_origin`
-//! of `ferrohealth-server`), a session's access token is refreshed before the
-//! request it arrives with is served, and a page asks for a live session
-//! ([`context`]'s `gate`) and calls the FerroPIX server once before it is drawn. No
-//! specification governs the console's HTTP surface: our own design.
+//! of `ferrohealth-server`). The sign-in, callback, sign-out and session
+//! routes and the middleware that refreshes a session's access token before
+//! the request it arrives with is served are `ferrohealth-session`'s, which
+//! draws a stopped sign-in through [`pages::SignInPages`]; a page asks for a
+//! live session ([`context`]'s `gate`) and calls the FerroPIX server once
+//! before it is drawn. No specification governs the console's HTTP surface:
+//! our own design.
 
 use std::sync::Arc;
 
@@ -34,24 +37,31 @@ use ferrohealth_server::refusal::RefusalBody;
 use ferrohealth_server::same_origin::{self, SameOrigin};
 use ferrohealth_server::section::ServerSection;
 use ferrohealth_server::serve::Drained;
-use ferrohealth_smart::metadata::{Http, ServerMetadata};
-use ferrohealth_smart::oidc::{OidcError, Provider, RelyingParty};
+use ferrohealth_session::cookies::{CookieNames, HOST_PREFIX};
+use ferrohealth_session::record::Held;
+use ferrohealth_session::routes::{SignIn, keep_session};
+use ferrohealth_session::sessions::Sessions;
+use ferrohealth_smart::oidc::RelyingParty;
 use ferrohealth_ui::serve::{PREFIX, axum_router};
 use http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use http::{HeaderValue, Method, StatusCode};
 use tower_http::compression::CompressionLayer;
 
 use crate::app::SIGN_IN;
-use crate::config::settings::{OidcSettings, Settings};
+use crate::config::settings::Settings;
 use crate::locale::messages::Msg;
 use crate::locale::{catalog, tr_in};
 use crate::model::PageContext;
 use crate::paths::{FAVICON, MARK_DARK, MARK_LIGHT};
 use crate::pix::{ClientError, Pix};
-use crate::session::Sessions;
-use crate::session::request::{Held, held};
 
 pub mod context;
+pub mod pages;
+
+/// The base name of every cookie the console sets: `ferropix_console_session`
+/// carries the session, `ferropix_console_sign_in` a pending sign-in, and
+/// `ferropix_console_theme` the theme.
+pub const COOKIES: &str = "ferropix_console";
 
 /// The path of the console's health summary route.
 pub const HEALTH: &str = ferrohealth_server::health::SUMMARY;
@@ -69,52 +79,61 @@ const MARK_DARK_SVG: &str = include_str!("../../../../assets/brand/ferropix-icon
 #[derive(Debug, Clone)]
 pub struct ConsoleState {
     settings: Arc<Settings>,
-    sessions: Sessions,
+    sign_in: SignIn<pages::SignInPages>,
     pix: Pix,
-    relying_party: Option<RelyingParty>,
     health: Health,
 }
 
 /// Why the console's state could not be built.
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
-    /// A client of the FerroPIX server or of the OpenID Provider could not be
-    /// built.
+    /// A client of the FerroPIX server could not be built.
     #[error(transparent)]
     Client(#[from] ClientError),
-    /// The configured OpenID Provider endpoints are not ones a relying party
-    /// can use.
-    #[error("the OpenID Provider's endpoints cannot be used")]
+    /// The relying party at the OpenID Provider could not be built: its
+    /// client, its discovery, or endpoints it cannot use.
+    #[error("the OpenID Provider cannot be used")]
     Provider {
         /// What the relying party refused.
         #[source]
-        source: OidcError,
+        source: Box<ferrohealth_session::config::ConfigError>,
     },
 }
 
 impl ConsoleState {
-    /// The state for `settings`, with an empty session store.
+    /// The state for `settings`, with an empty session store; the relying
+    /// party discovers the provider's endpoints first when the configuration
+    /// does not name them.
     ///
     /// # Errors
-    /// Returns [`StateError::Client`] when a client of the FerroPIX server, or
-    /// of the OpenID Provider, cannot be built, and [`StateError::Provider`]
-    /// for provider endpoints a relying party refuses.
-    pub fn new(settings: Settings) -> Result<Self, StateError> {
+    /// Returns [`StateError::Client`] when the client of the FerroPIX server
+    /// cannot be built, and [`StateError::Provider`] for a relying party
+    /// that cannot be built or a provider that cannot be read.
+    pub async fn new(settings: Settings) -> Result<Self, StateError> {
         let pix = Pix::new(&settings.pix)?;
-        let relying_party = settings
-            .oidc
-            .as_ref()
-            .map(|oidc| relying_party(oidc, &settings))
-            .transpose()?;
+        let party =
+            match &settings.oidc {
+                Some(oidc) => Some(oidc.checked.relying_party().await.map_err(|source| {
+                    StateError::Provider {
+                        source: Box::new(source),
+                    }
+                })?),
+                None => None,
+            };
+        let sessions = Sessions::new(settings.session.clone(), CookieNames::for_console(COOKIES));
+        let sign_in = SignIn::new(
+            sessions,
+            party,
+            pages::SignInPages::new(settings.locale.clone()),
+        );
         // The settings are resolved and both clients built, so the console
         // serves from here.
         let lifecycle = Lifecycle::default();
         lifecycle.booted();
         Ok(Self {
-            sessions: Sessions::new(settings.session),
             settings: Arc::new(settings),
+            sign_in,
             pix,
-            relying_party,
             health: Health::new(Registry::default(), lifecycle),
         })
     }
@@ -138,10 +157,16 @@ impl ConsoleState {
         &self.settings
     }
 
+    /// The sign-in: the session store and the relying party.
+    #[must_use]
+    pub fn sign_in(&self) -> &SignIn<pages::SignInPages> {
+        &self.sign_in
+    }
+
     /// The session store.
     #[must_use]
     pub fn sessions(&self) -> &Sessions {
-        &self.sessions
+        self.sign_in.sessions()
     }
 
     /// The client of the FerroPIX server.
@@ -150,57 +175,29 @@ impl ConsoleState {
         &self.pix
     }
 
-    /// The relying party of the OpenID Provider, which the sign-in exchanges
-    /// its code with and a session refreshes its access token with; `None`
-    /// when no provider is configured.
+    /// The relying party of the OpenID Provider; `None` when no provider is
+    /// configured.
     #[must_use]
     pub fn relying_party(&self) -> Option<&RelyingParty> {
-        self.relying_party.as_ref()
+        self.sign_in.party()
     }
-}
 
-/// The relying party of the provider `oidc` names, calling it within the
-/// timeout of a call to the FerroPIX server.
-fn relying_party(oidc: &OidcSettings, settings: &Settings) -> Result<RelyingParty, StateError> {
-    // NOTE: RFC 6749 §3.2: the token endpoint answers the request itself, so
-    // the provider's client follows no redirect.
-    let client = reqwest::Client::builder()
-        .timeout(settings.pix.timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(ClientError::from)?;
-    let metadata = ServerMetadata {
-        issuer: oidc.issuer.clone(),
-        authorization_endpoint: Some(oidc.authorization_endpoint.to_string()),
-        token_endpoint: Some(oidc.token_endpoint.to_string()),
-        jwks_uri: Some(oidc.jwks_uri.to_string()),
-        end_session_endpoint: oidc.end_session_endpoint.as_ref().map(ToString::to_string),
-        ..ServerMetadata::default()
-    };
-    let provider =
-        Provider::from_metadata(&metadata).map_err(|source| StateError::Provider { source })?;
-    let mut relying_party = RelyingParty::new(
-        Http::from_client(client),
-        provider,
-        oidc.client_id.clone(),
-        oidc.redirect_uri.clone(),
-    )
-    .with_scopes(oidc.scopes.iter().cloned());
-    if let Some(secret) = &oidc.client_secret {
-        relying_party = relying_party.with_client_secret(secret.clone());
+    /// The name every preference cookie starts with on this console, under
+    /// the `__Host-` prefix when the cookies are `Secure`.
+    #[must_use]
+    pub fn preference_prefix(&self) -> String {
+        let base = format!("{COOKIES}_");
+        if self.settings.session.secure_cookie() {
+            format!("{HOST_PREFIX}{base}")
+        } else {
+            base
+        }
     }
-    if oidc.offline_access {
-        relying_party = relying_party.with_offline_access();
-    }
-    if let Some(redirect) = &oidc.post_logout_redirect_uri {
-        relying_party = relying_party.with_post_logout_redirect_uri(redirect.clone());
-    }
-    Ok(relying_party)
 }
 
 /// Builds the console's whole HTTP service over `state`.
 pub fn router(state: ConsoleState) -> axum::Router {
-    let form_action = form_action(state.settings());
+    let form_action = form_action(&state);
     let check = same_origin_check(state.settings());
     let health = ferrohealth_server::health::routes(state.health().clone());
     let pages = axum::Router::new()
@@ -208,12 +205,6 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .route(FAVICON, get(brand))
         .route(MARK_LIGHT, get(brand))
         .route(MARK_DARK, get(brand))
-        .route(crate::paths::LOGIN, get(crate::oidc::login))
-        .route(crate::oidc::CALLBACK, get(crate::oidc::callback))
-        .route(
-            crate::oidc::logout::LOGOUT,
-            post(crate::oidc::logout::logout),
-        )
         .route(
             crate::preferences::PREFERENCE_ROUTE,
             post(crate::preferences::choose),
@@ -225,10 +216,6 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .route(
             crate::preferences::SIDEBAR_ROUTE,
             post(crate::preferences::sidebar),
-        )
-        .route(
-            crate::paths::SESSION,
-            get(crate::session::route::session).post(crate::session::route::session),
         )
         .route(crate::pages::search::SUGGEST, post(crate::posts::suggest))
         .route(crate::pages::trail::EXPORT, post(crate::posts::export))
@@ -246,9 +233,14 @@ pub fn router(state: ConsoleState) -> axum::Router {
         })
         .fallback(page)
         .layer(axum::middleware::from_fn(context::gate))
-        .layer(axum::middleware::from_fn(
-            crate::oidc::refresh::refresh_session,
+        .layer(axum::middleware::from_fn_with_state(
+            state.sign_in().clone(),
+            keep_session::<pages::SignInPages>,
         ))
+        .merge(
+            ferrohealth_session::routes::router(state.sign_in().clone())
+                .layer(axum::middleware::from_fn(no_sign_in_return)),
+        )
         .layer(axum::middleware::from_fn(move |request, next| {
             same_origin::only(check.clone(), request, next)
         }))
@@ -262,6 +254,26 @@ pub fn router(state: ConsoleState) -> axum::Router {
         .layer(axum::middleware::from_fn(move |request, next| {
             console::headers(headers.clone(), request, next)
         }))
+}
+
+/// Drops the `return` of a `GET /login` that names one of the console's
+/// sign-in pages, so a completed sign-in never lands on a page that says
+/// the session ended.
+async fn no_sign_in_return(mut request: Request, next: axum::middleware::Next) -> Response {
+    let login = ferrohealth_session::paths::LOGIN;
+    // NOTE: no specification governs this: our own design; `ferrohealth-session` refuses
+    // the sign-in page itself as a return, and every page under it is the console's too.
+    let names_sign_in = request.uri().path() == login
+        && request.uri().query().is_some_and(|query| {
+            url::form_urlencoded::parse(query.as_bytes()).any(|(name, back)| {
+                name == ferrohealth_session::paths::RETURN
+                    && crate::paths::is_sign_in(back.split(['?', '#']).next().unwrap_or_default())
+            })
+        });
+    if names_sign_in {
+        *request.uri_mut() = http::Uri::from_static(ferrohealth_session::paths::LOGIN);
+    }
+    next.run(request).await
 }
 
 /// The routes a page's forms post to, each answered by
@@ -299,7 +311,7 @@ fn same_origin_check(settings: &Settings) -> SameOrigin {
         // whose origin is a tuple, so the fallback is never taken and stays closed.
         Some(oidc) => check
             .clone()
-            .with_origin(&oidc.redirect_uri)
+            .with_origin(oidc.redirect_uri())
             .unwrap_or(check),
         None => check,
     }
@@ -359,9 +371,9 @@ pub fn render(parts: &http::request::Parts) -> Response {
 /// server does not send one.
 async fn capability_download(
     Extension(state): Extension<ConsoleState>,
-    headers: http::HeaderMap,
+    Extension(held): Extension<Held>,
 ) -> Response {
-    let Ok(Held::SignedIn { token, .. }) = held(&state, &headers) else {
+    let Some(token) = context::token(&held) else {
         return Redirect::to(SIGN_IN).into_response();
     };
     match state.pix().capability_statement(&token).await {
@@ -392,11 +404,10 @@ async fn capability_download(
 /// Connect RP-Initiated Logout 1.0 §2), so without its origin the browser
 /// blocks the sign-out on its way to the provider.
 #[must_use]
-pub fn form_action(settings: &Settings) -> String {
-    let end_session = settings
-        .oidc
-        .as_ref()
-        .and_then(|oidc| oidc.end_session_endpoint.as_ref())
+pub fn form_action(state: &ConsoleState) -> String {
+    let end_session = state
+        .relying_party()
+        .and_then(|party| party.provider().end_session_endpoint())
         .map(url::Url::origin)
         .filter(url::Origin::is_tuple);
     match end_session {

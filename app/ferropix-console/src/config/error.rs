@@ -72,6 +72,10 @@ pub enum Error {
         /// What the key requires.
         reason: &'static str,
     },
+    /// A refusal of `[oidc]` or `[session]` the keys above do not name, such
+    /// as a sealed store with no key.
+    #[error(transparent)]
+    Session(Box<ferrohealth_session::config::ConfigError>),
     /// Cookies without `Secure` on a console that is not plain HTTP on
     /// loopback, where they would travel in the clear.
     #[error(
@@ -81,4 +85,26 @@ pub enum Error {
         /// The key.
         key: String,
     },
+}
+
+impl From<ferrohealth_session::config::ConfigError> for Error {
+    /// The refusal of a `[oidc]` or `[session]` key, by its key as the
+    /// console's own refusals name one.
+    fn from(error: ferrohealth_session::config::ConfigError) -> Self {
+        use ferrohealth_session::config::ConfigError;
+        match error {
+            ConfigError::Secret(source) => Self::Secret(source),
+            ConfigError::Missing { key } => Self::Missing {
+                key: key.to_owned(),
+            },
+            ConfigError::Url { key, source } => Self::Url {
+                key: key.to_owned(),
+                source,
+            },
+            ConfigError::Zero { key } => Self::Zero {
+                key: key.to_owned(),
+            },
+            other => Self::Session(Box::new(other)),
+        }
+    }
 }

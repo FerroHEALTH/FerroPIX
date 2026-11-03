@@ -15,6 +15,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `mcsd` | Mobile Care Services Discovery | ITI-90, ITI-91 |
 | `pmir` | Patient Master Identity Registry | ITI-93, ITI-94 |
 | `xcpd` | Cross-Community Patient Discovery | ITI-55 |
+| `soap` | The SOAP 1.2 envelope reader of ITI TF-2 Appendix V, with no profile: what `xcpd` reads its messages through, and what another crate's Appendix V transaction reads its own through, its body read by a visitor it supplies | Appendix V |
 | `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna): the client side's, and the PIXm Manager's and the PDQm Supplier's from a `received::Received` request | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
 | `smart` | The IUA authorizer over the OAuth 2.0 client-credentials token of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) | ITI-72 |
@@ -23,8 +24,9 @@ Patient Index, which adds the server sides of the profiles as features.
 | `pmir-server` | The Patient Identity Registry side of PMIR, typed, with no store and no HTTP server | ITI-93, ITI-94 |
 
 The crate depends on no application, so a federation gateway, a master patient
-index or any other caller can use it as it is. Only the `xcpd` feature may carry
-the SOAP 1.2, HL7 v3 and SAML XUA stack; a build without it compiles none of it.
+index or any other caller can use it as it is. Only the `soap` and `xcpd`
+features may carry the SOAP 1.2 stack and only `xcpd` the HL7 v3 and SAML XUA
+stack; a build without them compiles none of it.
 The profiles are published at <https://profiles.ihe.net/ITI/>.
 
 ## Access tokens (IUA ITI-72)

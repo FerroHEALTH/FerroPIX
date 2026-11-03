@@ -6,8 +6,9 @@
 //! (Implementatiehandleiding Open en gesloten autorisatievraag 3.8.2
 //! §3.2.4.2 and the example of §3.2.4.4).
 
+use ihe_iti::soap::{self, ANONYMOUS};
 use quick_xml::Writer;
-use quick_xml::events::{BytesDecl, BytesText, Event};
+use quick_xml::events::BytesText;
 use secrecy::ExposeSecret as _;
 use url::Url;
 use uuid::Uuid;
@@ -15,12 +16,8 @@ use uuid::Uuid;
 use super::question::{ClosedQuestion, ProfessionalId};
 use super::{
     ACTION, BSN_ROOT, CARE_PROVIDER_TYPE_SYSTEM, DATA_CATEGORY_SYSTEM, HL7, PURPOSE_SYSTEM,
-    ROLE_SYSTEM, SOAP, URA_ROOT, WSA, XACML, XACML_SAML_PROTOCOL,
+    ROLE_SYSTEM, URA_ROOT, XACML, XACML_SAML_PROTOCOL,
 };
-
-/// The WS-Addressing anonymous address: the answer comes back on the
-/// request's own connection.
-const ANONYMOUS: &str = "http://www.w3.org/2005/08/addressing/anonymous";
 
 /// The XACML 3.0 attribute categories the question fills (§3.2.4.2).
 const RESOURCE: &str = "urn:oasis:names:tc:xacml:3.0:attribute-category:resource";
@@ -57,21 +54,10 @@ pub(super) fn envelope(
     endpoint: &Url,
     message: Uuid,
 ) -> std::io::Result<Vec<u8>> {
-    let mut writer = Writer::new(Vec::new());
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
-    writer
-        .create_element("soap:Envelope")
-        .with_attributes([("xmlns:soap", SOAP), ("xmlns:wsa", WSA)])
-        .write_inner_content(|writer| {
-            writer
-                .create_element("soap:Header")
-                .write_inner_content(|writer| header(writer, endpoint, message))?;
-            writer
-                .create_element("soap:Body")
-                .write_inner_content(|writer| query(writer, question))?;
-            Ok(())
-        })?;
-    Ok(writer.into_inner())
+    soap::write(
+        |writer| header(writer, endpoint, message),
+        |writer| query(writer, question),
+    )
 }
 
 /// The WS-Addressing headers of §3.2.4.4, with the `MessageID` §6 equates

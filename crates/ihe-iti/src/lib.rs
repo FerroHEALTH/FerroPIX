@@ -10,6 +10,8 @@
 //! - `pmir`: Patient Master Identity Registry, ITI-93 and ITI-94.
 //! - `xcpd`: Cross-Community Patient Discovery, ITI-55, the one profile on
 //!   SOAP 1.2 with HL7 v3 and SAML XUA.
+//! - `soap`: the SOAP 1.2 envelope reader of ITI TF-2 Appendix V, which XCPD
+//!   reads through and any other Appendix V transaction can, with no profile.
 //! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
 //!   ITI-91, ITI-93 and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`.
 //! - `atna`: the DICOM audit message of ITI-55 with `xcpd`, with no FHIR
@@ -70,5 +72,7 @@ mod search;
     feature = "pmir-server"
 ))]
 pub mod server;
+#[cfg(feature = "soap")]
+pub mod soap;
 #[cfg(feature = "xcpd")]
 pub mod xcpd;

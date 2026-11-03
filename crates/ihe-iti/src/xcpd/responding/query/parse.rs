@@ -5,17 +5,13 @@
 //! envelope, the transmission and control act wrappers and the query
 //! parameters, collected in one pass and checked once at the end.
 
-use quick_xml::NsReader;
-use quick_xml::events::{BytesStart, Event};
-use quick_xml::name::ResolveResult;
 use secrecy::SecretString;
 
 use super::super::super::identifier::{HomeCommunityId, Oid, PatientIdentifier};
-use super::super::super::request::{ANONYMOUS, ProcessingCode};
-use super::super::super::{ACTION, HL7, SOAP, WSA};
-use super::{
-    BirthTime, DEPTH, Parameters, PersonName, PostalAddress, Priority, ReceivedQuery, Refusal,
-};
+use super::super::super::request::ProcessingCode;
+use super::super::super::{ACTION, HL7};
+use super::{BirthTime, Parameters, PersonName, PostalAddress, Priority, ReceivedQuery, Refusal};
+use crate::soap::{self, ANONYMOUS, Element, Visitor};
 
 /// The local names a parameter element may carry, lowerCamel as the HL7 v3
 /// XML ITS writes them; §3.55.4.1.2.4's example spells one `LivingSubjectId`.
@@ -40,21 +36,16 @@ fn parameter(local: &str) -> Option<&'static str> {
 
 /// Which namespace an element is in, of the ones the reader looks at.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Ns {
+pub(super) enum Ns {
     Soap,
     Wsa,
     Hl7,
     Other,
 }
 
-/// One open element: its namespace and local name.
-type Open = (Ns, String);
-
 /// What the reader collects.
 #[derive(Default)]
 pub(super) struct Collected {
-    envelope: bool,
-    body: bool,
     query: bool,
     action: Option<String>,
     message_id: Option<String>,
@@ -77,209 +68,174 @@ pub(super) struct Collected {
     segment: Option<(usize, usize)>,
 }
 
-/// Collects what the request says, refusing what is not well-formed XML.
-pub(super) fn parse(text: &str, collected: &mut Collected) -> Result<(), Refusal> {
-    let mut reader = NsReader::from_str(text);
-    let mut open: Vec<Open> = Vec::new();
-    let mut words = String::new();
-    loop {
-        let before = usize::try_from(reader.buffer_position()).unwrap_or(usize::MAX);
-        let (ns, event) = match reader.read_resolved_event() {
-            Ok((namespace, event)) => (kind(&namespace), event),
-            Err(_syntax) => {
-                return Err(Refusal::NotXml {
-                    position: reader.error_position(),
-                });
-            }
-        };
-        match event {
-            Event::Start(element) => {
-                if open.len() >= DEPTH {
-                    return Err(Refusal::TooDeep { limit: DEPTH });
-                }
-                open.push((ns, local_name(&element)));
-                opened(collected, &open, &element, before)?;
-                words.clear();
-            }
-            Event::Empty(element) => {
-                open.push((ns, local_name(&element)));
-                opened(collected, &open, &element, before)?;
-                closed(collected, &open, "", before);
-                open.pop();
-            }
-            Event::End(_) => {
-                let after = usize::try_from(reader.buffer_position()).unwrap_or(usize::MAX);
-                closed(collected, &open, &words, after);
-                words.clear();
-                open.pop();
-            }
-            Event::Text(text) => words.push_str(&text.xml10_content()),
-            Event::CData(data) => words.push_str(&data.into_inner()),
-            Event::GeneralRef(reference) => {
-                let resolved = reference
-                    .resolve_char_ref()
-                    .ok()
-                    .flatten()
-                    .map(String::from)
-                    .or_else(|| {
-                        quick_xml::escape::resolve_predefined_entity(&reference.xml10_content())
-                            .map(str::to_owned)
-                    })
-                    .ok_or(Refusal::NotXml {
-                        position: reader.buffer_position(),
-                    })?;
-                words.push_str(&resolved);
-            }
-            Event::DocType(_) => return Err(Refusal::DocumentType),
-            Event::Eof => break,
-            Event::Comment(_) | Event::Decl(_) | Event::PI(_) => {}
-        }
-    }
-    Ok(())
-}
-
-/// Which of the namespaces the reader looks at `namespace` is.
-fn kind(namespace: &ResolveResult<'_>) -> Ns {
-    match namespace {
-        ResolveResult::Bound(ns) if ns.0 == SOAP => Ns::Soap,
-        ResolveResult::Bound(ns) if ns.0 == WSA => Ns::Wsa,
-        ResolveResult::Bound(ns) if ns.0 == HL7 => Ns::Hl7,
-        _ => Ns::Other,
-    }
-}
-
-fn local_name(element: &BytesStart<'_>) -> String {
-    element.local_name().as_ref().to_owned()
-}
-
-/// The value of the attribute `name`, unescaped, if the element has it.
-fn attribute(element: &BytesStart<'_>, name: &str) -> Result<Option<String>, Refusal> {
-    let malformed = Refusal::NotXml { position: 0 };
-    let Some(found) = element
-        .try_get_attribute(name)
-        .map_err(|_attribute| malformed.clone())?
-    else {
-        return Ok(None);
-    };
-    let value = found
-        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-        .map_err(|_escape| malformed)?;
-    Ok(Some(value.into_owned()))
-}
-
 /// The open elements below the query interaction, in the HL7 namespace, as
 /// local names; `None` when the path leaves the interaction or the
 /// namespace.
-fn inside(open: &[Open]) -> Option<Vec<&str>> {
+fn inside<'a>(open: &[(Ns, &'a str)]) -> Option<Vec<&'a str>> {
     let inner = open.get(3..)?;
     inner
         .iter()
-        .map(|(ns, local)| (*ns == Ns::Hl7).then_some(local.as_str()))
+        .map(|(ns, local)| (*ns == Ns::Hl7).then_some(*local))
         .collect()
 }
 
-/// What the element just opened says, given the elements open around it.
-fn opened(
-    collected: &mut Collected,
-    open: &[Open],
-    element: &BytesStart<'_>,
-    at: usize,
-) -> Result<(), Refusal> {
-    let names: Vec<(Ns, &str)> = open
-        .iter()
-        .map(|(ns, local)| (*ns, local.as_str()))
-        .collect();
-    match names.as_slice() {
-        [(Ns::Soap, "Envelope")] => collected.envelope = true,
-        [(_, _)] => return Err(Refusal::NotAnEnvelope),
-        [(Ns::Soap, "Envelope"), (Ns::Soap, "Body")] => collected.body = true,
-        [(Ns::Soap, "Envelope"), (Ns::Soap, "Body"), child] => match child {
-            (Ns::Hl7, "PRPA_IN201305UV02") if !collected.query => collected.query = true,
-            _ => return Err(Refusal::WrongInteraction),
-        },
-        _ => {}
-    }
-    if !collected.query {
-        return Ok(());
-    }
-    let Some(path) = inside(open) else {
-        return Ok(());
-    };
-    let id = |element: &BytesStart<'_>| -> Result<Option<String>, Refusal> {
-        attribute(element, "root")
-    };
-    match path.as_slice() {
-        ["id"] => {
-            if let Some(root) = id(element)? {
-                collected.transmission = Some((root, attribute(element, "extension")?));
+impl Visitor for Collected {
+    type Namespace = Ns;
+    type Error = Refusal;
+    const SOAP: Ns = Ns::Soap;
+    const NAMESPACES: &'static [(&'static str, Ns)] =
+        &[(soap::ADDRESSING, Ns::Wsa), (HL7, Ns::Hl7)];
+    const OTHER: Ns = Ns::Other;
+
+    fn opened(&mut self, open: &[(Ns, &str)], element: &Element<'_>) -> Result<(), Refusal> {
+        if let [(Ns::Soap, "Envelope"), (Ns::Soap, "Body"), child] = open {
+            match child {
+                (Ns::Hl7, "PRPA_IN201305UV02") if !self.query => self.query = true,
+                _ => return Err(Refusal::WrongInteraction),
             }
         }
-        ["interactionId"] => collected.interaction = attribute(element, "extension")?,
-        ["processingCode"] => collected.processing = attribute(element, "code")?,
-        ["sender", "device", "id"] => collected.sender_device = id(element)?,
-        [
-            "sender",
-            "device",
-            "asAgent",
-            "representedOrganization",
-            "id",
-        ] => {
-            collected.sender_community = id(element)?;
+        if !self.query {
+            return Ok(());
         }
-        ["receiver", "device", "id"] => collected.receiver_device = id(element)?,
-        [
-            "receiver",
-            "device",
-            "asAgent",
-            "representedOrganization",
-            "id",
-        ] => {
-            collected.target_community = id(element)?;
-        }
-        [
-            "controlActProcess",
-            "authorOrPerformer",
-            "assignedDevice",
-            "id",
-        ] => {
-            collected.reverse_authority = id(element)?;
-        }
-        ["controlActProcess", "queryByParameter"] => collected.segment = Some((at, at)),
-        ["controlActProcess", "queryByParameter", "queryId"] => {
-            if let Some(root) = id(element)? {
-                collected.query_id = Some((root, attribute(element, "extension")?));
+        let Some(path) = inside(open) else {
+            return Ok(());
+        };
+        let id = |element: &Element<'_>| -> Result<Option<String>, Refusal> {
+            Ok(element.attribute("root")?)
+        };
+        match path.as_slice() {
+            ["id"] => {
+                if let Some(root) = id(element)? {
+                    self.transmission = Some((root, element.attribute("extension")?));
+                }
             }
+            ["interactionId"] => self.interaction = element.attribute("extension")?,
+            ["processingCode"] => self.processing = element.attribute("code")?,
+            ["sender", "device", "id"] => self.sender_device = id(element)?,
+            [
+                "sender",
+                "device",
+                "asAgent",
+                "representedOrganization",
+                "id",
+            ] => {
+                self.sender_community = id(element)?;
+            }
+            ["receiver", "device", "id"] => self.receiver_device = id(element)?,
+            [
+                "receiver",
+                "device",
+                "asAgent",
+                "representedOrganization",
+                "id",
+            ] => {
+                self.target_community = id(element)?;
+            }
+            [
+                "controlActProcess",
+                "authorOrPerformer",
+                "assignedDevice",
+                "id",
+            ] => {
+                self.reverse_authority = id(element)?;
+            }
+            ["controlActProcess", "queryByParameter"] => {
+                self.segment = Some((element.at(), element.at()));
+            }
+            ["controlActProcess", "queryByParameter", "queryId"] => {
+                if let Some(root) = id(element)? {
+                    self.query_id = Some((root, element.attribute("extension")?));
+                }
+            }
+            [
+                "controlActProcess",
+                "queryByParameter",
+                "responsePriorityCode",
+            ] => {
+                self.priority = element.attribute("code")?;
+            }
+            [
+                "controlActProcess",
+                "queryByParameter",
+                "matchCriterionList",
+                "minimumDegreeMatch",
+                "value",
+            ] => {
+                self.parameters.minimum_degree_match = element
+                    .attribute("value")?
+                    .and_then(|value| value.trim().parse::<u8>().ok())
+                    .filter(|value| *value <= 100);
+            }
+            [
+                "controlActProcess",
+                "queryByParameter",
+                "parameterList",
+                name,
+                rest @ ..,
+            ] => {
+                parameter_opened(self, parameter(name), rest, element)?;
+            }
+            _ => {}
         }
-        [
-            "controlActProcess",
-            "queryByParameter",
-            "responsePriorityCode",
-        ] => {
-            collected.priority = attribute(element, "code")?;
-        }
-        [
-            "controlActProcess",
-            "queryByParameter",
-            "matchCriterionList",
-            "minimumDegreeMatch",
-            "value",
-        ] => {
-            collected.parameters.minimum_degree_match = attribute(element, "value")?
-                .and_then(|value| value.trim().parse::<u8>().ok())
-                .filter(|value| *value <= 100);
-        }
-        [
-            "controlActProcess",
-            "queryByParameter",
-            "parameterList",
-            name,
-            rest @ ..,
-        ] => {
-            parameter_opened(collected, parameter(name), rest, element)?;
-        }
-        _ => {}
+        Ok(())
     }
-    Ok(())
+
+    fn closed(&mut self, open: &[(Ns, &str)], words: Option<&str>, at: usize) {
+        let words = words.unwrap_or_default().trim();
+        match open {
+            [
+                (Ns::Soap, "Envelope"),
+                (Ns::Soap, "Header"),
+                (Ns::Wsa, "Action"),
+            ] => {
+                self.action = Some(words.to_owned());
+            }
+            [
+                (Ns::Soap, "Envelope"),
+                (Ns::Soap, "Header"),
+                (Ns::Wsa, "MessageID"),
+            ] => {
+                self.message_id = Some(words.to_owned());
+            }
+            [
+                (Ns::Soap, "Envelope"),
+                (Ns::Soap, "Header"),
+                (Ns::Wsa, "ReplyTo"),
+                (Ns::Wsa, "Address"),
+            ] => self.reply_to = Some(words.to_owned()),
+            [
+                (Ns::Soap, "Envelope"),
+                (Ns::Soap, "Header"),
+                (_, "CorrelationTimeToLive"),
+            ] => {
+                self.correlation = Some(words.to_owned());
+            }
+            _ => {}
+        }
+        if !self.query {
+            return;
+        }
+        let Some(path) = inside(open) else {
+            return;
+        };
+        match path.as_slice() {
+            ["controlActProcess", "queryByParameter"] => {
+                if let Some(segment) = self.segment.as_mut() {
+                    segment.1 = at;
+                }
+            }
+            [
+                "controlActProcess",
+                "queryByParameter",
+                "parameterList",
+                name,
+                rest @ ..,
+            ] => {
+                parameter_closed(self, parameter(name), rest, words);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// What an element inside the parameter `name` says as it opens.
@@ -287,7 +243,7 @@ fn parameter_opened(
     collected: &mut Collected,
     name: Option<&str>,
     rest: &[&str],
-    element: &BytesStart<'_>,
+    element: &Element<'_>,
 ) -> Result<(), Refusal> {
     let parameters = &mut collected.parameters;
     match (name, rest) {
@@ -298,24 +254,24 @@ fn parameter_opened(
             collected.address = Some(PostalAddress::default());
         }
         (Some("livingSubjectAdministrativeGender"), ["value"]) => {
-            parameters.gender = attribute(element, "code")?;
+            parameters.gender = element.attribute("code")?;
         }
         (Some("livingSubjectBirthTime"), ["value"]) => {
-            collected.birth = Some((attribute(element, "value")?, None, None));
+            collected.birth = Some((element.attribute("value")?, None, None));
         }
         (Some("livingSubjectBirthTime"), ["value", "low"]) => {
             if let Some(birth) = collected.birth.as_mut() {
-                birth.1 = attribute(element, "value")?;
+                birth.1 = element.attribute("value")?;
             }
         }
         (Some("livingSubjectBirthTime"), ["value", "high"]) => {
             if let Some(birth) = collected.birth.as_mut() {
-                birth.2 = attribute(element, "value")?;
+                birth.2 = element.attribute("value")?;
             }
         }
         (Some("livingSubjectId"), ["value"]) => {
-            if let Some(root) = attribute(element, "root")? {
-                let value = attribute(element, "extension")?.unwrap_or_default();
+            if let Some(root) = element.attribute("root")? {
+                let value = element.attribute("extension")?.unwrap_or_default();
                 parameters.ids.push(PatientIdentifier::new(
                     Oid::new(&root)?,
                     SecretString::from(value),
@@ -323,83 +279,20 @@ fn parameter_opened(
             }
         }
         (Some("patientTelecom"), ["value"]) => {
-            if let Some(value) = attribute(element, "value")? {
+            if let Some(value) = element.attribute("value")? {
                 parameters.telecom.push(value);
             }
         }
         (Some("principalCareProviderId"), ["value"]) => {
-            if let Some(root) = attribute(element, "root")? {
+            if let Some(root) = element.attribute("root")? {
                 parameters
                     .care_providers
-                    .push((Oid::new(&root)?, attribute(element, "extension")?));
+                    .push((Oid::new(&root)?, element.attribute("extension")?));
             }
         }
         _ => {}
     }
     Ok(())
-}
-
-/// What an element says as it closes, with the `words` it held, at byte
-/// `at` past its end.
-fn closed(collected: &mut Collected, open: &[Open], words: &str, at: usize) {
-    let names: Vec<(Ns, &str)> = open
-        .iter()
-        .map(|(ns, local)| (*ns, local.as_str()))
-        .collect();
-    let words = words.trim();
-    match names.as_slice() {
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Header"),
-            (Ns::Wsa, "Action"),
-        ] => {
-            collected.action = Some(words.to_owned());
-        }
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Header"),
-            (Ns::Wsa, "MessageID"),
-        ] => {
-            collected.message_id = Some(words.to_owned());
-        }
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Header"),
-            (Ns::Wsa, "ReplyTo"),
-            (Ns::Wsa, "Address"),
-        ] => collected.reply_to = Some(words.to_owned()),
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Header"),
-            (_, "CorrelationTimeToLive"),
-        ] => {
-            collected.correlation = Some(words.to_owned());
-        }
-        _ => {}
-    }
-    if !collected.query {
-        return;
-    }
-    let Some(path) = inside(open) else {
-        return;
-    };
-    match path.as_slice() {
-        ["controlActProcess", "queryByParameter"] => {
-            if let Some(segment) = collected.segment.as_mut() {
-                segment.1 = at;
-            }
-        }
-        [
-            "controlActProcess",
-            "queryByParameter",
-            "parameterList",
-            name,
-            rest @ ..,
-        ] => {
-            parameter_closed(collected, parameter(name), rest, words);
-        }
-        _ => {}
-    }
 }
 
 /// What an element inside the parameter `name` says as it closes.
@@ -463,9 +356,6 @@ impl Collected {
     /// The query the request holds, refusing what ITI-55 requires and the
     /// request lacks.
     pub(super) fn finish(self, text: &str) -> Result<ReceivedQuery, Refusal> {
-        if !self.envelope || !self.body {
-            return Err(Refusal::NotAnEnvelope);
-        }
         if self.action.as_deref() != Some(ACTION) {
             return Err(Refusal::WrongAction);
         }

@@ -9,7 +9,7 @@ use std::fmt;
 
 use jiff::Timestamp;
 use quick_xml::Writer;
-use quick_xml::events::{BytesDecl, BytesText, Event};
+use quick_xml::events::{BytesText, Event};
 use secrecy::{ExposeSecret as _, SecretString};
 use url::Url;
 use uuid::Uuid;
@@ -17,16 +17,13 @@ use uuid::Uuid;
 use super::error::{InvalidInput, XcpdError};
 use super::identifier::{HomeCommunityId, Oid, PatientIdentifier};
 use super::security::XuaAssertion;
-use super::{ACTION, HL7, SOAP, WSA, WSSE};
+use super::{ACTION, HL7, WSSE};
+use crate::soap::{self, ANONYMOUS};
 use ihe_atna::redact::RedactedUrl;
 
 /// The OID of the HL7 interaction and trigger event identifiers
 /// (Table 3.55.4.1.2.3-1).
 const HL7_INTERACTION: &str = "2.16.840.1.113883.1.6";
-
-/// The WS-Addressing anonymous address: the answer comes back on the
-/// request's own connection, the synchronous exchange (Appendix V.5).
-pub(super) const ANONYMOUS: &str = "http://www.w3.org/2005/08/addressing/anonymous";
 
 /// Whether a message belongs to production, training or debugging
 /// (`processingCode`, Appendix O Table O.1.1-1).
@@ -226,25 +223,13 @@ pub(super) fn envelope(
     assertion: Option<&XuaAssertion>,
 ) -> Result<Written, XcpdError> {
     let segment = query_by_parameter(query, ids).map_err(XcpdError::Encode)?;
-    let mut writer = Writer::new(Vec::new());
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-        .map_err(XcpdError::Encode)?;
-    writer
-        .create_element("soap:Envelope")
-        .with_attributes([("xmlns:soap", SOAP), ("xmlns:wsa", WSA)])
-        .write_inner_content(|writer| {
-            writer
-                .create_element("soap:Header")
-                .write_inner_content(|writer| header(writer, gateway, ids, assertion))?;
-            writer
-                .create_element("soap:Body")
-                .write_inner_content(|writer| message(writer, query, gateway, ids, &segment))?;
-            Ok(())
-        })
-        .map_err(XcpdError::Encode)?;
+    let body = soap::write(
+        |writer| header(writer, gateway, ids, assertion),
+        |writer| message(writer, query, gateway, ids, &segment),
+    )
+    .map_err(XcpdError::Encode)?;
     Ok(Written {
-        body: writer.into_inner(),
+        body,
         query: SecretString::from(segment),
     })
 }

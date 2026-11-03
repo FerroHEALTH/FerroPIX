@@ -17,6 +17,7 @@ use secrecy::SecretString;
 use super::super::error::InvalidInput;
 use super::super::identifier::{HomeCommunityId, Oid, PatientIdentifier};
 use super::super::request::ProcessingCode;
+use crate::soap::{self, Visitor as _};
 use ihe_atna::redact::REDACTED;
 
 mod parse;
@@ -87,6 +88,18 @@ pub enum Refusal {
     /// identifier value is empty.
     #[error("an identifier of the query is not usable")]
     Identifier(#[from] InvalidInput),
+}
+
+impl From<soap::Malformed> for Refusal {
+    fn from(malformed: soap::Malformed) -> Self {
+        match malformed {
+            soap::Malformed::NotSoap => Self::NotSoap,
+            soap::Malformed::NotXml { position } => Self::NotXml { position },
+            soap::Malformed::DocumentType => Self::DocumentType,
+            soap::Malformed::TooDeep { limit } => Self::TooDeep { limit },
+            soap::Malformed::NotAnEnvelope => Self::NotAnEnvelope,
+        }
+    }
 }
 
 /// How soon the answer is wanted (`responsePriorityCode`,
@@ -265,24 +278,11 @@ pub struct ReceivedQuery {
 ///
 /// A [`Refusal`] for a request that is not a well-formed ITI-55 query.
 pub fn read(media: Option<&str>, body: &[u8]) -> Result<ReceivedQuery, Refusal> {
-    let soap = media.is_some_and(|media| {
-        media
-            .split(';')
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .eq_ignore_ascii_case("application/soap+xml")
-    });
-    if !soap {
-        return Err(Refusal::NotSoap);
-    }
+    parse::Collected::media(media)?;
     if body.len() > LIMIT {
         return Err(Refusal::TooLarge { limit: LIMIT });
     }
-    let text = std::str::from_utf8(body).map_err(|error| Refusal::NotXml {
-        position: u64::try_from(error.valid_up_to()).unwrap_or(u64::MAX),
-    })?;
     let mut collected = parse::Collected::default();
-    parse::parse(text, &mut collected)?;
-    collected.finish(text)
+    let envelope = soap::read(body, DEPTH, &mut collected)?;
+    collected.finish(envelope.text())
 }

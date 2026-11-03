@@ -86,12 +86,6 @@ use uuid::Uuid;
 use error::{ClientError, InvalidInput, Malformation, MitzError};
 use question::{ClosedAnswer, ClosedQuestion};
 
-/// The SOAP 1.2 envelope namespace.
-const SOAP: &str = "http://www.w3.org/2003/05/soap-envelope";
-
-/// The WS-Addressing 1.0 namespace.
-const WSA: &str = "http://www.w3.org/2005/08/addressing";
-
 /// The XACML 3.0 core namespace of the `Request` and the `Response`
 /// (§3.2.4.4, §3.2.5.4).
 const XACML: &str = "urn:oasis:names:tc:xacml:3.0:core:schema:wd-17";

@@ -9,6 +9,7 @@
 //! never a patient value, so an error may name one.
 
 use http::StatusCode;
+use ihe_iti::soap::{self, FaultCode};
 
 use super::question::DataCategory;
 
@@ -130,41 +131,6 @@ impl MitzError {
     }
 }
 
-/// The code of a SOAP 1.2 fault (SOAP 1.2 Part 1 §5.4.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum FaultCode {
-    /// `Sender`: the message was incorrectly formed or carried wrong
-    /// information.
-    Sender,
-    /// `Receiver`: the message could not be processed for reasons of the
-    /// receiver.
-    Receiver,
-    /// Any other code, its text not kept.
-    Other,
-}
-
-impl FaultCode {
-    /// The fault code a `Code/Value` text names, read by its local part.
-    pub(super) fn of(text: &str) -> Self {
-        match text.rsplit(':').next().unwrap_or_default() {
-            "Sender" => Self::Sender,
-            "Receiver" => Self::Receiver,
-            _ => Self::Other,
-        }
-    }
-}
-
-impl std::fmt::Display for FaultCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Sender => "Sender",
-            Self::Receiver => "Receiver",
-            Self::Other => "another code",
-        })
-    }
-}
-
 /// How an answer departs from the closed authorization question: a SOAP 1.2
 /// envelope whose body holds one XACML 3.0 `Response` with one `Result` per
 /// data category asked about.
@@ -173,33 +139,15 @@ impl std::fmt::Display for FaultCode {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum Malformation {
-    /// The answer's media type is not SOAP 1.2.
-    #[error("the answer is not application/soap+xml")]
-    NotSoap,
     /// The answer is longer than the client reads.
     #[error("the answer exceeds {limit} bytes")]
     TooLarge {
         /// The limit, in bytes.
         limit: usize,
     },
-    /// The answer is not well-formed XML.
-    #[error("the answer is not well-formed XML (byte {position})")]
-    NotXml {
-        /// The byte offset of the syntax error.
-        position: u64,
-    },
-    /// The answer declares a document type, which the client never reads.
-    #[error("the answer declares a document type")]
-    DocumentType,
-    /// The answer nests elements deeper than the client reads.
-    #[error("the answer nests deeper than {limit} elements")]
-    TooDeep {
-        /// The limit.
-        limit: usize,
-    },
-    /// The answer is not a SOAP 1.2 envelope with a body.
-    #[error("the answer is not a SOAP 1.2 envelope with a body")]
-    NotAnEnvelope,
+    /// The answer is not a well-formed SOAP 1.2 envelope with a body.
+    #[error("the answer is not a well-formed SOAP 1.2 envelope")]
+    Envelope(#[from] soap::Malformed),
     /// The body holds no XACML 3.0 `Response`, or more than one.
     #[error("the body holds no single XACML 3.0 Response")]
     NoResponse,

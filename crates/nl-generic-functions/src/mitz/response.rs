@@ -9,15 +9,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use http::StatusCode;
-use quick_xml::NsReader;
-use quick_xml::events::{BytesStart, Event};
-use quick_xml::name::ResolveResult;
+use ihe_iti::soap::{self, Answer, Element, Visitor};
 use secrecy::{ExposeSecret as _, SecretString};
 
-use super::error::{FaultCode, Malformation, MitzError};
+use super::error::{Malformation, MitzError};
 use super::question::{ClosedAnswer, ClosedQuestion, DataCategory, Decision};
 use super::request::{CATEGORY, HOLDER_ID, PATIENT_ID};
-use super::{BSN_ROOT, DATA_CATEGORY_SYSTEM, HL7, SOAP, URA_ROOT, XACML};
+use super::{BSN_ROOT, DATA_CATEGORY_SYSTEM, HL7, URA_ROOT, XACML};
 
 /// The most bytes of an answer the client reads (no specification governs
 /// this: our own design, room for many more results than one question asks
@@ -47,9 +45,6 @@ struct ResultRead {
 /// What the reader collects of an answer.
 #[derive(Default)]
 struct Read {
-    envelope: bool,
-    body: bool,
-    fault: Option<String>,
     responses: usize,
     results: Vec<ResultRead>,
     category: Option<String>,
@@ -65,9 +60,6 @@ enum Ns {
     Other,
 }
 
-/// One open element: its namespace and local name.
-type Open = (Ns, String);
-
 /// Reads the answer with `status`, media type `media` and `body` to
 /// `question`.
 pub(super) fn read(
@@ -77,26 +69,12 @@ pub(super) fn read(
     question: &ClosedQuestion,
 ) -> Result<ClosedAnswer, MitzError> {
     // NOTE: Programma van Eisen AMC AUS-TR-e0900: Mitz uses the HTTP and SOAP error codes, so an
-    // answer that is no SOAP message is malformed only on a 200.
-    let rejected = |malformed: MitzError| {
-        if status == StatusCode::OK {
-            malformed
-        } else {
-            MitzError::Rejected { status }
-        }
-    };
-    if media.map(media_type).as_deref() != Some("application/soap+xml") {
-        return Err(rejected(Malformation::NotSoap.into()));
-    }
-    let read = parse(body).map_err(rejected)?;
-    if let Some(code) = read.fault {
-        return Err(MitzError::Fault {
-            code: FaultCode::of(&code),
-            status,
-        });
-    }
-    if status != StatusCode::OK {
-        return Err(MitzError::Rejected { status });
+    // answer that is no SOAP message is malformed only on a 200, as `soap::answer` reads it.
+    let mut read = Read::default();
+    match soap::answer(status, media, body, DEPTH, &mut read)? {
+        Answer::Envelope => {}
+        Answer::Fault { code, status } => return Err(MitzError::Fault { code, status }),
+        Answer::Rejected { status } => return Err(MitzError::Rejected { status }),
     }
     if read.responses != 1 {
         return Err(Malformation::NoResponse.into());
@@ -192,182 +170,12 @@ fn about_holder(holders: &[Identifier], question: &ClosedQuestion) -> bool {
     )
 }
 
-/// The type and subtype of a media type, lowercased, without parameters.
-fn media_type(media: &str) -> String {
-    media
-        .split(';')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase()
-}
-
-/// Collects what the answer says, refusing what is not well-formed XML.
-fn parse(body: &[u8]) -> Result<Read, MitzError> {
-    let text = std::str::from_utf8(body).map_err(|error| Malformation::NotXml {
-        position: u64::try_from(error.valid_up_to()).unwrap_or(u64::MAX),
-    })?;
-    let mut reader = NsReader::from_str(text);
-    let mut open: Vec<Open> = Vec::new();
-    let mut read = Read::default();
-    let mut collected = String::new();
-    loop {
-        let (ns, event) = match reader.read_resolved_event() {
-            Ok((namespace, event)) => (kind(&namespace), event),
-            Err(_syntax) => {
-                return Err(Malformation::NotXml {
-                    position: reader.error_position(),
-                }
-                .into());
-            }
-        };
-        match event {
-            Event::Start(element) => {
-                if open.len() >= DEPTH {
-                    return Err(Malformation::TooDeep { limit: DEPTH }.into());
-                }
-                open.push((ns, local_name(&element)));
-                opened(&mut read, &open, &element)?;
-                collected.clear();
-            }
-            Event::Empty(element) => {
-                open.push((ns, local_name(&element)));
-                opened(&mut read, &open, &element)?;
-                closed(&mut read, &open, "");
-                open.pop();
-            }
-            Event::End(_) => {
-                closed(&mut read, &open, &collected);
-                collected.clear();
-                open.pop();
-            }
-            Event::Text(text) => collected.push_str(&text.xml10_content()),
-            Event::CData(data) => collected.push_str(&data.into_inner()),
-            Event::GeneralRef(reference) => {
-                let resolved = reference
-                    .resolve_char_ref()
-                    .ok()
-                    .flatten()
-                    .map(String::from)
-                    .or_else(|| {
-                        quick_xml::escape::resolve_predefined_entity(&reference.xml10_content())
-                            .map(str::to_owned)
-                    })
-                    .ok_or(Malformation::NotXml {
-                        position: reader.buffer_position(),
-                    })?;
-                collected.push_str(&resolved);
-            }
-            Event::DocType(_) => return Err(Malformation::DocumentType.into()),
-            Event::Eof => break,
-            Event::Comment(_) | Event::Decl(_) | Event::PI(_) => {}
-        }
-    }
-    if !read.envelope || !read.body {
-        return Err(Malformation::NotAnEnvelope.into());
-    }
-    Ok(read)
-}
-
-/// Which of the namespaces the reader looks at `namespace` is.
-fn kind(namespace: &ResolveResult<'_>) -> Ns {
-    match namespace {
-        ResolveResult::Bound(ns) if ns.0 == SOAP => Ns::Soap,
-        ResolveResult::Bound(ns) if ns.0 == XACML => Ns::Xacml,
-        ResolveResult::Bound(ns) if ns.0 == HL7 => Ns::Hl7,
-        _ => Ns::Other,
-    }
-}
-
-fn local_name(element: &BytesStart<'_>) -> String {
-    element.local_name().as_ref().to_owned()
-}
-
-/// The value of the attribute `name`, unescaped, if the element has it.
-fn attribute(element: &BytesStart<'_>, name: &str) -> Result<Option<String>, MitzError> {
-    let malformed = Malformation::NotXml { position: 0 };
-    let Some(found) = element
-        .try_get_attribute(name)
-        .map_err(|_attribute| malformed.clone())?
-    else {
-        return Ok(None);
-    };
-    let value = found
-        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-        .map_err(|_escape| malformed)?;
-    Ok(Some(value.into_owned()))
-}
-
 /// Whether the innermost open element is inside a `Result` of the body.
-fn in_result(open: &[Open]) -> bool {
+fn in_result(open: &[(Ns, &str)]) -> bool {
     open.get(2..)
         .unwrap_or_default()
         .iter()
-        .any(|(ns, local)| *ns == Ns::Xacml && local == "Result")
-}
-
-/// What the element just opened says, given the elements open around it.
-fn opened(read: &mut Read, open: &[Open], element: &BytesStart<'_>) -> Result<(), MitzError> {
-    let names: Vec<(Ns, &str)> = open
-        .iter()
-        .map(|(ns, local)| (*ns, local.as_str()))
-        .collect();
-    match names.as_slice() {
-        [(Ns::Soap, "Envelope")] => read.envelope = true,
-        [(_, _)] => return Err(Malformation::NotAnEnvelope.into()),
-        [(Ns::Soap, "Envelope"), (Ns::Soap, "Body")] => read.body = true,
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Body"),
-            (Ns::Soap, "Fault"),
-        ] => {
-            read.fault = Some(String::new());
-        }
-        [(Ns::Soap, "Envelope"), (Ns::Soap, "Body"), ..] => {}
-        _ => return Ok(()),
-    }
-    let Some(&(ns, local)) = names.last() else {
-        return Ok(());
-    };
-    match (ns, local) {
-        (Ns::Xacml, "Response") => read.responses = read.responses.saturating_add(1),
-        (Ns::Xacml, "Result") if !in_result(open.split_last().map_or(&[], |(_, rest)| rest)) => {
-            read.results.push(ResultRead::default());
-        }
-        (Ns::Xacml, "Attributes") if in_result(open) => {
-            read.category = attribute(element, "Category")?.map(|text| text.trim().to_owned());
-        }
-        (Ns::Xacml, "Attribute") if in_result(open) => {
-            read.attribute = attribute(element, "AttributeId")?.map(|text| text.trim().to_owned());
-        }
-        (Ns::Hl7, "CodedValue") if in_result(open) => {
-            if is(read.category.as_deref(), ACTION) && is(read.attribute.as_deref(), CATEGORY) {
-                let code = attribute(element, "code")?;
-                let system = attribute(element, "codeSystem")?;
-                if let Some(result) = read.results.last_mut() {
-                    result.categories.push((code, system));
-                }
-            }
-        }
-        (Ns::Hl7, "InstanceIdentifier") if in_result(open) => {
-            let resource = is(read.category.as_deref(), RESOURCE);
-            let patient = resource && is(read.attribute.as_deref(), PATIENT_ID);
-            let holder = resource && is(read.attribute.as_deref(), HOLDER_ID);
-            if patient || holder {
-                let root = attribute(element, "root")?.map(|text| text.trim().to_owned());
-                let extension = attribute(element, "extension")?.map(SecretString::from);
-                if let Some(result) = read.results.last_mut() {
-                    if patient {
-                        result.patients.push((root, extension));
-                    } else {
-                        result.holders.push((root, extension));
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
+        .any(|(ns, local)| *ns == Ns::Xacml && *local == "Result")
 }
 
 /// Whether `value` is `expected`.
@@ -375,31 +183,80 @@ fn is(value: Option<&str>, expected: &str) -> bool {
     value == Some(expected)
 }
 
-/// What the element about to close held as text, given the elements open.
-fn closed(read: &mut Read, open: &[Open], text: &str) {
-    let names: Vec<(Ns, &str)> = open
-        .iter()
-        .map(|(ns, local)| (*ns, local.as_str()))
-        .collect();
-    if let [
-        (Ns::Soap, "Envelope"),
-        (Ns::Soap, "Body"),
-        (Ns::Soap, "Fault"),
-        (Ns::Soap, "Code"),
-        (Ns::Soap, "Value"),
-    ] = names.as_slice()
-    {
-        read.fault = Some(text.trim().to_owned());
-        return;
-    }
-    match names.last() {
-        Some((Ns::Xacml, "Decision")) if in_result(open) => {
-            if let Some(result) = read.results.last_mut() {
-                result.decisions.push(text.to_owned());
+impl Visitor for Read {
+    type Namespace = Ns;
+    type Error = Malformation;
+    const SOAP: Ns = Ns::Soap;
+    const NAMESPACES: &'static [(&'static str, Ns)] = &[(XACML, Ns::Xacml), (HL7, Ns::Hl7)];
+    const OTHER: Ns = Ns::Other;
+
+    fn opened(&mut self, open: &[(Ns, &str)], element: &Element<'_>) -> Result<(), Malformation> {
+        let [(Ns::Soap, "Envelope"), (Ns::Soap, "Body"), ..] = open else {
+            return Ok(());
+        };
+        let Some(&(ns, local)) = open.last() else {
+            return Ok(());
+        };
+        match (ns, local) {
+            (Ns::Xacml, "Response") => self.responses = self.responses.saturating_add(1),
+            (Ns::Xacml, "Result")
+                if !in_result(open.split_last().map_or(&[], |(_, rest)| rest)) =>
+            {
+                self.results.push(ResultRead::default());
             }
+            (Ns::Xacml, "Attributes") if in_result(open) => {
+                self.category = element
+                    .attribute("Category")?
+                    .map(|text| text.trim().to_owned());
+            }
+            (Ns::Xacml, "Attribute") if in_result(open) => {
+                self.attribute = element
+                    .attribute("AttributeId")?
+                    .map(|text| text.trim().to_owned());
+            }
+            (Ns::Hl7, "CodedValue") if in_result(open) => {
+                if is(self.category.as_deref(), ACTION) && is(self.attribute.as_deref(), CATEGORY) {
+                    let code = element.attribute("code")?;
+                    let system = element.attribute("codeSystem")?;
+                    if let Some(result) = self.results.last_mut() {
+                        result.categories.push((code, system));
+                    }
+                }
+            }
+            (Ns::Hl7, "InstanceIdentifier") if in_result(open) => {
+                let resource = is(self.category.as_deref(), RESOURCE);
+                let patient = resource && is(self.attribute.as_deref(), PATIENT_ID);
+                let holder = resource && is(self.attribute.as_deref(), HOLDER_ID);
+                if patient || holder {
+                    let root = element
+                        .attribute("root")?
+                        .map(|text| text.trim().to_owned());
+                    let extension = element.attribute("extension")?.map(SecretString::from);
+                    if let Some(result) = self.results.last_mut() {
+                        if patient {
+                            result.patients.push((root, extension));
+                        } else {
+                            result.holders.push((root, extension));
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
-        Some((Ns::Xacml, "Attributes")) => read.category = None,
-        Some((Ns::Xacml, "Attribute")) => read.attribute = None,
-        _ => {}
+        Ok(())
+    }
+
+    fn closed(&mut self, open: &[(Ns, &str)], text: Option<&str>, _at: usize) {
+        let text = text.unwrap_or_default();
+        match open.last() {
+            Some((Ns::Xacml, "Decision")) if in_result(open) => {
+                if let Some(result) = self.results.last_mut() {
+                    result.decisions.push(text.to_owned());
+                }
+            }
+            Some((Ns::Xacml, "Attributes")) => self.category = None,
+            Some((Ns::Xacml, "Attribute")) => self.attribute = None,
+            _ => {}
+        }
     }
 }

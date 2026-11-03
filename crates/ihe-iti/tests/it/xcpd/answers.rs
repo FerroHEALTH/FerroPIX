@@ -7,8 +7,9 @@
 use std::time::Duration;
 
 use ihe_atna::user::OnBehalfOf;
+use ihe_iti::soap::{FaultCode, Malformed};
 use ihe_iti::xcpd::discovery::{Discovery, RequestedAttribute};
-use ihe_iti::xcpd::error::{DetectedIssue, FaultCode, Malformation, XcpdError};
+use ihe_iti::xcpd::error::{DetectedIssue, Malformation, XcpdError};
 use secrecy::ExposeSecret;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::{method, path};
@@ -180,7 +181,10 @@ async fn a_status_without_a_soap_answer_is_rejected() {
 #[tokio::test]
 async fn an_ok_answer_that_is_not_soap_is_malformed() {
     let answer = answer_of(200, "text/xml", fixture("match.xml")).await;
-    assert_eq!(Some(Malformation::NotSoap), malformation(answer));
+    assert_eq!(
+        Some(Malformation::Envelope(Malformed::NotSoap)),
+        malformation(answer)
+    );
     let answer = answer_of(
         200,
         "multipart/related; type=\"application/xop+xml\"",
@@ -250,9 +254,12 @@ async fn every_departure_from_the_response_contract_is_malformed() {
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE env:Envelope>",
             ),
-            Malformation::DocumentType,
+            Malformation::Envelope(Malformed::DocumentType),
         ),
-        ("<Envelope/>".to_owned(), Malformation::NotAnEnvelope),
+        (
+            "<Envelope/>".to_owned(),
+            Malformation::Envelope(Malformed::NotAnEnvelope),
+        ),
     ];
     for (body, expected) in cases {
         let answer = answer_of(200, SOAP_XML, body).await;
@@ -260,7 +267,10 @@ async fn every_departure_from_the_response_contract_is_malformed() {
     }
     let broken = answer_of(200, SOAP_XML, base.replace("</env:Body>", "")).await;
     assert!(
-        matches!(malformation(broken), Some(Malformation::NotXml { .. })),
+        matches!(
+            malformation(broken),
+            Some(Malformation::Envelope(Malformed::NotXml { .. }))
+        ),
         "an answer that is not well formed"
     );
 }

@@ -99,12 +99,6 @@ use ihe_atna::user::OnBehalfOf;
 use request::{DiscoveryQuery, Ids, RespondingGateway};
 use security::XuaAssertion;
 
-/// The SOAP 1.2 envelope namespace.
-const SOAP: &str = "http://www.w3.org/2003/05/soap-envelope";
-
-/// The WS-Addressing 1.0 namespace.
-const WSA: &str = "http://www.w3.org/2005/08/addressing";
-
 /// The WS-Security 1.0 extension namespace.
 const WSSE: &str =
     "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";

@@ -18,11 +18,12 @@ use quick_xml::events::{BytesDecl, BytesText, Event};
 use secrecy::{ExposeSecret as _, SecretString};
 use uuid::Uuid;
 
+use super::super::HL7;
 use super::super::discovery::RequestedAttribute;
 use super::super::error::DetectedIssue;
 use super::super::identifier::{HomeCommunityId, Oid};
-use super::super::{HL7, SOAP, WSA};
 use super::query::{PersonName, PostalAddress, ReceivedQuery};
+use crate::soap::{self, ENVELOPE};
 use ihe_atna::redact::REDACTED;
 
 mod subject;
@@ -140,25 +141,10 @@ pub fn envelope(
     outcome: &Outcome,
 ) -> std::io::Result<Vec<u8>> {
     let message = Uuid::new_v4();
-    let mut writer = Writer::new(Vec::new());
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
-    writer
-        .create_element("soap:Envelope")
-        .with_attributes([("xmlns:soap", SOAP), ("xmlns:wsa", WSA)])
-        .write_inner_content(|writer| {
-            writer
-                .create_element("soap:Header")
-                .write_inner_content(|writer| {
-                    addressing(writer, RESPONSE_ACTION, message, query)
-                })?;
-            writer
-                .create_element("soap:Body")
-                .write_inner_content(|writer| {
-                    response(writer, query, responder, outcome, message)
-                })?;
-            Ok(())
-        })?;
-    Ok(writer.into_inner())
+    soap::write(
+        |writer| addressing(writer, RESPONSE_ACTION, message, query),
+        |writer| response(writer, query, responder, outcome, message),
+    )
 }
 
 /// The `MCCI_IN000002UV01` acknowledgement of a Deferred request the gateway
@@ -170,51 +156,38 @@ pub fn envelope(
 /// The writer's error when the acknowledgement cannot be written.
 pub fn deferred_refused(query: &ReceivedQuery, responder: &Responder) -> std::io::Result<Vec<u8>> {
     let message = Uuid::new_v4();
-    let mut writer = Writer::new(Vec::new());
-    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
-    writer
-        .create_element("soap:Envelope")
-        .with_attributes([("xmlns:soap", SOAP), ("xmlns:wsa", WSA)])
-        .write_inner_content(|writer| {
+    soap::write(
+        |writer| addressing(writer, ACKNOWLEDGEMENT_ACTION, message, query),
+        |writer| {
             writer
-                .create_element("soap:Header")
+                .create_element("MCCI_IN000002UV01")
+                .with_attributes([("xmlns", HL7), ("ITSVersion", "XML_1.0")])
                 .write_inner_content(|writer| {
-                    addressing(writer, ACKNOWLEDGEMENT_ACTION, message, query)
-                })?;
-            writer
-                .create_element("soap:Body")
-                .write_inner_content(|writer| {
-                    writer
-                        .create_element("MCCI_IN000002UV01")
-                        .with_attributes([("xmlns", HL7), ("ITSVersion", "XML_1.0")])
-                        .write_inner_content(|writer| {
-                            wrapper(writer, query, responder, message, "MCCI_IN000002UV01")?;
-                            acknowledgement(writer, query, "AE", |writer| {
+                    wrapper(writer, query, responder, message, "MCCI_IN000002UV01")?;
+                    acknowledgement(writer, query, "AE", |writer| {
+                        writer
+                            .create_element("acknowledgementDetail")
+                            .with_attribute(("typeCode", "E"))
+                            .write_inner_content(|writer| {
                                 writer
-                                    .create_element("acknowledgementDetail")
-                                    .with_attribute(("typeCode", "E"))
-                                    .write_inner_content(|writer| {
-                                        writer
-                                            .create_element("code")
-                                            .with_attributes([
-                                                ("code", "NS250"),
-                                                ("displayName", "Unsupported processing mode"),
-                                            ])
-                                            .write_empty()?;
-                                        writer.create_element("text").write_text_content(
-                                            BytesText::new("Deferred Response not supported."),
-                                        )?;
-                                        Ok(())
-                                    })?;
+                                    .create_element("code")
+                                    .with_attributes([
+                                        ("code", "NS250"),
+                                        ("displayName", "Unsupported processing mode"),
+                                    ])
+                                    .write_empty()?;
+                                writer.create_element("text").write_text_content(
+                                    BytesText::new("Deferred Response not supported."),
+                                )?;
                                 Ok(())
                             })?;
-                            Ok(())
-                        })?;
+                        Ok(())
+                    })?;
                     Ok(())
                 })?;
             Ok(())
-        })?;
-    Ok(writer.into_inner())
+        },
+    )
 }
 
 /// Who a SOAP fault blames (SOAP 1.2 Part 1 §5.4.6).
@@ -243,7 +216,7 @@ pub fn fault(blame: Blame, reason: &str) -> std::io::Result<Vec<u8>> {
     writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
     writer
         .create_element("soap:Envelope")
-        .with_attribute(("xmlns:soap", SOAP))
+        .with_attribute(("xmlns:soap", ENVELOPE))
         .write_inner_content(|writer| {
             writer
                 .create_element("soap:Body")

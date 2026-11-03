@@ -9,8 +9,9 @@
 //! example arc.
 
 use ihe_atna::user::OnBehalfOf;
+use ihe_iti::soap::FaultCode;
 use ihe_iti::xcpd::discovery::{Discovery, RequestedAttribute};
-use ihe_iti::xcpd::error::{DetectedIssue, FaultCode, XcpdError};
+use ihe_iti::xcpd::error::{DetectedIssue, XcpdError};
 use ihe_iti::xcpd::identifier::HomeCommunityId;
 use ihe_iti::xcpd::responding::answer::{self, Blame, Candidate, MEDIA_TYPE, Outcome, Responder};
 use ihe_iti::xcpd::responding::query::{

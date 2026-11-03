@@ -35,7 +35,7 @@ use ihe_iti::pdqm::matches::MatchGrade;
 use ihe_iti::pdqm::server::matching::{MatchEntry, MatchRequest, MatchSetError, match_set};
 use ihe_iti::pdqm::server::search::PatientSearch;
 use ihe_iti::pdqm::server::searchset::{Paging, SearchEntry, SearchSetError, searchset};
-use ihe_iti::pdqm::server::{Refusal, Score, ScoreError, retrieved};
+use ihe_iti::pdqm::server::{Refusal, Score, ScoreError};
 use ihe_iti::server::answer::Answer;
 use sqlx::{PgConnection, Postgres, Transaction};
 use url::Url;
@@ -219,7 +219,7 @@ impl Supplier {
         }
         let endpoint = self.url("Patient");
         let first = search.self_link(&endpoint).url().clone();
-        let mut paging = Paging::new().first(first.clone());
+        let mut paging = Paging::default().first(first.clone());
         if page.more
             && size > 0
             && let Some(last) = page.persons.last()
@@ -259,7 +259,7 @@ impl Supplier {
         snapshot.commit().await.map_err(store)?;
         Ok(match patients.into_values().next() {
             Some(patient) => Retrieved::Found {
-                answer: Box::new(retrieved(patient)),
+                answer: Box::new(Answer::ok(patient)),
                 person: id,
             },
             None => Retrieved::NotFound,

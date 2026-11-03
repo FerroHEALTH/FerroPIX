@@ -67,6 +67,22 @@ impl<T: Resource> Answer<T> {
         Self { status, resource }
     }
 
+    /// Returns the `200` answer carrying `resource`: a read, a retrieve or an
+    /// update (FHIR R4 http.html#read, http.html#update), such as the one
+    /// Patient of a PDQm retrieve (§2:3.78.4.3.3, Case 1).
+    #[must_use]
+    pub fn ok(resource: T) -> Self {
+        Self::new(StatusCode::OK, resource)
+    }
+
+    /// Returns the `201` answer of a create: `resource` as the server stored
+    /// it (FHIR R4 http.html#create), such as a PMIR `Subscription`
+    /// (§2:3.94.4.2.2). The caller sets the `Location` header.
+    #[must_use]
+    pub fn created(resource: T) -> Self {
+        Self::new(StatusCode::CREATED, resource)
+    }
+
     /// Returns the HTTP status.
     #[must_use]
     pub fn status(&self) -> StatusCode {

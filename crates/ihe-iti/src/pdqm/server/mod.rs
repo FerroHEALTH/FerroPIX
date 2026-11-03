@@ -19,7 +19,7 @@
 //!   [`matching::match_set`] writes the Match Output Bundle, each entry with
 //!   its `search.score` and `match-grade` (§2:3.119.4.2.2.4).
 //! - [`Refusal`] is each failure the transactions name with a status, and
-//!   [`retrieved`] the answer of the retrieve (§2:3.78.4.3).
+//!   [`Answer::ok`] the answer of the retrieve (§2:3.78.4.3).
 //!
 //! The store, the matching and the router are the caller's. Every
 //! demographic travels in a redacting type: no type here has `Display`,
@@ -36,7 +36,7 @@
 //! let search = PatientSearch::from_query("family:exact=MOHR&gender=female&_sort=given")?;
 //! assert_eq!(search.dropped(), ["_sort"]);
 //! let endpoint = Url::parse("https://pdq.example.org/fhir/Patient")?;
-//! let answer = searchset(&search, &endpoint, 0, Vec::new(), &Paging::new())?;
+//! let answer = searchset(&search, &endpoint, 0, Vec::new(), &Paging::default())?;
 //! assert_eq!(answer.status(), http::StatusCode::OK);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -48,7 +48,6 @@ pub mod searchset;
 use std::fmt;
 
 use fhir_types::r4::operation_outcome::OperationOutcome;
-use fhir_types::r4::patient::Patient;
 use http::StatusCode;
 
 use crate::outcome::IssueType;
@@ -57,7 +56,7 @@ use crate::server::answer::{Answer, Severity};
 /// A failure ITI-78 names, which the Supplier decides from its store.
 ///
 /// The format failure of Case 5 is
-/// [`Unacceptable`](crate::server::format::Unacceptable).
+/// [`FormatError`](crate::server::format::FormatError).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Refusal {
@@ -88,13 +87,6 @@ impl Refusal {
             ),
         }
     }
-}
-
-/// Returns the `200` answer of a retrieve: the one Patient the id names
-/// (§2:3.78.4.3.3, Case 1).
-#[must_use]
-pub fn retrieved(patient: Patient) -> Answer<Patient> {
-    Answer::new(StatusCode::OK, patient)
 }
 
 /// The Supplier's confidence in a match: a decimal between 0 and 1

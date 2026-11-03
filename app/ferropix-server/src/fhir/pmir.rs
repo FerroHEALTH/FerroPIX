@@ -39,6 +39,7 @@ use crate::audit::records::{self, Call, SubscriptionAction};
 use crate::audit::reserve::{Pending, UNAUDITED};
 use crate::auth::table::Route;
 use crate::config::section::is_loopback_url;
+use crate::fhir::wire;
 use crate::store::Store;
 use crate::store::subscription::{self, Updated};
 
@@ -341,13 +342,7 @@ async fn requested(
     parts: &Parts,
     body: Body,
 ) -> Result<RequestedSubscription, Box<Answer<OperationOutcome>>> {
-    let content_type = parts
-        .headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok());
-    let Some(format) = Format::of_content_type(content_type) else {
-        return Err(Box::new(Format::unsupported_media_type()));
-    };
+    let format = wire::body_format(&parts.headers).map_err(|case| Box::new(case.answer()))?;
     let Ok(bytes) = axum::body::to_bytes(body, usize::MAX).await else {
         return Err(Box::new(Answer::outcome(
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -418,9 +413,9 @@ pub(super) fn answer_format(parts: &Parts) -> Format {
 /// An answer carrying `subscription`: `201` for a create, `200` otherwise.
 fn answer(status: StatusCode, subscription: Subscription) -> Answer<Subscription> {
     if status == StatusCode::CREATED {
-        ihe_iti::pmir::server::subscription::created(subscription)
+        Answer::created(subscription)
     } else {
-        ihe_iti::pmir::server::subscription::current(subscription)
+        Answer::ok(subscription)
     }
 }
 

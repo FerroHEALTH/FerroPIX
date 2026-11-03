@@ -34,7 +34,7 @@ use ihe_iti::pdqm::server::Refusal;
 use ihe_iti::pdqm::server::matching::MatchRequest;
 use ihe_iti::pdqm::server::search::PatientSearch;
 use ihe_iti::server::answer::{Answer, Resource, Severity};
-use ihe_iti::server::format::Format;
+use ihe_iti::server::format::{Format, FormatError};
 use secrecy::SecretString;
 use uuid::Uuid;
 
@@ -257,7 +257,7 @@ async fn matches(face: Arc<Face>, request: Request) -> Response {
         .unwrap_or("application/octet-stream");
     let raw = raw(&face, "Patient/$match", &query, Some((media, &bytes)));
     let Some(body_format) = Format::of_content_type(content_type.as_deref()) else {
-        let answer = Format::unsupported_media_type();
+        let answer = FormatError::UnsupportedMediaType.refusal();
         return refuse(&face, &parts, &call, Search::Match, raw, &answer, &query).await;
     };
     let format = match Format::negotiate(raw_format(&query).as_deref(), accept(&parts)) {

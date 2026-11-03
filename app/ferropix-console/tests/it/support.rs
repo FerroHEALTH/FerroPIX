@@ -18,7 +18,7 @@ use url::Url;
 use ferropix_console::config::Config;
 use ferropix_console::config::settings::Settings;
 use ferropix_console::server::{ConsoleState, router};
-use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
+use ferropix_testkit::oidc::{CODE_GRANT, IdTokenClaims, Provider, TokenAnswer};
 
 /// The settings a console with its FerroPIX server at `server` runs on.
 pub(crate) fn settings(server: &str) -> Settings {
@@ -216,7 +216,7 @@ pub(crate) async fn sign_in(
         ..answer
     };
     provider.reset().await?;
-    provider.answer_code(&answer).await?;
+    provider.answer_grant(&[CODE_GRANT], &answer).await?;
     let (response, body) = complete(service, &begun).await?;
     assert_eq!(StatusCode::SEE_OTHER, response.status(), "{body}");
     session_cookie(&response)

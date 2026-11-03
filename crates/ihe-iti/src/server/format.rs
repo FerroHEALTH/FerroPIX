@@ -37,7 +37,7 @@ pub enum Format {
 impl Format {
     /// Returns the format a request body's `Content-Type` names, or `None`
     /// for a missing or another media type, which a server answers with
-    /// [`Format::unsupported_media_type`].
+    /// [`FormatError::UnsupportedMediaType`].
     ///
     /// The FHIR media types, and the plain `application/json`,
     /// `application/xml` and `text/xml` FHIR R4 also accepts, are recognised
@@ -56,15 +56,15 @@ impl Format {
     /// `application/*`) is JSON, and a range with `q=0` is refused.
     ///
     /// # Errors
-    /// [`Unacceptable`] when `_format` names no FHIR encoding, or `accept`
-    /// is present and admits neither, which PDQm answers with a `406`
-    /// (§2:3.78.4.1.3, Case 5).
-    pub fn negotiate(format: Option<&str>, accept: Option<&str>) -> Result<Self, Unacceptable> {
+    /// [`FormatError::NotAcceptable`] when `_format` names no FHIR encoding,
+    /// or `accept` is present and admits neither, which PDQm answers with a
+    /// `406` (§2:3.78.4.1.3, Case 5).
+    pub fn negotiate(format: Option<&str>, accept: Option<&str>) -> Result<Self, FormatError> {
         if let Some(format) = format {
             return match format.trim() {
                 "json" => Ok(Self::Json),
                 "xml" => Ok(Self::Xml),
-                other => media(other).ok_or(Unacceptable),
+                other => media(other).ok_or(FormatError::NotAcceptable),
             };
         }
         let Some(accept) = accept.filter(|accept| !accept.trim().is_empty()) else {
@@ -89,7 +89,8 @@ impl Format {
                 best = Some((quality, format));
             }
         }
-        best.map(|(_, format)| format).ok_or(Unacceptable)
+        best.map(|(_, format)| format)
+            .ok_or(FormatError::NotAcceptable)
     }
 
     /// Returns the media type an answer in this format carries.
@@ -99,19 +100,6 @@ impl Format {
             Self::Json => "application/fhir+json",
             Self::Xml => "application/fhir+xml",
         }
-    }
-
-    /// Returns the refusal of a request body whose media type is no FHIR
-    /// encoding: a `415` with a `not-supported` issue (FHIR R4 http.html,
-    /// "Content Types and encodings").
-    #[must_use]
-    pub fn unsupported_media_type() -> Answer<OperationOutcome> {
-        Answer::outcome(
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            Severity::Error,
-            IssueType::NotSupported,
-            "the request body is neither FHIR JSON nor FHIR XML",
-        )
     }
 
     /// The resource `body` holds, in the JSON object model.
@@ -183,27 +171,38 @@ fn media(text: &str) -> Option<Format> {
     }
 }
 
-/// The answer cannot be written in any format the request accepts: PDQm's
-/// Case 5 (§2:3.78.4.1.3).
+/// A request in no FHIR encoding the server reads or writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("the request accepts no FHIR encoding the server writes")]
-pub struct Unacceptable;
+#[non_exhaustive]
+pub enum FormatError {
+    /// The request body's media type is no FHIR encoding
+    /// ([`Format::of_content_type`] found none).
+    #[error("the request body is in no FHIR encoding the server reads")]
+    UnsupportedMediaType,
+    /// The answer cannot be written in any format the request accepts:
+    /// PDQm's Case 5 (§2:3.78.4.1.3).
+    #[error("the request accepts no FHIR encoding the server writes")]
+    NotAcceptable,
+}
 
-impl Unacceptable {
-    /// Returns the refusal: a `406` with an `error` issue of type
-    /// `not-supported` (PDQm 3.2.0 §2:3.78.4.1.3, Case 5).
+impl FormatError {
+    /// Returns the refusal, an `error` issue of type `not-supported`: a `415`
+    /// for a body in no FHIR encoding (FHIR R4 http.html, "Content Types and
+    /// encodings"), a `406` for an answer in none (PDQm 3.2.0
+    /// §2:3.78.4.1.3, Case 5).
     #[must_use]
-    #[expect(
-        clippy::unused_self,
-        reason = "every reader's error answers with its refusal by this one method"
-    )]
     pub fn refusal(self) -> Answer<OperationOutcome> {
-        Answer::outcome(
-            StatusCode::NOT_ACCEPTABLE,
-            Severity::Error,
-            IssueType::NotSupported,
-            "the requested response format is not supported",
-        )
+        let (status, text) = match self {
+            Self::UnsupportedMediaType => (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "the request body is neither FHIR JSON nor FHIR XML",
+            ),
+            Self::NotAcceptable => (
+                StatusCode::NOT_ACCEPTABLE,
+                "the requested response format is not supported",
+            ),
+        };
+        Answer::outcome(status, Severity::Error, IssueType::NotSupported, text)
     }
 }
 
@@ -252,7 +251,7 @@ impl BodyError {
 
 #[cfg(test)]
 mod tests {
-    use super::{BodyError, Format, Unacceptable};
+    use super::{BodyError, Format, FormatError};
 
     #[test]
     fn the_content_type_names_the_body_format() {
@@ -295,17 +294,17 @@ mod tests {
         );
         assert_eq!(
             Format::negotiate(None, Some("text/html")),
-            Err(Unacceptable),
+            Err(FormatError::NotAcceptable),
             "no FHIR encoding"
         );
         assert_eq!(
             Format::negotiate(None, Some("application/fhir+xml;q=0")),
-            Err(Unacceptable),
+            Err(FormatError::NotAcceptable),
             "q=0 refuses"
         );
         assert_eq!(
             Format::negotiate(Some("ttl"), None),
-            Err(Unacceptable),
+            Err(FormatError::NotAcceptable),
             "Turtle is not written"
         );
     }

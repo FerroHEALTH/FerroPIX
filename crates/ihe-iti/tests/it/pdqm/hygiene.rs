@@ -40,7 +40,7 @@ const TOKEN: &str = "Qz7token";
 
 fn query() -> PatientQuery {
     let sentinel = SecretString::from(SENTINEL);
-    PatientQuery::new()
+    PatientQuery::default()
         .family(&sentinel, StringMatch::Exact)
         .and_then(|query| query.given(&sentinel, StringMatch::StartsWith))
         .and_then(|query| query.identifier(Some(DOMAIN), &sentinel))

@@ -211,7 +211,7 @@ async fn a_replica_read_spends_one_budget_on_both_searches() {
     }
     let error = Replica::read(
         &client(&server),
-        Scope::everything(),
+        Scope::default(),
         &mut within(Limits {
             entries: 1,
             ..Limits::default()

@@ -242,7 +242,7 @@ async fn the_igs_examples_read_through_iti_90() {
     assert_eq!(3, endpoints.matches().len());
     let replica = ihe_iti::mcsd::replica::Replica::read(
         &client,
-        ihe_iti::mcsd::replica::Scope::everything(),
+        ihe_iti::mcsd::replica::Scope::default(),
         &mut budget(),
     )
     .await

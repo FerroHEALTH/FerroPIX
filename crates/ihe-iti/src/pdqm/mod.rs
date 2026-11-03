@@ -47,7 +47,7 @@
 //!     .redirect(reqwest::redirect::Policy::none())
 //!     .build()?;
 //! let client = PdqmClient::new(Url::parse("https://pdq.example.org/fhir/")?, http)?;
-//! let query = PatientQuery::new()
+//! let query = PatientQuery::default()
 //!     .family(&SecretString::from("Schmidt"), StringMatch::Exact)?
 //!     .birthdate(DatePrefix::Eq, &SecretString::from("1923-07-25"))?;
 //! let on_behalf = OnBehalfOf::System;

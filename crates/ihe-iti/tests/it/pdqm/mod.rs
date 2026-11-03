@@ -88,7 +88,7 @@ pub(crate) fn unreachable_client() -> PdqmClient {
 
 /// The IG's example query: the family name `Schmidt`.
 pub(crate) fn schmidt() -> PatientQuery {
-    PatientQuery::new()
+    PatientQuery::default()
         .family(&SecretString::from("Schmidt"), StringMatch::StartsWith)
         .expect("a query")
 }

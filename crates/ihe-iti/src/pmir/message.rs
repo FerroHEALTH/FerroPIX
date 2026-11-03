@@ -11,7 +11,6 @@ use fhir_types::r4::bundle::{Bundle, BundleEntry, BundleEntryRequest};
 use fhir_types::r4::message_header::{
     MessageHeader, MessageHeaderEvent, MessageHeaderResponse, MessageHeaderSource,
 };
-use fhir_types::r4::operation_outcome::{OperationOutcome, OperationOutcomeIssue};
 use fhir_types::r4::patient::Patient;
 use fhir_types::r4::resource::Resource;
 use http::StatusCode;
@@ -454,20 +453,6 @@ pub(super) fn acknowledgement(
         ..Bundle::default()
     };
     serde_json::to_vec(&bundle).map_err(Unwritable)
-}
-
-/// The `OperationOutcome` refusing a message for `error`.
-pub(super) fn refusal(error: &FeedError) -> Result<Vec<u8>, Unwritable> {
-    let outcome = OperationOutcome {
-        issue: vec![OperationOutcomeIssue {
-            severity: "error".into(),
-            code: error.issue().to_string().into(),
-            diagnostics: Some(error.to_string().into()),
-            ..OperationOutcomeIssue::default()
-        }],
-        ..OperationOutcome::default()
-    };
-    serde_json::to_vec(&outcome).map_err(Unwritable)
 }
 
 #[cfg(test)]

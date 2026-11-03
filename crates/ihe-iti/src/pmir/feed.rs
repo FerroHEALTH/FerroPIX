@@ -15,6 +15,7 @@
 
 use std::fmt;
 
+use fhir_types::r4::operation_outcome::{OperationOutcome, OperationOutcomeIssue};
 use secrecy::SecretString;
 
 use ihe_atna::redact::REDACTED;
@@ -282,5 +283,14 @@ pub struct Unwritable(#[source] pub(super) serde_json::Error);
 /// # Errors
 /// [`Unwritable`] when the outcome cannot be written as FHIR JSON.
 pub fn refusal(error: &FeedError) -> Result<Vec<u8>, Unwritable> {
-    message::refusal(error)
+    let outcome = OperationOutcome {
+        issue: vec![OperationOutcomeIssue {
+            severity: "error".into(),
+            code: error.issue().to_string().into(),
+            diagnostics: Some(error.to_string().into()),
+            ..OperationOutcomeIssue::default()
+        }],
+        ..OperationOutcome::default()
+    };
+    serde_json::to_vec(&outcome).map_err(Unwritable)
 }

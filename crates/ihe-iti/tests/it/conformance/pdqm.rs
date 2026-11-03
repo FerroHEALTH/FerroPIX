@@ -19,10 +19,11 @@ use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
 use ihe_iti::pdqm::input::MatchInput;
 use ihe_iti::pdqm::matches::MatchGrade;
+use ihe_iti::pdqm::server::Score;
 use ihe_iti::pdqm::server::matching::{MatchEntry, MatchRequest, MatchSetError, match_set};
 use ihe_iti::pdqm::server::search::PatientSearch;
 use ihe_iti::pdqm::server::searchset::{Paging, SearchEntry, searchset};
-use ihe_iti::pdqm::server::{Score, retrieved};
+use ihe_iti::server::answer::Answer;
 use ihe_iti::server::format::Format;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
@@ -200,7 +201,7 @@ async fn search_answer(id: &str) {
         &Url::parse(ENDPOINT).expect("a URL"),
         total,
         entries,
-        &Paging::new(),
+        &Paging::default(),
     )
     .unwrap_or_else(|error| panic!("the Supplier cannot write it: {error}"));
     let written = answer.resource();
@@ -416,7 +417,7 @@ async fn retrieve(id: &str) {
     let [matched] = found.patients() else {
         panic!("the client reads {} Patients", found.patients().len());
     };
-    let answer = retrieved(matched.patient().clone());
+    let answer = Answer::ok(matched.patient().clone());
     assert_eq!(answer.status(), StatusCode::OK, "the Supplier's status");
     let written: Value =
         serde_json::from_slice(&answer.encode(Format::Json).expect("JSON")).expect("JSON");

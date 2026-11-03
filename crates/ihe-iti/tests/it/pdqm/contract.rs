@@ -83,7 +83,7 @@ fn patient_resource(file: &str, mode: &str) -> Resource {
 fn every_parameter() -> PatientQuery {
     let text = SecretString::from("x");
     let both = [StringMatch::StartsWith, StringMatch::Exact];
-    let mut query = PatientQuery::new()
+    let mut query = PatientQuery::default()
         .id(&SecretString::from("ex-patient"))
         .and_then(|query| query.identifier(Some(DOMAIN), &text))
         .and_then(|query| query.telecom(&text))

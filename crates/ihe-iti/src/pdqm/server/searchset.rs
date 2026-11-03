@@ -85,7 +85,8 @@ impl fmt::Debug for SearchEntry {
 /// <http://hl7.org/fhir/R4/http.html#paging>; §2:3.78.4.2.2.4).
 ///
 /// The links are the Supplier's own and may carry the search, so `Debug`
-/// says which are present and never a URL.
+/// says which are present and never a URL. The default paging has no link:
+/// a result set on one page.
 #[derive(Clone, Default)]
 pub struct Paging {
     first: Option<Url>,
@@ -95,12 +96,6 @@ pub struct Paging {
 }
 
 impl Paging {
-    /// Creates paging with no link: a result set on one page.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// This paging, with the `first` link.
     #[must_use]
     pub fn first(mut self, url: Url) -> Self {
@@ -284,7 +279,7 @@ mod tests {
                 url("https://pdq.example.org/fhir/Patient/p1"),
                 patient(),
             )],
-            &Paging::new().next(url("https://pdq.example.org/fhir/Patient?page=2")),
+            &Paging::default().next(url("https://pdq.example.org/fhir/Patient?page=2")),
         )
         .expect("a searchset");
         let json = String::from_utf8(answer.encode(Format::Json).expect("JSON")).expect("UTF-8");
@@ -308,7 +303,7 @@ mod tests {
                 url("https://pdq.example.org/fhir/Patient/p1"),
                 patient(),
             )],
-            &Paging::new(),
+            &Paging::default(),
         );
         assert_eq!(refused.err(), Some(SearchSetError::TotalBelowMatches));
     }

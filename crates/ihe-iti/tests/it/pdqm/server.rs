@@ -22,7 +22,7 @@ use ihe_iti::pdqm::server::matching::{MatchEntry, MatchError, MatchRequest, matc
 use ihe_iti::pdqm::server::search::{Criterion, PatientSearch, SearchError, StringParameter};
 use ihe_iti::pdqm::server::searchset::{Paging, SearchEntry, searchset};
 use ihe_iti::pdqm::server::{Refusal, Score};
-use ihe_iti::server::format::{Format, Unacceptable};
+use ihe_iti::server::format::{Format, FormatError};
 use secrecy::ExposeSecret;
 use serde_json::Value;
 use url::Url;
@@ -317,7 +317,8 @@ fn the_search_writer_holds_what_the_vendored_response_holds() {
         .into_iter()
         .map(|(full_url, patient)| SearchEntry::matched(full_url, patient))
         .collect();
-    let answer = searchset(&search, &url(ENDPOINT), 1, entries, &Paging::new()).expect("Case 1");
+    let answer =
+        searchset(&search, &url(ENDPOINT), 1, entries, &Paging::default()).expect("Case 1");
     let written = answer.resource();
     assert_eq!(written.total, example.total, "the total of Case 1");
     assert_eq!(written.r#type, example.r#type, "a searchset");
@@ -348,7 +349,7 @@ fn the_refusals_of_the_cases_carry_their_outcomes() {
         json["issue"][0]["diagnostics"], "targetSystem not found",
         "Case 4"
     );
-    let case_five = Unacceptable.refusal();
+    let case_five = FormatError::NotAcceptable.refusal();
     assert_eq!(case_five.status(), StatusCode::NOT_ACCEPTABLE, "Case 5");
     assert_eq!(case_five.issue_type(), IssueType::NotSupported, "Case 5");
     assert_eq!(
@@ -377,7 +378,7 @@ fn no_type_with_a_demographic_displays_or_shows_it() {
         url(&format!("{ENDPOINT}/{SENTINEL}")),
         request.patient().clone(),
     );
-    let paging = Paging::new().next(url(&format!("{ENDPOINT}?family={SENTINEL}")));
+    let paging = Paging::default().next(url(&format!("{ENDPOINT}?family={SENTINEL}")));
     let link = search.self_link(&url(ENDPOINT));
     assert!(
         link.url().as_str().contains(SENTINEL),

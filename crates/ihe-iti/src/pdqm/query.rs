@@ -144,7 +144,7 @@ struct Parameter {
 ///
 /// Every value is directly identifying and travels only in the request body
 /// to the Supplier. `Debug` names the parameters and never a value, and the
-/// type has no `Display`.
+/// type has no `Display`. The default query has no criteria.
 ///
 /// # Examples
 ///
@@ -152,7 +152,7 @@ struct Parameter {
 /// use ihe_iti::pdqm::query::{DatePrefix, Gender, PatientQuery, StringMatch};
 /// use secrecy::SecretString;
 ///
-/// let query = PatientQuery::new()
+/// let query = PatientQuery::default()
 ///     .family(&SecretString::from("Schmidt"), StringMatch::Exact)?
 ///     .birthdate(DatePrefix::Eq, &SecretString::from("1923-07-25"))?
 ///     .gender(Gender::Male);
@@ -166,12 +166,6 @@ pub struct PatientQuery {
 }
 
 impl PatientQuery {
-    /// Creates a query with no criteria.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Adds `_id`: the Patient's logical id on the Supplier.
     ///
     /// # Errors
@@ -498,7 +492,7 @@ mod tests {
 
     #[test]
     fn the_form_carries_each_parameter_with_its_modifier_and_prefix() {
-        let query = PatientQuery::new()
+        let query = PatientQuery::default()
             .family(&secret("Schmidt"), StringMatch::Exact)
             .and_then(|query| query.given(&secret("Jo,hn"), StringMatch::StartsWith))
             .and_then(|query| query.birthdate(DatePrefix::Ge, &secret("1923")))
@@ -522,7 +516,7 @@ mod tests {
 
     #[test]
     fn identifiers_and_domains_are_tokens() {
-        let query = PatientQuery::new()
+        let query = PatientQuery::default()
             .identifier(Some("urn:oid:2.999.1"), &secret("a|1"))
             .and_then(|query| query.identifier(None, &secret("8675309")))
             .and_then(|query| query.identifier_domains(&["urn:oid:2.999.2", "urn:oid:2.999.3"]))
@@ -544,7 +538,7 @@ mod tests {
         );
         assert!(query.names_domain(), "the query names a domain");
         assert!(
-            !PatientQuery::new()
+            !PatientQuery::default()
                 .identifier(None, &secret("8675309"))
                 .expect("a query")
                 .names_domain(),
@@ -554,15 +548,15 @@ mod tests {
 
     #[test]
     fn invalid_criteria_are_refused_before_anything_is_sent() {
-        let empty = PatientQuery::new().family(&secret(""), StringMatch::Exact);
+        let empty = PatientQuery::default().family(&secret(""), StringMatch::Exact);
         assert_eq!(empty.err(), Some(InvalidInput::EmptyValue), "empty family");
-        let system = PatientQuery::new().identifier(Some("not a uri"), &secret("1"));
+        let system = PatientQuery::default().identifier(Some("not a uri"), &secret("1"));
         assert_eq!(system.err(), Some(InvalidInput::System), "relative system");
-        let domains = PatientQuery::new().identifier_domains(&[]);
+        let domains = PatientQuery::default().identifier_domains(&[]);
         assert_eq!(domains.err(), Some(InvalidInput::EmptyValue), "no domain");
-        let id = PatientQuery::new().id(&secret("a/b"));
+        let id = PatientQuery::default().id(&secret("a/b"));
         assert_eq!(id.err(), Some(InvalidInput::Id), "a slash in an id");
-        let date = PatientQuery::new().birthdate(DatePrefix::Eq, &secret("25-07-1923"));
+        let date = PatientQuery::default().birthdate(DatePrefix::Eq, &secret("25-07-1923"));
         assert_eq!(date.err(), Some(InvalidInput::Date), "a day-first date");
     }
 }

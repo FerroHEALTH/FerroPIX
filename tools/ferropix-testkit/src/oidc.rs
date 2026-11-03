@@ -46,6 +46,10 @@ pub const AUTHORIZATION_PATH: &str = "/authorize";
 /// The path of the token endpoint.
 pub const TOKEN_PATH: &str = "/token";
 
+/// The form field of an authorization code grant at the token endpoint
+/// (RFC 6749 §4.1.3), for [`Provider::answer_grant`].
+pub const CODE_GRANT: &str = "grant_type=authorization_code";
+
 /// The path of the end-session endpoint.
 pub const END_SESSION_PATH: &str = "/logout";
 
@@ -182,16 +186,6 @@ impl Provider {
         payload: &serde_json::Value,
     ) -> Result<String, ProviderError> {
         jsonwebtoken::encode(header, payload, &self.encoding).map_err(ProviderError::Sign)
-    }
-
-    /// Answers every authorization code grant at the token endpoint with
-    /// `answer`.
-    ///
-    /// # Errors
-    /// Returns [`ProviderError::Json`] when the answer cannot be written.
-    pub async fn answer_code(&self, answer: &TokenAnswer) -> Result<(), ProviderError> {
-        self.answer_grant("grant_type=authorization_code", answer)
-            .await
     }
 
     /// Answers a refresh token grant that sends `refresh_token` with
@@ -353,8 +347,16 @@ impl Provider {
         )
     }
 
-    /// Mounts `answer` for a token request whose form carries `grant`.
-    async fn answer_grant(&self, grant: &str, answer: &TokenAnswer) -> Result<(), ProviderError> {
+    /// Answers every token request whose form carries `grant`, such as
+    /// [`CODE_GRANT`], with `answer`.
+    ///
+    /// # Errors
+    /// Returns [`ProviderError::Json`] when the answer cannot be written.
+    pub async fn answer_grant(
+        &self,
+        grant: &str,
+        answer: &TokenAnswer,
+    ) -> Result<(), ProviderError> {
         let body = serde_json::to_string(answer).map_err(ProviderError::Json)?;
         Mock::given(method("POST"))
             .and(path(TOKEN_PATH))

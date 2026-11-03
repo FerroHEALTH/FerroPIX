@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use axum::body::Body;
 use ferrohealth_ui::view::session::Left;
-use ferropix_testkit::oidc::{IdTokenClaims, Provider, TokenAnswer};
+use ferropix_testkit::oidc::{CODE_GRANT, IdTokenClaims, Provider, TokenAnswer};
 use http::{Request, StatusCode};
 
 use crate::support::{
@@ -124,7 +124,7 @@ async fn led_to(
         ..TokenAnswer::bearer(OPERATOR_TOKEN)
     };
     provider.reset().await?;
-    provider.answer_code(&answer).await?;
+    provider.answer_grant(CODE_GRANT, &answer).await?;
     let (response, body) = complete(service, &begun).await?;
     assert_eq!(StatusCode::SEE_OTHER, response.status(), "{body}");
     Ok(header(&response, "location").to_owned())

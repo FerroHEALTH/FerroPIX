@@ -79,7 +79,7 @@ impl RespondingGateway {
         if endpoint.scheme() != "https" {
             return Err(InvalidInput::Endpoint);
         }
-        Self::any_scheme(endpoint, device)
+        Self::unencrypted_for_development(endpoint, device)
     }
 
     /// The gateway at `endpoint`, `http` or `https`, for development and
@@ -94,10 +94,6 @@ impl RespondingGateway {
     /// [`InvalidInput::Endpoint`] when `endpoint` is not an `http` or `https`
     /// URL without a fragment.
     pub fn unencrypted_for_development(endpoint: Url, device: Oid) -> Result<Self, InvalidInput> {
-        Self::any_scheme(endpoint, device)
-    }
-
-    fn any_scheme(endpoint: Url, device: Oid) -> Result<Self, InvalidInput> {
         if !matches!(endpoint.scheme(), "http" | "https") || endpoint.fragment().is_some() {
             return Err(InvalidInput::Endpoint);
         }

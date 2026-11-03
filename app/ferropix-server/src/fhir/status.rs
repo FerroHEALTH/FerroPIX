@@ -16,7 +16,7 @@ use http::StatusCode;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pixm::server::Refusal;
 use ihe_iti::server::answer::{Answer, Severity};
-use ihe_iti::server::format::{Format, Unacceptable};
+use ihe_iti::server::format::FormatError;
 
 use crate::audit::reserve::UNAUDITED;
 
@@ -171,8 +171,8 @@ impl Case {
                 IssueType::BusinessRule,
                 "the surviving identifier names no active record of the domain",
             ),
-            Self::NotAcceptable => Unacceptable.refusal(),
-            Self::UnsupportedMediaType => Format::unsupported_media_type(),
+            Self::NotAcceptable => FormatError::NotAcceptable.refusal(),
+            Self::UnsupportedMediaType => FormatError::UnsupportedMediaType.refusal(),
             Self::PayloadTooLarge => error(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 IssueType::TooCostly,

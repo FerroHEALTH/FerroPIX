@@ -41,12 +41,6 @@ pub struct Scope {
 }
 
 impl Scope {
-    /// Every `Organization` and every `Endpoint` of the directory.
-    #[must_use]
-    pub fn everything() -> Self {
-        Self::default()
-    }
-
     /// The `Organization`s carrying an identifier in `organization_system`
     /// and the `Endpoint`s carrying one in `endpoint_system`.
     #[must_use]

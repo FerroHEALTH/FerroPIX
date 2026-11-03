@@ -173,7 +173,7 @@ impl MitzClient {
         if endpoint.scheme() != "https" {
             return Err(ClientError::Endpoint(InvalidInput::Endpoint));
         }
-        Self::any_scheme(endpoint, http)
+        Self::unencrypted_for_development(endpoint, http)
     }
 
     /// Creates a client for `endpoint`, `http` or `https`, for development
@@ -192,10 +192,6 @@ impl MitzClient {
         endpoint: Url,
         http: reqwest::ClientBuilder,
     ) -> Result<Self, ClientError> {
-        Self::any_scheme(endpoint, http)
-    }
-
-    fn any_scheme(endpoint: Url, http: reqwest::ClientBuilder) -> Result<Self, ClientError> {
         let bare = endpoint.username().is_empty()
             && endpoint.password().is_none()
             && endpoint.query().is_none()

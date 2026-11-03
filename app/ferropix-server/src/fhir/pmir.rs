@@ -30,7 +30,7 @@ use ihe_atna::balp::Outcome;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pmir::server::subscription::RequestedSubscription;
 use ihe_iti::server::answer::{Answer, Resource, Severity};
-use ihe_iti::server::format::Format;
+use ihe_iti::server::format::{Format, FormatError};
 use url::Url;
 use uuid::Uuid;
 
@@ -346,7 +346,7 @@ async fn requested(
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok());
     let Some(format) = Format::of_content_type(content_type) else {
-        return Err(Box::new(Format::unsupported_media_type()));
+        return Err(Box::new(FormatError::UnsupportedMediaType.refusal()));
     };
     let Ok(bytes) = axum::body::to_bytes(body, usize::MAX).await else {
         return Err(Box::new(Answer::outcome(
@@ -418,9 +418,9 @@ pub(super) fn answer_format(parts: &Parts) -> Format {
 /// An answer carrying `subscription`: `201` for a create, `200` otherwise.
 fn answer(status: StatusCode, subscription: Subscription) -> Answer<Subscription> {
     if status == StatusCode::CREATED {
-        ihe_iti::pmir::server::subscription::created(subscription)
+        Answer::created(subscription)
     } else {
-        ihe_iti::pmir::server::subscription::current(subscription)
+        Answer::ok(subscription)
     }
 }
 

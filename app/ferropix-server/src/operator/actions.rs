@@ -159,7 +159,7 @@ pub async fn export(operator: &Operator, request: Request) -> Response {
     if let Err(error) = record_action(operator.store.pool(), &recorded).await {
         return wire::failed(&error);
     }
-    let call = wire::call(operator, &parts);
+    let call = records::Call::of_request(&parts, &operator.endpoint);
     let person = read.person.map(|person| format!("Patient/{person}"));
     let exchange =
         records::operator::export(&call, actions.len(), person.as_deref(), Outcome::Success);

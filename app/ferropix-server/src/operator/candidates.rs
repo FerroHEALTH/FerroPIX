@@ -80,7 +80,7 @@ pub async fn list(operator: &Operator, request: Request) -> Response {
         .iter()
         .map(|person| format!("Patient/{person}"))
         .collect();
-    let call = wire::call(operator, &parts);
+    let call = records::Call::of_request(&parts, &operator.endpoint);
     let exchanges = records::operator::steward_search(
         &call,
         &raw(operator, &parts),
@@ -104,7 +104,7 @@ pub async fn one(operator: &Operator, request: Request) -> Response {
         Ok(None) => return problem::refuse(Kind::NotFound, NO_SUCH_CANDIDATE),
         Err(error) => return wire::failed(&error),
     };
-    let call = wire::call(operator, &parts);
+    let call = records::Call::of_request(&parts, &operator.endpoint);
     let mut persons = vec![candidate.a.person.clone(), candidate.b.person.clone()];
     persons.dedup();
     let exchanges = persons
@@ -154,7 +154,7 @@ pub async fn decide(operator: &Operator, request: Request) -> Response {
             return wire::failed(&OperatorError::Unadmitted(feed_error(&error)));
         }
     };
-    let call = wire::call(operator, &parts);
+    let call = records::Call::of_request(&parts, &operator.endpoint);
     let Some(person) = decided.person.or_else(|| decided.persons.first().copied()) else {
         return wire::failed(&OperatorError::Unadmitted(
             "candidate record without a person",

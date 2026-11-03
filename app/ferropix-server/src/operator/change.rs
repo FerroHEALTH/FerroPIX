@@ -229,7 +229,7 @@ pub async fn commit<'a>(
     record_action(&mut *transaction, &recorded)
         .await
         .map_err(failed)?;
-    let exchange = exchange(&wire::call(operator, parts), &write);
+    let exchange = exchange(&Call::of_request(parts, &operator.endpoint), &write);
     wire::record(operator, parts, vec![exchange])
         .await
         .map_err(|error| Box::new(wire::unaudited(&error)))?;

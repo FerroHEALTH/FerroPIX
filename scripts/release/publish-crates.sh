@@ -17,6 +17,8 @@
 # Usage:
 #   publish-crates.sh publish          # upload each crate in order
 #   publish-crates.sh dry-run          # package every crate, as one set
+#   publish-crates.sh package DIR      # package every crate as one set into
+#                                      # DIR, each .crate with its .sha256sum
 #   publish-crates.sh verify           # read the registry back, with retries
 #   publish-crates.sh version CRATE    # print one crate's version
 #   publish-crates.sh list             # print the published members, one a line
@@ -91,6 +93,36 @@ do_dry_run() {
   cargo publish "${args[@]}" --dry-run --locked
 }
 
+# Package every member in one `cargo package` invocation, in dependency
+# order, for the same reason as the dry run (#446): a member packaged alone
+# resolves a sibling from crates.io, which does not hold the version being
+# released yet (<https://doc.rust-lang.org/cargo/commands/cargo-package.html>).
+# Each .crate lands in DIR beside its checksum, the files the release lane
+# attests and attaches.
+do_package() {
+  local dir="$1" crate version file args=()
+  for crate in ${CRATES[@]+"${CRATES[@]}"}; do
+    args+=(-p "$crate")
+  done
+  if [[ ${#args[@]} -eq 0 ]]; then
+    echo "no published crate yet; nothing to package"
+    return 0
+  fi
+  cargo package "${args[@]}" --locked
+  mkdir -p "$dir"
+  for crate in "${CRATES[@]}"; do
+    version="$(manifest_version "$crate")"
+    file="target/package/${crate}-${version}.crate"
+    [[ -s "$file" ]] || {
+      echo "::error::cargo package wrote no $file" >&2
+      return 1
+    }
+    cp "$file" "$dir/"
+    (cd "$dir" && sha256sum "${crate}-${version}.crate" >"${crate}-${version}.crate.sha256sum")
+  done
+  echo "publish-crates: packaged ${#CRATES[@]} crate(s) as one set into $dir"
+}
+
 # Read the registry, never the exit code alone. The index is eventually
 # consistent right after an upload: a miss is retried, and a failed request
 # counts as "not seen yet", not as a miss.
@@ -123,11 +155,12 @@ do_verify() {
 case "${1:-}" in
   publish) do_publish ;;
   dry-run) do_dry_run ;;
+  package) do_package "${2:?usage: publish-crates.sh package DIR}" ;;
   verify) do_verify ;;
   version) manifest_version "${2:?usage: publish-crates.sh version CRATE}" ;;
   list) for crate in ${CRATES[@]+"${CRATES[@]}"}; do printf '%s\n' "$crate"; done ;;
   *)
-    echo "publish-crates: expected 'publish', 'dry-run', 'verify', 'version' or 'list', got '${1:-<none>}'" >&2
+    echo "publish-crates: expected 'publish', 'dry-run', 'package', 'verify', 'version' or 'list', got '${1:-<none>}'" >&2
     exit 2
     ;;
 esac

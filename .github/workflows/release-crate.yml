@@ -40,21 +40,12 @@ jobs:
         with:
           cache: "false"
       # Each crate is on its own version line, apart from the tag
-      # (.claude/rules/crates-publishing.md), so its files carry its own.
+      # (.claude/rules/crates-publishing.md), so its files carry its own. The
+      # crates are packaged as one set, so a crate that requires a sibling not
+      # yet on crates.io resolves it from the set (#446).
       - name: Package the crates
-        env:
-          CRATES: ${{ inputs.crates }}
-        run: |
-          set -euo pipefail
-          mkdir dist
-          for crate in $CRATES; do
-            version="$(bash scripts/release/publish-crates.sh version "$crate")"
-            cargo package -p "$crate" --locked
-            file="target/package/${crate}-${version}.crate"
-            test -s "$file"
-            cp "$file" dist/
-            (cd dist && sha256sum "${crate}-${version}.crate" > "${crate}-${version}.crate.sha256sum")
-          done
+        run: bash scripts/release/publish-crates.sh package dist
+
       - id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:

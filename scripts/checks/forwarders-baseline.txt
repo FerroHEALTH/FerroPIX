@@ -3,4 +3,3 @@
 # The key of every forwarder scripts/checks/forwarders.sh counts, written
 # by --update: the path, the owner and the call it makes. A tab and a
 # reason after a key record why that forwarder stays.
-crates/ihe-iti/src/server/answer.rs: Answer::outcome -> Self::of_issue(status, severity, code, diagnostics)

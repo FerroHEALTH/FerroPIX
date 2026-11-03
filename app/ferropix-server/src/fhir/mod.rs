@@ -8,10 +8,9 @@
 //! The capability statement, the SMART discovery document, the PIXm
 //! Manager ([`pixm`]), the PDQm Supplier ([`pdqm`]), the PMIR Registry
 //! ([`registry`] for ITI-93, [`pmir`] for ITI-94) and the operator API
-//! ([`crate::operator`]) answer; a row no handler serves answers `501`, with
-//! a `not-supported` issue on the FHIR face and a problem on the operator
-//! API, so the guard in front of a new route is in place
-//! and tested first. [`status`] is
+//! ([`crate::operator`]) answer, and [`routes`] refuses a route-table row no
+//! handler serves with [`Unserved`], so a row never reaches the wire without
+//! its handler. [`status`] is
 //! the one table of every outcome a transaction answers, and [`wire`] puts
 //! each in JSON or XML.
 
@@ -43,7 +42,7 @@ use crate::auth::{Discovery, Smart};
 use crate::config::section::matching::Matching;
 use crate::config::section::operator::Operator;
 use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
-use crate::fhir::outcome::{IssueType, body, respond};
+use crate::fhir::outcome::body;
 use crate::store::Store;
 
 /// What the transactions of the FHIR face read and write: the store, the
@@ -140,6 +139,11 @@ pub struct Address<'a> {
 ///
 /// The router is meant to be nested under `base` with the health routes;
 /// the guard reads the matched route templates under it.
+///
+/// # Errors
+///
+/// [`Unserved`], naming every switched-on row of the route table that no
+/// handler serves.
 pub fn routes(
     address: Address<'_>,
     mounts: Mounts,
@@ -148,7 +152,7 @@ pub fn routes(
     lifecycle: &Lifecycle,
     audit: &Audit,
     backend: &Backend,
-) -> Router {
+) -> Result<Router, Unserved> {
     let (base, public_base_url) = (address.base, address.public_base_url);
     let statement = Arc::new(capability::statement(public_base_url, smart, mounts));
     let configuration = smart.configuration().map(Arc::new);
@@ -191,11 +195,13 @@ pub fn routes(
         public_base_url,
     ));
     let mut router = Router::new();
+    let mut unserved = Vec::new();
     for route in table::ROUTES
         .iter()
         .filter(|route| mounts.admits(route.mount))
     {
         let Ok(filter) = MethodFilter::try_from(route.method.clone()) else {
+            unserved.push(route);
             continue;
         };
         if let Some(handler) = pdqm::handler(route, filter, &pdqm)
@@ -234,12 +240,45 @@ pub fn routes(
                     )
                 })
             }
-            _ if route.mount == Mount::Operator => on(filter, pending_operator),
-            _ => on(filter, pending_fhir),
+            _ => {
+                unserved.push(route);
+                continue;
+            }
         };
         router = router.route(route.path, handler);
     }
-    guarded(router, base, smart, audit)
+    Unserved::check(&unserved)?;
+    Ok(guarded(router, base, smart, audit))
+}
+
+/// The rows of the route table no handler serves, each as its method, its
+/// path and its interaction.
+#[derive(Debug, thiserror::Error)]
+#[error("no handler serves the route-table rows {}", .rows.join(", "))]
+pub struct Unserved {
+    /// The rows.
+    rows: Vec<String>,
+}
+
+impl Unserved {
+    /// `Ok` when `rows` is empty, else the [`Unserved`] that names them.
+    fn check(rows: &[&table::Route]) -> Result<(), Self> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        Err(Self {
+            rows: rows
+                .iter()
+                .map(|route| format!("{} {} ({})", route.method, route.path, route.interaction))
+                .collect(),
+        })
+    }
+
+    /// The rows, each as its method, its path and its interaction.
+    #[must_use]
+    pub fn rows(&self) -> &[String] {
+        &self.rows
+    }
 }
 
 /// Returns `router` behind the audit reservation, the Source rule and the
@@ -415,33 +454,26 @@ async fn unmatched() -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
-/// A row of the FHIR face that no handler serves: none today, so a row
-/// added without its handler answers `501` rather than `404`.
-async fn pending_fhir() -> Response {
-    respond(
-        StatusCode::NOT_IMPLEMENTED,
-        IssueType::NotSupported,
-        "FerroPIX does not serve this interaction yet",
-        None,
-    )
-}
-
-/// A row of the operator API that no handler serves: none today, so a row
-/// added without its handler answers `501` rather than `404`.
-async fn pending_operator() -> Response {
-    crate::problem::blank(
-        StatusCode::NOT_IMPLEMENTED,
-        "FerroPIX does not serve this route yet",
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use ferropix_operator_api::health::{Outcome, UpstreamKind};
 
-    use super::{consumer, subscriber};
+    use super::{Unserved, consumer, subscriber};
+    use crate::auth::table::ROUTES;
     use crate::store::outbox::LastNotification;
     use crate::store::subscription::LastDelivery;
+
+    #[test]
+    fn a_row_without_a_handler_is_named() {
+        assert!(Unserved::check(&[]).is_ok(), "no row is unserved");
+        let row = &ROUTES[0];
+        let unserved = Unserved::check(&[row]).expect_err("the row is unserved");
+        assert_eq!(
+            [format!("{} {} ({})", row.method, row.path, row.interaction)],
+            unserved.rows()
+        );
+        assert!(unserved.to_string().contains(row.path), "{unserved}");
+    }
 
     fn delivery(endpoint: &str) -> LastDelivery {
         LastDelivery {

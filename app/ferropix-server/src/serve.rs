@@ -40,6 +40,9 @@ pub enum ServeError {
     /// The client that delivers ITI-93 to subscribers could not be built.
     #[error("the ITI-93 sender's HTTP client could not be built")]
     Pmir(#[source] reqwest::Error),
+    /// A route-table row has no handler.
+    #[error("the routes could not be built")]
+    Routes(#[source] fhir::Unserved),
     /// The listener could not be bound.
     #[error("the listener could not be bound")]
     Io(#[source] std::io::Error),
@@ -112,7 +115,8 @@ pub async fn serve_settings(
         base: server.base_path.as_str(),
         public_base_url: &public_base_url,
     };
-    let guarded = fhir::routes(at, mounts, &smart, &health, &lifecycle, &audit, &backend);
+    let guarded = fhir::routes(at, mounts, &smart, &health, &lifecycle, &audit, &backend)
+        .map_err(ServeError::Routes)?;
     let (guarded, mut channels) = with_xcpd(guarded, xcpd, &store, &matching, at, &audit, &wake)?;
     channels.pmir = pmir_channel(&pmir)?;
     channels.hl7v2 = mllp_channel(hl7v2.as_ref(), &audit);

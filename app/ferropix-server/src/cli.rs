@@ -76,14 +76,6 @@ pub enum DbCommand {
 }
 
 impl Command {
-    /// Returns the tracker issue that lands this job, or `None` when it runs.
-    #[must_use]
-    pub const fn pending_issue(&self) -> Option<u32> {
-        match self {
-            Self::Common(_) | Self::Db { .. } | Self::Matching { .. } => None,
-        }
-    }
-
     /// Returns the job as it is spelled on the command line.
     #[must_use]
     pub const fn spelling(&self) -> &'static str {
@@ -194,16 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn no_job_is_pending() {
-        for command in [
-            Command::Common(Common::Serve),
-            Command::Common(Common::Healthcheck),
-            Command::Db {
-                command: DbCommand::Migrate,
-            },
-        ] {
-            assert_eq!(None, command.pending_issue(), "{command:?}");
-        }
+    fn db_migrate_is_spelled_as_on_the_command_line() {
         assert_eq!(
             "db migrate",
             Command::Db {

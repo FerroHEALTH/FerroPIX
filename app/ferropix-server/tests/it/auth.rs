@@ -262,7 +262,8 @@ pub(crate) async fn application_logged(
         &lifecycle,
         &audit,
         backend,
-    );
+    )
+    .expect("every route-table row has its handler");
     (
         router(
             &settings.server,

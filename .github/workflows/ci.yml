@@ -129,6 +129,8 @@ jobs:
         run: bash scripts/release/stage-dist.sh --self-test
       - name: The chart comparison matches a repackaged chart and refuses other files
         run: bash scripts/release/chart-published.sh --self-test
+      - name: The Trivy install refuses a version with no sha256 and a tarball off its pin
+        run: bash scripts/release/install-trivy.sh --self-test
       - name: The destructive-command hook
         run: |
           set -euo pipefail

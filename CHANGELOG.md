@@ -13,6 +13,95 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-11-03
+
+### Added
+
+- `[server] idle_timeout_ms` (120000 by default) closes a kept-alive HTTP/1.1
+  connection that sends no next request within that time, with a clean end
+  of stream. The default outlasts the 90 s a common HTTP client keeps an idle
+  connection, so the client normally closes first (#384).
+- The console's single-key shortcuts are back on FerroUI's `keys` module:
+  on a pair `l` links (or asks first when the link merges), `n` decides
+  Not a match, `d` defers, `r` puts the focus in the reason, and `[` and
+  `]` lead to the neighbouring pairs; in the review queue `o` or `d` opens
+  the focused row's side panel. Each control announces its key in
+  `aria-keyshortcuts`, and the shortcut legend and the queue's hint list
+  `o` and `d` again (#390).
+
+### Changed
+
+- The server takes `ferrohealth-telemetry` 0.2.3. Each exported request span
+  is a server span named `{method} {route}`, such as
+  `GET /fhir/Patient/$ihe-pix` (the method alone when no route matched),
+  where it was named `request`, and its status is an error on a 5xx, under
+  the OpenTelemetry HTTP semantic conventions. A method outside the
+  standard set reads `_OTHER` in the request line and the span. `/metrics`
+  gains `http_server_active_requests`, the requests in flight by method and
+  scheme. `[telemetry.otlp]` refuses `trust_roots_file` or
+  `client_identity_file` beside an endpoint that is not `https://`, and a
+  file that is no PEM of its kind, where it exported in plain text with the
+  files ignored. Migration: point the endpoint at `https://` when the
+  collector speaks TLS, or drop the two keys when it does not (#382).
+- FerroPIX runs on `ferrohealth-server` 0.4.1, which keeps a product's own
+  fallback and the layers around it when the stack merges its routes
+  (FerroHEALTH/FerroSYS#199). FerroPIX was not exposed to the regression
+  0.4.1 fixes: every release ran on 0.3.8, which predates it, and the change
+  that took 0.4.0 declared the fallback of the FHIR face and the operator API
+  inside their guard, so an anonymous request to a path no route matches is
+  refused with `401` before and after (#386).
+- The operator console moves to FerroUI 0.6.0 and draws every page whole on
+  its server: a link, a search, a filter or a decision loads one complete
+  page, and FerroUI's small script modules add the keyboard, the side panels,
+  the dialogs and the session warning on top, with every page working when
+  they do not load. The console runs no WebAssembly and links no Leptos
+  crate; its binary serves FerroUI's stylesheet, theme and script modules
+  under `/ferrohealth-ui/0.6.0/`, cached for good, so the image carries the
+  binary alone. The Content-Security-Policy now admits scripts and styles
+  from the console's own origin alone, `script-src 'self'; style-src 'self'`,
+  with no nonce and no `'wasm-unsafe-eval'`. The review queue's At a glance
+  button now opens its side panel on a click, where the row's link took the
+  press before (#388).
+- The operator console moves to FerroUI 0.6.2 and `ferrohealth-server`
+  0.4.2. A select in a dense options row and a long identifier or link in
+  a stacked table no longer scroll the page sideways at 320 px. The
+  console's Content-Security-Policy is unchanged (`script-src 'self';
+  style-src 'self'`, no nonce) and now comes from the family's
+  server-rendered console headers, FerroUI's script modules are served
+  under `/ferrohealth-ui/0.6.2/`, and About names FerroUI 0.6.2 (#394).
+- `ihe-iti` 0.0.67 and `nl-generic-functions` 0.0.34 drop the functions that only forwarded to another, so callers name the target: `PatientQuery::default()` and `Paging::default()` for the removed `new()`, `mcsd::replica::Scope::default()` for `Scope::everything()`, `Answer::ok` for `pdqm::server::retrieved` and `pmir::server::subscription::current`, and `Answer::created` for `pmir::server::subscription::created`. `server::format::FormatError`, with its `UnsupportedMediaType` and `NotAcceptable` variants, replaces `Unacceptable` as the error of `Format::negotiate` and `Format::unsupported_media_type()` as the `415` refusal. Every answer and message on the wire is unchanged (#404).
+- `ihe-iti` 0.0.68 reads and writes the SOAP 1.2 envelope of ITI TF-2 Appendix V once, in the new `soap` feature: `soap::read` and `soap::answer` read an envelope through a `soap::Visitor`, `soap::write` writes one, and `soap::FaultCode`, `soap::Malformed` and the `ENVELOPE`, `ADDRESSING`, `ANONYMOUS` and `MEDIA_TYPE` constants are its own. `xcpd` reads and writes through it. `nl-generic-functions` 0.0.35's `mitz` feature now depends on `ihe-iti` with `soap` and reads the Mitz answer's envelope through it. A product changes `xcpd::error::FaultCode` and `mitz::error::FaultCode` to `ihe_iti::soap::FaultCode` (Mitz now names `VersionMismatch`, `MustUnderstand` and `DataEncodingUnknown`, which it reported as another code), and the `NotSoap`, `NotXml`, `DocumentType`, `TooDeep` and `NotAnEnvelope` variants of `xcpd::error::Malformation` and `mitz::error::Malformation` to `Malformation::Envelope(soap::Malformed::…)`. Every request, answer and fault on the wire is unchanged (#405).
+- `ihe-iti` 0.0.69 holds the request authorizer once, in the new `authorizer` feature, which `pixm`, `pdqm`, `mcsd`, `pmir` and `smart` turn on and which compiles no FHIR model: `authorizer::send`, the send that resends once when the authorizer asks, and its `Unsent` are public. `nl-generic-functions` 0.0.36 drops its `authorizer` module and feature: the NVI client authenticates through `ihe_iti::authorizer`, so a product that implements an authorizer for it changes `nl_generic_functions::authorizer::{Authorizer, Authorized, AuthorizerError, Retry}` to `ihe_iti::authorizer::…` and depends on `ihe-iti` with `authorizer`. The token renewal stays with `ferrohealth-smart`'s `TokenSource`. Every request either crate sends is unchanged (#406).
+- `ihe-iti` 0.0.70 and `nl-generic-functions` 0.0.37 write each shape the PDQm, PIXm, mCSD, PMIR, XCPD, NVI and Mitz clients share once. `authorizer::send` is generic over the client's error, which implements the new `exchange::Unanswered` and `authorizer::Unauthenticated`, and `authorizer::Unsent` is gone; `exchange::read` reads an answer to a bound, and `soap::post`, with the new `soap::Refusal`, sends a SOAP 1.2 message over HTTP, so the `soap` feature now compiles `reqwest`. The PDQm and PIXm `Malformation` hold `NotFhirJson`, `TooLarge`, `NotJson`, `NotAResource` and `Decode` in the new `outcome::Unreadable`, matched as `Malformation::Unreadable(Unreadable::NotFhirJson)`. `mcsd::directory::DirectoryEntry<Organization>` and `DirectoryEntry<Endpoint>`, over the sealed `DirectoryResource`, replace `DirectoryOrganization` and `DirectoryEndpoint`. `pixm::server::feed::Revision::into_patient` and `server::answer::Answer::into_resource`, which nothing called, are removed. Every request and answer on the wire is unchanged (#407).
+- The operator console signs in and keeps its sessions through `ferrohealth-session` 0.1.0, the FerroHEALTH console sign-in crate, in place of its own copy. `[oidc]` now needs only `issuer`, `client_id` and `redirect_uri`: the provider's endpoints are discovered when the console starts, and `authorization_endpoint`, `token_endpoint`, `jwks_uri`, `end_session_endpoint` and the new `revocation_endpoint` each take the place of the discovered one; `ca_file` and `timeout_s` (default 10) are new. `[session]` gains `store` (`memory`, the default, or `sealed` with `key` or `key_file`), and refuses an `absolute_timeout_s` shorter than `idle_timeout_s`. `config check` calls no provider: a section that leaves the endpoints to discovery is read when the console starts. The routes `/login`, `/auth/callback`, `/logout` and `/session` keep their paths; a sign-out now revokes the session's token when the provider has a revocation endpoint, and a console with no provider ends the session and lands on the signed-out page in place of answering `503`. A page whose session lives on but whose access token the provider could not renew sends the steward to the new `/sign-in/unrenewed`, which says so and leads back to the page (#418).
+- `ihe-iti` 0.0.71 and `nl-generic-functions` 0.0.38: a client's `with_authorizer` is now the one method of the `ihe_iti::authorizer::Authorizable` trait, which the PIXm, PDQm, mCSD and NVI clients and the PMIR subscriber implement, so a caller imports the trait to call it. The FHIR search value escaping and the FHIR JSON media type check move into the new `rest` feature as `ihe_iti::rest::escape` and `ihe_iti::rest::fhir_json`, which `pixm`, `pdqm`, `mcsd`, `pmir` and the `nvi` feature of `nl-generic-functions` turn on. Every message, answer and audit record is unchanged (#425).
+- `ihe-iti` 0.0.72 and `nl-generic-functions` 0.0.39: the new `mcsd::directory::identifier_pairs` reads the `system` and `value` of a list of FHIR identifiers, which `DirectoryEntry<Organization>::identifiers` and `nl_generic_functions::lrza::ura` share, so the `lrza` feature now takes `ihe-iti` with `mcsd`. The mCSD client reads its search and history pages through one pager, and the mCSD, PDQm and PMIR readers share one owner of an entry's `fullUrl`, a request URL's logical id and the `next` link. Every message, answer and audit record is unchanged (#430).
+- The operator console takes `ferrohealth-session` 0.1.1. Its `[oidc] post_logout_redirect_uri`, like `redirect_uri`, must be an `http` or `https` URL with a host and no userinfo. The session route now answers a gone session with an RFC 9457 problem whose detail is the catalog's `session-gone`. The provider, redirect and scope rules of `[oidc]`, and the refusal of a sign-in page as a return, are the crate's now; every configuration refusal names the same key as before (#432).
+
+### Removed
+
+- The console's `[server] site_root` key, its
+  `FERROPIX_CONSOLE__SERVER__SITE_ROOT` variable and the `/site` directory of
+  the console image: there is no site bundle to serve. A configuration that
+  still sets the key is refused at start, naming it, so remove it; the Helm
+  chart (0.3.5) no longer sets it. The console's own single-key shortcuts
+  (`l`, `n`, `d`, `r`, `[` and `]` on a pair, `o` and `d` on the review
+  queue) are gone until FerroUI binds a control's key (#390); every action
+  keeps its button or link, and `/`, `?`, `j`, `k`, Enter and the digits
+  stay (#388).
+
+### Fixed
+
+- The console dashboard's Listeners card shows the feed sender's real state.
+  It read a readiness indicator the server never registers, so the row read
+  Off on every deployment; the console and the server now take the
+  indicator names from one definition in the operator API (#383).
+- On a kept-alive HTTP/1.1 connection, `[server] header_read_timeout_ms`
+  counts from the first byte of each request head. It used to count from the
+  end of the previous answer, so it also closed an idle connection after
+  30 s, sometimes as a client sent its next request into it, which a `POST`
+  cannot safely retry (#384).
+
 ## [0.0.12] - 2026-10-29
 
 ### Changed

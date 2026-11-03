@@ -92,6 +92,15 @@ async fn a_post_to_the_session_route_extends_the_idle_timeout() -> Result<(), Bo
     Ok(())
 }
 
+/// The members of an RFC 9457 problem the session route answers with.
+#[derive(Debug, serde::Deserialize)]
+struct Problem {
+    #[serde(rename = "type")]
+    kind: String,
+    status: u16,
+    detail: String,
+}
+
 #[tokio::test]
 async fn the_session_route_answers_401_with_no_session_or_an_ended_one()
 -> Result<(), Box<dyn Error>> {
@@ -106,7 +115,18 @@ async fn the_session_route_answers_401_with_no_session_or_an_ended_one()
         let (response, body) = send(&service, request).await?;
         assert_eq!(StatusCode::UNAUTHORIZED, response.status(), "{method}");
         assert_eq!("no-store", header(&response, "cache-control"));
-        assert!(body.is_empty(), "{method}: {body}");
+        assert_eq!(
+            "application/problem+json",
+            header(&response, "content-type"),
+            "{method}: RFC 9457 §3"
+        );
+        let problem: Problem = serde_json::from_str(&body)?;
+        assert_eq!(401, problem.status, "{method}");
+        assert_eq!("about:blank", problem.kind, "{method}");
+        assert_eq!(
+            "Your session ended. Sign in again to go on.", problem.detail,
+            "{method}: the catalog's words"
+        );
     }
     Ok(())
 }

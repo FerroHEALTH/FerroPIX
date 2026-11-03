@@ -61,6 +61,11 @@ impl Pages for SignInPages {
         std::future::ready((why.status(), [(CACHE_CONTROL, "no-store")], text).into_response())
     }
 
+    fn session_gone(&self, parts: &Parts) -> String {
+        let locale = negotiated(&parts.headers, self.locale.clone());
+        tr_in(catalog(), &locale, Msg::SessionGone)
+    }
+
     fn sign_in_page(&self) -> &'static str {
         SIGN_IN
     }

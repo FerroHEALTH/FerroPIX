@@ -104,6 +104,17 @@ impl From<ferrohealth_session::config::ConfigError> for Error {
             ConfigError::Zero { key } => Self::Zero {
                 key: key.to_owned(),
             },
+            ConfigError::UrlShape { key, reason } => Self::UrlShape {
+                key: key.to_owned(),
+                reason,
+            },
+            ConfigError::NoOpenId => Self::Missing {
+                key: String::from("oidc.scopes (openid)"),
+            },
+            ConfigError::OfflineAccessScope => Self::Scope {
+                key: String::from("oidc.scopes"),
+                reason: "must not list offline_access; set oidc.offline_access = true",
+            },
             other => Self::Session(Box::new(other)),
         }
     }

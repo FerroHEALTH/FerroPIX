@@ -9,7 +9,8 @@
 use std::time::Duration;
 
 use http::StatusCode;
-use nl_generic_functions::mitz::error::{FaultCode, Malformation, MitzError};
+use ihe_iti::soap::{FaultCode, Malformed};
+use nl_generic_functions::mitz::error::{Malformation, MitzError};
 use nl_generic_functions::mitz::question::{DataCategory, Decision};
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -282,7 +283,10 @@ async fn a_200_that_is_not_soap_is_malformed() {
     let server = mitz(200, "application/json", "{}").await;
     let error = failure(&server).await;
     assert!(
-        matches!(error, MitzError::Malformed(Malformation::NotSoap)),
+        matches!(
+            error,
+            MitzError::Malformed(Malformation::Envelope(Malformed::NotSoap))
+        ),
         "{error:?}"
     );
 }
@@ -294,7 +298,9 @@ async fn an_answer_that_is_not_xml_is_malformed() {
     assert!(
         matches!(
             error,
-            MitzError::Malformed(Malformation::NotXml { .. } | Malformation::NotAnEnvelope)
+            MitzError::Malformed(Malformation::Envelope(
+                Malformed::NotXml { .. } | Malformed::NotAnEnvelope
+            ))
         ),
         "{error:?}"
     );
@@ -308,7 +314,10 @@ async fn a_document_type_is_refused() {
     );
     let error = failure(&mitz(200, SOAP_XML, &body).await).await;
     assert!(
-        matches!(error, MitzError::Malformed(Malformation::DocumentType)),
+        matches!(
+            error,
+            MitzError::Malformed(Malformation::Envelope(Malformed::DocumentType))
+        ),
         "{error:?}"
     );
 }
@@ -319,7 +328,10 @@ async fn an_answer_nested_too_deep_is_refused() {
     let body = answer(&[deep]);
     let error = failure(&mitz(200, SOAP_XML, &body).await).await;
     assert!(
-        matches!(error, MitzError::Malformed(Malformation::TooDeep { .. })),
+        matches!(
+            error,
+            MitzError::Malformed(Malformation::Envelope(Malformed::TooDeep { .. }))
+        ),
         "{error:?}"
     );
 }

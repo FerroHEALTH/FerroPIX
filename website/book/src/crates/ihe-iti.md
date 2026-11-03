@@ -17,6 +17,7 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `pmir` | Patient Master Identity Registry, PMIR | ITI-93, ITI-94 | Patient Identity Subscriber and Consumer |
 | `mcsd` | Mobile Care Services Discovery, mCSD | ITI-90, ITI-91 | Query Client and Update Client |
 | `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway, and the Responding Gateway's messages with no HTTP server |
+| `soap` | The SOAP 1.2 envelope of ITI TF-2 Appendix V, with no profile: its reader, which hands every element to a visitor the transaction supplies, its writer and its fault codes | Appendix V | what `xcpd` and the Mitz question of `nl-generic-functions` read and write through |
 | `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side, and of the PIXm Manager and the PDQm Supplier |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
 | `smart` | The authorizer over the client-credentials token of `ferrohealth-smart` | ITI-72 | the client's access token |
@@ -24,8 +25,8 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
 | `pmir-server` | The server side of PMIR, with no store and no HTTP server | ITI-93, ITI-94 | Patient Identity Registry |
 
-Only `xcpd` carries the SOAP 1.2, HL7 v3 and SAML XUA stack; a build without
-it compiles none of it. The FHIR features decode FHIR R4 through
+Only `soap` and `xcpd` carry the SOAP 1.2 stack, and only `xcpd` HL7 v3 and
+SAML XUA; a build without them compiles none of it. The FHIR features decode FHIR R4 through
 [`fhir-types`](https://crates.io/crates/fhir-types), the model FerroBRIDGE
 generates from the HL7 packages.
 

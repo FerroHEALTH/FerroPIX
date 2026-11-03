@@ -227,7 +227,7 @@ impl AuditEvent {
         let mut participants = vec![ActiveParticipant {
             // NOTE: ITI TF-2 §3.55.5.1.1 leaves a synchronous exchange's source UserID
             // not specialized, and PS3.15 A.5.1 requires one: it is the wsa:ReplyTo sent.
-            user_id: super::request::ANONYMOUS.to_owned(),
+            user_id: crate::soap::ANONYMOUS.to_owned(),
             alternative_user_id: Some(self.process_id.to_string()),
             user_name: None,
             // NOTE: DICOM PS3.15 A.5.2 names one participant as UserIsRequestor, the

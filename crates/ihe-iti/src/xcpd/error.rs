@@ -10,6 +10,8 @@
 
 use http::StatusCode;
 
+use crate::soap::{self, FaultCode};
+
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -101,53 +103,6 @@ impl XcpdError {
     }
 }
 
-/// The code of a SOAP 1.2 fault (SOAP 1.2 Part 1 §5.4.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum FaultCode {
-    /// `VersionMismatch`.
-    VersionMismatch,
-    /// `MustUnderstand`: a header the gateway was required to understand,
-    /// such as the WS-Addressing `Action` or the WS-Security header.
-    MustUnderstand,
-    /// `DataEncodingUnknown`.
-    DataEncodingUnknown,
-    /// `Sender`: the request was at fault.
-    Sender,
-    /// `Receiver`: the responding gateway was at fault.
-    Receiver,
-    /// A code SOAP 1.2 does not define.
-    Other,
-}
-
-impl FaultCode {
-    /// The code a fault's `Code/Value` names, by its local part.
-    pub(super) fn of(value: &str) -> Self {
-        let local = value.rsplit(':').next().unwrap_or(value).trim();
-        match local {
-            "VersionMismatch" => Self::VersionMismatch,
-            "MustUnderstand" => Self::MustUnderstand,
-            "DataEncodingUnknown" => Self::DataEncodingUnknown,
-            "Sender" => Self::Sender,
-            "Receiver" => Self::Receiver,
-            _ => Self::Other,
-        }
-    }
-}
-
-impl std::fmt::Display for FaultCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::VersionMismatch => "VersionMismatch",
-            Self::MustUnderstand => "MustUnderstand",
-            Self::DataEncodingUnknown => "DataEncodingUnknown",
-            Self::Sender => "Sender",
-            Self::Receiver => "Receiver",
-            Self::Other => "a code SOAP 1.2 does not define",
-        })
-    }
-}
-
 /// A problem the responding gateway coded in its response, from code system
 /// `1.3.6.1.4.1.19376.1.2.27.3` (§3.55.4.2.2.7, Table 3.55.4.2.2.7-1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,9 +139,6 @@ impl DetectedIssue {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum Malformation {
-    /// The answer's media type is not `application/soap+xml`.
-    #[error("the answer is not application/soap+xml")]
-    NotSoap,
     /// The answer is a multipart (MTOM) package, which an ITI-55 response
     /// carries no attachment to need.
     #[error("the answer is a multipart package")]
@@ -197,25 +149,9 @@ pub enum Malformation {
         /// The limit, in bytes.
         limit: usize,
     },
-    /// The answer is not well-formed XML.
-    #[error("the answer is not well-formed XML (byte {position})")]
-    NotXml {
-        /// The byte offset of the fault.
-        position: u64,
-    },
-    /// The answer carries a document type declaration, which a SOAP message
-    /// must not (SOAP 1.2 Part 1 §5).
-    #[error("the answer carries a document type declaration")]
-    DocumentType,
-    /// The answer nests deeper than the client reads.
-    #[error("the answer nests deeper than {limit} elements")]
-    TooDeep {
-        /// The limit, in elements.
-        limit: usize,
-    },
-    /// The answer is not a SOAP 1.2 envelope with a body.
-    #[error("the answer is not a SOAP 1.2 envelope with a body")]
-    NotAnEnvelope,
+    /// The answer is not a well-formed SOAP 1.2 envelope with a body.
+    #[error("the answer is not a well-formed SOAP 1.2 envelope")]
+    Envelope(#[from] soap::Malformed),
     /// The body holds neither a `PRPA_IN201306UV02` response nor a fault.
     #[error("the SOAP body holds neither an ITI-55 response nor a fault")]
     UnexpectedBody,

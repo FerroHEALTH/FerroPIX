@@ -25,6 +25,11 @@ crate that only implements an authorizer builds none; `nvi` turns it on.
 The identifier systems the functions share (the pseudonymised BSN and the
 URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.
 
+Mitz holds the closed authorization question to ITI TF-2 Appendix V, so `mitz`
+reads the answer's SOAP 1.2 envelope through the `soap` feature of
+[`ihe-iti`](https://crates.io/crates/ihe-iti), which owns that envelope; the
+XACML 3.0 body is read here.
+
 The NVI client never puts the pseudonym in an error, a `Debug` rendering or
 anything but the request to the service, and it follows a `next` link only on
 its own search endpoint. An authorizer is handed the request URL without its

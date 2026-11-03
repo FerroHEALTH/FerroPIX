@@ -16,6 +16,7 @@
 #
 # Usage:
 #   publish-crates.sh publish          # upload each crate in order
+#   publish-crates.sh dry-run          # package every crate, as one set
 #   publish-crates.sh verify           # read the registry back, with retries
 #   publish-crates.sh version CRATE    # print one crate's version
 #   publish-crates.sh list             # print the published members, one a line
@@ -74,6 +75,22 @@ do_publish() {
   echo "publish-crates: every crate is at its version or was already there"
 }
 
+# Package every member in one cargo invocation, so a member that requires a
+# version of another not yet on crates.io (nl-generic-functions on ihe-iti)
+# resolves it from the set being packaged
+# (<https://doc.rust-lang.org/cargo/commands/cargo-publish.html>).
+do_dry_run() {
+  local crate args=()
+  for crate in ${CRATES[@]+"${CRATES[@]}"}; do
+    args+=(-p "$crate")
+  done
+  if [[ ${#args[@]} -eq 0 ]]; then
+    echo "no published crate yet; nothing to package"
+    return 0
+  fi
+  cargo publish "${args[@]}" --dry-run --locked
+}
+
 # Read the registry, never the exit code alone. The index is eventually
 # consistent right after an upload: a miss is retried, and a failed request
 # counts as "not seen yet", not as a miss.
@@ -105,11 +122,12 @@ do_verify() {
 
 case "${1:-}" in
   publish) do_publish ;;
+  dry-run) do_dry_run ;;
   verify) do_verify ;;
   version) manifest_version "${2:?usage: publish-crates.sh version CRATE}" ;;
   list) for crate in ${CRATES[@]+"${CRATES[@]}"}; do printf '%s\n' "$crate"; done ;;
   *)
-    echo "publish-crates: expected 'publish', 'verify', 'version' or 'list', got '${1:-<none>}'" >&2
+    echo "publish-crates: expected 'publish', 'dry-run', 'verify', 'version' or 'list', got '${1:-<none>}'" >&2
     exit 2
     ;;
 esac

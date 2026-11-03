@@ -6,15 +6,13 @@
 //! §3.55.4.2.3.
 
 use http::StatusCode;
-use quick_xml::NsReader;
-use quick_xml::events::{BytesStart, Event};
-use quick_xml::name::ResolveResult;
 use secrecy::SecretString;
 
 use super::discovery::{Discovery, Match, RequestedAttribute};
-use super::error::{DetectedIssue, FaultCode, Malformation, XcpdError};
+use super::error::{DetectedIssue, Malformation, XcpdError};
 use super::identifier::{CommunityPatientId, HomeCommunityId, Oid};
-use super::{HL7, REQUEST_SYSTEM, SOAP, WSA};
+use super::{HL7, REQUEST_SYSTEM};
+use crate::soap::{self, Answer, Element, Visitor};
 
 /// The most bytes of an answer the client reads (no specification governs
 /// this: our own design, room for many matches and their demographics).
@@ -34,9 +32,6 @@ struct Event1 {
 /// What the reader collects of an answer.
 #[derive(Default)]
 struct Read {
-    envelope: bool,
-    body: bool,
-    fault: Option<String>,
     response: bool,
     interaction: Option<String>,
     relates_to: Option<String>,
@@ -56,9 +51,6 @@ enum Ns {
     Other,
 }
 
-/// One open element: its namespace and local name.
-type Open = (Ns, String);
-
 /// Reads the answer with `status`, media type `media` and `body` to the
 /// request whose `MessageID` is `message`.
 pub(super) fn read(
@@ -67,34 +59,11 @@ pub(super) fn read(
     body: &[u8],
     message: &str,
 ) -> Result<Discovery, XcpdError> {
-    // NOTE: no specification governs this: our own design; an answer that is no
-    // ITI-55 response is malformed only on a 200, and any other status says enough.
-    let rejected = |malformed: XcpdError| {
-        if status == StatusCode::OK {
-            malformed
-        } else {
-            XcpdError::Rejected { status }
-        }
-    };
-    let soap = match media.map(media_type) {
-        Some(kind) if kind == "application/soap+xml" => true,
-        Some(kind) if kind == "multipart/related" => {
-            return Err(rejected(Malformation::Multipart.into()));
-        }
-        _ => false,
-    };
-    if !soap {
-        return Err(rejected(Malformation::NotSoap.into()));
-    }
-    let read = parse(body).map_err(rejected)?;
-    if let Some(code) = read.fault {
-        return Err(XcpdError::Fault {
-            code: FaultCode::of(&code),
-            status,
-        });
-    }
-    if status != StatusCode::OK {
-        return Err(XcpdError::Rejected { status });
+    let mut read = Read::default();
+    match soap::answer(status, media, body, DEPTH, &mut read)? {
+        Answer::Envelope => {}
+        Answer::Fault { code, status } => return Err(XcpdError::Fault { code, status }),
+        Answer::Rejected { status } => return Err(XcpdError::Rejected { status }),
     }
     if !read.response {
         return Err(Malformation::UnexpectedBody.into());
@@ -155,118 +124,9 @@ fn matches(events: Vec<Event1>) -> Result<Vec<Match>, XcpdError> {
     Ok(found)
 }
 
-/// The type and subtype of a media type, lowercased, without parameters.
-fn media_type(media: &str) -> String {
-    media
-        .split(';')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase()
-}
-
-/// Collects what the answer says, refusing what is not well-formed XML.
-fn parse(body: &[u8]) -> Result<Read, XcpdError> {
-    let text = std::str::from_utf8(body).map_err(|error| Malformation::NotXml {
-        position: u64::try_from(error.valid_up_to()).unwrap_or(u64::MAX),
-    })?;
-    let mut reader = NsReader::from_str(text);
-    let mut open: Vec<Open> = Vec::new();
-    let mut read = Read::default();
-    let mut collected = String::new();
-    loop {
-        let (ns, event) = match reader.read_resolved_event() {
-            Ok((namespace, event)) => (kind(&namespace), event),
-            Err(_syntax) => {
-                return Err(Malformation::NotXml {
-                    position: reader.error_position(),
-                }
-                .into());
-            }
-        };
-        match event {
-            Event::Start(element) => {
-                let local = local_name(&element);
-                if open.len() >= DEPTH {
-                    return Err(Malformation::TooDeep { limit: DEPTH }.into());
-                }
-                open.push((ns, local));
-                element_opened(&mut read, &open, &element)?;
-                collected.clear();
-            }
-            Event::Empty(element) => {
-                let local = local_name(&element);
-                open.push((ns, local));
-                element_opened(&mut read, &open, &element)?;
-                open.pop();
-            }
-            Event::End(_) => {
-                element_closed(&mut read, &open, &collected);
-                collected.clear();
-                open.pop();
-            }
-            Event::Text(text) => collected.push_str(&text.xml10_content()),
-            Event::CData(data) => {
-                collected.push_str(&data.into_inner());
-            }
-            Event::GeneralRef(reference) => {
-                let resolved = reference
-                    .resolve_char_ref()
-                    .ok()
-                    .flatten()
-                    .map(String::from)
-                    .or_else(|| {
-                        quick_xml::escape::resolve_predefined_entity(&reference.xml10_content())
-                            .map(str::to_owned)
-                    })
-                    .ok_or(Malformation::NotXml {
-                        position: reader.buffer_position(),
-                    })?;
-                collected.push_str(&resolved);
-            }
-            Event::DocType(_) => return Err(Malformation::DocumentType.into()),
-            Event::Eof => break,
-            Event::Comment(_) | Event::Decl(_) | Event::PI(_) => {}
-        }
-    }
-    if !read.envelope || !read.body {
-        return Err(Malformation::NotAnEnvelope.into());
-    }
-    Ok(read)
-}
-
-/// Which of the namespaces the reader looks at `namespace` is.
-fn kind(namespace: &ResolveResult<'_>) -> Ns {
-    match namespace {
-        ResolveResult::Bound(ns) if ns.0 == SOAP => Ns::Soap,
-        ResolveResult::Bound(ns) if ns.0 == WSA => Ns::Wsa,
-        ResolveResult::Bound(ns) if ns.0 == HL7 => Ns::Hl7,
-        _ => Ns::Other,
-    }
-}
-
-fn local_name(element: &BytesStart<'_>) -> String {
-    element.local_name().as_ref().to_owned()
-}
-
-/// The value of the attribute `name`, unescaped, if the element has it.
-fn attribute(element: &BytesStart<'_>, name: &str) -> Result<Option<String>, XcpdError> {
-    let malformed = Malformation::NotXml { position: 0 };
-    let Some(found) = element
-        .try_get_attribute(name)
-        .map_err(|_attribute| malformed.clone())?
-    else {
-        return Ok(None);
-    };
-    let value = found
-        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-        .map_err(|_escape| malformed)?;
-    Ok(Some(value.into_owned()))
-}
-
 /// Whether the open elements, from the body's child down, are exactly
 /// `path` in the HL7 v3 namespace.
-fn at(open: &[Open], path: &[&str]) -> bool {
+fn at(open: &[(Ns, &str)], path: &[&str]) -> bool {
     let Some(inner) = open.get(3..) else {
         return false;
     };
@@ -277,119 +137,113 @@ fn at(open: &[Open], path: &[&str]) -> bool {
             .all(|((ns, local), expected)| *ns == Ns::Hl7 && local == expected)
 }
 
-/// What the element just opened says, given the elements open around it.
-fn element_opened(
-    read: &mut Read,
-    open: &[Open],
-    element: &BytesStart<'_>,
-) -> Result<(), XcpdError> {
-    let names: Vec<(Ns, &str)> = open
-        .iter()
-        .map(|(ns, local)| (*ns, local.as_str()))
-        .collect();
-    match names.as_slice() {
-        [(Ns::Soap, "Envelope")] => read.envelope = true,
-        [(_, _)] => return Err(Malformation::NotAnEnvelope.into()),
-        [(Ns::Soap, "Envelope"), (Ns::Soap, "Body")] => read.body = true,
-        [(Ns::Soap, "Envelope"), (Ns::Soap, "Body"), child] => match child {
-            (Ns::Soap, "Fault") => read.fault = Some(String::new()),
-            (Ns::Hl7, "PRPA_IN201306UV02") if !read.response => read.response = true,
-            _ => return Err(Malformation::UnexpectedBody.into()),
-        },
-        _ => {}
-    }
-    if !read.response {
-        return Ok(());
-    }
-    let reason_of = ["controlActProcess", "reasonOf", "detectedIssueEvent"];
-    if at(open, &["interactionId"]) {
-        read.interaction = attribute(element, "extension")?;
-    } else if at(open, &["acknowledgement", "typeCode"]) {
-        read.acknowledgement = attribute(element, "code")?;
-    } else if at(
-        open,
-        &["controlActProcess", "queryAck", "queryResponseCode"],
-    ) {
-        read.query_response = attribute(element, "code")?;
-    } else if at(open, &["controlActProcess", "subject", "registrationEvent"]) {
-        read.events.push(Event1::default());
-    } else if at(
-        open,
-        &[
-            "controlActProcess",
-            "subject",
-            "registrationEvent",
-            "subject1",
-            "patient",
-            "id",
-        ],
-    ) {
-        if let (Some(event), Some(root)) = (read.events.last_mut(), attribute(element, "root")?) {
-            let extension = attribute(element, "extension")?.map(SecretString::from);
-            event
-                .ids
-                .push(CommunityPatientId::new(SecretString::from(root), extension));
-        }
-    } else if at(
-        open,
-        &[
-            "controlActProcess",
-            "subject",
-            "registrationEvent",
-            "custodian",
-            "assignedEntity",
-            "id",
-        ],
-    ) {
-        if let Some(event) = read.events.last_mut() {
-            event.community = attribute(element, "root")?;
-        }
-    } else if at(
-        open,
-        &[&reason_of[..], &["triggerFor", "actOrderRequired", "code"]].concat(),
-    ) {
-        if attribute(element, "codeSystem")?.as_deref() == Some(REQUEST_SYSTEM)
-            && let Some(code) = attribute(element, "code")?
-        {
-            read.requested.push(RequestedAttribute::of(&code));
-        }
-    } else if at(
-        open,
-        &[
-            &reason_of[..],
-            &["mitigatedBy", "detectedIssueManagement", "code"],
-        ]
-        .concat(),
-    ) && let Some(code) = attribute(element, "code")?
-    {
-        let system = attribute(element, "codeSystem")?;
-        read.issues
-            .push(DetectedIssue::of(&code, system.as_deref()));
-    }
-    Ok(())
-}
+impl Visitor for Read {
+    type Namespace = Ns;
+    type Error = Malformation;
+    const SOAP: Ns = Ns::Soap;
+    const NAMESPACES: &'static [(&'static str, Ns)] =
+        &[(soap::ADDRESSING, Ns::Wsa), (HL7, Ns::Hl7)];
+    const OTHER: Ns = Ns::Other;
 
-/// What the element about to close held as text, given the elements open.
-fn element_closed(read: &mut Read, open: &[Open], text: &str) {
-    let names: Vec<(Ns, &str)> = open
-        .iter()
-        .map(|(ns, local)| (*ns, local.as_str()))
-        .collect();
-    match names.as_slice() {
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Header"),
-            (Ns::Wsa, "RelatesTo"),
-        ] => {
-            read.relates_to = Some(text.to_owned());
+    fn media(media: Option<&str>) -> Result<(), Malformation> {
+        match media.map(soap::essence).as_deref() {
+            Some(soap::MEDIA_TYPE) => Ok(()),
+            Some("multipart/related") => Err(Malformation::Multipart),
+            _ => Err(soap::Malformed::NotSoap.into()),
         }
-        [
-            (Ns::Soap, "Envelope"),
-            (Ns::Soap, "Body"),
-            (Ns::Soap, "Fault"),
-            (Ns::Soap, "Code"),
-            (Ns::Soap, "Value"),
-        ] => read.fault = Some(text.trim().to_owned()),
-        _ => {}
+    }
+
+    fn opened(&mut self, open: &[(Ns, &str)], element: &Element<'_>) -> Result<(), Malformation> {
+        if let [(Ns::Soap, "Envelope"), (Ns::Soap, "Body"), child] = open {
+            match child {
+                (Ns::Soap, "Fault") => {}
+                (Ns::Hl7, "PRPA_IN201306UV02") if !self.response => self.response = true,
+                _ => return Err(Malformation::UnexpectedBody),
+            }
+        }
+        if !self.response {
+            return Ok(());
+        }
+        let reason_of = ["controlActProcess", "reasonOf", "detectedIssueEvent"];
+        if at(open, &["interactionId"]) {
+            self.interaction = element.attribute("extension")?;
+        } else if at(open, &["acknowledgement", "typeCode"]) {
+            self.acknowledgement = element.attribute("code")?;
+        } else if at(
+            open,
+            &["controlActProcess", "queryAck", "queryResponseCode"],
+        ) {
+            self.query_response = element.attribute("code")?;
+        } else if at(open, &["controlActProcess", "subject", "registrationEvent"]) {
+            self.events.push(Event1::default());
+        } else if at(
+            open,
+            &[
+                "controlActProcess",
+                "subject",
+                "registrationEvent",
+                "subject1",
+                "patient",
+                "id",
+            ],
+        ) {
+            if let (Some(event), Some(root)) = (self.events.last_mut(), element.attribute("root")?)
+            {
+                let extension = element.attribute("extension")?.map(SecretString::from);
+                event
+                    .ids
+                    .push(CommunityPatientId::new(SecretString::from(root), extension));
+            }
+        } else if at(
+            open,
+            &[
+                "controlActProcess",
+                "subject",
+                "registrationEvent",
+                "custodian",
+                "assignedEntity",
+                "id",
+            ],
+        ) {
+            if let Some(event) = self.events.last_mut() {
+                event.community = element.attribute("root")?;
+            }
+        } else if at(
+            open,
+            &[&reason_of[..], &["triggerFor", "actOrderRequired", "code"]].concat(),
+        ) {
+            if element.attribute("codeSystem")?.as_deref() == Some(REQUEST_SYSTEM)
+                && let Some(code) = element.attribute("code")?
+            {
+                self.requested.push(RequestedAttribute::of(&code));
+            }
+        } else if at(
+            open,
+            &[
+                &reason_of[..],
+                &["mitigatedBy", "detectedIssueManagement", "code"],
+            ]
+            .concat(),
+        ) && let Some(code) = element.attribute("code")?
+        {
+            let system = element.attribute("codeSystem")?;
+            self.issues
+                .push(DetectedIssue::of(&code, system.as_deref()));
+        }
+        Ok(())
+    }
+
+    fn closed(&mut self, open: &[(Ns, &str)], text: Option<&str>, _at: usize) {
+        if let (
+            [
+                (Ns::Soap, "Envelope"),
+                (Ns::Soap, "Header"),
+                (Ns::Wsa, "RelatesTo"),
+            ],
+            Some(text),
+        ) = (open, text)
+        {
+            self.relates_to = Some(text.to_owned());
+        }
     }
 }

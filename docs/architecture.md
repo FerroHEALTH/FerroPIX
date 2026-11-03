@@ -1799,7 +1799,7 @@ repository edge is no native relationship.
 | Member | Holds | May depend on (workspace) |
 |---|---|---|
 | `crates/ihe-iti` | the identity profiles, client and server sides by feature | |
-| `crates/nl-generic-functions` | the Dutch functions | `ihe-iti` is not needed |
+| `crates/nl-generic-functions` | the Dutch functions | `ihe-iti` with `soap`, for the SOAP 1.2 envelope of the Mitz question (ITI TF-2 Appendix V) |
 | `app/ferropix-operator-api` | the serde types of the health and operator documents | |
 | `app/ferropix-server` | the server: configuration, store, matching, the three faces, audit, health, the operator API | `ihe-iti`, `nl-generic-functions`, `ferropix-operator-api` |
 | `app/ferropix-console` | the console | `ferropix-operator-api` only |

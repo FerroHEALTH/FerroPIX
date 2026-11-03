@@ -120,7 +120,9 @@ The build order is the milestones:
 - `crates/nl-generic-functions`: the Dutch Generic Functions (NVI, Mitz,
   LRZa, Nuts authentication and the shared identifiers), a feature each,
   moved from FerroFED with its history; the Nuts grant holds its
-  authorization server to RFC 8414 on `ferrohealth-smart`'s metadata module.
+  authorization server to RFC 8414 on `ferrohealth-smart`'s metadata module,
+  and Mitz reads its SOAP 1.2 envelope through `ihe-iti`'s `soap` feature
+  (ITI TF-2 Appendix V), the one owner of that envelope.
   Its Nuts tests run against the test devices under `tests/it/testkit/`.
 - `app/ferropix-server`: the server (#58), its own binary `ferropix`,
   `publish = false`: the subcommands `serve`, `config check`, `healthcheck`

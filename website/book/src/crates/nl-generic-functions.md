@@ -46,8 +46,11 @@ The Mitz client follows the VZVZ *Implementatiehandleiding Open en gesloten
 autorisatievraag* 3.8.2: a SOAP 1.2 request carrying one XACML 3.0
 `XACMLAuthzDecisionQuery`, over mutual TLS. Only `Permit` and `Deny` are
 decisions; `Indeterminate`, `NotApplicable`, a fault, a timeout and an answer
-that does not hold to the question are typed errors. The BSN travels only in
-the request to Mitz, and the client follows no redirect.
+that does not hold to the question are typed errors. The implementation guide
+holds the question to ITI TF-2 Appendix V, so `mitz` writes and reads the SOAP
+1.2 envelope through the `soap` feature of [`ihe-iti`](ihe-iti.md), whose
+`soap::FaultCode` a fault carries; the XACML 3.0 body is read here. The BSN
+travels only in the request to Mitz, and the client follows no redirect.
 
 ## Nuts (`nuts-auth`)
 

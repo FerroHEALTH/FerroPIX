@@ -35,16 +35,7 @@ jobs:
         with:
           cache: "false"
       - name: Every published crate packages
-        run: |
-          set -euo pipefail
-          crates="$(bash scripts/release/publish-crates.sh list)"
-          if [ -z "$crates" ]; then
-            echo "no published crate yet; nothing to package"
-            exit 0
-          fi
-          while IFS= read -r crate; do
-            cargo publish -p "$crate" --dry-run --locked
-          done <<< "$crates"
+        run: bash scripts/release/publish-crates.sh dry-run
 
   publish:
     name: publish

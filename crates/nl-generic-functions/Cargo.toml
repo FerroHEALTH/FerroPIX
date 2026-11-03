@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.34"
+version = "0.0.35"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -47,11 +47,14 @@ nvi = [
 ]
 # GF-Consent through Mitz, the optional Step-1 pre-filter (Annex B §B.6): the
 # closed authorization question of the Mitz afsprakenstelsel, a SOAP 1.2
-# request with an XACML 3.0 decision query, written and read with the XML
-# crate, sent over HTTP with a request id, and the redacting secret type the
-# BSN travels in.
+# request under ITI TF-2 Appendix V with an XACML 3.0 decision query, written
+# with the XML crate, its answer's envelope read by the Appendix V reader of
+# `ihe-iti`, sent over HTTP with a request id, and the redacting secret type
+# the BSN travels in.
 mitz = [
   "dep:http",
+  "dep:ihe-iti",
+  "ihe-iti/soap",
   "dep:quick-xml",
   "dep:reqwest",
   "dep:secrecy",
@@ -92,6 +95,10 @@ fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
+# The SOAP 1.2 envelope reader of ITI TF-2 Appendix V, which the Mitz question
+# is held to; the international crate sits below the national one, and a
+# caret requirement, as a shared crate takes on another family shared crate.
+ihe-iti = { version = "0.0.68", path = "../ihe-iti", default-features = false, optional = true }
 # The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.

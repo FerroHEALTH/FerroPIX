@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.67"
+version = "0.0.68"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -22,8 +22,8 @@ include = ["src/**", "README.md", "LICENSE"]
 
 # One crate for the IHE ITI Technical Framework, one feature per profile
 # (no specification governs this: our own design). The crate depends on no
-# application, and only `xcpd` may ever carry the SOAP 1.2, HL7 v3 and SAML
-# XUA stack. The user an exchange is made for is `ihe-atna`'s model, so an
+# application; only `soap` and `xcpd` may ever carry the SOAP 1.2 stack, and
+# only `xcpd` HL7 v3 and SAML XUA. The user an exchange is made for is `ihe-atna`'s model, so an
 # audit record and the exchange share one type.
 [features]
 # PIXm, the patient identifier cross-reference (ITI-83): the HTTP client,
@@ -110,9 +110,14 @@ pmir = [
   "dep:thiserror",
   "dep:url",
 ]
+# The SOAP 1.2 envelope of ITI TF-2 Appendix V, read over the XML crate with
+# no profile, and an answer's HTTP status and media type held to it: what XCPD reads its messages through, and what another crate's
+# Appendix V transaction, such as the Mitz question of `nl-generic-functions`,
+# reads its own through.
+soap = ["dep:http", "dep:quick-xml", "dep:thiserror"]
 # XCPD, cross-community patient discovery (ITI-55): the HTTP client the
-# SOAP 1.2 envelope travels on, the XML reader and writer of the envelope and
-# the HL7 v3 messages, the message and query ids, the creation time, the
+# SOAP 1.2 envelope travels on, the envelope reader of `soap`, the XML writer
+# of the envelope and the reader and writer of the HL7 v3 messages, the message and query ids, the creation time, the
 # redacting secret type the identifiers travel in, and the timer that bounds
 # an exchange's audit record by the exchange's timeout. The SAML XUA assertion is
 # supplied by the caller and embedded as written, so no signing crate is
@@ -131,6 +136,7 @@ xcpd = [
   "dep:tokio",
   "dep:url",
   "dep:uuid",
+  "soap",
 ]
 # BALP, the audit record each FHIR profile defines for its own transactions:
 # with `pixm`, `pdqm`, `mcsd` or `pmir` the BALP AuditEvent of that profile's

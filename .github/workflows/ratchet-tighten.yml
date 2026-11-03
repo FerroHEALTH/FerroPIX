@@ -23,7 +23,8 @@
 # A fine-grained PAT or GitHub App token with contents:write and
 # pull-requests:write in RATCHET_TIGHTEN_TOKEN avoids that. Without it the
 # lane still opens the pull request and says in its body to close and reopen
-# it.
+# it, or, where Actions may not open one, pushes the branch and ends with a
+# notice and the body in the step summary.
 name: Ratchet tighten
 
 on:
@@ -120,38 +121,42 @@ jobs:
           # The parent is the commit the counts were measured on, so the
           # lowered counts hold for it; CI on the pull request measures them
           # again against main as it is at merge time.
+          # Every request body goes through a file with --input, so no file
+          # content passes through argv, whose single argument the kernel caps
+          # (FerroHEALTH/FerroEHR#4790).
           base_tree=$(gh api "repos/${REPO}/git/commits/${BASE_SHA}" --jq .tree.sha)
-          tree_args=()
+          printf '[]' >tree-entries.json
           while IFS= read -r f; do
             [ -n "$f" ] || continue
             if [ -f "$f" ]; then
-              blob=$(gh api "repos/${REPO}/git/blobs" \
-                       -f encoding=base64 -f content="$(base64 -w0 "$f")" --jq .sha)
-              tree_args+=( -f "tree[][path]=$f" -f "tree[][mode]=100644" \
-                           -f "tree[][type]=blob" -f "tree[][sha]=$blob" )
+              base64 -w0 "$f" | jq -Rs '{encoding: "base64", content: .}' >blob.json
+              blob=$(gh api "repos/${REPO}/git/blobs" --input blob.json --jq .sha)
+              jq --arg path "$f" --arg sha "$blob" \
+                '. + [{path: $path, mode: "100644", type: "blob", sha: $sha}]' \
+                tree-entries.json >tree-entries.next && mv tree-entries.next tree-entries.json
               echo "staged $f ($blob)"
             fi
           done <changed-files.txt
-          tree=$(gh api "repos/${REPO}/git/trees" \
-                   -f "base_tree=${base_tree}" "${tree_args[@]}" --jq .sha)
-          commit=$(gh api "repos/${REPO}/git/commits" \
-                     -f "message=chore(checks): lower the ratchet counts" \
-                     -f "tree=${tree}" -f "parents[]=${BASE_SHA}" --jq .sha)
+          jq --arg base "$base_tree" '{base_tree: $base, tree: .}' tree-entries.json >tree.json
+          tree=$(gh api "repos/${REPO}/git/trees" --input tree.json --jq .sha)
+          jq -n --arg tree "$tree" --arg parent "$BASE_SHA" \
+            '{message: "chore(checks): lower the ratchet counts", tree: $tree, parents: [$parent]}' >commit.json
+          commit=$(gh api "repos/${REPO}/git/commits" --input commit.json --jq .sha)
 
           # One pull request at a time: an open one moves to the new commit,
           # which is this lane's own branch and never main.
           open=$(gh pr list --repo "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then
-            gh api -X PATCH "repos/${REPO}/git/refs/heads/${branch}" \
-              -f "sha=${commit}" -F force=true --jq .ref
+            jq -n --arg sha "$commit" '{sha: $sha, force: true}' >ref.json
+            gh api -X PATCH "repos/${REPO}/git/refs/heads/${branch}" --input ref.json --jq .ref
             echo "::notice::Moved #${open} to ${commit}."
             exit 0
           fi
           if gh api "repos/${REPO}/git/ref/heads/${branch}" --silent 2>/dev/null; then
             gh api -X DELETE "repos/${REPO}/git/refs/heads/${branch}"
           fi
-          gh api "repos/${REPO}/git/refs" \
-            -f "ref=refs/heads/${branch}" -f "sha=${commit}" --jq .ref
+          jq -n --arg ref "refs/heads/${branch}" --arg sha "$commit" '{ref: $ref, sha: $sha}' >ref.json
+          gh api "repos/${REPO}/git/refs" --input ref.json --jq .ref
 
           {
             echo "The ratchet guards pass a fall and fail only a rise, so pull requests leave the ratchet files alone (#392). This pull request records what fell on \`main\`, and carries only the ratchet files:"
@@ -169,9 +174,22 @@ jobs:
             fi
           } >pr-body.md
 
-          url=$(gh pr create --repo "$REPO" --base main --head "$branch" \
-                  --title "chore(checks): lower the ratchet counts" \
-                  --body-file pr-body.md)
+          # The organisation keeps "Allow GitHub Actions to create and approve
+          # pull requests" off, so the workflow token may be refused; the
+          # pushed branch is then the hand-off (FerroHEALTH/FerroEHR#4797).
+          title="chore(checks): lower the ratchet counts"
+          if ! url=$(gh pr create --repo "$REPO" --base main --head "$branch" \
+                       --title "$title" --body-file pr-body.md); then
+            {
+              echo "### Open the pull request by hand"
+              echo
+              echo "Branch \`${branch}\`, title \`${title}\`, body:"
+              echo
+              cat pr-body.md
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "::notice::Pushed ${branch}; Actions may not open its pull request here. Open it by hand with the title \"${title}\" and the body in this run's summary."
+            exit 0
+          fi
           echo "::notice::Opened $url"
           echo "$url" >>"$GITHUB_STEP_SUMMARY"
           gh pr merge "$url" --repo "$REPO" --auto

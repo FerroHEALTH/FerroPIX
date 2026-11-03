@@ -18,7 +18,7 @@ use ferrobridge_hl7v2::parse::{
     Component, Delimiters, ErrorCode, Field, Location, Message, Repetition,
 };
 
-use crate::hl7v2::stamped::Stamped;
+use crate::v2::stamped::Stamped;
 
 /// One `ERR` segment: where, which condition, and a text that quotes
 /// nothing from the message.
@@ -302,7 +302,7 @@ mod tests {
     use ferrobridge_hl7v2::parse::lex::lex;
 
     use super::{Fault, Writer, location};
-    use crate::hl7v2::stamped::Stamped;
+    use crate::v2::stamped::Stamped;
     use ferrobridge_hl7v2::parse::ErrorCode;
 
     const QUERY: &str = "MSH|^~\\&|CONSUMER|EAST|PIX|NORTH|20261025100000||QBP^Q23^QBP_Q21|Q-1|P|2.5||||||UNICODE UTF-8\rQPD|IHE PIX Query|TAG-1|A\\S\\1^^^EAST&2.999.1.1&ISO|^^^&2.999.1.2&ISO~^^^LAB\rRCP|I\r";

@@ -21,8 +21,8 @@ use ferrobridge_hl7v2::parse::{Field, Repetition, Segment};
 use fhir_types::codec::{Object, Value};
 
 use crate::config::section::hl7v2::authority::Authorities;
-use crate::hl7v2::write::Writer;
 use crate::matching::subject::MOTHERS_MAIDEN_NAME;
+use crate::v2::write::Writer;
 
 /// One identifier of PID-3 or MRG-1: its domain, when its assigning
 /// authority names one the face knows, and its value.
@@ -600,7 +600,7 @@ mod tests {
 
     use super::{Shown, birth_date, identifiers, patient, segment};
     use crate::config::section::hl7v2::authority::Authorities;
-    use crate::hl7v2::write::Writer;
+    use crate::v2::write::Writer;
 
     fn feed() -> String {
         let family = FAMILY_NAMES[0];

@@ -20,9 +20,9 @@ use ferrobridge_hl7v2::parse::Delimiters;
 use ferrobridge_hl7v2::parse::lex::lex;
 
 use crate::config::section::hl7v2::authority::{Authorities, Hd};
-use crate::hl7v2::pid::{self, Shown};
-use crate::hl7v2::stamped::Stamped;
-use crate::hl7v2::write::Writer;
+use crate::v2::pid::{self, Shown};
+use crate::v2::stamped::Stamped;
+use crate::v2::write::Writer;
 
 /// The delimiters a notification declares in MSH-1 and MSH-2. No
 /// specification governs the choice, which the message declares: our own
@@ -204,7 +204,7 @@ mod tests {
 
     use super::{Acknowledged, Party, acknowledged, adt_a31, read};
     use crate::config::section::hl7v2::authority::Authorities;
-    use crate::hl7v2::stamped::Stamped;
+    use crate::v2::stamped::Stamped;
 
     const EAST: &str = "urn:oid:2.999.1.1";
     const WEST: &str = "https://west.example.org/patients";

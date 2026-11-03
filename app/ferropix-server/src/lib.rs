@@ -29,6 +29,7 @@ pub mod problem;
 pub mod serve;
 pub mod store;
 pub mod usage_report;
+pub mod v2;
 pub mod xcpd;
 
 use std::fmt::Write as _;

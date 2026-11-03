@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The FHIR R4 `OperationOutcome` a refusal answers with.
+//! The FHIR R4 `OperationOutcome` a refusal answers with, and a resource
+//! written in the format a request negotiated, which the FHIR face and the
+//! feed lane's notices both write.
 //!
 //! An issue carries a fixed diagnostics text and never a value from the
 //! request: no token, no subject and no identifier reaches it. The issue
@@ -13,8 +15,22 @@ use std::sync::Arc;
 use axum::response::{IntoResponse, Response};
 use ferrohealth_server::panic::PanicBody;
 use ferrohealth_server::refusal::RefusalBody;
+use fhir_types::codec::Json;
 use fhir_types::r4::operation_outcome::{OperationOutcome, OperationOutcomeIssue};
 use http::{HeaderValue, StatusCode, header};
+use ihe_iti::server::format::Format;
+
+/// Returns `resource` written in `format`, `None` when it has no form there.
+pub fn encoded<T: Json + serde::Serialize>(resource: &T, format: Format) -> Option<Vec<u8>> {
+    match format {
+        Format::Xml => resource.to_json().ok().and_then(|object| {
+            fhir_types::xml::to_xml(&fhir_types::r4::schema::SCHEMAS, &object)
+                .ok()
+                .map(String::into_bytes)
+        }),
+        _ => serde_json::to_vec(resource).ok(),
+    }
+}
 
 /// The media type of a FHIR JSON body (FHIR R4 `http.html`, §3.1.0.1.10).
 pub const FHIR_JSON: &str = "application/fhir+json";

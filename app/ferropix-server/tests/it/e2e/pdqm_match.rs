@@ -18,11 +18,11 @@ use std::collections::BTreeSet;
 
 use ferropix_server::config::section::matching::Matching;
 use ferropix_server::config::section::profiles::Deprecated;
-use ferropix_server::feed::demographics;
 use ferropix_server::matching::scorer::{Grade, Scorer};
 use ferropix_server::matching::subject::Subject;
 use ferropix_server::pdqm::FEW_FIELDS_WARNING;
 use ferropix_server::store::Store;
+use ferropix_server::store::demographics;
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::fixtures::Fixture;
 use ferropix_testkit::synthetic::FAMILY_NAMES;

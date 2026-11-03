@@ -19,6 +19,7 @@
 //! specification governs how it is stored: our own design
 //! (`docs/architecture.md` §4).
 
+pub mod demographics;
 pub mod estimate;
 pub mod gate;
 pub mod identifier;
@@ -60,7 +61,7 @@ pub struct Store {
     feed: Option<std::sync::Arc<subscription::FeedSettings>>,
     /// What a cross-reference change is notified with, while HL7 v2
     /// consumers are configured.
-    consumers: Option<std::sync::Arc<crate::feed::notify::Notifying>>,
+    consumers: Option<std::sync::Arc<outbox::Notifying>>,
 }
 
 /// The job a store is started for, which decides the steps it runs.
@@ -173,7 +174,7 @@ impl Store {
     /// Returns this store notifying every cross-reference change as an
     /// ITI-10 message to each consumer it concerns, under `consumers`.
     #[must_use]
-    pub fn with_consumers(mut self, consumers: crate::feed::notify::Notifying) -> Self {
+    pub fn with_consumers(mut self, consumers: outbox::Notifying) -> Self {
         self.consumers = Some(std::sync::Arc::new(consumers));
         self
     }
@@ -181,7 +182,7 @@ impl Store {
     /// Returns what the store notifies changes with, `None` while no HL7 v2
     /// consumer is configured.
     #[must_use]
-    pub fn consumers(&self) -> Option<&crate::feed::notify::Notifying> {
+    pub fn consumers(&self) -> Option<&outbox::Notifying> {
         self.consumers.as_deref()
     }
 

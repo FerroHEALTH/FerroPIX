@@ -17,11 +17,7 @@ use ferrohealth_smart::guard::Requirement;
 use ferrohealth_smart::scope::Permission;
 use http::Method;
 
-/// The FHIR face's path under `{base}`.
-pub const FHIR: &str = "/fhir";
-
-/// The operator API's path under `{base}`.
-pub const OPERATOR: &str = "/operator";
+use crate::mount::{FHIR, OPERATOR};
 
 /// Which switch of the configuration mounts a route.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

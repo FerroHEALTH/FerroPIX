@@ -5,7 +5,13 @@
 //! switch and the sealing key. No specification governs the store: our own
 //! design.
 
+use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
+use secrecy::{ExposeSecret, SecretBox};
 
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +20,6 @@ use ferrohealth_secret::secret_url::SecretUrl;
 
 use crate::config::error::Error;
 use crate::config::{Profile, secret};
-use crate::store::seal::{KeyFormatError, SealingKey};
 
 /// The `[db]` section as written.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -102,10 +107,12 @@ impl Db {
                 key: String::from("db.data_key_file"),
             })?;
         let data_key = read_secret_file("db.data_key", key_file)?;
-        let data_key = SealingKey::from_base64(secrecy::ExposeSecret::expose_secret(&data_key))
-            .map_err(|KeyFormatError| Error::Value {
-                key: String::from("db.data_key_file"),
-                rule: "the file holds the base64 of exactly 32 bytes",
+        let data_key =
+            SealingKey::from_base64(data_key.expose_secret()).map_err(|KeyFormatError| {
+                Error::Value {
+                    key: String::from("db.data_key_file"),
+                    rule: "the file holds the base64 of exactly 32 bytes",
+                }
             })?;
         Ok(DbSettings {
             url,
@@ -113,6 +120,63 @@ impl Db {
             migrate: self.migrate,
             data_key,
         })
+    }
+}
+
+/// The length of the sealing key in bytes.
+pub const KEY_LEN: usize = 32;
+
+/// The sealing key is not the base64 of 32 bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the sealing key is not the base64 of exactly 32 bytes")]
+pub struct KeyFormatError;
+
+/// The 32-byte sealing key, as the key file holds it: its base64, trimmed.
+///
+/// It renders as `***` through `Debug`, and its bytes are zeroed on drop.
+#[derive(Clone)]
+pub struct SealingKey(Arc<SecretBox<[u8; KEY_LEN]>>);
+
+impl SealingKey {
+    /// Reads a key from the base64 text of its 32 bytes.
+    ///
+    /// A key is made with `openssl rand -base64 32`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ferropix_server::config::section::db::SealingKey;
+    ///
+    /// let key = SealingKey::from_base64("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")?;
+    /// assert_eq!(format!("{key:?}"), "SealingKey(***)");
+    /// assert!(SealingKey::from_base64("too short").is_err());
+    /// # Ok::<(), ferropix_server::config::section::db::KeyFormatError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// Returns [`KeyFormatError`] when `text` is not standard padded base64 or
+    /// does not decode to exactly 32 bytes.
+    pub fn from_base64(text: &str) -> Result<Self, KeyFormatError> {
+        // NOTE: no specification governs this: our own design; the decoder's
+        // error names the offending byte, which is key material, so it is dropped.
+        let decoded = SecretBox::new(Box::new(
+            STANDARD.decode(text.trim()).ok().ok_or(KeyFormatError)?,
+        ));
+        let bytes = <[u8; KEY_LEN]>::try_from(decoded.expose_secret().as_slice())
+            .ok()
+            .ok_or(KeyFormatError)?;
+        Ok(Self(Arc::new(SecretBox::new(Box::new(bytes)))))
+    }
+
+    /// Returns the bytes, for the derivations of the store's sealing.
+    pub(crate) fn bytes(&self) -> &[u8; KEY_LEN] {
+        self.0.expose_secret()
+    }
+}
+
+impl fmt::Debug for SealingKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SealingKey(***)")
     }
 }
 

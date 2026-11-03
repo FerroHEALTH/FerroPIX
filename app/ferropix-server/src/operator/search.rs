@@ -19,7 +19,7 @@
 //! request refused before it runs writes none. No search writes a steward
 //! action: the BALP trail holds it. These rules are our own design.
 
-use crate::fhir::outcome::body;
+use crate::outcome::body;
 use http::StatusCode;
 use std::collections::BTreeMap;
 

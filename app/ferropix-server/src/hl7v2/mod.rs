@@ -27,7 +27,6 @@
 //! message reaches a log line: the span names MSH-10 and the type, and the
 //! events the acknowledgment code.
 
-pub mod authority;
 pub mod cursor;
 pub mod feed;
 pub mod notification;
@@ -60,11 +59,11 @@ use url::Url;
 
 use crate::audit::Audit;
 use crate::audit::records::Call;
+use crate::config::section::hl7v2::authority::Authorities;
 use crate::config::section::hl7v2::{Hl7v2Settings, Sender};
 use crate::config::section::matching::Matching;
 use crate::config::section::profiles::Deprecated;
 use crate::feed::Feeder;
-use crate::hl7v2::authority::Authorities;
 use crate::hl7v2::cursor::Cursors;
 use crate::hl7v2::stamped::Stamped;
 use crate::hl7v2::write::{Fault, Writer};

@@ -14,7 +14,8 @@
 use std::time::Duration;
 
 use ferropix_server::config::section::outbox::{Outbox, Retention};
-use ferropix_server::outbox::{self, Channels, Wake};
+use ferropix_server::outbox::{self, Channels};
+use ferropix_server::store::outbox::Wake;
 use ferropix_server::store::outbox::{self as store_outbox, Channel, Message};
 use ferropix_server::xcpd::routes;
 use ferropix_testkit::containers::e2e_enabled;

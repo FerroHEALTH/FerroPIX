@@ -155,7 +155,7 @@ pub struct FeedSettings {
     /// The most attempts one message is given.
     pub max_attempts: u32,
     /// What wakes the outbox sender.
-    pub wake: crate::outbox::Wake,
+    pub wake: crate::store::outbox::Wake,
 }
 
 /// Returns every live subscription whose status is `active`, by id: a

@@ -13,7 +13,7 @@
 //! took it away. A cell that a spreadsheet would read as a formula is
 //! prefixed with `'`. These rules are our own design.
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::body::Body;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};

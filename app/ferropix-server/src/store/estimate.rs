@@ -52,7 +52,7 @@ pub async fn estimate(store: &Store) -> Result<Estimates, StoreError> {
         };
         after = *last;
         for (_, text) in page {
-            let Ok(patient) = crate::feed::demographics::patient(&text) else {
+            let Ok(patient) = crate::store::demographics::patient(&text) else {
                 unreadable = unreadable.saturating_add(1);
                 continue;
             };

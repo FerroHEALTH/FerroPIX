@@ -17,40 +17,19 @@
 //! notifications in order. No specification governs the outbox: our own
 //! design.
 
-use std::sync::Arc;
-
 use secrecy::SecretString;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::config::section::hl7v2::{Consumer, Notification};
 use crate::feed::FeedError;
 use crate::feed::announce::Change;
-use crate::hl7v2::authority::Authorities;
 use crate::hl7v2::notification::{self, Party};
 use crate::hl7v2::stamped::Stamped;
-use crate::outbox::Wake;
 use crate::store::outbox::{self, Channel, Message};
 use crate::store::{Store, xref};
 
 /// The media type an ITI-10 notification is stored under.
 pub const MEDIA_TYPE: &str = "application/hl7-v2";
-
-/// What a cross-reference change is notified with while consumers are
-/// configured.
-#[derive(Debug, Clone)]
-pub struct Notifying {
-    /// The Manager's sending application and facility.
-    pub manager: (String, String),
-    /// The consumers, in configuration order.
-    pub consumers: Arc<[Consumer]>,
-    /// The assigning authority of each domain.
-    pub authorities: Authorities,
-    /// The retry bounds.
-    pub notification: Notification,
-    /// What wakes the outbox sender.
-    pub wake: Wake,
-}
 
 /// Writes the ITI-10 notification of `changes` for each consumer of `store`
 /// they concern, through `connection`, and returns how many it wrote; none

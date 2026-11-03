@@ -5,7 +5,7 @@
 //! scorer run with, every field's weights included, the configured ones
 //! marked.
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::response::Response;
 use ferropix_operator_api::matching::{FieldWeights, Matching};
 use http::StatusCode;

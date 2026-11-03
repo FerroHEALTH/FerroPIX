@@ -65,17 +65,16 @@ use crate::audit::records::{self, Call, Identifier};
 use crate::audit::reserve::Place;
 use crate::config::section::matching::{BlockingKey, Matching};
 use crate::config::section::xcpd::XcpdSettings;
-use crate::feed::demographics::DemographicsError;
 use crate::matching::scorer::{Grade, Scorer};
-use crate::outbox::{Backoff, HttpChannel, Wake};
+use crate::mount::XCPD;
+use crate::outbox::{Backoff, HttpChannel};
 use crate::pdqm::PdqError;
 use crate::pdqm::patient::{self, Person};
+use crate::store::demographics::DemographicsError;
+use crate::store::outbox::Wake;
 use crate::store::outbox::{self, Channel, Message};
 use crate::store::xref::{self, Lookup};
 use crate::store::{Store, StoreError};
-
-/// The gateway's path under `{base}`.
-pub const PATH: &str = "/xcpd";
 
 /// The Responding Gateway over one store.
 #[derive(Debug, Clone)]
@@ -118,7 +117,7 @@ impl Gateway {
         wake: Wake,
     ) -> Result<Self, reqwest::Error> {
         let master = public_base_url.as_str().trim_end_matches('/').to_owned();
-        let endpoint = url::Url::parse(&format!("{master}{PATH}")).map_or_else(
+        let endpoint = url::Url::parse(&format!("{master}{XCPD}")).map_or_else(
             |_| NetworkAddress::uri(public_base_url),
             |url| NetworkAddress::uri(&url),
         );
@@ -478,10 +477,10 @@ impl Gateway {
     }
 }
 
-/// Returns the router of `POST {PATH}`.
+/// Returns the router of `POST {XCPD}`.
 pub fn routes(gateway: Gateway) -> Router {
     Router::new()
-        .route(PATH, post(received))
+        .route(XCPD, post(received))
         .with_state(Arc::new(gateway))
 }
 

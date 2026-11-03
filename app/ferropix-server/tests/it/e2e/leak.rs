@@ -418,7 +418,7 @@ async fn no_identifier_name_or_query_value_reaches_a_log_a_debug_rendering_or_an
     let errors = [
         ferropix_server::pdqm::PdqError::Unsupported,
         ferropix_server::pdqm::PdqError::Demographics(
-            ferropix_server::feed::demographics::DemographicsError,
+            ferropix_server::store::demographics::DemographicsError,
         ),
     ];
     for error in &errors {

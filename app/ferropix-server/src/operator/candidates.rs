@@ -15,7 +15,7 @@
 //! commits. No
 //! specification governs the queue: our own design.
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::candidate::{
@@ -624,7 +624,7 @@ mod tests {
             let text = format!(
                 r#"{{"resourceType":"Patient","name":[{{"family":"{family}","given":["Ada"]}}],"birthDate":"1980-02-29","gender":"female"}}"#
             );
-            crate::feed::demographics::patient(&text).expect("a patient")
+            crate::store::demographics::patient(&text).expect("a patient")
         };
         let a = crate::matching::subject::Subject::from_patient(
             &patient("Proefsma"),

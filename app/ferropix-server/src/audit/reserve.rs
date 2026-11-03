@@ -25,7 +25,7 @@ use tokio::sync::Mutex;
 
 use crate::audit::{Audit, Unrecorded, written};
 use crate::auth::table;
-use crate::fhir::outcome::{IssueType, respond};
+use crate::outcome::{IssueType, respond};
 use crate::problem::{self, Kind};
 
 /// The diagnostics of a transaction refused because its record could not be

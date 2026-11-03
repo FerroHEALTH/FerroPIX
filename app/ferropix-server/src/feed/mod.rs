@@ -27,7 +27,6 @@
 
 pub mod announce;
 mod attempt;
-pub mod demographics;
 mod link;
 pub mod master;
 pub mod merging;
@@ -52,12 +51,12 @@ use crate::config::section::matching::{BlockingKey, Matching};
 use crate::feed::attempt::{
     Resolving, Revising, announced, condition, current, identity_keys, local_keys, me,
 };
-use crate::feed::demographics::DemographicsError;
 use crate::feed::link::MergeKind;
 use crate::feed::write::{Blocks, Carried, Subjects};
 use crate::matching::blocking;
 use crate::matching::scorer::Scorer;
 use crate::matching::subject::Subject;
+use crate::store::demographics::{self, DemographicsError};
 use crate::store::identifier::Refused;
 use crate::store::record::{self, Channel, PersonId, RecordId};
 use crate::store::{Store, StoreError};

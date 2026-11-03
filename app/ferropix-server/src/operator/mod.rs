@@ -61,8 +61,8 @@ use crate::audit::Audit;
 use crate::auth::source::Sources;
 use crate::auth::table::Route;
 use crate::config::section::matching::{BlockingKey, Matching};
-use crate::feed::demographics::DemographicsError;
 use crate::matching::scorer::Scorer;
+use crate::store::demographics::DemographicsError;
 use crate::store::seal::{IdentifierValue, SealError, Sealer};
 use crate::store::{Store, StoreError};
 

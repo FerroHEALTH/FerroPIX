@@ -19,7 +19,7 @@
 //! commits (PIXm 3.1.0 §2:3.104.5). Our own design (`docs/architecture.md`
 //! §12.3).
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::extract::Request;
 use axum::response::Response;
 use ferropix_operator_api::domain::{

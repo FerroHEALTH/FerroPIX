@@ -21,16 +21,16 @@ use std::time::Duration;
 
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 use secrecy::ExposeSecret as _;
-use tokio::sync::{Notify, watch};
+use tokio::sync::watch;
 
 use crate::audit::Audit;
 use crate::audit::records::{self, Identifier};
 use crate::config::section::hl7v2::Consumer;
+use crate::config::section::hl7v2::authority::Authorities;
 use crate::config::section::outbox::Retention;
-use crate::hl7v2::authority::Authorities;
 use crate::hl7v2::notification::{self, Acknowledged, Party};
 use crate::store::Store;
-use crate::store::outbox::{self, Channel, Claimed, LEASE};
+use crate::store::outbox::{self, Channel, Claimed, LEASE, Wake};
 
 /// The longest the sender sleeps without looking at the outbox.
 pub const IDLE: Duration = Duration::from_secs(30);
@@ -98,17 +98,6 @@ pub struct Channels {
     pub hl7v2: Option<MllpChannel>,
 }
 
-/// What wakes the sender: a message written.
-#[derive(Debug, Clone, Default)]
-pub struct Wake(Arc<Notify>);
-
-impl Wake {
-    /// Wakes the sender to look at the outbox now.
-    pub fn now(&self) {
-        self.0.notify_one();
-    }
-}
-
 /// Starts the sender over `store`, delivering through `channels` and pruning
 /// by `retention`, woken by `wake`, until `stopped` is raised.
 #[must_use]
@@ -166,7 +155,7 @@ async fn run(
         }
         tokio::select! {
             () = tokio::time::sleep(wait) => {}
-            () = wake.0.notified() => {}
+            () = wake.woken() => {}
             _ = stopped.wait_for(|stop| *stop) => return,
         }
     }

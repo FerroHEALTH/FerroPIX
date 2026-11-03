@@ -22,7 +22,7 @@ use ihe_atna::balp::Outcome;
 use secrecy::SecretString;
 
 use crate::audit::records::{self, Call, Identifier, V2Query};
-use crate::hl7v2::authority::Hd;
+use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::pid::{self, Shown};
 use crate::hl7v2::stamped::Stamped;
 use crate::hl7v2::write::{Fault, Writer, location};

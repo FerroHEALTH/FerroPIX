@@ -20,7 +20,7 @@
 use ferrobridge_hl7v2::parse::{Field, Repetition, Segment};
 use fhir_types::codec::{Object, Value};
 
-use crate::hl7v2::authority::Authorities;
+use crate::config::section::hl7v2::authority::Authorities;
 use crate::hl7v2::write::Writer;
 use crate::matching::subject::MOTHERS_MAIDEN_NAME;
 
@@ -59,7 +59,7 @@ pub fn identifiers(field: Option<&Field>, authorities: &Authorities, default: &s
         .iter()
         .filter_map(|repetition| {
             let value = repetition.component(1)?.text()?.to_owned();
-            let hd = crate::hl7v2::authority::Hd::of(repetition.component(4));
+            let hd = crate::config::section::hl7v2::authority::Hd::of(repetition.component(4));
             let system = if hd.is_empty() {
                 Some(default.to_owned())
             } else {
@@ -599,7 +599,7 @@ mod tests {
     use fhir_types::r4::patient::Patient;
 
     use super::{Shown, birth_date, identifiers, patient, segment};
-    use crate::hl7v2::authority::Authorities;
+    use crate::config::section::hl7v2::authority::Authorities;
     use crate::hl7v2::write::Writer;
 
     fn feed() -> String {

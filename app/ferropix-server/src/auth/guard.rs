@@ -32,7 +32,7 @@ use http::{Extensions, Method, StatusCode, Uri};
 use crate::auth::Smart;
 use crate::auth::source::{Verdict, domains_of};
 use crate::auth::table::{self, Need, Route, SourceRule};
-use crate::fhir::outcome::{IssueType, respond};
+use crate::outcome::{IssueType, respond};
 use crate::problem::{self, Kind};
 
 /// The diagnostics of a request that carries no valid credential.

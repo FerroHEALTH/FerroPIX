@@ -7,8 +7,7 @@
 
 use crate::config::settings::Settings;
 use crate::{
-    METER, audit, auth, config, feed, fhir, hl7v2, http, operator, outbox, store, usage_report,
-    xcpd,
+    METER, audit, auth, config, fhir, hl7v2, http, operator, outbox, store, usage_report, xcpd,
 };
 use ferrohealth_health::lifecycle::Lifecycle;
 use ferrohealth_health::registry::Registry;
@@ -74,7 +73,7 @@ pub async fn serve_settings(
     telemetry: Arc<Telemetry>,
 ) -> Result<(), ServeError> {
     let started = Instant::now();
-    let wake = outbox::Wake::default();
+    let wake = store::outbox::Wake::default();
     let store = start_store(&settings, &wake).await?;
     let domains = store::seed::stored(&store)
         .await
@@ -232,7 +231,7 @@ fn with_xcpd(
     matching: &config::section::matching::Matching,
     at: fhir::Address<'_>,
     audit: &audit::Audit,
-    wake: &outbox::Wake,
+    wake: &store::outbox::Wake,
 ) -> Result<(axum::Router, outbox::Channels), ServeError> {
     let Some(settings) = settings else {
         return Ok((guarded, outbox::Channels::default()));
@@ -259,7 +258,10 @@ fn with_xcpd(
 ///
 /// # Errors
 /// Returns [`ServeError::Store`] when the store refuses to start or seed.
-async fn start_store(settings: &Settings, wake: &outbox::Wake) -> Result<store::Store, ServeError> {
+async fn start_store(
+    settings: &Settings,
+    wake: &store::outbox::Wake,
+) -> Result<store::Store, ServeError> {
     let store = store::Store::start(&settings.db, &settings.domains, store::Job::Serve)
         .await
         .map_err(ServeError::Store)?;
@@ -276,14 +278,18 @@ async fn start_store(settings: &Settings, wake: &outbox::Wake) -> Result<store::
 /// Returns `store` notifying every cross-reference change as an ITI-10
 /// message to each consumer it concerns, when `[[hl7v2.consumers]]` names
 /// one (ITI TF-2 §3.10.4.1.1).
-fn with_consumers(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> store::Store {
+fn with_consumers(
+    store: store::Store,
+    settings: &Settings,
+    wake: &store::outbox::Wake,
+) -> store::Store {
     let Some(hl7v2) = settings.hl7v2.as_ref().filter(|h| !h.consumers.is_empty()) else {
         return store;
     };
-    store.with_consumers(feed::notify::Notifying {
+    store.with_consumers(store::outbox::Notifying {
         manager: hl7v2.manager.clone(),
         consumers: hl7v2.consumers.clone().into(),
-        authorities: hl7v2::authority::Authorities::new(&hl7v2.namespaces),
+        authorities: config::section::hl7v2::authority::Authorities::new(&hl7v2.namespaces),
         notification: hl7v2.notification,
         wake: wake.clone(),
     })
@@ -299,7 +305,7 @@ fn mllp_channel(
     let hl7v2 = hl7v2.filter(|h| !h.consumers.is_empty())?;
     Some(outbox::MllpChannel {
         consumers: hl7v2.consumers.clone().into(),
-        authorities: hl7v2::authority::Authorities::new(&hl7v2.namespaces),
+        authorities: config::section::hl7v2::authority::Authorities::new(&hl7v2.namespaces),
         frame_limit: hl7v2.frame_limit,
         backoff: outbox::Backoff {
             initial: std::time::Duration::from_millis(hl7v2.notification.initial_backoff_ms),
@@ -311,7 +317,7 @@ fn mllp_channel(
 
 /// Returns `store` announcing every change to a person as an ITI-93 message
 /// when `[pmir]` is on (PMIR 1.6.0 §2:3.93.4.1.1).
-fn with_feed(store: store::Store, settings: &Settings, wake: &outbox::Wake) -> store::Store {
+fn with_feed(store: store::Store, settings: &Settings, wake: &store::outbox::Wake) -> store::Store {
     if !settings.pmir.enabled {
         return store;
     }

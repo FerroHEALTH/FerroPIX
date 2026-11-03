@@ -23,7 +23,7 @@
 //! No log line, span or error carries a pseudonym or a reason. No
 //! specification governs these routes: our own design.
 
-use crate::fhir::outcome;
+use crate::outcome;
 use std::sync::Arc;
 
 use axum::extract::Request;

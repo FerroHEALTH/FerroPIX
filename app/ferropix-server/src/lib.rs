@@ -20,8 +20,10 @@ pub mod fhir;
 pub mod hl7v2;
 pub mod http;
 pub mod matching;
+pub mod mount;
 pub mod operator;
 pub mod outbox;
+pub mod outcome;
 pub mod pdqm;
 pub mod problem;
 pub mod serve;
@@ -364,21 +366,24 @@ fn db(settings: Settings, command: &DbCommand) -> ExitCode {
 }
 
 /// Reads the old sealing key of `db reseal` from `path`.
-fn read_old_key(path: &std::path::Path) -> Result<store::seal::SealingKey, config::error::Error> {
+fn read_old_key(
+    path: &std::path::Path,
+) -> Result<config::section::db::SealingKey, config::error::Error> {
     let text = ferrohealth_secret::file::read_secret_file("old_key", path)?;
-    store::seal::SealingKey::from_base64(secrecy::ExposeSecret::expose_secret(&text)).map_err(
-        |store::seal::KeyFormatError| config::error::Error::Value {
-            key: String::from("old_key_file"),
-            rule: "the file holds the base64 of exactly 32 bytes",
-        },
-    )
+    config::section::db::SealingKey::from_base64(secrecy::ExposeSecret::expose_secret(&text))
+        .map_err(
+            |config::section::db::KeyFormatError| config::error::Error::Value {
+                key: String::from("old_key_file"),
+                rule: "the file holds the base64 of exactly 32 bytes",
+            },
+        )
 }
 
 /// Connects to the store and rewrites every identifier column from `old` to
 /// the configured key.
 async fn reseal(
     settings: &Settings,
-    old: &store::seal::SealingKey,
+    old: &config::section::db::SealingKey,
 ) -> Result<(store::Store, String), store::StoreError> {
     let old = store::seal::Sealer::new(old)?;
     let store = store::Store::connect(&settings.db).await?;

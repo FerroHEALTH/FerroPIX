@@ -10,7 +10,7 @@
 //! record. What the dashboard counts is our own design: no specification
 //! governs it.
 
-use crate::fhir::outcome;
+use crate::outcome;
 use axum::response::Response;
 use ferropix_operator_api::overview::{
     DayCount, FEED_HOURS, HourFeeds, OLDEST, Overview, QUEUE_DAYS, Queue, QueueEntry,

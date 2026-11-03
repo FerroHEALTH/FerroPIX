@@ -12,8 +12,9 @@ use uuid::Uuid;
 
 use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
-use crate::feed::{FeedError, Feeder, demographics};
+use crate::feed::{FeedError, Feeder};
 use crate::matching::subject::{IdentifierKey, Subject};
+use crate::store::demographics;
 use crate::store::record::{PersonId, RecordId};
 
 use super::{Me, Other, store};

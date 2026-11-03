@@ -136,6 +136,17 @@ self_test() {
   sed -i.bak 's/0\.13\.1/0.13.0/' "$d/scripts/tools.sh" && rm "$d/scripts/tools.sh.bak"
   expect 1 "a tool pin its script does not repeat"
   case_dir
+  mkdir -p "$d/scripts/release"
+  # shellcheck disable=SC2016 # the backticks are Markdown in the fixture
+  printf '| Trivy | `0.76.1` | `scripts/release/install-trivy.sh` |\n' >> "$d/docs/VERSIONS.md"
+  # shellcheck disable=SC2016 # the stub is a literal script, never expanded here
+  printf '#!/usr/bin/env bash\n# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\n# 0.76.1\n[[ "$1 $2" == "--sha256 0.76.1" ]]\n' > "$d/scripts/release/install-trivy.sh"
+  expect 0 "a Trivy pin the install script pins a sha256 for"
+  printf '#!/usr/bin/env bash\n# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\n# 0.76.1\nexit 1\n' > "$d/scripts/release/install-trivy.sh"
+  expect 1 "a Trivy pin the install script pins no sha256 for"
+  rm "$d/scripts/release/install-trivy.sh"
+  expect 1 "a Trivy pin with no install script"
+  case_dir
   printf '[workspace.package]\nversion = "1.2.3"\n' >> "$d/Cargo.toml"
   # shellcheck disable=SC2016 # the fixture is literal compose text, never expanded here
   printf '# SPDX-FileCopyrightText: Cadasto B.V.\n# SPDX-License-Identifier: BUSL-1.1\nservices:\n  ferropix:\n    image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-1.2.3}\n' > "$d/compose.yaml"
@@ -258,6 +269,17 @@ if [[ -n "$want" && -f Cargo.toml ]]; then
   [[ "$got" == "$want" ]] || drift "Cargo.toml pins ferrohealth-ui at ${got:-nothing}, docs/VERSIONS.md $want"
   tag="$(repeats "$ferroui_row" | grep -E '^v[0-9]' | head -n 1 || true)"
   [[ "$tag" == "v${want#=}" ]] || drift "docs/VERSIONS.md reads the FerroUI documents at the tag ${tag:-none}, wanted v${want#=}"
+fi
+
+# 3c. Trivy: the install script pins a sha256 for the version of its row,
+#     so a bump that forgets the checksum fails here and not in a release.
+want="$(pin Trivy)"
+if [[ -n "$want" ]]; then
+  if [[ ! -f scripts/release/install-trivy.sh ]]; then
+    drift "docs/VERSIONS.md pins Trivy $want but scripts/release/install-trivy.sh is missing"
+  elif ! bash scripts/release/install-trivy.sh --sha256 "$want" > /dev/null 2>&1; then
+    drift "scripts/release/install-trivy.sh pins no sha256 for Trivy $want"
+  fi
 fi
 
 # 4. The server image tag compose.yaml defaults to is the product version,

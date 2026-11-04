@@ -15,6 +15,7 @@ use http::{Request, Response, StatusCode};
 use tower::ServiceExt as _;
 use url::Url;
 
+use ferrohealth_session::clock::Clock;
 use ferrohealth_session::record::{Credential, Held};
 use ferrohealth_session::sessions::Occupancy;
 use ferropix_console::config::Config;
@@ -81,7 +82,16 @@ pub(crate) fn resolve(text: &str) -> Result<Settings, Box<dyn Error>> {
 
 /// The state and the service for the configuration `text` writes.
 pub(crate) async fn console(text: &str) -> Result<(ConsoleState, axum::Router), Box<dyn Error>> {
-    let state = ConsoleState::new(resolve(text)?).await?;
+    console_on(text, Clock::system()).await
+}
+
+/// The state and the service for the configuration `text` writes, with a
+/// session store that counts every lifetime on `clock`.
+pub(crate) async fn console_on(
+    text: &str,
+    clock: Clock,
+) -> Result<(ConsoleState, axum::Router), Box<dyn Error>> {
+    let state = ConsoleState::with_clock(resolve(text)?, clock).await?;
     let service = router(state.clone());
     Ok((state, service))
 }

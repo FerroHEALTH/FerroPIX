@@ -7,17 +7,16 @@
 //! gone. The sign-in a watch leads to keeps the page's address as `return`
 //! and comes back to it, and refuses a `return` that leaves the console.
 
-use std::error::Error;
-use std::time::Duration;
-
 use axum::body::Body;
+use ferrohealth_session::clock::{Clock, ManualClock};
 use ferrohealth_ui::view::session::Left;
 use ferropix_testkit::oidc::{CODE_GRANT, IdTokenClaims, Provider, TokenAnswer};
 use http::{Request, StatusCode};
+use std::error::Error;
 
 use crate::support::{
-    CLIENT_ID, OPERATOR_TOKEN, ORIGIN, begin_at, complete, configuration, console, get, get_with,
-    header, send, sign_in,
+    CLIENT_ID, OPERATOR_TOKEN, ORIGIN, begin_at, complete, configuration, console_on, get,
+    get_with, header, send, sign_in,
 };
 
 /// The server address of a console whose tests never reach the server.
@@ -29,16 +28,28 @@ const SESSION: &str = ferrohealth_session::paths::SESSION;
 /// The idle timeout of these tests' sessions, in seconds.
 const IDLE: u32 = 120;
 
+/// The second since the Unix epoch a manual session clock starts at.
+const START: i64 = 1_800_000_000;
+
 /// A provider, a console whose sessions idle out after [`IDLE`] seconds,
 /// and the cookie of a session signed in at it.
 async fn signed_in() -> Result<(Provider, axum::Router, String), Box<dyn Error>> {
+    signed_in_on(Clock::system()).await
+}
+
+/// A session as [`signed_in`] signs it in, in a store that counts every
+/// lifetime on `clock`.
+async fn signed_in_on(clock: Clock) -> Result<(Provider, axum::Router, String), Box<dyn Error>> {
     let provider = Provider::start().await?;
-    let (_state, service) = console(&configuration(
-        &provider,
-        NO_SERVER,
-        "",
-        &format!("idle_timeout_s = {IDLE}\nabsolute_timeout_s = 3600"),
-    ))
+    let (_state, service) = console_on(
+        &configuration(
+            &provider,
+            NO_SERVER,
+            "",
+            &format!("idle_timeout_s = {IDLE}\nabsolute_timeout_s = 3600"),
+        ),
+        clock,
+    )
     .await?;
     let cookie = sign_in(&service, &provider, TokenAnswer::bearer(OPERATOR_TOKEN)).await?;
     Ok((provider, service, cookie))
@@ -63,8 +74,9 @@ fn left(status: StatusCode, body: &str) -> Result<Left, Box<dyn Error>> {
 #[tokio::test]
 async fn a_read_of_the_session_route_answers_what_is_left_and_never_extends_it()
 -> Result<(), Box<dyn Error>> {
-    let (_provider, service, cookie) = signed_in().await?;
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    let time = ManualClock::new(START);
+    let (_provider, service, cookie) = signed_in_on(time.clock()).await?;
+    time.advance(1);
     let (response, body) = send(&service, get_with(SESSION, &cookie)?).await?;
     assert_eq!("application/json", header(&response, "content-type"));
     assert_eq!("no-store", header(&response, "cache-control"));
@@ -82,8 +94,9 @@ async fn a_read_of_the_session_route_answers_what_is_left_and_never_extends_it()
 
 #[tokio::test]
 async fn a_post_to_the_session_route_extends_the_idle_timeout() -> Result<(), Box<dyn Error>> {
-    let (_provider, service, cookie) = signed_in().await?;
-    tokio::time::sleep(Duration::from_millis(1100)).await;
+    let time = ManualClock::new(START);
+    let (_provider, service, cookie) = signed_in_on(time.clock()).await?;
+    time.advance(1);
     let (response, body) = send(&service, extend(Some(&cookie))?).await?;
     assert_eq!("no-store", header(&response, "cache-control"));
     let extended = left(response.status(), &body)?;

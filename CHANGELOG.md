@@ -13,6 +13,13 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-11-05
+
+### Changed
+
+- The console journeys and the book's console screenshots run Chrome for
+  Testing 157.0.8103.38 (#473).
+
 ## [0.0.15] - 2026-11-04
 
 ### Changed

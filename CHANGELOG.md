@@ -25,7 +25,7 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
   `taiki-e/install-action` 2.90.0, and the release lanes write the build
   SBOMs with syft 1.56.0 (#400).
 - The operator console draws with FerroUI 0.6.6 and signs in through
-  `ferrohealth-session` 0.2.0, whose `[oidc]` section takes `resolve`, to
+  `ferrohealth-session` 0.2.1, whose `[oidc]` section takes `resolve`, to
   reach a provider host at a fixed address, and `[oidc.tls]`, the client
   certificate the console presents to the provider and the lowest TLS
   version of that connection. The server takes `ferrohealth-smart` 0.8.8,
@@ -40,6 +40,11 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
   checked against a sha256 pinned per version. `aquasecurity/setup-trivy`
   downloaded it from `get.trivy.dev`, which stopped resolving on 2026-11-03,
   so every one of those lanes failed (#449).
+- The console's Sign out goes to the provider's end-session endpoint only
+  when the session it ends holds an ID Token, and otherwise to the
+  signed-out page, through `ferrohealth-session` 0.2.1. A Basic sign-out on
+  a console with a provider configured went to the provider, which held no
+  session of the operator's to end (#456).
 
 ## [0.0.13] - 2026-11-03
 

@@ -9,13 +9,14 @@
 
 use std::error::Error;
 
+use ferrohealth_session::clock::{Clock, ManualClock};
 use ferropix_console::server::ConsoleState;
 use ferropix_testkit::oidc::{Provider, TokenAnswer};
 use http::StatusCode;
 
 use crate::support::{
-    Captured, OPERATOR_REFRESH, OPERATOR_TOKEN, configuration, console, get, get_with, held_token,
-    occupancy, post_form, send, set_cookies, sign_in,
+    Captured, OPERATOR_REFRESH, OPERATOR_TOKEN, configuration, console_on, get, get_with,
+    held_token, occupancy, post_form, send, set_cookies, sign_in,
 };
 
 /// The server address of a console whose tests never need the server.
@@ -25,13 +26,26 @@ const NO_SERVER: &str = "http://127.0.0.1:9/";
 /// serve, so no server is asked and the answer is quick.
 const PAGE: &str = "/no-such-page";
 
+/// The second since the Unix epoch a manual session clock starts at.
+const START: i64 = 1_800_000_000;
+
 /// A provider, the console configured to sign in at it, and a session signed
 /// in with an access token already due and [`OPERATOR_REFRESH`].
 async fn due_session(
     session: &str,
 ) -> Result<(Provider, ConsoleState, axum::Router, String), Box<dyn Error>> {
+    due_session_on(session, Clock::system()).await
+}
+
+/// A session as [`due_session`] signs it in, in a store that counts every
+/// lifetime on `clock`.
+async fn due_session_on(
+    session: &str,
+    clock: Clock,
+) -> Result<(Provider, ConsoleState, axum::Router, String), Box<dyn Error>> {
     let provider = Provider::start().await?;
-    let (state, service) = console(&configuration(&provider, NO_SERVER, "", session)).await?;
+    let (state, service) =
+        console_on(&configuration(&provider, NO_SERVER, "", session), clock).await?;
     let cookie = sign_in(
         &service,
         &provider,
@@ -211,19 +225,23 @@ async fn a_session_whose_token_was_not_renewed_is_sent_to_the_sign_in_that_says_
 #[tokio::test]
 async fn the_absolute_timeout_ends_a_session_whatever_its_refresh_token()
 -> Result<(), Box<dyn Error>> {
+    // The extensions land one and three seconds in, the second at the idle
+    // timeout the sign-in alone would have reached.
+    let time = ManualClock::new(START);
     let (provider, state, service, cookie) =
-        due_session("idle_timeout_s = 3\nabsolute_timeout_s = 4").await?;
+        due_session_on("idle_timeout_s = 3\nabsolute_timeout_s = 4", time.clock()).await?;
     provider
         .answer_refresh(OPERATOR_REFRESH, &refreshed("synthetic-access-2", None))
         .await?;
     // NOTE: no specification governs this: our own design; the session watch's extension
     // keeps the idle timeout from ending the session and sends no refresh.
-    for _ in 0..2 {
-        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    for step in [1, 2] {
+        time.advance(step);
         let (extended, _body) = send(&service, post_form("/session", &cookie, "")?).await?;
         assert_eq!(StatusCode::OK, extended.status(), "the session lives");
     }
-    tokio::time::sleep(std::time::Duration::from_millis(1600)).await;
+    // Five seconds in: past the absolute timeout, two seconds after the last extension.
+    time.advance(2);
     send(&service, get_with(PAGE, &cookie)?).await?;
     assert_eq!(None, held_token(&state, &cookie)?);
     assert_eq!(

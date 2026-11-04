@@ -37,6 +37,7 @@ use ferrohealth_server::refusal::RefusalBody;
 use ferrohealth_server::same_origin::{self, SameOrigin};
 use ferrohealth_server::section::ServerSection;
 use ferrohealth_server::serve::Drained;
+use ferrohealth_session::clock::Clock;
 use ferrohealth_session::cookies::{CookieNames, HOST_PREFIX};
 use ferrohealth_session::record::Held;
 use ferrohealth_session::routes::{SignIn, keep_session};
@@ -110,6 +111,15 @@ impl ConsoleState {
     /// cannot be built, and [`StateError::Provider`] for a relying party
     /// that cannot be built or a provider that cannot be read.
     pub async fn new(settings: Settings) -> Result<Self, StateError> {
+        Self::with_clock(settings, Clock::system()).await
+    }
+
+    /// The state for `settings`, as [`ConsoleState::new`] builds it, with a
+    /// session store that counts every lifetime on `clock`.
+    ///
+    /// # Errors
+    /// Returns the errors of [`ConsoleState::new`].
+    pub async fn with_clock(settings: Settings, clock: Clock) -> Result<Self, StateError> {
         let pix = Pix::new(&settings.pix)?;
         let party =
             match &settings.oidc {
@@ -120,7 +130,11 @@ impl ConsoleState {
                 })?),
                 None => None,
             };
-        let sessions = Sessions::new(settings.session.clone(), CookieNames::for_console(COOKIES));
+        let sessions = Sessions::with_clock(
+            settings.session.clone(),
+            CookieNames::for_console(COOKIES),
+            clock,
+        );
         let sign_in = SignIn::new(
             sessions,
             party,

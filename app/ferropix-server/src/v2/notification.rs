@@ -141,7 +141,7 @@ pub fn read(text: &str, authorities: &Authorities) -> Option<Written> {
                 .repetitions()
                 .iter()
                 .filter_map(|cx| {
-                    let value = cx.component(1)?.text()?.to_owned();
+                    let value = cx.component(1)?.subcomponent(1)?.to_owned();
                     let system = authorities.system(&Hd::of(cx.component(4)))?;
                     Some((system, value))
                 })

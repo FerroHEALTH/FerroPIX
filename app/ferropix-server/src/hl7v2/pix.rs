@@ -87,7 +87,7 @@ pub(super) async fn query(
         .and_then(|field| field.repetitions().first());
     let value = source
         .and_then(|cx| cx.component(1))
-        .and_then(|component| component.text())
+        .and_then(|component| component.subcomponent(1))
         .map(str::to_owned);
     let system = face
         .authorities

@@ -58,7 +58,7 @@ pub fn identifiers(field: Option<&Field>, authorities: &Authorities, default: &s
         .repetitions()
         .iter()
         .filter_map(|repetition| {
-            let value = repetition.component(1)?.text()?.to_owned();
+            let value = repetition.component(1)?.subcomponent(1)?.to_owned();
             let hd = crate::config::section::hl7v2::authority::Hd::of(repetition.component(4));
             let system = if hd.is_empty() {
                 Some(default.to_owned())
@@ -190,7 +190,7 @@ fn family(name: &Repetition) -> Option<String> {
 /// The `HumanName` of an XPN (`datatype-xpn-to-humanname`), `None` when no
 /// part is valued.
 fn human_name(name: &Repetition) -> Option<Value> {
-    let part = |position: usize| name.component(position).and_then(|c| c.text());
+    let part = |position: usize| name.component(position).and_then(|c| c.subcomponent(1));
     let mut human = Object::new();
     if let Some(code) = part(7).and_then(name_use) {
         human.insert(text("use"), string(code));
@@ -229,7 +229,7 @@ fn name_use(code: &str) -> Option<&'static str> {
 /// The `Address` of an XAD (`datatype-xad-to-address`), `None` when no part
 /// is valued.
 fn address(address: &Repetition) -> Option<Value> {
-    let part = |position: usize| address.component(position).and_then(|c| c.text());
+    let part = |position: usize| address.component(position).and_then(|c| c.subcomponent(1));
     let mut fhir = Object::new();
     match part(7) {
         Some("M" | "SH") => {
@@ -270,7 +270,7 @@ fn address_use(code: &str) -> Option<&'static str> {
 /// The `ContactPoint` of an XTN (`datatype-xtn-to-contactpoint`), with `use`
 /// when XTN-2 names none (`segment-pid-to-patient`, PID-13 and PID-14).
 fn contact_point(xtn: &Repetition, default_use: &'static str) -> Option<Value> {
-    let part = |position: usize| xtn.component(position).and_then(|c| c.text());
+    let part = |position: usize| xtn.component(position).and_then(|c| c.subcomponent(1));
     let equipment = part(3);
     let email = matches!(equipment, Some("Internet" | "X.400"));
     let value = if email {

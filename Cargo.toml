@@ -54,24 +54,24 @@ ferrohealth-smart = { version = "=0.8.8", default-features = false }
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-04 (0.2.1, which requires
+# Verified against crates.io on 2026-11-04 (0.2.2, which requires
 # ferrohealth-smart 0.8.8).
-ferrohealth-session = { version = "=0.2.1", default-features = false }
+ferrohealth-session = { version = "=0.2.2", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
 # `--set` arguments of ferrohealth-server. Each pinned exactly, as a product
 # pins every family crate; ferrohealth-secret at the version ferrohealth-smart
-# requires. Verified against crates.io on 2026-10-29.
-ferrohealth-config = "=0.2.6"
+# requires. Verified against crates.io on 2026-11-04.
+ferrohealth-config = "=0.2.8"
 ferrohealth-secret = "=0.2.0"
 ferrohealth-server = { version = "=0.4.3", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition
-# and the panic hook. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-01.
-ferrohealth-telemetry = { version = "=0.2.3", default-features = false }
+# and the panic hook, whose line names the request id. Pinned exactly, as a
+# product pins every family crate. Verified against crates.io on 2026-11-04.
+ferrohealth-telemetry = { version = "=0.2.4", default-features = false }
 # The health family of FerroHEALTH/FerroSYS: the readiness document, which
 # the operator console's browser half reads too, and with `registry` the
 # indicators and the lifecycle the server runs. Pinned exactly at the version
@@ -85,15 +85,15 @@ ferrohealth-usage-report = { version = "=0.2.0", default-features = false }
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser and the original-mode acknowledgment, over the generated v2 tables,
 # pinned exactly as a product pins every family crate. Verified against
-# crates.io on 2026-10-26 (0.1.158, the first with `mllp::send`).
-ferrobridge-hl7v2 = { version = "=0.1.159", default-features = false }
+# crates.io on 2026-11-04 (0.1.177, the sender under `mllp::sender`).
+ferrobridge-hl7v2 = { version = "=0.1.177", default-features = false }
 hl7v2-types = "=0.1.127"
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
-# Verified against crates.io on 2026-10-28 (0.3.1, `ferrohealth-smart` 0.8).
-ihe-atna = { version = "=0.3.1", default-features = false }
+# Verified against crates.io on 2026-11-04 (0.3.3, `ferrohealth-smart` 0.8).
+ihe-atna = { version = "=0.3.3", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60.2", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

@@ -15,7 +15,8 @@ use std::sync::{Arc, Mutex};
 
 use ferrobridge_hl7v2::ack::{self, Code, Header, Stamp};
 use ferrobridge_hl7v2::decode::Charset;
-use ferrobridge_hl7v2::mllp::{Codec, Connection, Handler, serve};
+use ferrobridge_hl7v2::mllp::Codec;
+use ferrobridge_hl7v2::mllp::listener::{Connection, Handler, serve};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 

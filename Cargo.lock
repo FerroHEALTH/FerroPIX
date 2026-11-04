@@ -1245,9 +1245,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.1.177"
+version = "0.1.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc8669a5561c23aa129d9069560c0e2252fa4b2053717eca0418d8414f556ae8"
+checksum = "fade11eb16b50e89f960cbe259729fc5fd1b3a2bdc0bf02ba864d10dba20f141"
 dependencies = [
  "bytes",
  "encoding_rs",
@@ -4430,7 +4430,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

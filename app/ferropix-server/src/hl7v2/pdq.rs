@@ -240,8 +240,12 @@ fn increment(message: &Message) -> Result<Option<u32>, Fault> {
     else {
         return Ok(None);
     };
-    let amount = quantity.component(1).and_then(|component| component.text());
-    let units = quantity.component(2).and_then(|component| component.text());
+    let amount = quantity
+        .component(1)
+        .and_then(|component| component.subcomponent(1));
+    let units = quantity
+        .component(2)
+        .and_then(|component| component.subcomponent(1));
     let Some(amount) = amount else {
         return Ok(None);
     };
@@ -331,7 +335,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
         let at = || location("QPD", 1, 3, Some(index.saturating_add(1)), None);
         let Some(name) = repetition
             .component(1)
-            .and_then(|component| component.text())
+            .and_then(|component| component.subcomponent(1))
         else {
             continue;
         };

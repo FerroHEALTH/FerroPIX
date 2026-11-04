@@ -42,9 +42,10 @@ use std::time::{Duration, Instant};
 use ferrobridge_hl7v2::ack::{self, Code, Header};
 use ferrobridge_hl7v2::decode::{self, Charset};
 use ferrobridge_hl7v2::inbound::{self, Inbound, Received};
-use ferrobridge_hl7v2::mllp::{self, Codec, Connection, Handler, Malformed, Timeouts};
+use ferrobridge_hl7v2::mllp::listener::{self, Connection, Handler, Timeouts};
+use ferrobridge_hl7v2::mllp::{Codec, Malformed};
+use ferrobridge_hl7v2::parse::Message;
 use ferrobridge_hl7v2::parse::structure::structure_declared;
-use ferrobridge_hl7v2::parse::{Component, Message};
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 use ferrohealth_usage_report::window::Window;
 use ihe_atna::balp::{NetworkAddress, Peer};
@@ -335,9 +336,11 @@ pub fn names(sender: &Sender, message: &Message) -> bool {
             .and_then(|header| header.field(position))
             .and_then(|field| field.repetitions().first())
             .is_some_and(|hd| {
-                [1, 2]
-                    .into_iter()
-                    .any(|part| hd.component(part).and_then(Component::text) == Some(wanted))
+                [1, 2].into_iter().any(|part| {
+                    hd.component(part)
+                        .and_then(|component| component.subcomponent(1))
+                        == Some(wanted)
+                })
             })
     };
     named(3, &sender.application) && named(4, &sender.facility)
@@ -450,7 +453,7 @@ where
     let inner = Arc::clone(&signalled);
     let flag = listening.clone();
     listening.set(true);
-    let server = mllp::serve_with(
+    let server = listener::serve_with(
         socket,
         face,
         listener.codec,

@@ -327,11 +327,11 @@ async fn notify(channel: &MllpChannel, row: &Claimed) -> Result<(), String> {
         .audit
         .reserve()
         .map_err(|_full| String::from("the audit spool has no room for the record"))?;
-    let timeouts = ferrobridge_hl7v2::mllp::SendTimeouts {
+    let timeouts = ferrobridge_hl7v2::mllp::sender::SendTimeouts {
         connect: Duration::from_millis(consumer.connect_timeout_ms),
         reply: Duration::from_millis(consumer.reply_timeout_ms),
     };
-    let reply = ferrobridge_hl7v2::mllp::send(
+    let reply = ferrobridge_hl7v2::mllp::sender::send(
         consumer.address.as_str(),
         text.as_bytes(),
         ferrobridge_hl7v2::mllp::Codec::new(channel.frame_limit),
@@ -381,8 +381,8 @@ async fn notify(channel: &MllpChannel, row: &Claimed) -> Result<(), String> {
 }
 
 /// The failure text of an MLLP send that returned no reply, by its kind.
-fn sent_failure(error: &ferrobridge_hl7v2::mllp::SendError) -> String {
-    use ferrobridge_hl7v2::mllp::SendError;
+fn sent_failure(error: &ferrobridge_hl7v2::mllp::sender::SendError) -> String {
+    use ferrobridge_hl7v2::mllp::sender::SendError;
     match error {
         SendError::Refused(_) => String::from("the consumer refused the connection"),
         SendError::ConnectTimedOut { .. } => String::from("the connection timed out"),

@@ -69,6 +69,12 @@ and is counted in `http_server_active_requests`, the requests in flight by
 method and scheme, both of which `GET {base}/metrics` serves and
 `[telemetry.otlp]` pushes.
 
+A panic writes one `error` line that names the thread and the source
+location and leaves the panic message out, since a message can quote a
+patient identifier. When the panicking thread is serving a request, the
+line also carries that request's `request_id`, so you can find the request
+it broke.
+
 The line never holds the path as sent, a query string outside
 `telemetry.logged_query_parameters`, a body or a header value. A PIXm Consumer that calls `$ihe-pix` by `GET` puts the patient's
 identifier in the query, and the line still names only the route template.

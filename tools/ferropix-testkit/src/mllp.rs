@@ -13,7 +13,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use bytes::BytesMut;
-use ferrobridge_hl7v2::mllp::{self, Codec, FrameError, SendTimeouts};
+use ferrobridge_hl7v2::mllp::sender::{self, SendTimeouts};
+use ferrobridge_hl7v2::mllp::{Codec, FrameError};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::TcpStream;
 use tokio_util::codec::Decoder as _;
@@ -30,7 +31,7 @@ const READ_CHUNK: usize = 4096;
 pub enum SendError {
     /// The sender of `ferrobridge-hl7v2` returned no answer.
     #[error("the MLLP exchange failed")]
-    Mllp(#[from] mllp::SendError),
+    Mllp(#[from] sender::SendError),
     /// The connection failed.
     #[error("the MLLP connection failed")]
     Io(#[from] std::io::Error),
@@ -49,14 +50,14 @@ pub enum SendError {
 /// text, unframed.
 ///
 /// # Errors
-/// Returns [`SendError::Mllp`] when `ferrobridge_hl7v2::mllp::send` returns
+/// Returns [`SendError::Mllp`] when `ferrobridge_hl7v2::mllp::sender::send` returns
 /// no answer, and [`SendError::Text`] when the answer is no UTF-8 text.
 pub async fn send(address: SocketAddr, message: &str) -> Result<String, SendError> {
     let timeouts = SendTimeouts {
         connect: ANSWER_TIMEOUT,
         reply: ANSWER_TIMEOUT,
     };
-    let answer = mllp::send(address, message.as_bytes(), Codec::default(), timeouts).await?;
+    let answer = sender::send(address, message.as_bytes(), Codec::default(), timeouts).await?;
     String::from_utf8(answer).map_err(SendError::Text)
 }
 

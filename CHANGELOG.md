@@ -13,6 +13,39 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-11-04
+
+### Changed
+
+- The server and console images build on the distroless static base the
+  `nonroot` tag resolves to on 2026-11-03, the compose quickstart's
+  development issuer and the testkit's stub OpenID Provider run
+  `mock-oauth2-server` 6.1.4, the console journeys run Chrome for Testing
+  156.0.8078.80, CI audits the workflows with zizmor 1.32.0 through
+  `taiki-e/install-action` 2.90.0, and the release lanes write the build
+  SBOMs with syft 1.56.0 (#400).
+- The operator console draws with FerroUI 0.6.6 and signs in through
+  `ferrohealth-session` 0.2.1, whose `[oidc]` section takes `resolve`, to
+  reach a provider host at a fixed address, and `[oidc.tls]`, the client
+  certificate the console presents to the provider and the lowest TLS
+  version of that connection. The server takes `ferrohealth-smart` 0.8.8,
+  which that release requires (#451).
+- `ihe-iti` 0.0.74 and `nl-generic-functions` 0.0.41 ship a `Cargo.lock`
+  that resolves `ferrohealth-smart` 0.8.8. Their code is unchanged (#451).
+
+### Fixed
+
+- The release vulnerability record, the scan before the image tags and the
+  weekly published-image scan install Trivy from its GitHub release tarball,
+  checked against a sha256 pinned per version. `aquasecurity/setup-trivy`
+  downloaded it from `get.trivy.dev`, which stopped resolving on 2026-11-03,
+  so every one of those lanes failed (#449).
+- The console's Sign out goes to the provider's end-session endpoint only
+  when the session it ends holds an ID Token, and otherwise to the
+  signed-out page, through `ferrohealth-session` 0.2.1. A Basic sign-out on
+  a console with a provider configured went to the provider, which held no
+  session of the operator's to end (#456).
+
 ## [0.0.13] - 2026-11-03
 
 ### Added

@@ -376,7 +376,7 @@ fn framed(visit: &Visit, drawn: Drawn) -> Html {
         },
     );
     framed
-        .then(shortcut_legend(locale, shortcut_groups(visit)))
+        .then(shortcut_legend(locale, shortcut_groups(visit), None))
         .then(watch(visit))
 }
 

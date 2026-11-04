@@ -118,7 +118,7 @@ impl<'a> Screen<'a> {
                 mono: self.mono,
                 badge: None,
             },
-            ActionGroup::none(),
+            ActionGroup::default(),
         );
         let state = self.body.unwrap_or_else(|| {
             server_state(visit, visit.page.probe.as_ref(), self.needs, &self.route)

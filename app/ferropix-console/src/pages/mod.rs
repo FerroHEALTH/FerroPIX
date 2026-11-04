@@ -31,9 +31,10 @@ use ferrohealth_ui::i18n::{Arg, Locale};
 use ferrohealth_ui::icon::Glyph;
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, link_button};
+use ferrohealth_ui::view::layout::{Arrangement, Gap, stack_at};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::refusal::{Issue, Refusal, Severity, refusal};
-use ferrohealth_ui::view::surface::{card, cluster, definitions, disclosure, stack};
+use ferrohealth_ui::view::surface::{card, definitions, disclosure};
 use ferrohealth_ui::view::time::timestamp;
 use http::StatusCode;
 
@@ -146,7 +147,7 @@ fn probe_refusal(locale: &Locale, probe: &Probe, what: &str) -> Refusal {
 /// called the server.
 fn try_again(visit: &Visit, probe: &Probe) -> Html {
     let locale = &visit.locale;
-    cluster(
+    Arrangement::Cluster.wrap(
         link_button(
             visit.path().to_owned(),
             Variant::Secondary,
@@ -273,12 +274,15 @@ pub fn server_state(visit: &Visit, probe: Option<&Probe>, needs: Needs, route: &
     } else {
         Html::empty()
     };
-    stack(Html::join([
-        refusal(locale, &probe_refusal(locale, probe, &what)),
-        try_again(visit, probe),
-        away,
-        technical_detail(locale, probe),
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            refusal(locale, &probe_refusal(locale, probe, &what)),
+            try_again(visit, probe),
+            away,
+            technical_detail(locale, probe),
+        ]),
+    )
 }
 
 /// The words of a steward action's or a source message's kind as the server

@@ -13,14 +13,13 @@
 
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::table::view::{
-    Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
-};
+use ferrohealth_ui::table::view::{Body, Column, DataTable, Role, cell, data_table, title_cell};
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT};
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, definitions, disclosure, stack};
+use ferrohealth_ui::view::surface::{card, definitions, disclosure};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::actions::{Action, ActionFilter, Actions};
@@ -89,7 +88,10 @@ fn filters(visit: &Visit, filter: &ActionFilter) -> Html {
 /// The trail: its filters, then its page of actions.
 #[must_use]
 pub fn trail(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
-    stack(card(visit.tr(Msg::Filters), filters(visit, filter)).then(table(visit, filter, actions)))
+    stack_at(
+        Gap::Loose,
+        card(visit.tr(Msg::Filters), filters(visit, filter)).then(table(visit, filter, actions)),
+    )
 }
 
 /// The page of actions, with the next page's post when one follows.
@@ -124,7 +126,7 @@ fn table(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
         .map(|action| {
             Html::raw(format!(
                 "<tr>{}{}{}{}{}{}</tr>",
-                title_cell(None, timestamp(locale, &action.at), None),
+                title_cell(None, None, timestamp(locale, &action.at), None),
                 cell(actor, Html::text(&action.actor)),
                 cell(
                     kind,
@@ -169,12 +171,7 @@ fn table(visit: &Visit, filter: &ActionFilter, actions: &Actions) -> Html {
             order: None,
             tabs: None,
             actions: None,
-            body: data_table(DataTable {
-                caption: &caption,
-                columns: &columns,
-                sorting: Sorting::default(),
-                body: Body::Rows(rows),
-            }),
+            body: data_table(DataTable::new(&caption, &columns, Body::Rows(rows))),
             pager,
         },
     )

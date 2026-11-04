@@ -263,8 +263,14 @@ the provider's endpoints when it starts (RFC 8414, OpenID Connect Discovery
 discovered one. `config check` calls no provider: a section that names the
 authorization, token and key-set endpoints is checked whole, and one that
 leaves them to discovery is read when the console starts. `ca_file` adds PEM
-trust roots for a provider behind a private certificate authority, and
-`timeout_s` (default 10) bounds one call to it.
+trust roots for a provider behind a private certificate authority,
+`resolve` reaches a provider host at a fixed address (each entry
+`host=ip:port`) for a provider whose name resolves only inside a private
+network, `[oidc.tls]` sets the client certificate the console presents to
+the provider (`client_certificate` with `client_key` or `client_key_file`,
+RFC 8705 §2) and `min_version`, the lowest TLS version of that connection
+(`"1.2"`, the default, or `"1.3"`), and `timeout_s` (default 10) bounds one
+call to it.
 
 `[session] store` is `memory` (the default), which keeps the sessions in the
 console's process with an opaque id in the cookie, or `sealed`, which keeps

@@ -13,15 +13,14 @@
 
 use ferrohealth_ui::html::Html;
 use ferrohealth_ui::icon::Glyph;
-use ferrohealth_ui::table::view::{
-    Body, Column, DataTable, Role, Sorting, cell, data_table, title_cell,
-};
+use ferrohealth_ui::table::view::{Body, Column, DataTable, Role, cell, data_table, title_cell};
 use ferrohealth_ui::tone::Tone;
 use ferrohealth_ui::view::button::{Variant, label};
 use ferrohealth_ui::view::form::{Field, INPUT, SELECT, check_field, help_id};
+use ferrohealth_ui::view::layout::{Gap, stack_at};
 use ferrohealth_ui::view::notice::{Announce, notice};
 use ferrohealth_ui::view::status::badge;
-use ferrohealth_ui::view::surface::{card, disclosure, stack};
+use ferrohealth_ui::view::surface::{card, disclosure};
 use ferrohealth_ui::view::template::list::{ListCard, list_card, list_empty};
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::pseudonym::{MAX_REASON, PseudonymDomain, PseudonymDomains, Resolution};
@@ -72,13 +71,16 @@ pub fn pseudonym_domains(
             Html::text(visit.tr(Msg::PseudonymAdminOnly))
         ))
     };
-    stack(Html::join([
-        resolved_notice(visit, resolved),
-        written_notice(visit, written, "POST /operator/pseudonym-domains"),
-        domain_table(visit, domains),
-        resolve_form(visit, &live),
-        editor,
-    ]))
+    stack_at(
+        Gap::Loose,
+        Html::join([
+            resolved_notice(visit, resolved),
+            written_notice(visit, written, "POST /operator/pseudonym-domains"),
+            domain_table(visit, domains),
+            resolve_form(visit, &live),
+            editor,
+        ]),
+    )
 }
 
 /// The answer to a resolve just posted: the person, linked to their page,
@@ -156,7 +158,7 @@ fn domain_table(visit: &Visit, domains: &PseudonymDomains) -> Html {
             };
             Html::raw(format!(
                 "<tr>{}{}{}{}{}{}</tr>",
-                title_cell(None, Html::text(&domain.name), None),
+                title_cell(None, None, Html::text(&domain.name), None),
                 cell(
                     namespace,
                     Html::raw(format!(
@@ -177,12 +179,7 @@ fn domain_table(visit: &Visit, domains: &PseudonymDomains) -> Html {
     let caption = visit.tr(Msg::PseudonymDomains);
     card_of(
         domains.domains.len(),
-        data_table(DataTable {
-            caption: &caption,
-            columns: &columns,
-            sorting: Sorting::default(),
-            body: Body::Rows(rows),
-        }),
+        data_table(DataTable::new(&caption, &columns, Body::Rows(rows))),
     )
 }
 

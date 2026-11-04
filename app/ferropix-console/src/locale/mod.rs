@@ -193,7 +193,7 @@ pub fn choices() -> Vec<Locale> {
         .filter(|tag| tag.as_str() != "en")
         .filter_map(|tag| Locale::parse(tag).ok())
         .collect();
-    found.insert(0, Locale::english());
+    found.insert(0, Locale::default());
     found
 }
 

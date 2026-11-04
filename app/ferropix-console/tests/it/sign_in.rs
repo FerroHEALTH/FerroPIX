@@ -68,7 +68,7 @@ async fn a_sign_in_refusal_reads_its_words_from_the_catalog_in_the_requested_loc
     );
     let (response, body) = send(&service, request).await?;
     assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
-    let english = tr_in(catalog(), &Locale::english(), Msg::SignInNotConfigured);
+    let english = tr_in(catalog(), &Locale::default(), Msg::SignInNotConfigured);
     assert_eq!(english, body);
     assert_eq!("sign-in is not configured on this console", body);
     Ok(())

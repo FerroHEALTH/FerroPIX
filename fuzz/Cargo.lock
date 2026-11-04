@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.73"
+version = "0.0.74"
 dependencies = [
  "fhir-types",
  "http",

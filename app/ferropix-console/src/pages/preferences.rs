@@ -13,7 +13,7 @@
 
 use ferrohealth_ui::calendar::Weekday;
 use ferrohealth_ui::html::Html;
-use ferrohealth_ui::i18n::{Arg, Locale};
+use ferrohealth_ui::i18n::Arg;
 use ferrohealth_ui::view::preferences::{
     Post, PreferenceRow, Section, SectionRoutes, SelectPreference, SwitchPreference,
     preference_row, preferences_page as library_page, select_preference, switch_preference,
@@ -125,7 +125,7 @@ pub fn preferences_page(visit: &Visit) -> Drawn {
     let browser = choices()
         .into_iter()
         .find(|locale| locale.tag() == *tag)
-        .unwrap_or_else(Locale::english);
+        .unwrap_or_default();
     let page = library_page(
         &visit.locale,
         ferrohealth_ui::view::preferences::PreferencesPage {

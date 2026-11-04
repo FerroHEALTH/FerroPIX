@@ -54,9 +54,9 @@ ferrohealth-smart = { version = "=0.8.8", default-features = false }
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-03 (0.2.0, which requires
+# Verified against crates.io on 2026-11-04 (0.2.1, which requires
 # ferrohealth-smart 0.8.8).
-ferrohealth-session = { version = "=0.2.0", default-features = false }
+ferrohealth-session = { version = "=0.2.1", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and

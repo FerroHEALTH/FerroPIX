@@ -97,13 +97,14 @@ self_test() {
     printf ')\n' >> "$work/scripts/release/publish-crates.sh"
   }
   # crate VERSION [LOCKED]: crates/pix-a at VERSION, consuming the workspace
-  # `serde`, locked at LOCKED (VERSION when not given).
+  # `serde` and `log` and requiring its own `tokio`, locked at LOCKED (VERSION
+  # when not given).
   crate() {
     mkdir -p "$work/crates/pix-a/src"
     if [[ "$1" == workspace ]]; then
-      printf '[package]\nname = "pix-a"\nversion.workspace = true\n\n[dependencies]\nserde.workspace = true\n' > "$work/crates/pix-a/Cargo.toml"
+      printf '[package]\nname = "pix-a"\nversion.workspace = true\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' > "$work/crates/pix-a/Cargo.toml"
     else
-      printf '[package]\nname = "pix-a"\nversion = "%s"\n\n[dependencies]\nserde.workspace = true\n' "$1" > "$work/crates/pix-a/Cargo.toml"
+      printf '[package]\nname = "pix-a"\nversion = "%s"\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' "$1" > "$work/crates/pix-a/Cargo.toml"
     fi
     printf '[[package]]\nname = "pix-a"\nversion = "%s"\n' "${2:-$1}" > "$work/Cargo.lock"
   }
@@ -215,6 +216,12 @@ self_test() {
   branch dependency
   manifest 0.0.0 'serde = "1.1"'
   commit "a workspace dependency the crate consumes moves"
+  branch inline
+  manifest 0.0.0 'serde = "1"'$'\n''log = "0.5"'
+  commit "a workspace dependency the crate consumes by an inline table moves"
+  branch own
+  manifest 0.0.0 'serde = "1"'$'\n''tokio = "1.1"'
+  commit "a workspace dependency of the crate's own requirement's name moves"
   branch lower
   echo 'pub fn c() {}' >> "$work/crates/pix-a/src/lib.rs"
   crate 0.0.39
@@ -234,6 +241,8 @@ self_test() {
   expect "a crate change without a bump, waived" 0 unbumped NO_CRATE_BUMP=true
   expect "a crate change with its bump" 0 bumped
   expect "a consumed workspace dependency without a bump" 1 dependency
+  expect "a dependency consumed by an inline table without a bump" 1 inline
+  expect "a crate's own requirement of a moved workspace name" 0 own
   expect "a crate version that moves backwards" 1 lower
   expect "a release beside a crate bump" 0 together
   echo "crate-version-guard: self-test passed."
@@ -352,8 +361,11 @@ while IFS= read -r crate; do
   if grep -qE "^crates/$crate/(src/|README\.md$|LICENSE$|Cargo\.toml$)" <<< "$changed"; then
     packaged=1
   fi
+  # A crate consumes a workspace entry by `dep.workspace = true` or by an
+  # inline table with `workspace = true`; its own requirement of that name
+  # takes nothing from the table.
   for dep in $touched; do
-    if read_head "$manifest" | grep -qE "^${dep}(\.workspace)?[[:space:]]*="; then packaged=1; fi
+    if read_head "$manifest" | grep -qE "^${dep}(\.workspace[[:space:]]*=[[:space:]]*true|[[:space:]]*=[[:space:]]*\{.*workspace[[:space:]]*=[[:space:]]*true)"; then packaged=1; fi
   done
   if [[ "$packaged" -eq 1 && "$old_ver" == "$new_ver" && "$new_ver" != 0.0.0 ]]; then
     if [[ "${NO_CRATE_BUMP:-false}" == true ]]; then

@@ -4,3 +4,5 @@
   certificate the console presents to the provider and the lowest TLS
   version of that connection. The server takes `ferrohealth-smart` 0.8.8,
   which that release requires.
+- `ihe-iti` 0.0.74 and `nl-generic-functions` 0.0.41 ship a `Cargo.lock`
+  that resolves `ferrohealth-smart` 0.8.8. Their code is unchanged.

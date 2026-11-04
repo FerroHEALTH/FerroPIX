@@ -100,7 +100,7 @@ jobs:
       # cargo-auditable embeds the dependency list in the binary, which is
       # what the binary SBOM and the image SBOMs below read their crates from.
       - name: Install cargo-auditable
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: cargo-auditable@0.7.7
 
@@ -133,7 +133,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Install syft
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: syft@1.54.1
       - name: Generate the build SBOM from the shipped binary
@@ -275,7 +275,7 @@ jobs:
       # was built for each platform above
       # (https://docs.docker.com/build/building/multi-platform/).
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -351,7 +351,7 @@ jobs:
       # syft reads the dependency list cargo-auditable embedded in the binary,
       # so the SBOM names the crates rather than the files in the image.
       - name: Install syft
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: syft@1.54.1
       - name: Generate one SBOM per platform

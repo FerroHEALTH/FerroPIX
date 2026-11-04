@@ -58,8 +58,7 @@ headless Chrome over WebDriver, through chromedriver, with the `thirtyfour`
 client, a test-only dependency of the testkit. Chrome and chromedriver come
 as one Chrome for Testing release, which `browser-actions/setup-chrome`
 installs in the `journeys` job of `ci.yml`, so the browser and its driver
-always match. Both pins are the ones FerroBRIDGE, FerroFED and FerroTERM
-run. The weekly `scripts/checks/pin-freshness.sh` reports a newer Stable
+always match. The weekly `scripts/checks/pin-freshness.sh` reports a newer Stable
 release.
 
 For a local run, `scripts/release/journey-tools.sh target/journey-tools`
@@ -68,16 +67,16 @@ look first. It takes each download URL from the Chrome for Testing JSON API
 and checks each zip against the SHA-256 below before it unpacks it. Chrome
 for Testing publishes no SHA-256; each digest is the one the family took of
 a download whose MD5 equals the `x-goog-hash` the storage bucket serves with
-it, and the `mac-arm64` pair verified again here on 2026-10-24.
+it, all four taken that way here on 2026-11-03.
 
 | Item | Pin | Repeated in |
 |---|---|---|
 | thirtyfour | `0.38.1` | `Cargo.toml` |
-| Chrome for Testing (Chrome and chromedriver) | `156.0.8078.47` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `ad7f2b49a4dc679af286b1b1b386670d93ca7868079f69012d21ba0ac8293df3` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `2a5024610c53f340a1aaa5d9a3e2a4fa448be7d71cca5238bd8c3c7f16181df4` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `f42d25b984e2185ee48a628f0e76d49fcdf2fa83f20f7c286880dddeb4a28cc9` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing (Chrome and chromedriver) | `156.0.8078.80` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `b711c720f774be355197f32edf37e0651418ba036d92446ee2da19ac017540a7` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `8bc590d1b1acac042a000234c768f31830f25a3983a83ed5e067114c87c4cad1` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `cae58bbd262ba5c8a0ce2540f44254b6e789efc4fe9b18bbb4a00487a9f5859e` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `b5fe5abe5a82ca3ac49b3f2ea9e177b63f82fc3a4227883e0eaa9894a6bf3b7f` | `scripts/release/journey-tools.sh` |
 
 `scripts/checks/versions.sh` reads each pin back from the files its row
 names.
@@ -99,7 +98,7 @@ and cargo-fuzz against its newest release. Nothing built there ships.
 
 The images the testkit (`tools/ferropix-testkit`) starts behind
 `FERROPIX_E2E`, each pinned by tag and by the digest of its image index,
-resolved on 2026-10-24. The suite holds each `PinnedImage` constant of
+resolved on 2026-10-24 and the stub OpenID Provider's on 2026-11-03. The suite holds each `PinnedImage` constant of
 `tools/ferropix-testkit/src/containers.rs` to its row here, and the
 pin-freshness lane reads each row against its registry. PostgreSQL is the
 official image at the store's major version; the stub OpenID Provider is
@@ -110,13 +109,14 @@ design.
 | Item | Pin | Repeated in |
 |---|---|---|
 | PostgreSQL test image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
-| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.3@sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
+| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.4@sha256:647dd8c78a54f0e6fcd58d79c884e612f8f998a0662276f3e1db22e464a50192` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
 
 ## The images and the release lanes
 
 The images' base, the images of the compose quickstart, the
 Dockerfile linter and the tools the release lanes install. Each image is
-pinned by tag and by the digest of its image index, resolved on 2026-10-24;
+pinned by tag and by the digest of its image index, resolved on 2026-10-24
+and the distroless base and the issuer on 2026-11-03;
 the pin-freshness lane reads each against its registry, and the distroless
 base, whose `nonroot` tag names no version, against the digest that tag
 resolves to now. The quickstart's PostgreSQL is the testkit's pin, and its
@@ -133,14 +133,14 @@ choice: our own design, FerroBRIDGE's set.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99` | `docker/Dockerfile`, `docker/console/Dockerfile` |
+| distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329` | `docker/Dockerfile`, `docker/console/Dockerfile` |
 | PostgreSQL quickstart image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | `compose.yaml` |
-| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.3@sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8` | `compose.yaml` |
+| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.4@sha256:647dd8c78a54f0e6fcd58d79c884e612f8f998a0662276f3e1db22e464a50192` | `compose.yaml` |
 | hadolint image | `v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d` | `.github/workflows/ci.yml` |
 | Trivy | `0.76.1` | `.github/workflows/release.yml`, `.github/workflows/scan-and-tag.yml`, `.github/workflows/image-scan.yml`, `scripts/release/install-trivy.sh` |
 | cargo-auditable | `0.7.7` | `.github/workflows/release-build.yml`, `.github/workflows/release-console.yml` |
 | cargo-cyclonedx | `0.5.9` | `.github/workflows/release-build.yml` |
-| syft | `1.54.1` | `.github/workflows/release-build.yml`, `.github/workflows/release-image.yml`, `.github/workflows/release-console.yml` |
+| syft | `1.56.0` | `.github/workflows/release-build.yml`, `.github/workflows/release-image.yml`, `.github/workflows/release-console.yml` |
 
 `scripts/checks/versions.sh` reads each pin back from the files its row
 names, and holds the server image tag `compose.yaml` defaults to equal to

@@ -48,9 +48,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
-          tool: zizmor@1.31.1
+          tool: zizmor@1.32.0
       - name: Audit .github
         # GH_TOKEN enables the online audits (impostor-commit verifies every
         # pinned commit belongs to the repository it names).
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: shellcheck@0.11.0
       - name: Every tracked shell program is clean at severity=style
@@ -630,14 +630,14 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-nextest
       - name: Install Chrome and chromedriver
         id: chrome
         uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         with:
-          chrome-version: 156.0.8078.47
+          chrome-version: 156.0.8078.80
           install-chromedriver: true
       # Each journey starts a chromedriver of its own on a port the system
       # picks and stops it with its session, so they run in parallel.
@@ -672,7 +672,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --locked --no-tests=warn
@@ -698,7 +698,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-nextest
       - run: bash scripts/checks/conformance.sh --check
@@ -725,7 +725,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-nextest
       - run: cargo nextest run -p ferropix-testkit -p ferropix-server --locked -E 'test(/e2e::/)'
@@ -891,7 +891,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache: "false"
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-deny
       - run: cargo deny check
@@ -1008,7 +1008,7 @@ jobs:
         with:
           components: clippy
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-nextest
       - name: Lint the feature set on its own

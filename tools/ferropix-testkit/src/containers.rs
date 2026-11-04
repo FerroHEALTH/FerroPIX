@@ -123,8 +123,8 @@ pub const POSTGRES: PinnedImage = PinnedImage {
 pub const STUB_PROVIDER: PinnedImage = PinnedImage {
     item: "Stub OpenID Provider image",
     repository: "ghcr.io/navikt/mock-oauth2-server",
-    tag: "6.1.3",
-    digest: "sha256:2a813381bf282da46ff36ff386059e7903e25865056af8149f4fb3f1441916b8",
+    tag: "6.1.4",
+    digest: "sha256:647dd8c78a54f0e6fcd58d79c884e612f8f998a0662276f3e1db22e464a50192",
 };
 
 /// Every image the harness starts.

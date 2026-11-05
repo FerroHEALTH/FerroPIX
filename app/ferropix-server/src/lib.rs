@@ -234,7 +234,10 @@ pub async fn probe(section: &ServerSection) -> Outcome {
     let base = section.base_path.as_str();
     match &section.tls {
         None => check(address, base, HEALTHCHECK_TIMEOUT).await,
-        Some(tls) => match ferrohealth_server::tls::HealthcheckTls::read(tls) {
+        Some(tls) => match ferrohealth_server::tls::HealthcheckTls::read_of(
+            tls,
+            ferrohealth_server::tls::TlsKeys::SERVER,
+        ) {
             Ok(pinned) => check_tls(address, base, HEALTHCHECK_TIMEOUT, &pinned).await,
             Err(error) => Outcome::Failed(format!("the TLS files do not read: {error}")),
         },

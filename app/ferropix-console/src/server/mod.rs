@@ -296,7 +296,7 @@ fn same_origin_check(settings: &Settings) -> SameOrigin {
         )
             .into_response()
     });
-    let check = SameOrigin::new().with_body(body);
+    let check = SameOrigin::default().with_body(body);
     match settings.oidc.as_ref() {
         // NOTE: RFC 6454 §4: `oidc.redirect_uri` resolves only as an http or https URL,
         // whose origin is a tuple, so the fallback is never taken and stays closed.

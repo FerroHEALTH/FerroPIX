@@ -177,7 +177,7 @@ impl Kind {
     /// nothing from the request.
     #[must_use]
     pub fn problem(self, detail: &'static str) -> Problem {
-        self.problem_type().problem().with_detail(detail)
+        Problem::of(self.problem_type()).with_detail(detail)
     }
 }
 

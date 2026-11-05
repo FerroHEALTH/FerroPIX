@@ -13,6 +13,33 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-11-05
+
+A family upkeep release. The server, the console and the testkit move to
+the newest FerroHEALTH family crates, `ferrohealth-server` 0.5.0 among
+them, with no change to what FerroPIX answers or reads from its
+configuration. RUSTSEC-2026-0440 reaches only the test harness and does not
+affect any shipped artefact; its OpenVEX statement records why. The
+published crates `ihe-iti` and `nl-generic-functions` keep their versions.
+
+### Changed
+
+- The server, the console and the testkit run on the newest FerroHEALTH
+  family releases: `ferrobridge-hl7v2` 0.1.182, `ferrohealth-config` 0.2.9,
+  `ferrohealth-server` 0.5.0, `ferrohealth-session` 0.2.3,
+  `ferrohealth-telemetry` 0.2.5 and `ferrohealth-usage-report` 0.2.1. None
+  changes what FerroPIX answers or how it is configured (#484).
+
+### Security
+
+Shipped with functional changes because: no shipped artefact is affected (the VEX statement below records why), so there is no security update to separate from the other changes this release carries.
+
+- RUSTSEC-2026-0440 (`astral-tokio-tar` is unmaintained, with no patched
+  version) does not affect FerroPIX: `testcontainers` reaches the crate only
+  in the test harness, and the published `ihe-iti` and `nl-generic-functions` crates do not contain it.
+  `deny.toml` accepts the advisory until a `testcontainers` release drops
+  the crate (`security/vex/rust-advisories.openvex.json`) (#481).
+
 ## [0.0.16] - 2026-11-05
 
 ### Changed

@@ -89,15 +89,17 @@ self_test() {
   }
   # same NAME GOT WANT: GOT is WANT, or the case NAME fails.
   same() {
-    if [[ "$2" != "$3" ]]; then
-      echo "file-length: self-test failed: $1 (got '$2', wanted '$3')." >&2
+    local name="$1" got="$2" want="$3"
+    if [[ "$got" != "$want" ]]; then
+      echo "file-length: self-test failed: $name (got '$got', wanted '$want')." >&2
       failed=1
     fi
   }
   # noted NAME: the last run printed its note, or the case NAME fails.
   noted() {
+    local name="$1"
     if ! grep -q 'note:' "$work/out"; then
-      echo "file-length: self-test failed: $1." >&2
+      echo "file-length: self-test failed: $name." >&2
       failed=1
     fi
   }
@@ -112,7 +114,10 @@ self_test() {
     } > "$dir/$ALLOW"
   }
   # entry DIR PATH: the count the allow-list of DIR records for PATH.
-  entry() { awk -v p="$2" '$1 !~ /^#/ && $2 == p { print $1 }' "$1/$ALLOW"; }
+  entry() {
+    local dir="$1" path="$2"
+    awk -v p="$path" '$1 !~ /^#/ && $2 == p { print $1 }' "$dir/$ALLOW"
+  }
   local d big=$((HARD + 1))
 
   case_dir; fixture "$d" crates/a/src/big.rs "$big"

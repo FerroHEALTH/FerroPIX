@@ -87,22 +87,24 @@ colour_of() {
 
 # The passing examples of the pass list $1, sorted.
 passes_of() {
-  grep -v -e '^#' -e '^fail ' -e '^total ' -e '^$' "$1" | LC_ALL=C sort || true
+  local list="$1"
+  grep -v -e '^#' -e '^fail ' -e '^total ' -e '^$' "$list" | LC_ALL=C sort || true
 }
 
 # The total the pass list $1 records, or nothing.
 total_of() {
-  sed -n 's/^total \([0-9][0-9]*\)$/\1/p' "$1"
+  local list="$1"
+  sed -n 's/^total \([0-9][0-9]*\)$/\1/p' "$list"
 }
 
 # The badge JSON of corpus $1 that the pass list $2 implies.
 badge_of() {
-  local passed total
-  passed="$(passes_of "$2" | sed '/^$/d' | wc -l | tr -d ' ')"
-  total="$(total_of "$2")"
-  [[ -n "$total" ]] || { echo "conformance: $2 has no total line" >&2; return 2; }
+  local corpus="$1" list="$2" passed total
+  passed="$(passes_of "$list" | sed '/^$/d' | wc -l | tr -d ' ')"
+  total="$(total_of "$list")"
+  [[ -n "$total" ]] || { echo "conformance: $list has no total line" >&2; return 2; }
   printf '{"schemaVersion":1,"label":"%s","message":"%s / %s","color":"%s"}\n' \
-    "$(label_of "$1")" "$passed" "$total" "$(colour_of "$passed" "$total")"
+    "$(label_of "$corpus")" "$passed" "$total" "$(colour_of "$passed" "$total")"
 }
 
 # Compares the result $2 of corpus $1 with its pass list $3 under mode $4 and
@@ -131,7 +133,8 @@ compare_corpus() {
 
 # The markdown of one corpus badge.
 badge_link() {
-  echo "[![$(label_of "$1")](${ENDPOINT}${1}.json)](conformance/$1/pass-list.txt)"
+  local corpus="$1"
+  echo "[![$(label_of "$corpus")](${ENDPOINT}${corpus}.json)](conformance/$corpus/pass-list.txt)"
 }
 
 # The README block with its markers: the project and quality rows, then the

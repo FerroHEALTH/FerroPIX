@@ -33,27 +33,29 @@ guard_known_flags "[<file>] | --self-test" "--self-test" "$@"
 # directory: a clean one, and one of each refusal.
 self_test() {
   local work status
+  local unreleased='## [Unreleased]' added='### Added'
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' RETURN
   expect() {
+    local name="$1" want="$2"
     status=0
-    bash "$0" "$work/$1.md" > /dev/null 2>&1 || status=$?
-    if [[ "$status" -ne "$2" ]]; then
-      echo "changelog-structure: self-test failed: $1 exited $status, wanted $2." >&2
+    bash "$0" "$work/$name.md" > /dev/null 2>&1 || status=$?
+    if [[ "$status" -ne "$want" ]]; then
+      echo "changelog-structure: self-test failed: $name exited $status, wanted $want." >&2
       exit 1
     fi
   }
-  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '  wrapped' '- two' '' '### Fixed' '' '- three' > "$work/clean.md"
+  printf '%s\n' "$unreleased" '' "$added" '' '- one' '  wrapped' '- two' '' '### Fixed' '' '- three' > "$work/clean.md"
   expect clean 0
-  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '' '- two' > "$work/split.md"
+  printf '%s\n' "$unreleased" '' "$added" '' '- one' '' '- two' > "$work/split.md"
   expect split 1
-  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '  wrapped' '' '- two' > "$work/split-wrapped.md"
+  printf '%s\n' "$unreleased" '' "$added" '' '- one' '  wrapped' '' '- two' > "$work/split-wrapped.md"
   expect split-wrapped 1
-  printf '%s\n' '## [Unreleased]' '' '## [0.0.1] - 2026-01-01' '' '### Added' '' '- one' '' '- two' > "$work/released.md"
+  printf '%s\n' "$unreleased" '' '## [0.0.1] - 2026-01-01' '' "$added" '' '- one' '' '- two' > "$work/released.md"
   expect released 0
-  printf '%s\n' '## [Unreleased]' '' '### Added' '' '- one' '### Added' '' '- two' > "$work/duplicate.md"
+  printf '%s\n' "$unreleased" '' "$added" '' '- one' "$added" '' '- two' > "$work/duplicate.md"
   expect duplicate 1
-  printf '%s\n' '## [Unreleased]' '' '### Notes' '' '- one' > "$work/unknown.md"
+  printf '%s\n' "$unreleased" '' '### Notes' '' '- one' > "$work/unknown.md"
   expect unknown 1
   echo "changelog-structure: self-test OK."
 }

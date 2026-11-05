@@ -36,7 +36,8 @@ root="$(dirname "$0")/../.."
 
 # The pin of the docs/VERSIONS.md row whose first cell is $1, backticks off.
 pin() {
-  awk -F'|' -v item="$1" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
+  local item="$1"
+  awk -F'|' -v item="$item" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
     $2 == item { v = $3; gsub(/[[:space:]`]/, "", v); print v; exit }' docs/VERSIONS.md
 }
 
@@ -64,13 +65,15 @@ readonly REPEATED_ROWS=(
 # Every backticked path of the "Repeated in" cell of the row whose first
 # cell is $1, one per line.
 repeats() {
-  awk -F'|' -v item="$1" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
+  local item="$1"
+  awk -F'|' -v item="$item" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
     $2 == item { n = split($4, part, "`"); for (i = 2; i <= n; i += 2) print part[i]; exit }' docs/VERSIONS.md
 }
 
 # The value of key $2 in the TOML file $1, read as a quoted string.
 toml_value() {
-  awk -v key="$2" '$1 == key { if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' "$1"
+  local file="$1" key="$2"
+  awk -v key="$key" '$1 == key { if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' "$file"
 }
 
 # The self-test builds one fixture repository per case and runs the guard
@@ -93,11 +96,11 @@ self_test() {
   }
   # expect WANT NAME: the guard over $d exits WANT.
   expect() {
-    local status=0
+    local want="$1" name="$2" status=0
     git -C "$d" add -A
     bash "$self" --root "$d" > /dev/null 2>&1 || status=$?
-    if [[ "$status" -ne "$1" ]]; then
-      echo "versions: self-test failed: $2 exited $status, wanted $1." >&2
+    if [[ "$status" -ne "$want" ]]; then
+      echo "versions: self-test failed: $name exited $status, wanted $want." >&2
       failed=1
     fi
   }

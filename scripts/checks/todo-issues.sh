@@ -41,7 +41,7 @@ STUB
     git -C "$work/repo" add lib.rs
     status=0
     PATH="$work/bin:$PATH" bash "$work/repo/scripts/checks/todo-issues.sh" > /dev/null 2>&1 || status=$?
-    if [ "$status" -ne "$want" ]; then
+    if [[ "$status" -ne "$want" ]]; then
       echo "todo-issues: self-test failed: $name exited $status, wanted $want." >&2
       exit 1
     fi
@@ -54,7 +54,7 @@ STUB
   echo "todo-issues: self-test OK."
 }
 
-if [ "${1:-}" = "--self-test" ]; then
+if [[ "${1:-}" = "--self-test" ]]; then
   self_test
   exit 0
 fi
@@ -87,7 +87,7 @@ if ! gh repo view --json name > /dev/null 2>&1; then
 fi
 
 records=$(pointers | sort -t $'\t' -k1,1n -k2,2)
-if [ -z "$records" ]; then
+if [[ -z "$records" ]]; then
   echo "todo-issues: no pending-work pointers in the tree."
   exit 0
 fi
@@ -99,15 +99,15 @@ while IFS= read -r number; do
   if ! state=$(gh issue view "$number" --json state --jq .state 2> /dev/null < /dev/null); then
     state=UNKNOWN
   fi
-  [ "$state" = OPEN ] && continue
+  [[ "$state" = OPEN ]] && continue
   fail=1
   while IFS=$'\t' read -r n location; do
-    [ "$n" = "$number" ] || continue
-    echo "::error file=${location%%:*},line=${location##*:}::$location names #$number, which the tracker does not answer as an open issue ($state)."
+    [[ "$n" = "$number" ]] || continue
+    echo "::error file=${location%%:*},line=${location##*:}::$location names #$number, which the tracker does not answer as an open issue ($state)." >&2
   done <<< "$records"
 done < <(cut -f1 <<< "$records" | sort -un)
 
-if [ "$fail" -eq 0 ]; then
+if [[ "$fail" -eq 0 ]]; then
   echo "todo-issues: $checked issue(s) named by pending-work pointers, all open."
 fi
 exit "$fail"

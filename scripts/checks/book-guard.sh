@@ -30,7 +30,8 @@ set -euo pipefail
 
 # features_at REV MANIFEST: the [features] table of MANIFEST at REV.
 features_at() {
-  git show "$1:$2" 2> /dev/null | awk '/^\[features\]/ { p = 1; next } /^\[/ { p = 0 } p' || true
+  local rev="$1" manifest="$2"
+  git show "$rev:$manifest" 2> /dev/null | awk '/^\[features\]/ { p = 1; next } /^\[/ { p = 0 } p' || true
 }
 
 self_test() {
@@ -47,11 +48,13 @@ self_test() {
   }
   commit() {
     stub_git add -A
-    stub_git commit -q -m "$1"
+    local message="$1"
+    stub_git commit -q -m "$message"
   }
   branch() {
     stub_git checkout -q main
-    stub_git checkout -q -b "$1"
+    local name="$1"
+    stub_git checkout -q -b "$name"
   }
   expect() {
     local name=$1 want=$2 branch=$3

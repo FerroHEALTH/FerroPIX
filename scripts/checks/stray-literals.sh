@@ -70,7 +70,7 @@ self_test() {
     mkdir -p "$work/$name/scripts/checks"
     cp "$self" "$work/$name/scripts/checks/stray-literals.sh"
     (cd "$work/$name" && bash scripts/checks/stray-literals.sh src > out 2>&1) || status=$?
-    if [ "$status" -ne "$want" ]; then
+    if [[ "$status" -ne "$want" ]]; then
       echo "stray-literals: self-test failed: $name exited $status, wanted $want:" >&2
       cat "$work/$name/out" >&2
       failures=$((failures + 1))
@@ -78,8 +78,9 @@ self_test() {
   }
   # fixture NAME FILE TEXT: writes TEXT into FILE of the fixture tree NAME.
   fixture() {
-    mkdir -p "$(dirname "$work/$1/$2")"
-    printf '%s\n' "$3" > "$work/$1/$2"
+    local name="$1" file="$2" text="$3"
+    mkdir -p "$(dirname "$work/$name/$file")"
+    printf '%s\n' "$text" > "$work/$name/$file"
   }
 
   fixture text-node src/page.rs '    view! { <h1>"Patients"</h1> }'
@@ -132,28 +133,28 @@ self_test() {
 
   find "$work" -type f -delete
   find "$work" -depth -type d -exec rmdir {} +
-  if [ "$failures" -ne 0 ]; then
+  if [[ "$failures" -ne 0 ]]; then
     echo "stray-literals: self-test: $failures of $n cases failed" >&2
     exit 1
   fi
   echo "stray-literals: self-test OK ($n cases)."
 }
 
-if [ "${1:-}" = "--self-test" ]; then
+if [[ "${1:-}" = "--self-test" ]]; then
   self_test
   exit 0
 fi
 
 update=0
-if [ "${1:-}" = "--update" ]; then
+if [[ "${1:-}" = "--update" ]]; then
   update=1
   shift
 fi
-if [ "$#" -eq 0 ]; then
+if [[ "$#" -eq 0 ]]; then
   set -- app/ferropix-console/src
 fi
 for dir in "$@"; do
-  if [ ! -d "$dir" ]; then
+  if [[ ! -d "$dir" ]]; then
     echo "stray-literals: $dir is no directory" >&2
     exit 2
   fi
@@ -166,7 +167,7 @@ files=()
 while IFS= read -r file; do
   files+=("$file")
 done < <(find "$@" -type f -name '*.rs' | LC_ALL=C sort)
-if [ "${#files[@]}" -eq 0 ]; then
+if [[ "${#files[@]}" -eq 0 ]]; then
   echo "stray-literals: no .rs file under $*"
   exit 0
 fi
@@ -291,13 +292,13 @@ found="$(
 
 counts="$(printf '%s\n' "$found" | sed -n 's/^\([^:]*\):[0-9]*:.*/\1/p' | LC_ALL=C sort | uniq -c | awk '{print $1, $2}')"
 
-if [ "$update" -eq 1 ]; then
+if [[ "$update" -eq 1 ]]; then
   {
     printf '# %s: %s\n' "SPDX-FileCopyrightText" "Cadasto B.V."
     printf '# %s: %s\n' "SPDX-License-Identifier" "BUSL-1.1"
     echo "# The stray literals each file may still hold while its strings move to"
     echo "# the catalogs; rewritten by scripts/checks/stray-literals.sh --update."
-    if [ -n "$counts" ]; then printf '%s\n' "$counts"; fi
+    if [[ -n "$counts" ]]; then printf '%s\n' "$counts"; fi
   } > "$baseline"
   echo "stray-literals: wrote $baseline"
   exit 0
@@ -305,22 +306,22 @@ fi
 
 status=0
 while IFS= read -r entry; do
-  [ -n "$entry" ] || continue
+  [[ -n "$entry" ]] || continue
   count="${entry%% *}"
   file="${entry#* }"
   allowed=0
-  if [ -f "$baseline" ]; then
+  if [[ -f "$baseline" ]]; then
     allowed="$(awk -v f="$file" '$2 == f { print $1 }' "$baseline")"
     allowed="${allowed:-0}"
   fi
-  if [ "$count" -gt "$allowed" ]; then
+  if [[ "$count" -gt "$allowed" ]]; then
     status=1
     echo "stray-literals: $file holds $count stray literal(s), $allowed allowed:" >&2
     printf '%s\n' "$found" | awk -v f="$file:" 'index($0, f) == 1' >&2
   fi
 done <<< "$counts"
 
-if [ "$status" -ne 0 ]; then
+if [[ "$status" -ne 0 ]]; then
   echo "stray-literals: move each string into the catalog under locales/ and look it up, or allow a literal that is no reader's text in $allow with the reason." >&2
   exit 1
 fi

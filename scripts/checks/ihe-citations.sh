@@ -60,10 +60,10 @@ readonly UNVENDORED='2:3.55	ITI TF-2 §3.55 Cross Gateway Patient Discovery [ITI
 # and the cached ones, one path per line, the FHIR packages and the
 # provenance records left out.
 corpus_files() {
-  local cache
-  cache="$(cache_of "$1")"
+  local root="$1" cache
+  cache="$(cache_of "$root")"
   {
-  find "$1/docs/specs" -path "$1/docs/specs/ihe-*" -type f \
+  find "$root/docs/specs" -path "$root/docs/specs/ihe-*" -type f \
     \( -name '*.html' -o -name '*.md' -o -name '*.pdf' \) \
     ! -path '*/package/*' ! -name 'PROVENANCE.md' ! -name 'LICENSE*'
   # -L follows a cache that is a symbolic link, as a worktree's often is.
@@ -78,12 +78,13 @@ corpus_files() {
 # linked git worktree, the cache of the main worktree, which a vendor script
 # run there filled.
 cache_of() {
-  if [[ -d "$1/.vendor-cache" ]]; then
-    printf '%s\n' "$1/.vendor-cache"
+  local root="$1"
+  if [[ -d "$root/.vendor-cache" ]]; then
+    printf '%s\n' "$root/.vendor-cache"
     return 0
   fi
   local common
-  common="$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2> /dev/null || true)"
+  common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2> /dev/null || true)"
   if [[ -n "$common" && -d "$(dirname "$common")/.vendor-cache" ]]; then
     printf '%s\n' "$(dirname "$common")/.vendor-cache"
   fi
@@ -92,8 +93,8 @@ cache_of() {
 # profile_of FILE: the "NAME VERSION" an implementation guide page directory
 # records in the title of its PROVENANCE.md, or nothing for another text.
 profile_of() {
-  local provenance
-  provenance="$(dirname "$1")/PROVENANCE.md"
+  local file="$1" provenance
+  provenance="$(dirname "$file")/PROVENANCE.md"
   [[ -f "$provenance" ]] || return 0
   sed -n -E '1,8s/^# Provenance: the IHE ([A-Za-z]+) ([0-9]+\.[0-9]+\.[0-9]+) narrative pages.*$/\1 \2/p' "$provenance" | head -n 1
 }
@@ -124,6 +125,7 @@ headings() {
       command -v pdftotext > /dev/null 2>&1 || return 0
       pdftotext -layout "$file" - | layout_headings
       ;;
+    *) ;; # corpus_files lists only .html, .md and .pdf texts.
   esac
 }
 
@@ -207,7 +209,8 @@ citations() {
 # of pdftotext; a citation INDEX does not hold may be in one of them, even
 # inside a transaction another text holds, so it is counted as not checked.
 judge() {
-  awk -F '\t' -v unread="$4" '
+  local unvendored="$1" index="$2" citations="$3" unread="$4"
+  awk -F '\t' -v unread="$unread" '
     FNR == 1 { part++ }
     part == 1 { skip[$1] = $2; order[++roots] = $1; next }
     part == 2 {
@@ -265,7 +268,7 @@ judge() {
       }
       if (bad > 0) { printf "ihe-citations: %d of %d citation(s) name a section the vendored text does not hold\n", bad, checked; exit 1 }
       printf "ihe-citations: %d IHE citation(s), every one in the vendored text\n", checked
-    }' "$1" "$2" "$3"
+    }' "$unvendored" "$index" "$citations"
 }
 
 # check ROOT: builds the index under ROOT and judges the citations read from
@@ -330,15 +333,15 @@ self_test() {
   # $search, with CI unset.
   local search="$PATH"
   expect() {
-    local want="$1" status=0
+    local want="$1" line="$2" status=0
     n=$((n + 1))
-    printf 'crates/x/src/lib.rs:%d:%s\n' "$n" "$2" | CI="" PATH="$search" check "$work" > "$work/out" 2>&1 || status=$?
+    printf 'crates/x/src/lib.rs:%d:%s\n' "$n" "$line" | CI="" PATH="$search" check "$work" > "$work/out" 2>&1 || status=$?
     if [[ "$status" -ne "$want" ]]; then
-      echo "ihe-citations: self-test failed: '$2' exited $status, wanted $want." >&2
+      echo "ihe-citations: self-test failed: '$line' exited $status, wanted $want." >&2
       sed 's/^/  /' "$work/out" >&2
       failed=1
     elif [[ "$want" -ne 0 ]] && ! grep -q -F "::error::crates/x/src/lib.rs:$n " "$work/out"; then
-      echo "ihe-citations: self-test failed: the refusal of '$2' does not name its file and line." >&2
+      echo "ihe-citations: self-test failed: the refusal of '$line' does not name its file and line." >&2
       failed=1
     fi
     if [[ -n "${IHE_CITATIONS_VERBOSE:-}" ]]; then

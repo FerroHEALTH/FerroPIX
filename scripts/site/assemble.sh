@@ -59,14 +59,16 @@ fi
 # package_version MANIFEST: the version of the [package] or
 # [workspace.package] table of MANIFEST.
 package_version() {
+  local manifest="$1"
   awk '/^\[(workspace\.)?package\]/ { p = 1; next } /^\[/ { p = 0 }
-    p && $1 == "version" { if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' "$1"
+    p && $1 == "version" { if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' "$manifest"
 }
 
 # workspace_requirement NAME: the version requirement the root manifest's
 # [workspace.dependencies] gives NAME.
 workspace_requirement() {
-  awk -v name="$1" '/^\[workspace\.dependencies\]/ { p = 1; next } /^\[/ { p = 0 }
+  local name="$1"
+  awk -v name="$name" '/^\[workspace\.dependencies\]/ { p = 1; next } /^\[/ { p = 0 }
     p && $1 == name { if (match($0, /version = "[^"]*"/)) { print substr($0, RSTART + 11, RLENGTH - 12); exit }
                       else if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' Cargo.toml
 }

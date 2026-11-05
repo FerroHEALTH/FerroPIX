@@ -30,6 +30,7 @@ set -u
 # higher version at each position. Any other hunk keeps its markers. Every
 # capture is copied before the next match, which would overwrite it.
 merge_versions() {
+  local file="$1"
   perl -0pi -e '
     sub newer { my @a = split /\./, $_[0]; my @b = split /\./, $_[1];
       for my $i (0 .. 2) { my $c = $a[$i] <=> $b[$i]; return $c if $c } 0 }
@@ -43,7 +44,7 @@ merge_versions() {
       $ours =~ s{\d+\.\d+\.\d+}{ my ($o, $t) = ($ov[$i], $tv[$i]); $i++;
         newer($o, $t) >= 0 ? $o : $t }ge;
       $ours }
-    s{<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> origin/main\n}{pick($1, $2, $&)}gse' "$1"
+    s{<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> origin/main\n}{pick($1, $2, $&)}gse' "$file"
 }
 # The checks of the newest run of each workflow, from `gh pr checks --json
 # name,bucket,link,workflow`; a check whose link names no Actions run is kept.
@@ -70,7 +71,7 @@ self_test() {
  {"name":"build","bucket":"pass","workflow":"Docs","link":"https://github.com/o/r/actions/runs/99/job/3"}]
 EOF
   )
-  if [ "$got" != "0	" ]; then
+  if [[ "$got" != "0	" ]]; then
     echo "watch-prs: self-test: a superseded run was judged: [$got]" >&2
     failures=$((failures + 1))
   fi
@@ -81,7 +82,7 @@ EOF
  {"name":"analyze","bucket":"fail","workflow":"SonarQube Cloud","link":"https://github.com/o/r/actions/runs/102/job/3"}]
 EOF
   )
-  if [ "$got" != "0	test (a b)" ]; then
+  if [[ "$got" != "0	test (a b)" ]]; then
     echo "watch-prs: self-test: the newest red run was not judged: [$got]" >&2
     failures=$((failures + 1))
   fi
@@ -92,7 +93,7 @@ EOF
  {"name":"status","bucket":"fail","workflow":"","link":"https://example.org/status"}]
 EOF
   )
-  if [ "$got" != "1	status test (a b)" ]; then
+  if [[ "$got" != "1	status test (a b)" ]]; then
     echo "watch-prs: self-test: a pending job or a check outside Actions was misread: [$got]" >&2
     failures=$((failures + 1))
   fi
@@ -103,8 +104,8 @@ EOF
     '=======' 'x = { path = "x", version = "0.1.161" }' '>>>>>>> origin/main' \
     '# The next comment.' >"$dir/main-higher.toml"
   merge_versions "$dir/main-higher.toml"
-  if [ "$(cat "$dir/main-higher.toml")" != "$(printf '%s\n' 'a = 1' \
-    'x = { path = "x", version = "0.1.161" }' '# The next comment.')" ]; then
+  if [[ "$(cat "$dir/main-higher.toml")" != "$(printf '%s\n' 'a = 1' \
+    'x = { path = "x", version = "0.1.161" }' '# The next comment.')" ]]; then
     echo "watch-prs: self-test: a both-sides bump kept the lower version or broke the line:" >&2
     cat "$dir/main-higher.toml" >&2
     failures=$((failures + 1))
@@ -113,7 +114,7 @@ EOF
   printf '%s\n' '<<<<<<< HEAD' 'version = "0.2.0"' 'y = "1.10.0"' '=======' \
     'version = "0.1.9"' 'y = "1.9.3"' '>>>>>>> origin/main' >"$dir/branch-higher.toml"
   merge_versions "$dir/branch-higher.toml"
-  if [ "$(cat "$dir/branch-higher.toml")" != "$(printf '%s\n' 'version = "0.2.0"' 'y = "1.10.0"')" ]; then
+  if [[ "$(cat "$dir/branch-higher.toml")" != "$(printf '%s\n' 'version = "0.2.0"' 'y = "1.10.0"')" ]]; then
     echo "watch-prs: self-test: the branch's higher versions were not kept:" >&2
     cat "$dir/branch-higher.toml" >&2
     failures=$((failures + 1))
@@ -130,17 +131,17 @@ EOF
   fi
   rm -f "$dir/main-higher.toml" "$dir/branch-higher.toml" "$dir/other.toml" "$dir/other.expected"
   rmdir "$dir"
-  if [ "$failures" != 0 ]; then
+  if [[ "$failures" != 0 ]]; then
     echo "watch-prs: self-test: $failures check(s) failed" >&2
     exit 1
   fi
   echo "watch-prs: self-test passed"
 }
-if [ "${1:-}" = --self-test ]; then
+if [[ "${1:-}" = --self-test ]]; then
   self_test
   exit 0
 fi
-if [ $# -eq 0 ]; then
+if [[ $# -eq 0 ]]; then
   echo "usage: scripts/gh/watch-prs.sh <pr> [<pr>...]" >&2
   exit 64
 fi
@@ -180,7 +181,7 @@ resolve_merge() {
       if grep -q '^<<<<<<<\|^>>>>>>>' "$f"; then git merge --abort; exit 1; fi
     done
     # The lock exists once the workspace has a member; an empty one has none.
-    if [ -f Cargo.lock ]; then
+    if [[ -f Cargo.lock ]]; then
       cargo metadata --no-deps --format-version 1 >/dev/null 2>&1 || { git merge --abort; exit 1; }
       cargo update -w -q || { git merge --abort; exit 1; }
     fi
@@ -209,14 +210,14 @@ left=("$@")
 # A run started by a fresh push takes a moment to register; until it does,
 # gh pr checks still shows the previous run.
 sleep 90
-while [ ${#left[@]} -gt 0 ]; do
+while [[ ${#left[@]} -gt 0 ]]; do
   next=()
   for p in "${left[@]}"; do
     s=$(gh pr view "$p" --json state,mergeStateStatus --jq '.state + " " + .mergeStateStatus')
     st=${s% *}
     ms=${s#* }
-    if [ "$st" = MERGED ]; then echo "MERGED #$p"; continue; fi
-    if [ "$st" = CLOSED ]; then echo "CLOSED #$p"; continue; fi
+    if [[ "$st" = MERGED ]]; then echo "MERGED #$p"; continue; fi
+    if [[ "$st" = CLOSED ]]; then echo "CLOSED #$p"; continue; fi
     # A push drops the auto-merge arming; re-arming a queued PR is refused
     # harmlessly, so this runs on every pass.
     gh pr merge "$p" --auto >/dev/null 2>&1 || true
@@ -235,10 +236,10 @@ while [ ${#left[@]} -gt 0 ]; do
     verdict=$(gh pr checks "$p" --json name,bucket,link,workflow 2>/dev/null | judge) || verdict="1	"
     pend=${verdict%%	*}
     fails=${verdict#*	}
-    if [ "$pend" = 0 ] && [ -n "$fails" ]; then echo "RED #$p: $fails"; exit 3; fi
+    if [[ "$pend" = 0 && -n "$fails" ]]; then echo "RED #$p: $fails"; exit 3; fi
     next+=("$p")
   done
   left=("${next[@]+"${next[@]}"}")
-  [ ${#left[@]} -gt 0 ] && sleep 60
+  [[ ${#left[@]} -gt 0 ]] && sleep 60
 done
 echo "ALL MERGED"

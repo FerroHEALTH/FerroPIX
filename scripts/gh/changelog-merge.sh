@@ -306,24 +306,24 @@ self_test() {
   fi
 
   # The released part starts at the first version heading.
-  if [ "$(engine released "$work/main" | head -n1)" != "## [0.0.9] - 2026-10-19" ]; then
+  if [[ "$(engine released "$work/main" | head -n1)" != "## [0.0.9] - 2026-10-19" ]]; then
     echo "self-test: --released does not start at the first version" >&2
     failures=$((failures + 1))
   fi
 
-  [ "$failures" = 0 ] || die "self-test: $failures check(s) failed"
+  [[ "$failures" = 0 ]] || die "self-test: $failures check(s) failed"
   echo "changelog-merge: self-test passed"
 }
 
 case "${1:-}" in
   --self-test) self_test ;;
   --released)
-    [ $# -eq 2 ] || die "usage: --released FILE"
+    [[ $# -eq 2 ]] || die "usage: --released FILE"
     engine released "$2"
     ;;
   -*) die "unknown option $1" ;;
   *)
-    [ $# -eq 3 ] || die "usage: changelog-merge.sh BASE BRANCH MAIN"
+    [[ $# -eq 3 ]] || die "usage: changelog-merge.sh BASE BRANCH MAIN"
     engine merge "$1" "$2" "$3"
     ;;
 esac

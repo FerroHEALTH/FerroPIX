@@ -46,7 +46,13 @@
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+/* Smooth scrolling and the hover transitions run only for a reader who has
+   not asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+  .btn { transition: transform 0.06s ease, background 0.15s ease, border-color 0.15s ease; }
+  .card { transition: transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+}
 
 body {
   margin: 0;
@@ -125,7 +131,6 @@ code {
   font-weight: 700;
   font-size: 1rem;
   border: 1.5px solid transparent;
-  transition: transform 0.06s ease, background 0.15s ease, border-color 0.15s ease;
 }
 .btn:hover { text-decoration: none; transform: translateY(-1px); }
 .btn-primary { background: var(--fp-accent); color: var(--fp-on-accent); }
@@ -228,7 +233,6 @@ section { padding: clamp(3rem, 7vw, 4.5rem) 0; }
   border: 1px solid var(--fp-border);
   border-radius: var(--fp-radius);
   padding: 1.5rem;
-  transition: transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .card:hover {
   transform: translateY(-3px);
@@ -341,8 +345,4 @@ section { padding: clamp(3rem, 7vw, 4.5rem) 0; }
    longer line still scrolls inside the box, never the page. */
 @media (max-width: 480px) {
   .cmd { font-size: 0.7rem; padding: 0.9rem 0.75rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * { scroll-behavior: auto; transition: none !important; }
 }

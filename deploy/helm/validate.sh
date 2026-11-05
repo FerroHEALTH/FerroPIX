@@ -35,7 +35,8 @@ done
 
 # Renders `chart` with the values file `values`.
 render() {
-  helm template ferropix "$1" --namespace ferropix -f "$2"
+  local chart="$1" values="$2"
+  helm template ferropix "$chart" --namespace ferropix -f "$values"
 }
 
 # Checks the chart at `$1`; prints each fault and returns 1 on any.

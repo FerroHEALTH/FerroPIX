@@ -101,8 +101,9 @@ STUB
   }
   # called NAME NEEDLE: the case made that gh call.
   called() {
-    if ! grep -qF -- "$2" "$calls"; then
-      echo "gh-rel: self-test failed: $1 did not call '$2'." >&2
+    local name="$1" needle="$2"
+    if ! grep -qF -- "$needle" "$calls"; then
+      echo "gh-rel: self-test failed: $name did not call '$needle'." >&2
       cat "$calls" >&2
       exit 1
     fi
@@ -163,12 +164,12 @@ REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" ||
 # Resolve an issue #number to its database id (the value every write endpoint
 # wants). Fails loud if the issue does not exist.
 dbid() {
-  need_int "$1"
-  local id
-  id="$(gh api "repos/$REPO/issues/$1" --jq '.id' 2>/dev/null)" ||
-    die "issue #$1 not found in $REPO"
+  local number="$1" id
+  need_int "$number"
+  id="$(gh api "repos/$REPO/issues/$number" --jq '.id' 2>/dev/null)" ||
+    die "issue #$number not found in $REPO"
   case "$id" in
-    '' | *[!0-9]*) die "could not resolve the database id for #$1" ;;
+    '' | *[!0-9]*) die "could not resolve the database id for #$number" ;;
     *) ;;
   esac
   printf '%s' "$id"

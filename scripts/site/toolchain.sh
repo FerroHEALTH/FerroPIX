@@ -19,11 +19,11 @@ _toolchain_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # toolchain_pin ITEM: the pin of the row ITEM of docs/VERSIONS.md.
 toolchain_pin() {
-  local value
-  value="$(awk -F'|' -v item="$1" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
+  local item="$1" value
+  value="$(awk -F'|' -v item="$item" '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2) }
     $2 == item { v = $3; gsub(/[[:space:]`]/, "", v); print v; exit }' "$_toolchain_root/docs/VERSIONS.md")"
   if [[ -z "$value" ]]; then
-    echo "toolchain: docs/VERSIONS.md has no pin for $1" >&2
+    echo "toolchain: docs/VERSIONS.md has no pin for $item" >&2
     return 1
   fi
   printf '%s\n' "$value"

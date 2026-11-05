@@ -29,7 +29,8 @@ die() {
 }
 
 pinned_sha256() {
-  awk -F'\t' -v want="$1" '$1 == want { print $2; found = 1 } END { exit !found }' \
+  local version="$1"
+  awk -F'\t' -v want="$version" '$1 == want { print $2; found = 1 } END { exit !found }' \
     <<<"$CHECKSUMS"
 }
 

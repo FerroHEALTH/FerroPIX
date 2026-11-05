@@ -38,7 +38,7 @@ repo_root="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 case "${file_path:-}" in
 *.rs) ;;
 *.sh)
-  [ -f "$file_path" ] || exit 0
+  [[ -f "$file_path" ]] || exit 0
   if command -v shellcheck >/dev/null 2>&1; then
     findings="$(shellcheck --severity=style "$file_path" 2>&1)" || {
       printf '%s\n' "$findings" >&2
@@ -49,7 +49,7 @@ case "${file_path:-}" in
   ;;
 *) exit 0 ;;
 esac
-[ -f "$file_path" ] || exit 0
+[[ -f "$file_path" ]] || exit 0
 
 if command -v rustfmt >/dev/null 2>&1; then
   rustfmt --edition 2024 "$file_path" >/dev/null 2>&1 || true
@@ -57,7 +57,7 @@ fi
 
 # Comment-style guard (.claude/rules/comments.md): block comments, TODO(#N)
 # form, NOTE and essay budgets. Exit 2 feeds the findings back as a correction.
-if [ -x "$repo_root/scripts/checks/comment-style.sh" ]; then
+if [[ -x "$repo_root/scripts/checks/comment-style.sh" ]]; then
   findings="$("$repo_root/scripts/checks/comment-style.sh" --files "$file_path" 2>&1)" || {
     printf '%s\n' "$findings" >&2
     exit 2
@@ -69,13 +69,14 @@ fi
 # tools/forwarders in the one ./target on first use, a few seconds.
 case "$file_path" in
 */app/*/src/*.rs | */crates/*/src/*.rs | */tools/*/src/*.rs)
-  if [ -x "$repo_root/scripts/checks/forwarders.sh" ]; then
+  if [[ -x "$repo_root/scripts/checks/forwarders.sh" ]]; then
     findings="$("$repo_root/scripts/checks/forwarders.sh" --files "$file_path" 2>&1)" || {
       printf '%s\n' "$findings" >&2
       exit 2
     }
   fi
   ;;
+*) ;; # the ratchet counts forwarders in those trees only.
 esac
 
 exit 0

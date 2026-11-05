@@ -26,7 +26,7 @@
 set -euo pipefail
 
 readonly BOOK="${1:?usage: $0 BOOK_DIR}"
-[ -d "$BOOK" ] || { echo "book-csp: no such directory: $BOOK" >&2; exit 1; }
+[[ -d "$BOOK" ]] || { echo "book-csp: no such directory: $BOOK" >&2; exit 1; }
 
 # Every style value a bundled script sets through setAttribute, one per line.
 script_styles="$(find "$BOOK" -name '*.js' -exec perl -0777 -ne '

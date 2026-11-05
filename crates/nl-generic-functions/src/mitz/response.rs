@@ -187,7 +187,7 @@ impl Visitor for Read {
     type Namespace = Ns;
     type Error = Malformation;
     const SOAP: Ns = Ns::Soap;
-    const NAMESPACES: &'static [(&'static str, Ns)] = &[(XACML, Ns::Xacml), (HL7, Ns::Hl7)];
+    const NAMESPACES: &[(&str, Ns)] = &[(XACML, Ns::Xacml), (HL7, Ns::Hl7)];
     const OTHER: Ns = Ns::Other;
 
     fn opened(&mut self, open: &[(Ns, &str)], element: &Element<'_>) -> Result<(), Malformation> {

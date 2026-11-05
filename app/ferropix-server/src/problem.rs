@@ -182,7 +182,7 @@ impl Kind {
 }
 
 /// The registry and the slug of each kind.
-static REGISTRY: LazyLock<(ProblemTypes, BTreeMap<Kind, &'static str>)> = LazyLock::new(registry);
+static REGISTRY: LazyLock<(ProblemTypes, BTreeMap<Kind, &str>)> = LazyLock::new(registry);
 
 /// Builds the registry of every [`Kind`].
 #[expect(

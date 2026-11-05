@@ -133,7 +133,7 @@ impl Visitor for Read {
     type Namespace = Ns;
     type Error = Malformation;
     const SOAP: Ns = Ns::Soap;
-    const NAMESPACES: &'static [(&'static str, Ns)] = v3::NAMESPACES;
+    const NAMESPACES: &[(&str, Ns)] = v3::NAMESPACES;
     const OTHER: Ns = Ns::Other;
 
     fn media(media: Option<&str>) -> Result<(), Malformation> {

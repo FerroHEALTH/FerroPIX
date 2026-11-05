@@ -21,7 +21,7 @@ use crate::outcome::IssueType;
 /// answer with.
 pub trait Resource: sealed::Sealed + Json {
     /// The resource type, as `resourceType` names it.
-    const RESOURCE_TYPE: &'static str;
+    const RESOURCE_TYPE: &str;
 }
 
 mod sealed {

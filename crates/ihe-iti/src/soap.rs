@@ -50,7 +50,7 @@ pub trait Visitor {
     /// The SOAP 1.2 envelope namespace, as the visitor names it.
     const SOAP: Self::Namespace;
     /// Every namespace the visitor reads besides [`ENVELOPE`], by its URI.
-    const NAMESPACES: &'static [(&'static str, Self::Namespace)];
+    const NAMESPACES: &[(&str, Self::Namespace)];
     /// Any other namespace, and no namespace.
     const OTHER: Self::Namespace;
 

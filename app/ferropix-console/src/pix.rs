@@ -109,8 +109,7 @@ impl Pix {
             .timeout(settings.timeout)
             .connect_timeout(settings.timeout.min(Duration::from_secs(5)))
             .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(ClientError::from)?;
+            .build()?;
         Ok(Self {
             base: settings.base.clone(),
             http,

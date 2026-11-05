@@ -39,26 +39,30 @@ readonly TRACKER='https://github\.com/FerroHEALTH/[A-Za-z]+/(issues|milestone)/[
 # features MANIFEST: the feature names of MANIFEST's [features] table, sorted,
 # `default` left out (it names other features and is no feature of its own).
 features() {
+  local manifest="$1"
   awk '/^\[features\]/ { p = 1; next } /^\[/ { p = 0 }
-    p && /^[A-Za-z0-9_-]+[[:space:]]*=/ { name = $1; sub(/=.*/, "", name); if (name != "default") print name }' "$1" | sort -u
+    p && /^[A-Za-z0-9_-]+[[:space:]]*=/ { name = $1; sub(/=.*/, "", name); if (name != "default") print name }' "$manifest" | sort -u
 }
 
 # documented PAGE: the feature names the first column of the table under the
 # page's "## Features" heading names, sorted.
 documented() {
+  local page="$1"
   awk '/^## Features/ { p = 1; next } /^## / { p = 0 }
-    p && /^\| `[^`]+` \|/ { name = $0; sub(/^\| `/, "", name); sub(/`.*/, "", name); print name }' "$1" | sort -u
+    p && /^\| `[^`]+` \|/ { name = $0; sub(/^\| `/, "", name); sub(/`.*/, "", name); print name }' "$page" | sort -u
 }
 
 # package_version MANIFEST: the version of MANIFEST's [package] table.
 package_version() {
+  local manifest="$1"
   awk '/^\[package\]/ { p = 1; next } /^\[/ { p = 0 }
-    p && $1 == "version" { if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' "$1"
+    p && $1 == "version" { if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit } }' "$manifest"
 }
 
 # planned_without_link PAGE: print "line: heading" for each section of PAGE
 # that says "planned" and links no tracker issue or milestone.
 planned_without_link() {
+  local page="$1"
   awk -v tracker="$TRACKER" '
     function flush() { if (planned && !linked) print start ": " heading; planned = 0; linked = 0 }
     BEGIN { start = 1; heading = "(the page opening)" }
@@ -67,7 +71,7 @@ planned_without_link() {
     /^#+ / { flush(); start = NR; heading = $0; next }
     { if (tolower($0) ~ /(^|[^a-z])planned([^a-z]|$)/) planned = 1
       if ($0 ~ tracker) linked = 1 }
-    END { flush() }' "$1"
+    END { flush() }' "$page"
 }
 
 check() {

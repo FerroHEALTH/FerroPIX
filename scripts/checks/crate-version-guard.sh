@@ -47,7 +47,8 @@ package_version() {
 
 # The version of the package $1 in a Cargo.lock read on stdin.
 locked_version() {
-  awk -v name="$1" '$0 == "name = \"" name "\"" {p=1; next}
+  local package="$1"
+  awk -v name="$package" '$0 == "name = \"" name "\"" {p=1; next}
        p && /^version = /{gsub(/version = "|"/, ""); print; exit}'
 }
 
@@ -75,6 +76,7 @@ newer() {
 # of this script and a stub publish list, and runs the guard on branches.
 self_test() {
   local script status
+  local serde_one='serde = "1"'
   # Global, so the EXIT trap still sees it after the function returns.
   work="$(mktemp -d)"
   trap 'chmod -R u+w "$work" && rm -r -- "$work"' EXIT
@@ -88,36 +90,42 @@ self_test() {
   # manifest PRODUCT [DEPENDENCY]: the root manifest at PRODUCT, its
   # dependency table declaring DEPENDENCY.
   manifest() {
+    local version="$1" dependencies="${2:-}"
     printf '[workspace]\nmembers = ["crates/*"]\n\n[workspace.package]\nversion = "%s"\n\n[workspace.dependencies]\n%s\n' \
-      "$1" "${2:-}" > "$work/Cargo.toml"
+      "$version" "$dependencies" > "$work/Cargo.toml"
   }
   published() {
+    local name="$1"
     printf 'readonly CRATES=(\n' > "$work/scripts/release/publish-crates.sh"
-    if [[ -n "$1" ]]; then printf '  %s\n' "$1" >> "$work/scripts/release/publish-crates.sh"; fi
+    if [[ -n "$name" ]]; then printf '  %s\n' "$name" >> "$work/scripts/release/publish-crates.sh"; fi
     printf ')\n' >> "$work/scripts/release/publish-crates.sh"
   }
   # crate VERSION [LOCKED]: crates/pix-a at VERSION, consuming the workspace
   # `serde` and `log` and requiring its own `tokio`, locked at LOCKED (VERSION
   # when not given).
   crate() {
+    local version="$1" locked="${2:-$1}"
     mkdir -p "$work/crates/pix-a/src"
-    if [[ "$1" == workspace ]]; then
+    if [[ "$version" == workspace ]]; then
       printf '[package]\nname = "pix-a"\nversion.workspace = true\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' > "$work/crates/pix-a/Cargo.toml"
     else
-      printf '[package]\nname = "pix-a"\nversion = "%s"\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' "$1" > "$work/crates/pix-a/Cargo.toml"
+      printf '[package]\nname = "pix-a"\nversion = "%s"\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' "$version" > "$work/crates/pix-a/Cargo.toml"
     fi
-    printf '[[package]]\nname = "pix-a"\nversion = "%s"\n' "${2:-$1}" > "$work/Cargo.lock"
+    printf '[[package]]\nname = "pix-a"\nversion = "%s"\n' "$locked" > "$work/Cargo.lock"
   }
   section() {
-    perl -0pi -e "s/## \\[Unreleased\\]\\n/## [Unreleased]\\n\\n## [$1] - 2026-10-21\\n/" "$work/CHANGELOG.md"
+    local version="$1"
+    perl -0pi -e "s/## \\[Unreleased\\]\\n/## [Unreleased]\\n\\n## [$version] - 2026-10-21\\n/" "$work/CHANGELOG.md"
   }
   commit() {
+    local message="$1"
     stub_git add -A
-    stub_git commit -q -m "$1"
+    stub_git commit -q -m "$message"
   }
   branch() {
+    local name="$1"
     stub_git checkout -q main
-    stub_git checkout -q -b "$1"
+    stub_git checkout -q -b "$name"
   }
   # expect NAME WANT BRANCH [ENV…]: the guard over BRANCH against main exits
   # WANT.
@@ -170,18 +178,18 @@ self_test() {
   # A crate arrives on its own line, above the product version.
   branch arrive
   published "pix-a"
-  manifest 0.0.0 'serde = "1"'
+  manifest 0.0.0 "$serde_one"
   crate 0.0.39
   echo 'pub fn a() {}' > "$work/crates/pix-a/src/lib.rs"
   commit "a crate arrives at 0.0.39"
   branch inherit
   published "pix-a"
-  manifest 0.0.0 'serde = "1"'
+  manifest 0.0.0 "$serde_one"
   crate workspace 0.0.0
   commit "a crate that inherits the product version"
   branch stale
   published "pix-a"
-  manifest 0.0.0 'serde = "1"'
+  manifest 0.0.0 "$serde_one"
   crate 0.0.39 0.0.38
   commit "a crate locked behind its version"
   expect "a crate arriving on its own line" 0 arrive
@@ -217,10 +225,10 @@ self_test() {
   manifest 0.0.0 'serde = "1.1"'
   commit "a workspace dependency the crate consumes moves"
   branch inline
-  manifest 0.0.0 'serde = "1"'$'\n''log = "0.5"'
+  manifest 0.0.0 "$serde_one"$'\n''log = "0.5"'
   commit "a workspace dependency the crate consumes by an inline table moves"
   branch own
-  manifest 0.0.0 'serde = "1"'$'\n''tokio = "1.1"'
+  manifest 0.0.0 "$serde_one"$'\n''tokio = "1.1"'
   commit "a workspace dependency of the crate's own requirement's name moves"
   branch lower
   echo 'pub fn c() {}' >> "$work/crates/pix-a/src/lib.rs"
@@ -263,10 +271,11 @@ head="${2:-HEAD}"
 
 # read_head PATH: the file at the head, or on disk for WORKTREE.
 read_head() {
+  local path="$1"
   if [[ "$head" == WORKTREE ]]; then
-    cat "$1" 2> /dev/null || true
+    cat "$path" 2> /dev/null || true
   else
-    git show "$head:$1" 2> /dev/null || true
+    git show "$head:$path" 2> /dev/null || true
   fi
 }
 

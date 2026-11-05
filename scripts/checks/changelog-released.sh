@@ -36,10 +36,11 @@ self_test() {
   }
   # expect NAME WANT: the guard over the stub's tree exits WANT.
   expect() {
+    local name="$1" want="$2"
     status=0
     (cd "$work" && bash scripts/checks/changelog-released.sh) > "$work/out" 2>&1 || status=$?
-    if [[ "$status" -ne "$2" ]]; then
-      echo "changelog-released: self-test failed: $1 exited $status, wanted $2." >&2
+    if [[ "$status" -ne "$want" ]]; then
+      echo "changelog-released: self-test failed: $name exited $status, wanted $want." >&2
       cat "$work/out" >&2
       exit 1
     fi
@@ -72,15 +73,17 @@ readonly FIRST_CHECKED=0.0.1
 # The section of version $2 in file $1: its heading through the line before
 # the next version heading or the first link reference.
 section() {
-  awk -v v="$2" 'BEGIN { h = "## [" v "]" }
+  local file="$1" version="$2"
+  awk -v v="$version" 'BEGIN { h = "## [" v "]" }
     index($0, h) == 1 { p = 1; print; next }
     p && (/^## \[/ || /^\[[^]]+\]: /) { exit }
-    p' "$1"
+    p' "$file"
 }
 
 # 0 when version $1 is at or after FIRST_CHECKED.
 checked() {
-  [ "$(printf '%s\n%s\n' "$FIRST_CHECKED" "$1" | sort -V | head -n1)" = "$FIRST_CHECKED" ]
+  local version="$1"
+  [[ "$(printf '%s\n%s\n' "$FIRST_CHECKED" "$version" | sort -V | head -n1)" == "$FIRST_CHECKED" ]]
 }
 
 fail=0
@@ -93,10 +96,10 @@ while IFS= read -r v; do
   if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
     rc=0
     git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1 || rc=$?
-    if [ "$rc" = 2 ]; then
+    if [[ "$rc" == 2 ]]; then
       echo "  $tag: not tagged yet, skipped"
       continue
-    elif [ "$rc" != 0 ]; then
+    elif [[ "$rc" != 0 ]]; then
       echo "  DRIFT: cannot ask origin for $tag (git ls-remote exit $rc)" >&2
       fail=1
       continue
@@ -119,7 +122,7 @@ while IFS= read -r v; do
   fi
 done < <(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md)
 
-if [ "$fail" != 0 ]; then
+if [[ "$fail" != 0 ]]; then
   echo "changelog-released: a released section changed after its tag; move the entry to [Unreleased]" >&2
   exit 1
 fi

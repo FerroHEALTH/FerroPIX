@@ -59,6 +59,8 @@ readonly MATRIX=docs/VERSIONS.md
 # The workflow whose `run:` blocks and installer inputs name the CI tool pins.
 readonly CI=.github/workflows/ci.yml
 readonly REGISTRY_UA=ferropix-pin-check
+# The --proto and --proto-redir value that holds every remote call to HTTPS.
+readonly HTTPS_ONLY='=https'
 # One "tool<TAB>upstream repository" record per line: a CI tool ci.yml pins
 # by version, read against the newest GitHub release of its project.
 readonly CI_TOOLS="\
@@ -82,7 +84,8 @@ readonly NIGHTLY_MAX_DAYS=42
 # to the days between them; nothing for text that is no date. The count is
 # that of days_from_civil (https://howardhinnant.github.io/date_algorithms.html).
 day_number() {
-  awk -v date="$1" '
+  local date="$1"
+  awk -v date="$date" '
     BEGIN {
       if (date !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) exit
       split(date, part, "-"); y = part[1] + 0; m = part[2] + 0; d = part[3] + 0
@@ -169,7 +172,8 @@ W3C Web Services Addressing 1.0 SOAP Binding	ws-addr-soap	-	-"
 # w3c_date URL: the date a dated W3C publication URL ends in, as
 # YYYY-MM-DD; nothing for a URL that names no date.
 w3c_date() {
-  sed -nE 's|^https://www\.w3\.org/TR/[0-9]{4}/[A-Za-z]+-.*-([0-9]{4})([0-9]{2})([0-9]{2})/?$|\1-\2-\3|p' <<< "$1"
+  local url="$1"
+  sed -nE 's|^https://www\.w3\.org/TR/[0-9]{4}/[A-Za-z]+-.*-([0-9]{4})([0-9]{2})([0-9]{2})/?$|\1-\2-\3|p' <<< "$url"
 }
 
 # w3c_verdict PINNED LATEST HOLD LAG: how the pinned publication reads
@@ -233,7 +237,8 @@ unwatched_rows() {
 # pin cell of the matrix row whose first cell is LABEL, backticks and
 # trailing punctuation removed.
 matrix_cell_token() {
-  awk -F'|' -v want="$1" -v key="$2" '
+  local label="$1" key="$2" matrix="${3:-$MATRIX}"
+  awk -F'|' -v want="$label" -v key="$key" '
     NF >= 3 {
       label = $2; value = $3
       gsub(/`/, "", label); gsub(/^[ \t]+|[ \t]+$/, "", label)
@@ -241,20 +246,21 @@ matrix_cell_token() {
       gsub(/`/, "", value)
       n = split(value, word, " ")
       for (i = 1; i < n; i++) if (word[i] == key) { t = word[i + 1]; gsub(/[,.;:]+$/, "", t); print t; exit }
-    }' "${3:-$MATRIX}"
+    }' "$matrix"
 }
 
 # matrix_first LABEL PATTERN [MATRIX]: the first match of the awk regular
 # expression PATTERN in the pin cell of the matrix row whose first cell is
 # LABEL, backticks removed.
 matrix_first() {
-  awk -F'|' -v want="$1" -v pattern="$2" '
+  local label="$1" pattern="$2" matrix="${3:-$MATRIX}"
+  awk -F'|' -v want="$label" -v pattern="$pattern" '
     NF >= 3 {
       label = $2; value = $3
       gsub(/`/, "", label); gsub(/^[ \t]+|[ \t]+$/, "", label)
       gsub(/`/, "", value)
       if (label == want && match(value, pattern)) { print substr(value, RSTART, RLENGTH); exit }
-    }' "${3:-$MATRIX}"
+    }' "$matrix"
 }
 
 # The Chrome for Testing release the console's browser journeys run Chrome
@@ -341,13 +347,13 @@ registry_auth() {
       [[ "$path" == */* ]] || path="library/$path"
       ;;
   esac
-  challenge="$(curl --proto '=https' --silent --show-error --user-agent "$REGISTRY_UA" --output /dev/null \
+  challenge="$(curl --proto "$HTTPS_ONLY" --silent --show-error --user-agent "$REGISTRY_UA" --output /dev/null \
     --dump-header - "https://$host/v2/" | tr -d '\r' \
     | awk 'tolower($1) == "www-authenticate:" { sub(/^[^:]*:[ \t]*/, ""); print; exit }')" || return 1
   realm="$(sed -nE 's/.*realm="([^"]+)".*/\1/p' <<< "$challenge")"
   service="$(sed -nE 's/.*service="([^"]+)".*/\1/p' <<< "$challenge")"
   [[ -n "$realm" ]] || return 1
-  token="$(curl --proto '=https' --fail --silent --show-error --get --user-agent "$REGISTRY_UA" \
+  token="$(curl --proto "$HTTPS_ONLY" --fail --silent --show-error --get --user-agent "$REGISTRY_UA" \
     --data-urlencode "service=$service" --data-urlencode "scope=repository:$path:pull" "$realm" \
     | jq --raw-output --exit-status '.token // .access_token')" || return 1
   printf '%s\t%s\t%s\n' "$host" "$path" "$token"
@@ -360,7 +366,7 @@ registry_digest() {
   local repository="$1" tag="$2" host path token auth digest
   auth="$(registry_auth "$repository")" || return 1
   IFS=$'\t' read -r host path token <<< "$auth"
-  digest="$(curl --proto '=https' --fail --silent --show-error --head --user-agent "$REGISTRY_UA" \
+  digest="$(curl --proto "$HTTPS_ONLY" --fail --silent --show-error --head --user-agent "$REGISTRY_UA" \
     --header "Authorization: Bearer $token" \
     --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "https://$host/v2/$path/manifests/$tag" | tr -d '\r' \
@@ -384,7 +390,7 @@ registry_tags() {
   while [[ -n "$url" ]]; do
     pages=$((pages + 1))
     [[ "$pages" -le "$MAX_TAG_PAGES" ]] || return 1
-    curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" --dump-header "$headers" \
+    curl --proto "$HTTPS_ONLY" --fail --silent --show-error --user-agent "$REGISTRY_UA" --dump-header "$headers" \
       --header "Authorization: Bearer $token" "$url" > "$registry_scratch/tags.json" || return 1
     jq --raw-output '.tags // [] | .[]' "$registry_scratch/tags.json" >> "$registry_scratch/tags.txt" \
       || return 1
@@ -403,7 +409,8 @@ registry_tags() {
 # next_page HEADERS: the target of the `rel="next"` link in the response
 # header file HEADERS (RFC 8288 §3), or nothing on the last page.
 next_page() {
-  tr -d '\r' < "$1" | awk '
+  local headers="$1"
+  tr -d '\r' < "$headers" | awk '
     tolower($1) == "link:" && /rel="?next"?/ && match($0, /<[^>]+>/) {
       print substr($0, RSTART + 1, RLENGTH - 2); exit
     }'
@@ -417,7 +424,8 @@ next_page() {
 # (`4.3`, `18`) names a line, not a release, so a release carries at least as
 # many components as the pin, up to three: a Temurin respin adds a fourth.
 newest_release() {
-  awk -v pinned="$1" -v line="${2:-}" '
+  local pinned="$1" line="${2:-}"
+  awk -v pinned="$pinned" -v line="$line" '
     function shape(tag) {
       if (!match(tag, /^[0-9]+(\.[0-9]+)*(_[0-9]+)?/)) return 0
       version = substr(tag, 1, RLENGTH); suffix = substr(tag, RLENGTH + 1)
@@ -451,7 +459,8 @@ newest_release() {
 # newer release of a released pin, and the first release of a ballot pin
 # does.
 newest_version() {
-  awk -v pinned="$1" '
+  local pinned="$1"
+  awk -v pinned="$pinned" '
     function key(v,   core, pre, n, p, i, k) {
       core = v; pre = ""
       if (index(v, "-") > 0) { core = substr(v, 1, index(v, "-") - 1); pre = substr(v, index(v, "-") + 1) }
@@ -473,7 +482,8 @@ newest_version() {
 # LABEL, past a `version` word. A row that pins two versions names the newer
 # first.
 matrix_package_version() {
-  awk -F'|' -v want="$1" -v package="\`$2\`" '
+  local label="$1" package="$2" matrix="${3:-$MATRIX}"
+  awk -F'|' -v want="$label" -v package="\`$package\`" '
     NF >= 3 {
       label = $2; value = $3
       gsub(/`/, "", label); gsub(/^[ \t]+|[ \t]+$/, "", label)
@@ -486,7 +496,7 @@ matrix_package_version() {
         v = word[j]; gsub(/`/, "", v); gsub(/[,;:]+$/, "", v)
         print v; exit
       }
-    }' "${3:-$MATRIX}"
+    }' "$matrix"
 }
 
 # The self-test runs newest_release, matrix_images and ci_tools over fixtures and
@@ -496,8 +506,9 @@ self_test() {
   local failed=0 got work
   # expect WANT GOT WHAT: one comparison of the self-test.
   expect() {
-    if [[ "$2" != "$1" ]]; then
-      printf 'pin-freshness: self-test failed: %s gave "%s", wanted "%s".\n' "$3" "$2" "$1" >&2
+    local want="$1" got="$2" what="$3"
+    if [[ "$got" != "$want" ]]; then
+      printf 'pin-freshness: self-test failed: %s gave "%s", wanted "%s".\n' "$what" "$got" "$want" >&2
       failed=1
     fi
   }
@@ -716,7 +727,7 @@ newest_release_tag() {
     printf '%s\n' "$tag"
     return 0
   fi
-  location="$(curl --proto '=https' --silent --show-error --head --user-agent "$REGISTRY_UA" \
+  location="$(curl --proto "$HTTPS_ONLY" --silent --show-error --head --user-agent "$REGISTRY_UA" \
     "https://github.com/$repo/releases/latest" | tr -d '\r' \
     | awk 'tolower($1) == "location:" { print $2; exit }')" || {
     printf '%s\n' "$tag"
@@ -785,7 +796,7 @@ pinned="$(matrix_pin "$NIGHTLY_ROW")"
 if ! [[ "$pinned" =~ ^nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
   printf 'UNREADABLE %s: no nightly-YYYY-MM-DD pin in %s\n' "$NIGHTLY_ROW" "$MATRIX"
   unreadable=1
-elif ! newest="$(curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" "$NIGHTLY_MANIFEST" \
+elif ! newest="$(curl --proto "$HTTPS_ONLY" --fail --silent --show-error --user-agent "$REGISTRY_UA" "$NIGHTLY_MANIFEST" \
   | manifest_date)" || [[ -z "$newest" ]]; then
   printf 'UNREADABLE %s: could not read the date of %s\n' "$NIGHTLY_ROW" "$NIGHTLY_MANIFEST"
   unreadable=1
@@ -873,7 +884,7 @@ while IFS=$'\t' read -r label package hold; do
     continue
   fi
 
-  if ! versions="$(curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" "$FHIR_REGISTRY/$package" \
+  if ! versions="$(curl --proto "$HTTPS_ONLY" --fail --silent --show-error --user-agent "$REGISTRY_UA" "$FHIR_REGISTRY/$package" \
     | jq --raw-output --exit-status '.versions | keys[]' 2>&1)"; then
     printf 'UNREADABLE %s: could not read the registry entry of %s (%s)\n' "$label" "$package" "$versions"
     unreadable=1
@@ -906,7 +917,7 @@ while IFS=$'\t' read -r label url; do
     continue
   fi
 
-  if ! served="$(curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location --user-agent "$REGISTRY_UA" "$url" \
+  if ! served="$(curl --proto "$HTTPS_ONLY" --proto-redir "$HTTPS_ONLY" --fail --silent --show-error --location --user-agent "$REGISTRY_UA" "$url" \
     | shasum -a 256 | cut -d' ' -f1)" || ! [[ "$served" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'UNREADABLE %s: could not read %s\n' "$label" "$url"
     unreadable=1
@@ -925,7 +936,7 @@ done <<< "$WATCHED_DOCUMENTS"
 while IFS=$'\t' read -r label _; do
   [[ "$label" =~ ^IETF\ RFC\ ([0-9]+)$ ]] || continue
   number="${BASH_REMATCH[1]}"
-  if ! obsoleted="$(curl --proto '=https' --fail --silent --show-error --user-agent "$REGISTRY_UA" "$RFC_INDEX/rfc$number.json" \
+  if ! obsoleted="$(curl --proto "$HTTPS_ONLY" --fail --silent --show-error --user-agent "$REGISTRY_UA" "$RFC_INDEX/rfc$number.json" \
     | jq --raw-output --exit-status '.obsoleted_by | join(", ")' 2>&1)"; then
     printf 'UNREADABLE %s: could not read the RFC Editor record %s/rfc%s.json (%s)\n' \
       "$label" "$RFC_INDEX" "$number" "$obsoleted"
@@ -950,7 +961,7 @@ while IFS=$'\t' read -r label shortname hold lag; do
     continue
   fi
 
-  if ! latest="$(curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location --user-agent "$REGISTRY_UA" \
+  if ! latest="$(curl --proto "$HTTPS_ONLY" --proto-redir "$HTTPS_ONLY" --fail --silent --show-error --location --user-agent "$REGISTRY_UA" \
     --header 'Accept: application/json' "$W3C_API/$shortname/versions/latest" \
     | jq --raw-output --exit-status '.uri' 2>&1)"; then
     printf 'UNREADABLE %s: could not read the newest version of %s from %s (%s)\n' \
@@ -1041,7 +1052,7 @@ pinned="$(chrome_pin)"
 if [[ -z "$pinned" ]]; then
   printf 'UNREADABLE %s: no pin row in %s\n' "$CHROME_LABEL" "$MATRIX"
   unreadable=1
-elif ! latest="$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$CHROME_FEED" | chrome_stable 2>&1)"; then
+elif ! latest="$(curl --proto "$HTTPS_ONLY" --proto-redir "$HTTPS_ONLY" --tlsv1.2 -fsSL "$CHROME_FEED" | chrome_stable 2>&1)"; then
   printf 'UNREADABLE %s: could not read the newest Stable release from %s (%s)\n' \
     "$CHROME_LABEL" "$CHROME_FEED" "$latest"
   unreadable=1

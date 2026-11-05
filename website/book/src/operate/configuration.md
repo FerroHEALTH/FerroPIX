@@ -275,8 +275,8 @@ admitted. A section with no issuer and no Basic user is refused, and so is
 | `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
 | `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
-| `auth.role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. |
-| `auth.scopeless_subjects` | `[]` | The exact `sub` values granted system-wide access without a scope. |
+| `auth.role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. Beside several `[[auth.issuer]]` entries each path is written `<issuer>#<path>` and read from that issuer's tokens alone, and a bare path refuses the start, the default included: set `role_claims = []` there. |
+| `auth.scopeless_subjects` | `[]` | The exact `sub` values granted system-wide access without a scope. Beside several `[[auth.issuer]]` entries each is written `<issuer>#<sub>`, the issuer exactly as its entry names it, and admits that issuer's tokens alone, since a `sub` is unique only within its issuer (RFC 7519 §4.1.2); a bare entry, or one naming an issuer the section does not trust, refuses the start. |
 
 `[auth.introspection]` configures the introspection check, under
 `mode = "introspection"` only. FerroPIX authenticates its call with exactly
@@ -300,7 +300,21 @@ names neither `issuer` nor `token_endpoint`.
 
 Each `[[auth.issuer]]` entry names one trusted issuer, when the server
 trusts more than one. A token field the entry leaves out takes the
-section's value.
+section's value. With more than one entry, `auth.role_claims` and
+`auth.scopeless_subjects` name the issuer of each of their entries:
+
+```toml
+[auth]
+audience = ["https://pix.example.org/fhir"]
+role_claims = []
+scopeless_subjects = ["https://idp.example.org/realms/pix#service-account-sync"]
+
+[[auth.issuer]]
+issuer = "https://idp.example.org/realms/pix"
+
+[[auth.issuer]]
+issuer = "https://partner.example.net"
+```
 
 | Key | Default | What it sets |
 |---|---|---|

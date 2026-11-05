@@ -48,8 +48,9 @@ fhir-types = { version = "0.1.128", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroAUTH: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers. The server pins it exactly, as a product pins every family crate;
-# the published crates take their own caret requirement on it.
-ferrohealth-smart = { version = "=0.8.8", default-features = false }
+# the published crates take their own caret requirement on it. 0.8.9 holds
+# `scopeless_subjects` and `role_claims` per issuer (GHSA-pfgx-xq28-2629).
+ferrohealth-smart = { version = "=0.8.9", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every

@@ -3,8 +3,46 @@
   "@id": "https://github.com/FerroHEALTH/FerroPIX/blob/main/security/vex/rust-advisories.openvex.json",
   "author": "Cadasto B.V.",
   "role": "vendor",
-  "statements": [],
-  "timestamp": "2026-10-30T00:00:00Z",
+  "statements": [
+    {
+      "ferropix:reachability": {
+        "direct_dependents": [
+          "testcontainers"
+        ],
+        "package": "astral-tokio-tar",
+        "workspace_roots": [
+          "ferropix-console",
+          "ferropix-server",
+          "ferropix-testkit"
+        ]
+      },
+      "impact_statement": "The advisory is informational: Astral ended maintenance of `astral-tokio-tar` on 2026-11-03 and no version is patched. Its one carrier is `testcontainers` 0.28.0, which `ferropix-testkit`, the test-support crate (`publish = false`), uses to start the containers the integration tests run against. Every workspace root above reaches it only through a dev-dependency on `ferropix-testkit` or on `testcontainers`, so the crate is in none of the products. Neither published crate resolves it at all: `cargo tree -p ihe-iti` and `cargo tree -p nl-generic-functions`, all features and all targets, find no `astral-tokio-tar` node, and `ferropix-server` and `ferropix-console` reach it over no normal or build edge either. No release of `testcontainers` leaves the crate (0.28.0 requires ^0.6.1 and the upstream main branch requires 0.7.0). Re-evaluate when a `testcontainers` release drops the dependency, or if `ferropix-testkit` ever becomes a normal dependency of a shipped crate.",
+      "justification": "component_not_present",
+      "products": [
+        {
+          "@id": "pkg:cargo/ihe-iti",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/astral-tokio-tar"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:cargo/nl-generic-functions",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/astral-tokio-tar"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "vulnerability": {
+        "name": "RUSTSEC-2026-0440"
+      }
+    }
+  ],
+  "timestamp": "2026-11-05T00:00:00Z",
   "tooling": "scripts/security/vex-generate.sh from security/vex/rust-advisories.toml + deny.toml",
-  "version": 2
+  "version": 3
 }

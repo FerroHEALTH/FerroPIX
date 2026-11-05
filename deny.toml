@@ -13,7 +13,16 @@
 version = 2
 yanked = "deny"
 # An exception is dated and names the event that deletes it.
-ignore = []
+ignore = [
+  # 2026-11-05 (#481): astral-tokio-tar is unmaintained in every version,
+  # and testcontainers is its one carrier: 0.28.0, the newest release, needs
+  # ^0.6.1 and its main branch has moved to 0.7.0. The path argument is the
+  # RUSTSEC-2026-0440 statement in security/vex/rust-advisories.toml.
+  # DELETING EVENT: a testcontainers release that no longer depends on
+  # astral-tokio-tar.
+  # https://rustsec.org/advisories/RUSTSEC-2026-0440
+  { id = "RUSTSEC-2026-0440", reason = "reached only through testcontainers in the ferropix-testkit test harness, which no shipped artefact links" },
+]
 
 [licenses]
 version = 2

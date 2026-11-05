@@ -47,7 +47,7 @@ pub struct DirectoryEntry<R> {
 /// trait is sealed.
 pub trait DirectoryResource: sealed::Sealed {
     /// The `resourceType`.
-    const KIND: &'static str;
+    const KIND: &str;
 
     /// The resource's logical id.
     fn logical_id(&self) -> Option<&str>;

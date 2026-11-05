@@ -538,43 +538,48 @@ pub(crate) fn holds_to(document: &Value, profile: &Value) {
                 .flat_map(|node| children(node, segment))
                 .collect();
         }
-        let min = element["min"].as_u64();
-        let max = element["max"].as_str();
         for parent in &nodes {
-            let found = children(parent, last);
-            if let Some(min) = min {
-                assert!(
-                    u64::try_from(found.len()).unwrap() >= min,
-                    "{url}: {id} holds {} of at least {min} in {parent}",
-                    found.len()
-                );
+            holds_element(url, id, element, parent, last);
+        }
+    }
+}
+
+/// Holds the children of `parent` that the differential `element` (with id
+/// `id`, last segment `last`) names to its cardinality, its fixed values and
+/// patterns, and the PDQm profile its type names.
+fn holds_element(url: &str, id: &str, element: &Value, parent: &Value, last: &str) {
+    let found = children(parent, last);
+    if let Some(min) = element["min"].as_u64() {
+        assert!(
+            u64::try_from(found.len()).unwrap() >= min,
+            "{url}: {id} holds {} of at least {min} in {parent}",
+            found.len()
+        );
+    }
+    match element["max"].as_str() {
+        Some("*") | None => {}
+        Some(max) => {
+            let max: u64 = max.parse().expect("a maximum");
+            assert!(
+                u64::try_from(found.len()).unwrap() <= max,
+                "{url}: {id} holds {} of at most {max}",
+                found.len()
+            );
+        }
+    }
+    for (key, value) in element.as_object().expect("an element") {
+        if key.starts_with("fixed") || key.starts_with("pattern") {
+            for child in &found {
+                assert_eq!(child, value, "{url}: {id} {key}");
             }
-            match max {
-                Some("*") | None => {}
-                Some(max) => {
-                    let max: u64 = max.parse().expect("a maximum");
-                    assert!(
-                        u64::try_from(found.len()).unwrap() <= max,
-                        "{url}: {id} holds {} of at most {max}",
-                        found.len()
-                    );
-                }
-            }
-            for (key, value) in element.as_object().expect("an element") {
-                if key.starts_with("fixed") || key.starts_with("pattern") {
-                    for child in &found {
-                        assert_eq!(child, value, "{url}: {id} {key}");
-                    }
-                }
-            }
-            if let Some(target) = element["type"][0]["profile"][0].as_str()
-                && let Some(name) = target
-                    .strip_prefix("https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.")
-            {
-                for child in &found {
-                    holds_to(child, &self::profile(name));
-                }
-            }
+        }
+    }
+    if let Some(target) = element["type"][0]["profile"][0].as_str()
+        && let Some(name) =
+            target.strip_prefix("https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.")
+    {
+        for child in &found {
+            holds_to(child, &profile(name));
         }
     }
 }

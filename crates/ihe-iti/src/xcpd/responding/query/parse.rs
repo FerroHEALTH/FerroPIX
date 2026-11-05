@@ -75,7 +75,7 @@ impl Visitor for Collected {
     type Namespace = Ns;
     type Error = Refusal;
     const SOAP: Ns = Ns::Soap;
-    const NAMESPACES: &'static [(&'static str, Ns)] = v3::NAMESPACES;
+    const NAMESPACES: &[(&str, Ns)] = v3::NAMESPACES;
     const OTHER: Ns = Ns::Other;
 
     fn opened(&mut self, open: &[(Ns, &str)], element: &Element<'_>) -> Result<(), Refusal> {

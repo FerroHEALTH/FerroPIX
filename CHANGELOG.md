@@ -13,6 +13,24 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-11-06
+
+A fix release with one change to who may feed a domain. A Patient Identity
+Source is admitted only with a machine's client credentials token: a
+person's token through the Source's client is refused, so move any Source
+that fed that way to the client credentials grant before you upgrade. The
+console moves to FerroUI 0.6.8, so a tab you sign out in shows the
+signed-out page, and the compose quickstart's console signs a steward in.
+
+### Changed
+
+- A Patient Identity Source is admitted only with a machine's token, one the issuer's profile classifies as app-only from the client credentials grant. A person's token through the Source's client, a first-party client listed in `[[trust.issuer]] clients`, is answered `403` with a `forbidden` issue whose diagnostics say a Source sends a client credentials token, on ITI-104 and on the ITI-93 feed. A Source that fed with a person's token requests a client credentials token for its `source_client_id` (#496).
+
+### Fixed
+
+- The console moves to `ferrohealth-ui` 0.6.8, whose session watch no longer sends a tab that is signing out to the sign-in page that says the session expired: signing out right after bringing a tab forward lands on the signed-out page (FerroHEALTH/FerroUI#654). FerroUI 0.6.7 draws several live regions as `<output>` and named `<section>` elements with the same roles and looks (#493).
+- The compose quickstart signs a steward in to the console. The development issuer signs a console login and its renewal with the console's client id as `aud` and `client_id` and the steward scope `__ferropix.steward`, `quickstart.toml` admits that audience beside `http://localhost:8080/fhir`, and it mounts the operator API. Before, the server refused every console login's token and the operator API was not mounted (#499).
+
 ## [0.0.19] - 2026-11-06
 
 A family upkeep release that breaks the configuration. FerroPIX moves to

@@ -112,7 +112,7 @@ services:
       - no-new-privileges:true
 
   ferropix:
-    image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-0.0.19}
+    image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-0.0.20}
     container_name: ferropix
     restart: unless-stopped
     network_mode: service:issuer
@@ -168,7 +168,7 @@ services:
   # runs `ferropix-console healthcheck`, the image's HEALTHCHECK repeated for
   # Podman (HEALTH above).
   console:
-    image: ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION:-0.0.19}
+    image: ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION:-0.0.20}
     profiles: [console]
     restart: unless-stopped
     network_mode: service:issuer

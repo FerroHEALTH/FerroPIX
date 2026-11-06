@@ -1,0 +1,68 @@
+# The performance baseline of ferrohealth-perf. `ferrohealth-perf run --update`
+# lowers it; a raise is a hand edit in a change that says why.
+schema = 1
+tool = "0.1.1"
+written = "2026-11-06T20:45:44.3875333Z"
+
+[plan]
+rate = 50.0
+warmup_secs = 10
+duration_secs = 60
+requests = 5
+groups = ["pdqm-match", "pdqm-search", "pixm-feed", "pixm-query", "pixm-query-post"]
+
+[host]
+arch = "x86_64"
+os = "linux"
+available_parallelism = 4
+cpu_model = "AMD EPYC 9V45 96-Core Processor"
+total_memory_bytes = 16760344576
+
+[tolerance]
+latency = 0.25
+throughput = 0.2
+memory = 0.2
+cpu = 0.25
+transactions = 0.1
+
+[metrics]
+throughput_rps = 50.0
+peak_memory_bytes = 50393088.0
+cpu_per_request_ms = 1.37
+transactions_per_request = 3.4171428571428573
+"pdqm-match.p50_ms" = 5.339
+"pdqm-match.p95_ms" = 6.083
+"pdqm-match.p99_ms" = 6.699
+"pdqm-search.p50_ms" = 5.575
+"pdqm-search.p95_ms" = 6.327
+"pdqm-search.p99_ms" = 7.679
+"pixm-feed.p50_ms" = 7.063
+"pixm-feed.p95_ms" = 7.807
+"pixm-feed.p99_ms" = 9.495
+"pixm-query.p50_ms" = 3.667
+"pixm-query.p95_ms" = 4.271
+"pixm-query.p99_ms" = 4.767
+"pixm-query-post.p50_ms" = 3.825
+"pixm-query-post.p95_ms" = 4.407
+"pixm-query-post.p99_ms" = 5.031
+
+[noise]
+throughput_rps = 1.0
+peak_memory_bytes = 1.0037389254653337
+cpu_per_request_ms = 1.132231404958678
+transactions_per_request = 1.0036925142665325
+"pdqm-match.p50_ms" = 1.2419167248197256
+"pdqm-match.p95_ms" = 1.1691331923890063
+"pdqm-match.p99_ms" = 1.0225919706914974
+"pdqm-search.p50_ms" = 1.2491597580103069
+"pdqm-search.p95_ms" = 1.2197802197802197
+"pdqm-search.p99_ms" = 1.0729261622607111
+"pixm-feed.p50_ms" = 1.1497639589776982
+"pixm-feed.p95_ms" = 1.1059640175662275
+"pixm-feed.p99_ms" = 1.0250458814638885
+"pixm-query.p50_ms" = 1.4098423683198769
+"pixm-query.p95_ms" = 1.2860584161397168
+"pixm-query.p99_ms" = 1.012746972594009
+"pixm-query-post.p50_ms" = 1.4026402640264028
+"pixm-query-post.p95_ms" = 1.2927544734526255
+"pixm-query-post.p99_ms" = 1.3520558989518945

@@ -18,7 +18,7 @@ audience and lifetime under RFC 9068. The scopes each caller needs:
 | Caller | Scope | Routes |
 |---|---|---|
 | PIXm or PDQm Consumer | `system/Patient.rs` | `$ihe-pix` by `GET` and `POST` (ITI-83), the Patient search and read (ITI-78), `$match` (ITI-119) |
-| Patient Identity Source | `system/Patient.cud`, and the token's `client_id` equal to the domain's `source_client_id` | the conditional update and delete of `Patient` (ITI-104) |
+| Patient Identity Source | `system/Patient.cud`, and a machine's token whose `client_id` equals the domain's `source_client_id` | the conditional update and delete of `Patient` (ITI-104) |
 | PMIR subscriber | `system/Subscription.cruds` | `Subscription` (ITI-94) |
 | Data steward | `auth.product_scope` (default `__ferropix.steward`) | the operator API |
 | Administrator | `operator.admin_scope` (default `__ferropix.admin`) | the writes of identifier and pseudonymisation domains, and the reads beside them |
@@ -31,6 +31,14 @@ records, and a patient index answers about every patient. A Source's
 `clients`, so a Source of one domain cannot change another (PIXm 3.1.0
 §2:3.104.5).
 
+A Source is a machine. Its token comes from the client credentials grant
+(RFC 6749 §4.4), and the issuer's profile classifies it as app-only: under
+the `rfc9068` profile, its `sub` is its `client_id`. A person's token
+through the same client is refused, even when the issuer lists that client
+in `first_party_clients` for a login. To upgrade a Source that fed with a
+person's token, have it request a client credentials token for its
+`source_client_id` and send that.
+
 The answers:
 
 - No valid token: `401` with a `WWW-Authenticate: Bearer` challenge and an
@@ -42,6 +50,8 @@ The answers:
   [`not-permitted`](problems.md#not-permitted).
 - A Source changing a domain it does not feed: `403` with a `forbidden`
   issue.
+- A person's token through a Source's client: `403` with a `forbidden`
+  issue whose diagnostics say a Source sends a client credentials token.
 
 No refusal names a claim, a scope, the token or a value of the request.
 `GET {base}/fhir/metadata` and `GET {base}/fhir/.well-known/smart-configuration`

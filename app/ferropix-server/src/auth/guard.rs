@@ -49,6 +49,10 @@ pub const AUTHORIZATION_UNAVAILABLE: &str =
 pub const NOT_THE_SOURCE: &str =
     "the caller is not the Patient Identity Source of the identifier domain this request changes";
 
+/// The diagnostics of a person's token through a Source's client: a Source
+/// is a machine, with a client credentials token.
+pub const NOT_A_MACHINE: &str = "the Patient Identity Source of an identifier domain is a machine: send a client credentials token";
+
 /// Returns the route of `method` on the matched route of `extensions`
 /// under `{base}` `base`.
 fn route_of(base: &str, method: &Method, extensions: &Extensions) -> Option<&'static Route> {
@@ -294,29 +298,44 @@ fn check(confine: &Confine, access: &Access, request: &Request) -> Checked {
         );
     }
     let sources = confine.smart.sources();
-    let (systems, forbidden) = match source {
+    let (systems, verdicts) = match source {
         SourceRule::Any => return Checked::Pass,
         SourceRule::Named => {
             let systems = domains_of(request.uri().query());
-            let forbidden = systems
+            let verdicts = systems
                 .iter()
-                .any(|system| sources.verdict(access, system) == Verdict::Forbidden);
-            (systems, forbidden)
+                .map(|system| sources.verdict(access, system))
+                .collect();
+            (systems, verdicts)
         }
         SourceRule::Master => (
             sources.master().into_iter().collect(),
-            sources.verdict_master(access) == Verdict::Forbidden,
+            vec![sources.verdict_master(access)],
         ),
     };
-    if forbidden {
-        return Checked::Refused(respond(
+    match refusal(&verdicts) {
+        Some(diagnostics) => Checked::Refused(respond(
             StatusCode::FORBIDDEN,
             IssueType::Forbidden,
-            NOT_THE_SOURCE,
+            diagnostics,
             None,
-        ));
+        )),
+        None => Checked::Feed(systems),
     }
-    Checked::Feed(systems)
+}
+
+/// Returns the diagnostics of the refusal `verdicts` call for, or `None`
+/// when no domain refuses the caller: a person through a Source's client is
+/// told so before a caller that is no Source.
+#[must_use]
+pub fn refusal(verdicts: &[Verdict]) -> Option<&'static str> {
+    if verdicts.contains(&Verdict::NotAMachine) {
+        Some(NOT_A_MACHINE)
+    } else if verdicts.contains(&Verdict::Forbidden) {
+        Some(NOT_THE_SOURCE)
+    } else {
+        None
+    }
 }
 
 /// Returns the caller the request log names for `access`: the token's

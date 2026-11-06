@@ -24,7 +24,7 @@ use ferrohealth_server::health::Health;
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::Audit;
 use ferropix_server::auth::Smart;
-use ferropix_server::auth::guard::{NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
+use ferropix_server::auth::guard::{NOT_A_MACHINE, NOT_PERMITTED, NOT_THE_SOURCE, UNAUTHENTICATED};
 use ferropix_server::auth::table::{Mount, Need, ROUTES, Route, SourceRule};
 use ferropix_server::config::Config;
 use ferropix_server::config::settings::Settings;
@@ -74,6 +74,10 @@ fn handled(status: StatusCode) -> bool {
 /// (RFC 9068 §2.2).
 pub(crate) const CONSOLES: [&str; 3] = ["console", "synthetic-console", "ferropix-console"];
 
+/// The Source client the test issuer also signs a person's login for, as a
+/// first-party client: a person through it is never the Source.
+pub(crate) const SOURCE_FIRST_PARTY: &str = "east-lab";
+
 /// The subject of a steward's login.
 pub(crate) const PERSON: &str = "synthetic-subject-17";
 
@@ -92,12 +96,24 @@ impl SigningKey {
     /// steward's login through one of the [`CONSOLES`], or else the client
     /// credentials token of the machine `client`.
     pub(crate) fn token(&self, issuer: &str, client: &str, scope: &str) -> String {
-        let now = jiff::Timestamp::now().as_second();
         let subject = if CONSOLES.contains(&client) {
             PERSON
         } else {
             client
         };
+        self.token_for(issuer, client, subject, scope)
+    }
+
+    /// Returns a valid token of `issuer` for `client` granting `scope` to
+    /// `subject`, a person's when `subject` is not the client.
+    pub(crate) fn token_for(
+        &self,
+        issuer: &str,
+        client: &str,
+        subject: &str,
+        scope: &str,
+    ) -> String {
+        let now = jiff::Timestamp::now().as_second();
         let claims = serde_json::json!({
             "iss": issuer,
             "aud": AUDIENCE,
@@ -215,6 +231,7 @@ enabled = true
         issuer = issuer.server.uri(),
         clients = CONSOLES
             .iter()
+            .chain(&[SOURCE_FIRST_PARTY])
             .map(|client| format!("\"{client}\""))
             .collect::<Vec<_>>()
             .join(", "),
@@ -531,6 +548,40 @@ async fn a_source_feeding_another_domain_is_answered_403_with_a_forbidden_issue(
         assert!(
             handled(answer.status),
             "the Source is admitted and the Manager answers: {}",
+            answer.status
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_persons_token_through_the_source_client_is_answered_403_not_a_machine() {
+    let issuer = Issuer::start().await;
+    let secrets = Secrets::new();
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
+    let person = bearer(&issuer.key.token_for(
+        &issuer.server.uri(),
+        SOURCE_FIRST_PARTY,
+        PERSON,
+        "system/Patient.cud",
+    ));
+    let machine = bearer(&issuer.token(SOURCE_FIRST_PARTY, "system/Patient.cud"));
+    let sources = ROUTES.iter().filter(
+        |route| matches!(route.need, Need::Fhir { source, .. } if source != SourceRule::Any),
+    );
+    for route in sources {
+        let label = format!("{} {}", route.method, route.path);
+        let answer = send(&app, route.method.clone(), &uri_of(route), Some(&person)).await;
+        assert_eq!(StatusCode::FORBIDDEN, answer.status, "{label}");
+        assert_eq!("forbidden", answer.issue(), "{label}");
+        assert_eq!(NOT_A_MACHINE, answer.diagnostics(), "{label}");
+        assert_eq!(
+            None, answer.challenge,
+            "{label}: the scope is not the fault"
+        );
+        let answer = send(&app, route.method.clone(), &uri_of(route), Some(&machine)).await;
+        assert!(
+            handled(answer.status),
+            "{label}: the same client's machine token is admitted: {}",
             answer.status
         );
     }

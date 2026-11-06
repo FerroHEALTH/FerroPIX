@@ -27,12 +27,15 @@ data_key_file = "/run/secrets/ferropix-data-key"
 # `typ` JWT rather than the `at+jwt` of RFC 9068, and names the client in
 # `client_id` or `azp`, so the issuer takes the claims it carries; an issuer
 # of RFC 9068 tokens keeps the profile's own `token_types`,
-# `required_claims` and `client_claims`.
+# `required_claims` and `client_claims`. It signs a login's access token
+# with the ID Token's claims, so the console's own client id is the second
+# audience: a provider that audiences a login's access token to the server
+# needs only the first.
 [[auth.issuer]]
 issuer = "http://localhost:8180/ferropix"
 kind = "persons"
 profile = "rfc9068"
-audience = ["http://localhost:8080/fhir"]
+audience = ["http://localhost:8080/fhir", "ferropix-console"]
 token_types = ["JWT"]
 required_claims = ["iss", "exp", "aud", "sub"]
 client_claims = ["client_id", "azp"]
@@ -71,6 +74,11 @@ name = "Pseudonymised BSN"
 kind = "authoritative"
 source_client_id = "quickstart-source"
 sensitive = true
+
+# The steward's API, which the console reads and writes (compose.yaml, the
+# `console` profile).
+[operator]
+enabled = true
 
 [usage_report]
 deployment = "compose"

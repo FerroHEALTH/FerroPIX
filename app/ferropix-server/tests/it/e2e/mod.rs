@@ -29,6 +29,7 @@ mod pdqm_search;
 mod pixm;
 mod pseudo_bsn;
 mod pseudonyms;
+mod quickstart;
 mod registry;
 mod reseal;
 mod schema;

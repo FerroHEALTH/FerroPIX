@@ -222,7 +222,7 @@ async fn a_reveal_shows_the_value_with_its_countdown_and_the_trail_shows_the_dis
             .await;
         journey
             .element(
-                By::Css("[role='status']"),
+                By::Css("[data-fui='countdown'] output"),
                 "the countdown's live announcement",
             )
             .await;

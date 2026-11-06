@@ -498,7 +498,7 @@ async fn revealed(
     person: &str,
     pairs: &[(String, String)],
 ) -> Option<Document> {
-    let target = match (field(pairs, "target").as_deref(), field(pairs, "id")) {
+    let target = match (field(pairs, "kind").as_deref(), field(pairs, "id")) {
         (Some("record"), Some(id)) => Some(Target::Record(id)),
         (Some("carried"), Some(id)) => Some(Target::Carried(id)),
         (Some("pseudonym"), Some(id)) => Some(Target::Pseudonym(id)),

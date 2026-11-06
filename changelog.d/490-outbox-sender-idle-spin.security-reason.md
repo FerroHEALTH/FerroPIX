@@ -1,1 +1,0 @@
-Shipped with functional changes because: the one other change is the fix of the outbox sender's idle busy loop, which keeps over a CPU core busy on every running FerroPIX, and holding either fix back for a release of its own would leave a running deployment with one of the two defects for longer.

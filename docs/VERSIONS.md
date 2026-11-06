@@ -146,6 +146,18 @@ choice: our own design, FerroBRIDGE's set.
 names, and holds the server image tag `compose.yaml` defaults to equal to
 the workspace version.
 
+## The performance gate
+
+`.github/workflows/perf.yml` installs `ferrohealth-perf`, the family's
+performance gate (FerroHEALTH/FerroSYS#249), from crates.io at this exact
+version, and `scripts/perf/gate.sh` starts PostgreSQL and the stub OpenID
+Provider from the two test image rows above. No specification governs the
+choice: our own design.
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| ferrohealth-perf | `0.1.1` | `.github/workflows/perf.yml` |
+
 ## The duplication guard
 
 The clone detector of `scripts/checks/duplication.sh` (#392) also runs on a

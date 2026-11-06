@@ -119,6 +119,8 @@ jobs:
           for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
+      - name: The performance gate reads its pins, renders its plan and holds its two idle tables equal
+        run: bash scripts/perf/gate.sh --self-test
       - name: The release milestone script refuses open items and closes only after every leg
         run: bash scripts/release/milestone.sh --self-test
       - name: The release plan orders tags by version and counts the support period
@@ -501,10 +503,14 @@ jobs:
     outputs:
       manifest: ${{ steps.find.outputs.manifest }}
       cargo: ${{ steps.find.outputs.cargo }}
+      perf: ${{ steps.perf.outputs.perf }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The first parent of a pull request's merge commit and of a merge
+          # group's commit is its base, which the perf probe diffs against.
+          fetch-depth: 2
       - id: find
         run: |
           set -euo pipefail
@@ -522,6 +528,22 @@ jobs:
             echo "manifest=$manifest"
             echo "cargo=$cargo"
           } >> "$GITHUB_OUTPUT"
+      # The performance gate runs on a push to main, on a dispatch, and on a
+      # pull request or merge group that changes what the server is built
+      # from or what the gate reads (#506).
+      - id: perf
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          perf=true
+          if [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "merge_group" ]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            if ! grep -qE '^(app/ferropix-server/|app/ferropix-operator-api/|crates/|tools/ferropix-testkit/fixtures/|perf/|scripts/perf/|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$|docs/VERSIONS\.md$|\.github/workflows/(ci|perf)\.yml$|\.github/actions/setup-rust/)' <<< "$changed"; then
+              perf=false
+            fi
+          fi
+          echo "perf=$perf" >> "$GITHUB_OUTPUT"
 
   # ---- Tier 2 ---------------------------------------------------------------
   # The root manifest parses under the pinned toolchain, members or none.
@@ -729,6 +751,19 @@ jobs:
         with:
           tool: cargo-nextest
       - run: cargo nextest run -p ferropix-testkit -p ferropix-server --locked -E 'test(/e2e::/)'
+
+  # The performance gate (#506): the idle phase and the load phase of
+  # ferrohealth-perf against the release build, in perf.yml, which the
+  # release lane calls on the release commit too.
+  perf:
+    name: perf
+    needs: detect
+    if: needs.detect.outputs.cargo == 'true' && needs.detect.outputs.perf == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/perf.yml
+    with:
+      update: true
 
   # The quickstart, run as an operator runs it: the server built for the
   # static musl target, the image built from that binary through the staged
@@ -1109,6 +1144,7 @@ jobs:
       - test
       - conformance
       - e2e
+      - perf
       - quickstart
       - doc
       - cargo-deny

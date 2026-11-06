@@ -58,6 +58,7 @@ readonly REPEATED_ROWS=(
   "hadolint image"
   "Trivy"
   "cargo-auditable"
+  "ferrohealth-perf"
   "cargo-cyclonedx"
   "syft"
 )

@@ -111,12 +111,14 @@ curl http://localhost:8080/health/readiness
   loopback, so the development provider owns the network namespace and the
   server joins it. The server, your shell and your browser all reach it at
   `http://localhost:8180/ferropix`. It signs any client credentials
-  request: a development issuer, never for real data. For a deployment,
+  request, and its login form signs in any user name you type as a data
+  steward: a development issuer, never for real data. For a deployment,
   name your own `https` issuer in `[[auth.issuer]]`.
 - **The console.** The `console` profile runs the operator console beside
   the server on `http://localhost:3000/`, in the same network namespace,
   signed in through the development issuer; it needs a fifth secret,
-  `secrets/console-oidc-client-secret`.
+  `secrets/console-oidc-client-secret`. The quickstart mounts the operator
+  API the console reads.
 - **The usage report** is on and states `compose`; set
   `FERROPIX__USAGE_REPORT__ENABLED=false` in your shell or a `.env` file to
   switch it off ([Configuration](configuration.md#usage_report)).

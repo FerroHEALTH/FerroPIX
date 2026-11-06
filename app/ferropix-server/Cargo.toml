@@ -107,6 +107,9 @@ uuid.workspace = true
 # PostgreSQL behind FERROPIX_E2E, and the synthetic BSNs, names and domains
 # the store cases and the request-log test send.
 ferropix-testkit = { path = "../../tools/ferropix-testkit" }
+# The quickstart case signs a steward in to the console, run in process
+# beside the server (#497).
+ferropix-console = { path = "../ferropix-console" }
 # Every usage report the server builds, validated against the vendored
 # FerroPULSE report envelope v2.
 jsonschema.workspace = true

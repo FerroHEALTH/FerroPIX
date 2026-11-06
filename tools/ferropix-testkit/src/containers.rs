@@ -432,12 +432,13 @@ fn provider_config(audience: &str) -> Result<String, HarnessError> {
     serde_json::to_string(&config).map_err(HarnessError::Config)
 }
 
-/// Returns the request that starts the stub provider for `audience`.
-fn provider_request(audience: &str) -> Result<ContainerRequest<GenericImage>, HarnessError> {
-    Ok(STUB_PROVIDER
+/// Returns the request that starts the stub provider with the
+/// `JSON_CONFIG` `config`.
+fn provider_request(config: &str) -> ContainerRequest<GenericImage> {
+    STUB_PROVIDER
         .image()
         .with_exposed_port(PROVIDER_PORT.tcp())
-        .with_env_var("JSON_CONFIG", provider_config(audience)?))
+        .with_env_var("JSON_CONFIG", config)
 }
 
 /// Starts the stub OpenID Provider, whose tokens name `audience`, and waits
@@ -454,7 +455,23 @@ fn provider_request(audience: &str) -> Result<ContainerRequest<GenericImage>, Ha
 /// [`HarnessError::Http`] when the readiness probe cannot be built, and
 /// [`HarnessError::NotReady`] when the provider does not answer it in time.
 pub async fn stub_provider(audience: &str) -> Result<StubProvider, HarnessError> {
-    let container = provider_request(audience)?
+    let config = provider_config(audience)?;
+    stub_provider_configured(&config).await
+}
+
+/// Starts the stub OpenID Provider with the `JSON_CONFIG` `config`, as a
+/// deployment file writes it, and waits for its readiness endpoint.
+///
+/// The issuer id is the one `config` names; [`StubProvider::issuer`] is
+/// right when that is [`STUB_ISSUER_ID`].
+///
+/// # Errors
+///
+/// Returns [`HarnessError::Container`] when Docker refuses the container,
+/// [`HarnessError::Http`] when the readiness probe cannot be built, and
+/// [`HarnessError::NotReady`] when the provider does not answer it in time.
+pub async fn stub_provider_configured(config: &str) -> Result<StubProvider, HarnessError> {
+    let container = provider_request(config)
         .start()
         .await
         .map_err(|source| container_error(STUB_PROVIDER, source))?;
@@ -569,7 +586,7 @@ mod tests {
 
     #[test]
     fn the_provider_request_carries_its_configuration() {
-        let request = provider_request("ferropix-test").unwrap();
+        let request = provider_request(&provider_config("ferropix-test").unwrap());
         let names: Vec<String> = request
             .env_vars()
             .map(|(name, _)| name.into_owned())

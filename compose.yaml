@@ -89,14 +89,21 @@ services:
     environment:
       # The server listens on 8080 in this namespace, so the provider moves.
       SERVER_PORT: "8180"
-      # A login form for the browser, and one token callback for the client
+      # A login form for the browser and two token callbacks. The client
       # credentials grant: the client as `sub` and `client_id`, the server's
-      # audience, and the scope asked for. `$$` is a literal `$` to compose.
+      # audience, and the scope asked for. A console login and its renewal:
+      # the person who signed in as `sub`, the console as `aud` and
+      # `client_id`, since the provider signs the ID Token with the same
+      # claims and the console holds it to its own client id alone, and the
+      # steward scope. `$$` is a literal `$` to compose.
       JSON_CONFIG: >-
         {"interactiveLogin":true,"tokenCallbacks":[{"issuerId":"ferropix",
         "requestMappings":[{"requestParam":"grant_type","match":"client_credentials",
         "claims":{"sub":"$${clientId}","client_id":"$${clientId}",
-        "aud":["http://localhost:8080/fhir"],"scope":"$${scope}"}}]}]}
+        "aud":["http://localhost:8080/fhir"],"scope":"$${scope}"}},
+        {"requestParam":"grant_type","match":"authorization_code|refresh_token",
+        "claims":{"client_id":"$${clientId}","aud":["$${clientId}"],
+        "scope":"openid __ferropix.steward"}}]}]}
     read_only: true
     tmpfs:
       - /tmp

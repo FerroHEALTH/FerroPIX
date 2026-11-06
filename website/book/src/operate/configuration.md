@@ -94,8 +94,11 @@ both `[db]` secrets read from files under `/run/secrets/`. Its issuer is
 the development OpenID Provider of the compose quickstart, a `persons`
 issuer: it signs the Sources' client credentials tokens and the console's
 logins, as plain JWT bearer tokens, so the entry sets `token_types =
-["JWT"]` and the claims those tokens carry. The compose
-quickstart mounts it beside PostgreSQL
+["JWT"]` and the claims those tokens carry. It signs a login's access token
+with the claims of its ID Token, whose audience is the console's client id
+alone, so the entry lists `ferropix-console` as a second audience. The
+quickstart also mounts the operator API, which the console reads. The
+compose quickstart mounts it beside PostgreSQL
 ([Deployment](deployment.md#the-compose-quickstart)).
 
 ### The top level

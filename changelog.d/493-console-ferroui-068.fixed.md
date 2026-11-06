@@ -1,1 +1,0 @@
-- The console moves to `ferrohealth-ui` 0.6.8, whose session watch no longer sends a tab that is signing out to the sign-in page that says the session expired: signing out right after bringing a tab forward lands on the signed-out page (FerroHEALTH/FerroUI#654). FerroUI 0.6.7 draws several live regions as `<output>` and named `<section>` elements with the same roles and looks.

@@ -308,13 +308,16 @@ pub async fn claim(store: &Store, limit: i64, lease: Duration) -> Result<Vec<Cla
     Ok(claimed)
 }
 
-/// Returns how long until the next row falls due, `None` when none waits.
+/// Returns how long until the next row falls due, zero for an overdue row,
+/// and `None` when none waits.
 ///
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails.
 pub async fn next_due(store: &Store) -> Result<Option<Duration>, StoreError> {
+    // NOTE: PostgreSQL 18 §9.18.4: GREATEST skips a NULL argument, so the overdue clamp
+    // stays in Rust and `min` over no waiting row stays NULL, which is `None` (#490).
     let wait: Option<f64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT greatest(extract(epoch FROM min(o.next_at) - now()), 0)::double precision
+        "SELECT extract(epoch FROM min(o.next_at) - now())::double precision
          FROM pix.outbox o WHERE {PENDING}"
     )))
     .fetch_one(store.pool())

@@ -372,3 +372,210 @@ async fn connected_as_the_servers_role_a_delete_is_refused_and_the_prune_functio
         .expect("the server's role may prune");
     assert_eq!(1, pruned);
 }
+
+/// The most transactions an idle sender may commit over [`WATCHED`]: its
+/// claim and its look at the next due row, a few times over.
+const HANDFUL: i64 = 25;
+
+/// How long a case watches an idle sender.
+const WATCHED: Duration = Duration::from_secs(4);
+
+/// Starts PostgreSQL with the store migrated and no domain seeded, and
+/// returns it with the store and a superuser pool.
+async fn bare_store() -> (
+    ferropix_testkit::containers::Postgres,
+    ferropix_server::store::Store,
+    sqlx::PgPool,
+) {
+    let postgres = ferropix_testkit::containers::postgres()
+        .await
+        .expect("PostgreSQL starts");
+    let owner = super::app_role(&postgres).await;
+    let store = ferropix_server::store::Store::start(
+        &super::settings(&owner, &super::fresh_key(), true),
+        &[],
+        ferropix_server::store::Job::Migrate,
+    )
+    .await
+    .expect("the store starts");
+    let admin = super::admin(&postgres).await;
+    (postgres, store, admin)
+}
+
+/// Writes one message to `store` and returns its id.
+async fn written_to(store: &ferropix_server::store::Store) -> uuid::Uuid {
+    let message = Message {
+        channel: Channel::Xcpd,
+        destination: String::from("https://ig.example.org/replies"),
+        media_type: "application/soap+xml; charset=UTF-8",
+        payload: SecretString::from(String::from("<answer>synthetic</answer>")),
+        max_attempts: 3,
+        subscription: None,
+        consumer: None,
+    };
+    store_outbox::enqueue(store.pool(), store.sealer(), &message)
+        .await
+        .expect("written")
+}
+
+/// Moves the `next_at` of the row `id` by `seconds` from now.
+async fn due_in(store: &ferropix_server::store::Store, id: uuid::Uuid, seconds: i32) {
+    sqlx::query("UPDATE pix.outbox SET next_at = now() + make_interval(secs => $2) WHERE id = $1")
+        .bind(id)
+        .bind(seconds)
+        .execute(store.pool())
+        .await
+        .expect("rescheduled");
+}
+
+/// The transactions the database has committed, as its statistics say.
+async fn commits(admin: &sqlx::PgPool) -> i64 {
+    sqlx::query_scalar(
+        "SELECT xact_commit FROM pg_stat_database WHERE datname = current_database()",
+    )
+    .fetch_one(admin)
+    .await
+    .expect("the statistics read")
+}
+
+/// Starts a sender over `store` with no channel, lets it settle, and returns
+/// how many transactions the database committed over [`WATCHED`].
+async fn idle_commits(store: &ferropix_server::store::Store, admin: &sqlx::PgPool) -> i64 {
+    let channels = Channels {
+        xcpd: None,
+        pmir: None,
+        hl7v2: None,
+    };
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let sender = outbox::start(
+        store.clone(),
+        channels,
+        retention(),
+        Wake::default(),
+        stopped,
+    );
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let before = commits(admin).await;
+    tokio::time::sleep(WATCHED).await;
+    let after = commits(admin).await;
+    stop.send(true).expect("the sender listens");
+    tokio::time::timeout(Duration::from_secs(5), sender)
+        .await
+        .expect("the sender stops")
+        .expect("the sender's task ends");
+    after - before
+}
+
+#[tokio::test]
+async fn nothing_falls_due_in_an_empty_outbox() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, _admin) = bare_store().await;
+    assert_eq!(
+        None,
+        store_outbox::next_due(&store)
+            .await
+            .expect("the outbox reads"),
+        "an empty outbox has no next due row"
+    );
+}
+
+#[tokio::test]
+async fn nothing_falls_due_once_every_row_is_delivered_or_abandoned() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, _admin) = bare_store().await;
+    let delivered = written_to(&store).await;
+    let abandoned = written_to(&store).await;
+    store_outbox::delivered(&store, delivered)
+        .await
+        .expect("delivered");
+    store_outbox::failed(&store, abandoned, "the endpoint answered 503", None)
+        .await
+        .expect("abandoned");
+    assert_eq!(
+        None,
+        store_outbox::next_due(&store)
+            .await
+            .expect("the outbox reads"),
+        "a settled row never falls due"
+    );
+}
+
+#[tokio::test]
+async fn an_overdue_row_falls_due_at_once() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, _admin) = bare_store().await;
+    let id = written_to(&store).await;
+    due_in(&store, id, -3600).await;
+    assert_eq!(
+        Some(Duration::ZERO),
+        store_outbox::next_due(&store)
+            .await
+            .expect("the outbox reads")
+    );
+}
+
+#[tokio::test]
+async fn a_row_due_later_is_waited_for() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, _admin) = bare_store().await;
+    let id = written_to(&store).await;
+    due_in(&store, id, 60).await;
+    let wait = store_outbox::next_due(&store)
+        .await
+        .expect("the outbox reads")
+        .expect("a row waits");
+    assert!(
+        wait > Duration::from_secs(50) && wait <= Duration::from_secs(60),
+        "about a minute: {wait:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_idle_sender_over_an_empty_outbox_commits_only_a_handful_of_transactions() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, admin) = bare_store().await;
+    let committed = idle_commits(&store, &admin).await;
+    assert!(
+        committed <= HANDFUL,
+        "{committed} transactions in {WATCHED:?} with nothing to send"
+    );
+}
+
+#[tokio::test]
+async fn a_sender_that_claims_nothing_waits_though_a_row_reads_as_due() {
+    if !e2e_enabled() {
+        return;
+    }
+    let (_postgres, store, admin) = bare_store().await;
+    let id = written_to(&store).await;
+    due_in(&store, id, -60).await;
+    let mut holder = admin.begin().await.expect("a transaction");
+    sqlx::query("SELECT id FROM pix.outbox WHERE id = $1 FOR UPDATE")
+        .bind(id)
+        .execute(&mut *holder)
+        .await
+        .expect("the row is locked");
+    assert_eq!(
+        Some(Duration::ZERO),
+        store_outbox::next_due(&store)
+            .await
+            .expect("the outbox reads"),
+        "the locked row reads as due"
+    );
+    let committed = idle_commits(&store, &admin).await;
+    holder.rollback().await.expect("the lock is released");
+    assert!(
+        committed <= HANDFUL,
+        "{committed} transactions in {WATCHED:?} while the claim skips the locked row"
+    );
+}

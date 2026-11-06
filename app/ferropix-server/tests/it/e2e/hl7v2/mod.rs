@@ -330,7 +330,7 @@ async fn the_listener_answers_a_frame_and_refuses_what_it_cannot_read_or_accept(
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     let answer = v2
         .send(&adt("A01", "F-1", "H-1^^^HOSP", 0, "19800229"))
         .await;
@@ -380,7 +380,7 @@ async fn a_message_sent_again_is_acknowledged_again_and_changes_nothing() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     let message = adt("A01", "R-1", "H-1^^^HOSP", 0, "19800229");
     assert_eq!(code(&v2.send(&message).await), "AA");
     let versions = v2.count("source_record_version").await;
@@ -400,7 +400,7 @@ async fn the_listener_stops_on_the_signal_and_finishes_the_frame_in_flight() {
     if !e2e_enabled() {
         return;
     }
-    let mut v2 = V2::start(Cursors::default()).await;
+    let mut v2 = Box::pin(V2::start(Cursors::default())).await;
     for _ in 0..100 {
         if v2.listening.is_up() {
             break;
@@ -443,7 +443,7 @@ async fn each_trigger_event_writes_the_version_a_fhir_feed_writes() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     for (event, control) in [
         ("A01", "T-1"),
         ("A04", "T-2"),
@@ -503,7 +503,7 @@ async fn an_a40_merges_as_the_replaced_by_feed_does() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     assert_eq!(
         code(
             &v2.send(&adt("A01", "M-1", "H-1^^^HOSP", 0, "19800229"))
@@ -552,7 +552,7 @@ async fn a_feed_outside_the_sender_s_domain_without_pid_3_or_of_another_event_is
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     let elsewhere = v2
         .send(&adt("A01", "E-1", "L-1^^^LAB", 0, "19800229"))
         .await;
@@ -582,7 +582,7 @@ async fn the_record_of_a_feed_names_the_patient_as_its_subject() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     assert_eq!(
         code(
             &v2.send(&adt("A01", "B-1", "H-1^^^HOSP", 0, "19800229"))
@@ -666,7 +666,7 @@ async fn no_identifier_or_name_of_a_message_reaches_a_log_line() {
         .with_ansi(false)
         .with_writer(move || sink.clone())
         .finish();
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     let _subscriber = tracing::subscriber::set_default(subscriber);
     linked(&v2).await;
     let _pix = v2.send(&pix_query("G-1", "H-1^^^HOSP", "")).await;

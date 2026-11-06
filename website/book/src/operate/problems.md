@@ -54,7 +54,7 @@ when you report it. Every problem answer carries `Cache-Control: no-store`.
 | [`retired`](#retired) | `409` | The domain is retired. |
 | [`already-held`](#already-held) | `409` | Another domain holds the system or namespace. |
 | [`unknown-domain`](#unknown-domain) | `422` | The identifier domain is unknown or retired. |
-| [`source-not-admitted`](#source-not-admitted) | `422` | The Source is no client an issuer lists and no Basic user. |
+| [`source-not-admitted`](#source-not-admitted) | `422` | The Source is no client an issuer lists. |
 | [`store-unavailable`](#store-unavailable) | `503` | The cross-reference store could not be read. |
 | [`audit-unavailable`](#audit-unavailable) | `503` | The audit record could not be stored. |
 | [`authorization-unavailable`](#authorization-unavailable) | `503` | The token could not be checked. |
@@ -130,8 +130,8 @@ whose domain is retired.
 
 ### `source-not-admitted`
 
-A domain write names a Source that no `[[auth.issuer]]` lists among its
-`clients` and that is no Basic user. Admit the client in the configuration
+A domain write names a Source that no `[[trust.issuer]]` lists among its
+`clients`; a Basic user is never one. Admit the client in the configuration
 first ([Configuration](configuration.md)).
 
 ### `store-unavailable`

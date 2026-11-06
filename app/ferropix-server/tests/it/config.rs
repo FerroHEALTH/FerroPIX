@@ -225,8 +225,9 @@ fn the_dev_table_is_refused_under_production() {
 #[test]
 fn a_basic_user_is_refused_under_production() {
     let secrets = Secrets::new();
-    let text =
-        format!("{FULL}\n[[auth.basic.users]]\nuser = \"east-lab\"\npassword_hash = \"{PHC}\"\n");
+    let text = format!(
+        "{FULL}\n[[auth.basic.users]]\nuser = \"dev-steward\"\npassword_hash = \"{PHC}\"\nscopes = [\"__ferropix.steward\"]\n"
+    );
     let error = resolve(&text, &secrets).expect_err("production refuses Basic");
     assert!(
         matches!(&error, Error::DevelopmentOnly { key, .. } if key == "auth.basic"),
@@ -245,10 +246,19 @@ public_base_url = "http://localhost:8080"
 [server]
 listen = "127.0.0.1:8080"
 
+[[auth.issuer]]
+issuer = "http://127.0.0.1:8180/dev"
+kind = "machines"
+audience = ["http://localhost:8080/fhir"]
+
+[[trust.issuer]]
+issuer = "http://127.0.0.1:8180/dev"
+clients = ["dev-source"]
+
 [[auth.basic.users]]
-user = "dev-source"
+user = "dev-steward"
 password_hash = "{PHC}"
-scopes = ["system/Patient.cud"]
+scopes = ["__ferropix.steward"]
 
 [[domain]]
 system = "urn:oid:2.999.1.1"
@@ -276,9 +286,170 @@ source_client_id = "dev-source"
         "{error:?}"
     );
     assert!(
-        !error.to_string().contains("dev-source"),
+        !error.to_string().contains("dev-steward"),
         "the refusal names the key and never the value"
     );
+}
+
+#[test]
+fn a_basic_user_granted_a_system_scope_fails_at_boot_naming_the_user() {
+    let secrets = Secrets::new();
+    let text = format!(
+        r#"
+profile = "development"
+public_base_url = "http://localhost:8080"
+
+[server]
+listen = "127.0.0.1:8080"
+
+[[auth.basic.users]]
+user = "dev-steward"
+password_hash = "{PHC}"
+scopes = ["__ferropix.steward"]
+
+[[auth.basic.users]]
+user = "east-lab"
+password_hash = "{PHC}"
+scopes = ["system/Patient.cud"]
+
+[dev]
+"#
+    );
+    let error = resolve(&text, &secrets).expect_err("a Basic user is a person");
+    assert!(
+        matches!(&error, Error::BasicSystemScope { index: 1, user } if user == "east-lab"),
+        "{error:?}"
+    );
+    assert!(error.to_string().contains("east-lab"), "{error}");
+}
+
+#[test]
+fn a_basic_user_is_never_the_source_of_a_domain() {
+    let secrets = Secrets::new();
+    let text = format!(
+        r#"
+profile = "development"
+public_base_url = "http://localhost:8080"
+
+[server]
+listen = "127.0.0.1:8080"
+
+[[auth.basic.users]]
+user = "dev-source"
+password_hash = "{PHC}"
+scopes = ["__ferropix.steward"]
+
+[[domain]]
+system = "urn:oid:2.999.1.1"
+name = "Development hospital"
+kind = "local"
+source_client_id = "dev-source"
+
+[dev]
+"#
+    );
+    let error = resolve(&text, &secrets).expect_err("no issuer lists dev-source");
+    assert!(
+        matches!(&error, Error::ClientNotAdmitted { index: 0, client } if client == "dev-source"),
+        "{error:?}"
+    );
+}
+
+/// Walks the cause chain of `error` into one line, as `config check` prints
+/// it.
+fn chain(error: &Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = std::error::Error::source(error);
+    while let Some(inner) = cause {
+        text.push_str(": ");
+        text.push_str(&inner.to_string());
+        cause = inner.source();
+    }
+    text
+}
+
+#[test]
+fn every_removed_auth_key_fails_at_boot_naming_what_replaces_it() {
+    let secrets = Secrets::new();
+    for (key, line) in [
+        (
+            "audience",
+            "audience = [\"https://pix.example.org/pix/fhir\"]",
+        ),
+        ("algorithms", "algorithms = [\"RS256\"]"),
+        ("token_profile", "token_profile = \"rfc9068\""),
+        ("clock_skew_seconds", "clock_skew_seconds = 30"),
+        ("jwks_max_age_seconds", "jwks_max_age_seconds = 300"),
+        (
+            "jwks_refresh_interval_seconds",
+            "jwks_refresh_interval_seconds = 30",
+        ),
+        ("jwks_file", "jwks_file = \"\""),
+        ("timeout_ms", "timeout_ms = 5000"),
+        ("role_claims", "role_claims = [\"roles\"]"),
+        ("mode", "mode = \"jwt\""),
+    ] {
+        let text = FULL.replacen("[auth]\n", &format!("[auth]\n{line}\n"), 1);
+        let error = resolve(&text, &secrets).expect_err("a section-level issuer key is removed");
+        assert!(matches!(error, Error::Auth { .. }), "{key}: {error:?}");
+        let said = chain(&error);
+        assert!(said.contains(key), "{key}: {said}");
+        assert!(said.contains("removed"), "{key}: {said}");
+    }
+}
+
+#[test]
+fn the_old_issuer_shapes_fail_at_boot_naming_the_new_one() {
+    let secrets = Secrets::new();
+    let issuer = "issuer = \"https://idp.example.org/realms/pix\"\n";
+    let table = FULL
+        .find("[[auth.issuer]]")
+        .zip(FULL.find("[[trust.issuer]]"))
+        .and_then(|(from, to)| FULL.get(from..to))
+        .expect("the full configuration has an issuer table");
+    for (case, text, names) in [
+        (
+            "the flat issuer",
+            FULL.replacen(table, "", 1)
+                .replacen("[auth]\n", &format!("[auth]\n{issuer}"), 1),
+            "[[auth.issuer]] table with its own kind",
+        ),
+        (
+            "token_profile on an issuer",
+            FULL.replacen(
+                &format!("[[auth.issuer]]\n{issuer}"),
+                &format!("[[auth.issuer]]\n{issuer}token_profile = \"jwt\"\n"),
+                1,
+            ),
+            "token_profile",
+        ),
+        (
+            "a string scopeless subject",
+            FULL.replacen(
+                "[auth]\n",
+                "[auth]\nscopeless_subjects = [\"https://idp.example.org/realms/pix#east-lab\"]\n",
+                1,
+            ),
+            "{ issuer, sub }",
+        ),
+    ] {
+        assert_ne!(FULL, text, "{case}");
+        let error = resolve(&text, &secrets).expect_err("the old shape is refused");
+        assert!(matches!(error, Error::Auth { .. }), "{case}: {error:?}");
+        let said = chain(&error);
+        assert!(said.contains(names), "{case}: {said}");
+    }
+}
+
+#[test]
+fn an_issuer_without_its_kind_fails_at_boot() {
+    let secrets = Secrets::new();
+    let text = FULL.replacen("kind = \"persons\"\n", "", 1);
+    assert_ne!(FULL, text);
+    let error = resolve(&text, &secrets).expect_err("kind has no default");
+    assert!(matches!(error, Error::Auth { .. }), "{error:?}");
+    let said = chain(&error);
+    assert!(said.contains("kind"), "{said}");
 }
 
 #[test]

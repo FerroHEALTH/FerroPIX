@@ -4,12 +4,17 @@
 //! The `[auth]` section, which is `ferrohealth-smart`'s `AuthSection`, and
 //! the `[trust]` section beside it.
 //!
-//! `[auth]` names the issuers whose tokens the server accepts, verified
-//! against each issuer's key set or by its RFC 7662 introspection endpoint,
-//! the token rules, the trust roots and the Basic users of the development
-//! profile; `ferrohealth-smart` resolves it, with the issuer URL rule of
-//! RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric algorithms
-//! of RFC 8725 §3.1. Its `product_scope` is the scope of a data steward,
+//! `[auth]` names the issuers whose tokens the server accepts, each an
+//! `[[auth.issuer]]` table with its `kind`, its profile and its own token
+//! rules, verified against the issuer's key set or by its RFC 7662
+//! introspection endpoint, the trust roots and the Basic users of the
+//! development profile; `ferrohealth-smart` resolves it, with the issuer URL
+//! rule of RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric
+//! algorithms of RFC 8725 §3.1, and refuses the removed shapes (the flat
+//! `issuer`, a section-level issuer key, `token_profile`) naming what
+//! replaces them. A Basic user is a person: an entry granting a `system/`
+//! scope is refused, since a machine uses the client credentials grant
+//! (RFC 6749 §4.4). Its `product_scope` is the scope of a data steward,
 //! `__ferropix.steward` unless set; the administrator's is `[operator]
 //! admin_scope`. Both take an extension form of SMART App Launch 2.2.0,
 //! Scopes and Launch Context, §Extensibility.
@@ -66,19 +71,16 @@ pub struct AuthSettings {
     pub admin_scope: String,
     /// The Source clients each issuer may vouch for, by issuer.
     pub clients: BTreeMap<String, BTreeSet<String>>,
-    /// The user-ids of the Basic users.
-    pub basic_users: BTreeSet<String>,
 }
 
 impl AuthSettings {
     /// Returns whether a Source authenticated as `client` can be admitted:
-    /// an issuer lists it in its `clients`, or a Basic user is named so.
+    /// an issuer lists it in its `clients`. A Basic user never is one.
     #[must_use]
     pub fn admits(&self, client: &str) -> bool {
         self.clients
             .values()
             .any(|clients| clients.contains(client))
-            || self.basic_users.contains(client)
     }
 }
 
@@ -91,10 +93,12 @@ impl Auth {
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
     /// names an issuer `[auth]` does not or one named twice, or a client id
     /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
-    /// users under production; and [`Error::Auth`] for every rule
-    /// `ferrohealth-smart` checks: no issuer and no Basic user, no audience,
-    /// an issuer outside the URL rule, a symmetric algorithm, a skew over the
-    /// bound, an `[auth.introspection]` that breaks a rule, a `ca_file` that
+    /// users under production; [`Error::BasicSystemScope`] for a Basic user
+    /// granted a `system/` scope; and [`Error::Auth`] for every rule
+    /// `ferrohealth-smart` checks: a removed key, no issuer and no Basic
+    /// user, an issuer without `kind`, no audience, an issuer outside the URL
+    /// rule, a symmetric algorithm, a skew over the bound, a profile refused,
+    /// an `[auth.issuer.introspection]` that breaks a rule, a `ca_file` that
     /// is no PEM of certificates, and a Basic user it refuses.
     pub fn resolve(
         &self,
@@ -117,6 +121,7 @@ impl Auth {
                 rule: "a Basic user sends a reusable password on every request",
             });
         }
+        persons_only(section)?;
         let steward_scope = if section.product_scope.is_empty() {
             STEWARD_SCOPE.to_owned()
         } else {
@@ -139,21 +144,39 @@ impl Auth {
                 "it must differ from the steward scope, auth.product_scope",
             ));
         }
-        let clients = clients(section, trust)?;
         let resolved = section.resolve().map_err(|source| Error::Auth { source })?;
-        let basic_users = section
-            .basic
-            .iter()
-            .flat_map(|basic| basic.users.iter().map(|user| user.user.clone()))
-            .collect();
+        let clients = clients(section, trust)?;
         Ok(AuthSettings {
             resolved,
             steward_scope,
             admin_scope: admin_scope.to_owned(),
             clients,
-            basic_users,
         })
     }
+}
+
+/// Refuses a Basic user of `section` granted a `system/` scope.
+///
+/// A Basic credential is a person's, never a machine's, and
+/// `ferrohealth-smart` classifies it as a person (its `Caller::basic`); a
+/// `system/` scope (SMART App Launch 2.2.0, Scopes and Launch Context) on
+/// it would grant a person what only a client credentials token (RFC 6749
+/// §4.4) may hold.
+fn persons_only(section: &AuthSection) -> Result<(), Error> {
+    let users = section.basic.iter().flat_map(|basic| basic.users.iter());
+    for (index, user) in users.enumerate() {
+        if user
+            .scopes
+            .iter()
+            .any(|scope| scope.split(' ').any(|token| token.starts_with("system/")))
+        {
+            return Err(Error::BasicSystemScope {
+                index,
+                user: user.user.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Returns the Source clients of each `[[trust.issuer]]`, by issuer, each
@@ -164,8 +187,8 @@ fn clients(
 ) -> Result<BTreeMap<String, BTreeSet<String>>, Error> {
     let named: BTreeSet<String> = section
         .issuers()
-        .into_iter()
-        .map(|entry| entry.issuer)
+        .iter()
+        .map(|entry| entry.issuer.clone())
         .filter(|issuer| !issuer.is_empty())
         .collect();
     let mut clients = BTreeMap::new();
@@ -209,7 +232,10 @@ fn is_client_id(client: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use ferrohealth_smart::config::{AuthSection, BasicSection, BasicUser, IssuerEntry, IssuerKey};
+    use ferrohealth_smart::config::{
+        AuthSection, BasicSection, BasicUser, ConfigError, IssuerEntry, IssuerKey,
+    };
+    use ferrohealth_smart::kind::IssuerKind;
     use secrecy::SecretString;
 
     use super::{Auth, STEWARD_SCOPE, Trust, TrustedIssuer, is_client_id};
@@ -220,22 +246,33 @@ mod tests {
 
     fn auth(issuers: &[&str]) -> Auth {
         Auth(AuthSection {
-            issuer: if issuers.is_empty() {
-                IssuerKey::Flat(String::new())
-            } else {
-                IssuerKey::List(
-                    issuers
-                        .iter()
-                        .map(|issuer| IssuerEntry {
-                            issuer: (*issuer).to_owned(),
-                            ..IssuerEntry::default()
-                        })
-                        .collect(),
-                )
-            },
-            audience: vec![String::from("https://pix.example.org/fhir")],
+            issuer: IssuerKey::List(
+                issuers
+                    .iter()
+                    .map(|issuer| IssuerEntry {
+                        issuer: (*issuer).to_owned(),
+                        kind: Some(IssuerKind::Machines),
+                        audience: vec![String::from("https://pix.example.org/fhir")],
+                        ..IssuerEntry::default()
+                    })
+                    .collect(),
+            ),
             ..AuthSection::default()
         })
+    }
+
+    fn basic(user: &str, scopes: &[&str]) -> BasicSection {
+        BasicSection {
+            users: vec![BasicUser {
+                user: user.to_owned(),
+                password_hash: Some(SecretString::from(
+                    "$argon2id$v=19$m=19456,t=2,p=1$c3ludGhldGljLXNhbHQtMTY$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                )),
+                scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
+                ..BasicUser::default()
+            }],
+            ..BasicSection::default()
+        }
     }
 
     fn trust(entries: &[(&str, &[&str])]) -> Trust {
@@ -323,7 +360,7 @@ mod tests {
         bad.0.product_scope = String::from("steward");
         assert!(matches!(
             bad.0.resolve(),
-            Err(ferrohealth_smart::config::ConfigError::ProductScope { .. })
+            Err(ConfigError::ProductScope { .. })
         ));
         assert!(matches!(
             auth(&[url]).resolve(Profile::Production, &Trust::default(), "admin"),
@@ -345,28 +382,77 @@ mod tests {
     }
 
     #[test]
-    fn a_basic_user_is_refused_under_production_and_admits_its_client_under_development() {
-        let mut basic = auth(&[]);
-        basic.0.basic = Some(BasicSection {
-            users: vec![BasicUser {
-                user: String::from("dev-source"),
-                password_hash: Some(SecretString::from(
-                    "$argon2id$v=19$m=19456,t=2,p=1$c3ludGhldGljLXNhbHQtMTY$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-                )),
-                ..BasicUser::default()
-            }],
-            ..BasicSection::default()
-        });
-        let error = basic
+    fn a_basic_user_is_refused_under_production_and_is_no_source_under_development() {
+        let mut person = auth(&[]);
+        person.0.basic = Some(basic("dev-steward", &[STEWARD_SCOPE]));
+        let error = person
             .resolve(Profile::Production, &Trust::default(), ADMIN)
             .expect_err("Basic is a development credential");
         assert!(
             matches!(&error, Error::DevelopmentOnly { key, .. } if key == "auth.basic"),
             "{error:?}"
         );
-        let resolved = basic
+        let resolved = person
             .resolve(Profile::Development, &Trust::default(), ADMIN)
-            .expect("development admits a Basic user");
-        assert!(resolved.admits("dev-source"));
+            .expect("development admits a Basic person");
+        assert!(
+            !resolved.admits("dev-steward"),
+            "a Basic user is a person, never a Source"
+        );
+    }
+
+    #[test]
+    fn a_basic_user_granted_a_system_scope_is_refused_naming_the_user() {
+        for scopes in [
+            &["system/Patient.cud"][..],
+            &[STEWARD_SCOPE, "system/Patient.rs"][..],
+            &["__ferropix.steward system/Subscription.cruds"][..],
+        ] {
+            let mut machine = auth(&[]);
+            machine.0.basic = Some(basic("east-lab", scopes));
+            let error = machine
+                .resolve(Profile::Development, &Trust::default(), ADMIN)
+                .expect_err("a Basic credential is never a machine's");
+            assert!(
+                matches!(&error, Error::BasicSystemScope { index: 0, user } if user == "east-lab"),
+                "{scopes:?}: {error:?}"
+            );
+            assert!(error.to_string().contains("east-lab"), "{error}");
+            assert!(error.to_string().contains("client credentials"), "{error}");
+        }
+    }
+
+    #[test]
+    fn an_issuer_without_its_kind_is_refused() {
+        let mut kindless = auth(&["https://idp.example.org"]);
+        if let IssuerKey::List(entries) = &mut kindless.0.issuer {
+            for entry in entries {
+                entry.kind = None;
+            }
+        }
+        let error = kindless
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .expect_err("kind has no default");
+        assert!(matches!(error, Error::Auth { .. }), "{error:?}");
+    }
+
+    #[test]
+    fn the_flat_issuer_form_is_refused_naming_the_issuer_table() {
+        let flat = Auth(AuthSection {
+            issuer: IssuerKey::Flat(String::from("https://idp.example.org")),
+            ..AuthSection::default()
+        });
+        let error = flat
+            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .expect_err("the flat form is removed");
+        assert!(
+            matches!(
+                &error,
+                Error::Auth {
+                    source: ConfigError::Removed { .. }
+                }
+            ),
+            "{error:?}"
+        );
     }
 }

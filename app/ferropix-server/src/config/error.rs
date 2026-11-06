@@ -90,6 +90,18 @@ pub enum Error {
         #[source]
         source: ferrohealth_smart::config::ConfigError,
     },
+    /// A `[[auth.basic.users]]` entry grants a `system/` scope, which a
+    /// person's credential never carries: a machine authenticates with the
+    /// client credentials grant (RFC 6749 §4.4).
+    #[error(
+        "auth.basic.users[{index}] ({user:?}) grants a system/ scope; a Basic user is a person, so move the machine to a client credentials token of an [[auth.issuer]]"
+    )]
+    BasicSystemScope {
+        /// The position of the entry, from 0.
+        index: usize,
+        /// The user-id.
+        user: String,
+    },
     /// A `[[domain]]` names a Source client no issuer admits.
     #[error(
         "domain[{index}].source_client_id names {client:?}, which no [[auth.issuer]] lists in its clients"

@@ -5,8 +5,8 @@
 //!
 //! `GET {base}/operator/sources` lists them and
 //! `GET {base}/operator/sources/{id}` is one with its last messages. A
-//! source is a FHIR client an issuer vouches for, a Basic user of the
-//! development profile, or an HL7 v2 sender; how each is admitted is
+//! source is a FHIR client an issuer vouches for or an HL7 v2 sender; how
+//! each is admitted is
 //! configuration, read from the server's file. A message row names its
 //! time, its channel, what it did and its outcome, never a value.
 
@@ -26,8 +26,6 @@ pub enum Admission {
         /// The issuer.
         issuer: String,
     },
-    /// A Basic user of the development profile.
-    BasicUser,
     /// An HL7 v2 sender `[[hl7v2.senders]]` names.
     RegisteredSender {
         /// The sending application, MSH-3.

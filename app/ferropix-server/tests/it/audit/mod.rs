@@ -15,6 +15,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ferrohealth_smart::kind::CallerKind;
 use ferrohealth_smart::resource::{Access, Caller};
 use ferropix_server::audit::records::operator::{StewardAction, steward};
 use ferropix_server::audit::records::{Call, raw_request};
@@ -67,6 +68,11 @@ pub(super) fn call(user: Option<&str>) -> Call {
             "system/Patient.rs",
             None,
             false,
+            if user.is_some() {
+                CallerKind::Person
+            } else {
+                CallerKind::System
+            },
         )
         .with_issuer(String::from("https://idp.example.org")),
     ));

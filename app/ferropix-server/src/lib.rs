@@ -248,7 +248,7 @@ pub async fn probe(section: &ServerSection) -> Outcome {
 /// routes served until `SIGTERM` or `SIGINT` and the bounded drain.
 async fn serve(settings: Settings) -> Result<ExitCode, Failure> {
     let telemetry = telemetry(&settings.telemetry).map_err(started)?;
-    let code = match serve::serve_settings(settings, Arc::clone(&telemetry)).await {
+    let code = match Box::pin(serve::serve_settings(settings, Arc::clone(&telemetry))).await {
         Ok(()) => {
             tracing::info!("ferropix stopped");
             ExitCode::SUCCESS

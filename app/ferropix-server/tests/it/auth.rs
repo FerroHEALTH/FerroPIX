@@ -67,6 +67,16 @@ fn handled(status: StatusCode) -> bool {
     .contains(&status)
 }
 
+/// The consoles the test issuer signs a steward's login for: a token of one
+/// of these is a person's, whose `sub` is [`PERSON`], and the issuer admits
+/// it through its `first_party_clients`. Every other client's token is a
+/// machine's, from the client credentials grant, whose `sub` is the client
+/// (RFC 9068 §2.2).
+pub(crate) const CONSOLES: [&str; 3] = ["console", "synthetic-console", "ferropix-console"];
+
+/// The subject of a steward's login.
+pub(crate) const PERSON: &str = "synthetic-subject-17";
+
 /// The scopes that admit every route of the table.
 pub(crate) const EVERY_SCOPE: &str =
     "system/Patient.cruds system/Subscription.cruds __ferropix.steward __ferropix.admin";
@@ -78,13 +88,20 @@ pub(crate) struct SigningKey {
 }
 
 impl SigningKey {
-    /// Returns a valid token of `issuer` for `client` granting `scope`.
+    /// Returns a valid token of `issuer` for `client` granting `scope`: a
+    /// steward's login through one of the [`CONSOLES`], or else the client
+    /// credentials token of the machine `client`.
     pub(crate) fn token(&self, issuer: &str, client: &str, scope: &str) -> String {
         let now = jiff::Timestamp::now().as_second();
+        let subject = if CONSOLES.contains(&client) {
+            PERSON
+        } else {
+            client
+        };
         let claims = serde_json::json!({
             "iss": issuer,
             "aud": AUDIENCE,
-            "sub": "synthetic-subject-17",
+            "sub": subject,
             "client_id": client,
             "iat": now,
             "exp": now + 300,
@@ -162,11 +179,12 @@ public_base_url = "http://localhost:8080"
 [server]
 listen = "127.0.0.1:0"
 
-[auth]
-audience = ["{AUDIENCE}"]
-
 [[auth.issuer]]
 issuer = "{issuer}"
+kind = "persons"
+profile = "rfc9068"
+audience = ["{AUDIENCE}"]
+first_party_clients = [{clients}]
 
 [[trust.issuer]]
 issuer = "{issuer}"
@@ -194,7 +212,12 @@ enabled = true
 [operator]
 enabled = true
 "#,
-        issuer = issuer.server.uri()
+        issuer = issuer.server.uri(),
+        clients = CONSOLES
+            .iter()
+            .map(|client| format!("\"{client}\""))
+            .collect::<Vec<_>>()
+            .join(", "),
     );
     Config::from_sources(Some(&text), &secrets.environment())
         .expect("the configuration reads")
@@ -680,10 +703,12 @@ async fn a_refusal_shows_no_token_subject_or_identifier_in_its_body_or_the_log()
         }
     }
     let refusals = bodies.join("\n");
-    assert!(
-        !refusals.contains("synthetic-subject-17"),
-        "a refusal shows the token's subject"
-    );
+    for subject in ["west-lab", "east-lab"] {
+        assert!(
+            !refusals.contains(subject),
+            "a refusal shows the token's subject"
+        );
+    }
     assert!(!log.contains("sourceIdentifier="), "the log shows a query");
 }
 
@@ -699,15 +724,9 @@ public_base_url = "http://localhost:8080"
 listen = "127.0.0.1:0"
 
 [[auth.basic.users]]
-user = "dev-source"
+user = "dev-steward"
 password_hash = "{phc}"
-scopes = ["system/Patient.cud"]
-
-[[domain]]
-system = "{DOMAIN}"
-name = "Development hospital"
-kind = "local"
-source_client_id = "dev-source"
+scopes = ["__ferropix.steward"]
 
 [dev]
 "#,
@@ -745,7 +764,7 @@ source_client_id = "dev-source"
         &app,
         Method::POST,
         "/fhir/Patient/$ihe-pix",
-        Some("Basic ZGV2LXNvdXJjZTpub3QtdGhlLXBhc3N3b3Jk"),
+        Some("Basic ZGV2LXN0ZXdhcmQ6bm90LXRoZS1wYXNzd29yZA=="),
     )
     .await;
     assert_eq!(StatusCode::UNAUTHORIZED, wrong.status);

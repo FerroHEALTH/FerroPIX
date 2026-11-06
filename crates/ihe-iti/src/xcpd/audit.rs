@@ -297,6 +297,7 @@ pub(super) fn message(
         data_life_cycle: None,
         id_type_code: transaction.clone(),
         query: Some(query.clone()),
+        name: None,
         details: home_community
             .iter()
             .map(|community| {
@@ -315,6 +316,7 @@ pub(super) fn message(
             outcome: outcome.code(),
             type_codes: vec![transaction],
             outcome_description: None,
+            purposes_of_use: Vec::new(),
         },
         participants,
         source: source.clone(),

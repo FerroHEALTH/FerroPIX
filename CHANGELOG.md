@@ -13,6 +13,62 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-11-06
+
+A family upkeep release that breaks the configuration. FerroPIX moves to
+`ferrohealth-smart` 0.9.0, `ferrohealth-session` 0.3.0 and `ihe-atna`
+0.4.0, and the published crates `ihe-iti` 0.0.76 and
+`nl-generic-functions` 0.0.43 move with it. `[auth]` takes the 0.9.0
+shape: every issuer is an `[[auth.issuer]]` table with its `kind` and its
+profile, and a configuration in the old shape refuses the start, naming
+what replaces it. A Basic user is a person and never a Source: a machine
+signs in with a client credentials token. Rewrite `[auth]` by the upgrade
+steps below before you upgrade.
+
+### Changed
+
+- Breaking for an operator: `[auth]` takes the `ferrohealth-smart` 0.9.0
+  shape. Every issuer is an `[[auth.issuer]]` table with a required `kind`
+  (`"persons"`, `"machines"`, `"patients"` or `"federation"`) and a profile
+  (`profile = "rfc9068"` by default, or `"entra"`, `"keycloak"`, `"okta"`,
+  `"nl"`), and holds every setting of its tokens itself. A configuration in
+  the old shape refuses the start, naming what replaces it. Upgrade steps:
+  write a flat `auth.issuer = "…"` as an `[[auth.issuer]]` table; move
+  `audience`, `algorithms`, `clock_skew_seconds`, `jwks_max_age_seconds`,
+  `jwks_refresh_interval_seconds`, `jwks_file`, `timeout_ms`, `mode`,
+  `role_claims` and `[auth.introspection]` from `[auth]` onto each issuer
+  table (`[auth.issuer.introspection]`); add `kind` to each issuer, with
+  `kind = "machines"` for an issuer that signs only the client credentials
+  tokens of Sources, consumers and subscribers, or `kind = "persons"` with
+  the console's client in `first_party_clients` for one that also signs
+  the stewards' logins; replace `token_profile = "jwt"` with
+  `token_types = ["JWT"]` and the `required_claims` the issuer's tokens
+  carry, and drop `token_profile = "rfc9068"`; and write each
+  `scopeless_subjects` entry as `{ issuer = "…", sub = "…" }` (#487).
+- Breaking for a development configuration: a Basic user is a person, a
+  steward or an administrator, and never a Source or another machine. An
+  `[[auth.basic.users]]` entry granting a `system/` scope refuses the start,
+  naming the user, and a Basic user-id no longer counts as a domain's
+  `source_client_id`. Upgrade: move each machine on Basic to a client
+  credentials token (RFC 6749 §4.4) of an `[[auth.issuer]]`, list its
+  client under that issuer's `[[trust.issuer]] clients`, and keep on Basic
+  only the people who sign in by hand. `GET /operator/sources` no longer
+  lists Basic users, and the operator API's `Admission` has no `basic_user`
+  kind (#487).
+- Breaking for a crate user: `ihe-iti` 0.0.76 requires `ferrohealth-smart`
+  0.9 (caret `0.9.0`) and `ihe-atna` 0.4 (caret `0.4.0`), and
+  `nl-generic-functions` 0.0.43 requires `ferrohealth-smart` 0.9 and
+  `ihe-iti` 0.0.76. The `smart` feature's
+  `authorizer::smart::TokenAuthorizer` takes a `TokenSource` of the 0.9
+  line, and the `xcpd` ITI-55 audit message writes the `ihe-atna` 0.4
+  message shape. Upgrade: move `ferrohealth-smart` to 0.9.0 and `ihe-atna`
+  to 0.4.0 in the same change as these crates, or the build holds two
+  copies of each (#487).
+- The server and the console move to `ferrohealth-smart` 0.9.0,
+  `ferrohealth-session` 0.3.0 and `ihe-atna` 0.4.0, which writes every
+  string of a BALP `AuditEvent` with its control and bidirectional
+  formatting characters escaped as code points (#487).
+
 ## [0.0.18] - 2026-11-06
 
 A patch release with two fixes. The outbox sender no longer spins while

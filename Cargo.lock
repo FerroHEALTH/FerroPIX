@@ -1326,9 +1326,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-session"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04aa8c9099b2c793cbcdbdb350f729e0c74503966aa1bdb96b98398d4fa9edfd"
+checksum = "e3473fca1276c6fff2a4efeaa6f81288cc00134806590053d9bdfec028b7fc83"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1350,9 +1350,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-smart"
-version = "0.8.9"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302d8403aabe988cc6cbf014a35f0aa1f90f832ba73a404f2956a46a96829d0c"
+checksum = "78d2c73203a6ed7c64c4189327ea86a498ba7be61cb9bb1bb60bc733f3af135e"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -1368,6 +1368,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "toml",
  "tower",
  "tracing",
  "url",
@@ -2296,9 +2297,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.3.3"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aca996fcfe65f5b550fefc5b5e88618b6b4cd09d490a2dfada8b770e2469598"
+checksum = "ed5b92cbd44c5afbfd60f084fb8350a85a20f5a13f055af7e9da1f9145a17681"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2321,7 +2322,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.75"
+version = "0.0.76"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2766,7 +2767,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

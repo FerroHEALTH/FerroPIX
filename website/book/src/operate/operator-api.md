@@ -37,7 +37,7 @@ problem, `application/problem+json`, whose detail never quotes the request;
 | `PATCH /operator/pseudonym-domains/{id}` | administrator | A domain renamed, given another consumer, or retired, with your reason. |
 | `POST /operator/pseudonyms` | steward | Mints the person's pseudonym in a domain when its survivor has none, and says whether it did; the value is shown by a reveal. |
 | `POST /operator/pseudonyms/resolve` | steward | The person a pseudonym resolves to, through the merge chain, with your reason: a privacy disclosure. |
-| `GET /operator/sources` | steward or administrator | Every system allowed to feed: each FHIR client an issuer lists in its `clients`, each Basic user of the development profile and each `[[hl7v2.senders]]` entry, with its channel, how it is admitted, the domains that name it and its last activity. |
+| `GET /operator/sources` | steward or administrator | Every system allowed to feed: each FHIR client an issuer lists in its `clients` and each `[[hl7v2.senders]]` entry, with its channel, how it is admitted, the domains that name it and its last activity. |
 | `GET /operator/sources/{id}` | steward or administrator | One source with its last 20 messages: time, channel, what it asked and its outcome (`applied`, or the HL7 v2 acknowledgment code). An HL7 v2 sender's id is its facility and application joined by `.`. |
 | `GET /operator/matching` | steward or administrator | The thresholds, automatic linking, the blocking keys and every field's weights in effect, the configured ones marked. |
 | `GET /operator/configuration` | steward or administrator | The matching configuration in file mode: the thresholds, the weights, the blocking keys and the built-in deterministic rules, each setting with where its value came from (`file`, `environment`, `default`, `built_in`) and the file named once. |
@@ -126,8 +126,8 @@ Behind the administrator scope, `POST /operator/domains` adds a domain:
 
 The system is an absolute URI no other domain holds (`409` otherwise), the
 kind is `local` or `authoritative`, `sensitive` defaults to `true`, and the
-Source must be a client an `[[auth.issuer]]` lists in its `clients`, or a
-Basic user (`422` otherwise). The answer is `201` with the domain.
+Source must be a client a `[[trust.issuer]]` lists in its `clients`
+(`422` otherwise); a Basic user is never one. The answer is `201` with the domain.
 
 `PATCH /operator/domains/{id}` takes `name`, `source_client_id` and
 `retire`, any of them, and a required `reason`. A retired domain answers as
@@ -204,7 +204,7 @@ nothing.
 ## Sources and configuration are set in the file
 
 FerroPIX keeps no configuration store. A source is admitted by the file:
-an issuer's `clients`, a Basic user, or an `[[hl7v2.senders]]` entry. The
+an issuer's `clients` or an `[[hl7v2.senders]]` entry. The
 matching settings are read from `[matching]` at start. So the operator API
 shows both read-only, and you change them in the file; a change takes effect
 at the next start. An environment variable `FERROPIX__…` wins over the file,

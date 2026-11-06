@@ -174,7 +174,6 @@ fn admission(visit: &Visit, admission: &Admission) -> String {
         Admission::IdentityProvider { issuer } => {
             visit.tr_with(Msg::AdmissionIssuer, &[("issuer", issuer.clone().into())])
         }
-        Admission::BasicUser => visit.tr(Msg::AdmissionBasic),
         Admission::RegisteredSender {
             application,
             facility,

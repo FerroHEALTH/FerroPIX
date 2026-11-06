@@ -178,7 +178,7 @@ message and position without quoting the line.
 | `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `header_read_timeout_ms`, `idle_timeout_ms` (a kept-alive connection idle that long is closed), `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
 | `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
-| `[auth]` | `ferrohealth-smart`'s `AuthSection`: the issuer or `[[auth.issuer]]` entries with their RFC 8414 metadata, key sets or RFC 7662 introspection, `ca_file`, the audience, `[[auth.basic.users]]` under the development profile only, and `product_scope`, the steward scope |
+| `[auth]` | `ferrohealth-smart`'s `AuthSection`: the `[[auth.issuer]]` tables, each with its `kind`, its profile, its audience and its RFC 8414 metadata, key set or RFC 7662 introspection, `ca_file`, `[[auth.basic.users]]` under the development profile only, each a person and never granted a `system/` scope, and `product_scope`, the steward scope |
 | `[trust]` | `[[trust.issuer]]`: the `clients` each issuer may vouch for as a Source |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |
@@ -188,9 +188,9 @@ message and position without quoting the line.
 | `[operator]` | the operator API switch (`enabled`, off by default; on requires `[auth]`) |
 | `[usage_report]` | the FerroPULSE report (section 9) |
 
-A `[[domain]]` entry whose `source_client_id` no `[[auth.issuer]]` lists in
-its `clients` (or, under the development profile, no Basic user is named) is
-refused at load, as is a seed that names one system twice.
+A `[[domain]]` entry whose `source_client_id` no `[[trust.issuer]]` lists in
+its `clients` is refused at load, as is a seed that names one system twice;
+a Basic user is a person and never a Source.
 
 ## 4. The cross-reference store
 
@@ -943,8 +943,8 @@ grouping (PIXm 3.1.0 §2:3.83.5.2, §2:3.104.5.2; PDQm 3.2.0 §2:3.78.5.2,
   use for one.
 - A Source's `client_id` counts only when the issuer that signed the token
   lists it in `clients`, so two authorization servers cannot each vouch
-  for a client of the same name; a Basic user of the development profile
-  counts by its user-id. Every domain an ITI-104 request's `identifier`
+  for a client of the same name; a Basic caller is a person
+  (`ferrohealth-smart`'s `Caller::basic`) and never counts. Every domain an ITI-104 request's `identifier`
   names must be the caller's; a domain FerroPIX does not know is left to
   the transaction's handler.
 - A path under `{base}/fhir` or `{base}/operator` that no row names needs
@@ -955,11 +955,14 @@ grouping (PIXm 3.1.0 §2:3.83.5.2, §2:3.104.5.2; PDQm 3.2.0 §2:3.78.5.2,
   domain, with a fixed diagnostics text; on the operator API it is the
   RFC 9457 problem `unauthenticated` or `not-permitted` with the same text
   (D40).
-- The discovery document and the `CapabilityStatement` name the first
-  issuer whose metadata names a `token_endpoint`; issuers none of which
+- The discovery document and the `CapabilityStatement` name the first JWT
+  issuer whose metadata names a `token_endpoint`, else the first
+  introspected one; issuers none of which
   names one refuse the start, and a development surface of Basic users
   alone serves no discovery document.
-- Basic users need the `[dev]` table beside `profile = "development"`.
+- Basic users need the `[dev]` table beside `profile = "development"`, and
+  a Basic user granted a `system/` scope refuses the start, naming the
+  user: a machine uses the client credentials grant (RFC 6749 §4.4).
 
 **Audit** is BALP through `ihe-atna`. Every transaction writes the
 `AuditEvent` its profile prescribes for the Manager, the Supplier or the
@@ -1365,7 +1368,7 @@ FerroPIX keeps no configuration store, so the console runs in file mode
 (FerroUI 0.3.7 `design/COMPONENTS.md` rule 13): Configuration and every
 Settings tab are read-only views of the file, each setting marked when the
 environment set it or nothing did. A source's admission is configuration
-(an issuer's `clients`, a Basic user, an `[[hl7v2.senders]]` entry), so the
+(an issuer's `clients` or an `[[hl7v2.senders]]` entry), so the
 sources are read from it too and are added or retired in the file, never
 written through the API; the domains that name a source are read from the
 domains. No specification governs this: our own design (#120, #121).

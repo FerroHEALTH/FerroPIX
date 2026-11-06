@@ -29,8 +29,10 @@ use ferrohealth_smart::guard::Gate;
 use ferrohealth_smart::resource::configuration::{
     OpenIdConnect, PermissionCapability, SmartOptions,
 };
-use ferrohealth_smart::resource::introspection::{IntrospectionError, Introspector};
-use ferrohealth_smart::resource::{IssuerSet, ResourceError, ResourceServer, Verifier};
+use ferrohealth_smart::resource::introspection::{
+    IntrospectionError, IntrospectionSettings, Introspector,
+};
+use ferrohealth_smart::resource::{IssuerSet, ResourceError, ResourceServer};
 
 use crate::auth::source::Sources;
 use crate::config::section::auth::AuthSettings;
@@ -117,8 +119,8 @@ pub struct Smart {
 }
 
 impl Smart {
-    /// Reads the metadata and the key set of every issuer `auth` names, and
-    /// takes its Basic users.
+    /// Reads the metadata and the key set of every issuer `auth` names, sets
+    /// up every introspected one, and takes its Basic users.
     ///
     /// Each issuer is read once here, so an authorization server that cannot
     /// be reached refuses the start rather than the first request.
@@ -136,36 +138,12 @@ impl Smart {
             steward_scope,
             admin_scope,
             clients,
-            basic_users,
         } = auth;
         let mut gate = Gate::open();
-        let primary = if let Some(settings) = resolved.introspection {
-            let issuer = settings.issuer.clone();
-            let checker = Introspector::discover(settings).await.map_err(|source| {
-                SmartError::Introspector {
-                    issuer,
-                    source: Box::new(source),
-                }
-            })?;
-            let checker = Arc::new(checker);
-            let bearer: Arc<dyn Verifier> = checker.clone();
-            gate = gate.with_bearer(bearer);
-            let token_endpoint = checker
-                .metadata()
-                .token_endpoint
-                .clone()
-                .ok_or(SmartError::NoTokenEndpoint)?;
-            Some(Primary {
-                checker: Checker::Introspection(checker),
-                token_endpoint,
-            })
-        } else {
-            let (issuers, primary) = discover_issuers(resolved.issuers).await?;
-            if let Some(issuers) = issuers {
-                gate = gate.with_bearer(Arc::new(issuers));
-            }
-            primary
-        };
+        let (issuers, primary) = discover_issuers(resolved.issuers, resolved.introspection).await?;
+        if let Some(issuers) = issuers {
+            gate = gate.with_bearer(Arc::new(issuers));
+        }
         if let Some(store) = resolved.basic {
             gate = gate.with_basic(Arc::new(store));
         }
@@ -179,7 +157,7 @@ impl Smart {
             admin_scope,
             scopes_listed: resolved.scopes_supported,
             capabilities: resolved.capabilities,
-            sources: Sources::new(domains, clients, basic_users),
+            sources: Sources::new(domains, clients),
         })
     }
 
@@ -249,18 +227,26 @@ impl Smart {
     }
 }
 
-/// Reads the metadata and the key set of every issuer of `settings`, and
-/// returns the set that checks their tokens, `None` for no issuer, with the
-/// first issuer whose metadata names a token endpoint.
+/// Reads the metadata and the key set of every JWT issuer of `settings`
+/// and sets up every introspected issuer of `introspection`, and returns
+/// the one set that checks all their tokens, `None` for no issuer, with the
+/// issuer the discovery documents name: the first JWT issuer whose metadata
+/// names a token endpoint, else the first introspected one.
+///
+/// No specification governs which issuer the discovery documents name: our
+/// own design, which keeps the order the issuers are written in.
 ///
 /// # Errors
 ///
-/// Returns [`SmartError::Issuer`] for an issuer that cannot be read and
-/// [`SmartError::NoTokenEndpoint`] when none names a token endpoint.
+/// Returns [`SmartError::Issuer`] for an issuer that cannot be read,
+/// [`SmartError::Introspector`] for an introspected issuer that cannot be
+/// set up, and [`SmartError::NoTokenEndpoint`] when none names a token
+/// endpoint.
 async fn discover_issuers(
     settings: Vec<ferrohealth_smart::resource::Settings>,
+    introspection: Vec<IntrospectionSettings>,
 ) -> Result<(Option<IssuerSet>, Option<Primary>), SmartError> {
-    if settings.is_empty() {
+    if settings.is_empty() && introspection.is_empty() {
         return Ok((None, None));
     }
     let mut issuers = IssuerSet::new();
@@ -283,6 +269,26 @@ async fn discover_issuers(
             });
         }
         issuers = issuers.with(server);
+    }
+    for one in introspection {
+        let name = one.issuer.clone();
+        let checker =
+            Introspector::discover(one)
+                .await
+                .map_err(|source| SmartError::Introspector {
+                    issuer: name,
+                    source: Box::new(source),
+                })?;
+        let checker = Arc::new(checker);
+        if primary.is_none()
+            && let Some(token_endpoint) = checker.metadata().token_endpoint.clone()
+        {
+            primary = Some(Primary {
+                checker: Checker::Introspection(Arc::clone(&checker)),
+                token_endpoint,
+            });
+        }
+        issuers = issuers.with_introspector(checker);
     }
     let primary = primary.ok_or(SmartError::NoTokenEndpoint)?;
     Ok((Some(issuers), Some(primary)))

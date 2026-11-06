@@ -21,7 +21,7 @@ async fn a_pix_query_answers_what_iti_83_answers() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     linked(&v2).await;
     for (qpd4, targets) in [("", vec![]), ("^^^LAB", vec![LABORATORY_DOMAIN])] {
         let answer = v2.send(&pix_query("P-1", "H-1^^^HOSP", qpd4)).await;
@@ -71,7 +71,7 @@ async fn an_unknown_identifier_domain_or_target_domain_answers_the_case_the_text
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     linked(&v2).await;
     let unknown = v2.send(&pix_query("U-1", "H-404^^^HOSP", "")).await;
     assert_eq!(
@@ -150,7 +150,7 @@ async fn a_demographics_query_finds_the_persons_iti_78_finds() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     for (index, (name, born)) in [(0, "19800229"), (0, "19700101"), (1, "19800229")]
         .iter()
         .enumerate()
@@ -224,7 +224,7 @@ async fn a_query_continues_over_three_increments_and_a_pointer_past_its_bound_is
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     for index in 0..5 {
         let born = format!("1970010{}", index + 1);
         let answer = v2
@@ -269,7 +269,7 @@ async fn a_query_continues_over_three_increments_and_a_pointer_past_its_bound_is
     assert_eq!(seen.len(), 5);
     assert_eq!(next, None, "the last increment names no pointer");
 
-    let short = V2::start(Cursors::with_lifetime(Duration::ZERO)).await;
+    let short = Box::pin(V2::start(Cursors::with_lifetime(Duration::ZERO))).await;
     for index in 0..3 {
         let answer = short
             .send(
@@ -314,7 +314,7 @@ async fn a_demographics_and_visit_query_is_refused_as_unsupported() {
     if !e2e_enabled() {
         return;
     }
-    let v2 = V2::start(Cursors::default()).await;
+    let v2 = Box::pin(V2::start(Cursors::default())).await;
     let before = v2.records().len();
     for (control, qpd3) in [
         ("Z-1", "@PID.5.1.1^Proefsma"),

@@ -577,6 +577,7 @@ async fn the_feed_writes_its_balp_record_after_the_commit() {
             "system/Patient.cud",
             None,
             false,
+            ferrohealth_smart::kind::CallerKind::System,
         ),
     ));
     let call = ferropix_server::audit::records::Call::of(&access, None, &base, Some("e2e"));

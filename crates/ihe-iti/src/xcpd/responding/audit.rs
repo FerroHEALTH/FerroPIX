@@ -114,6 +114,7 @@ impl RespondingAuditEvent {
                 // specialized and PS3.15 A.5.1 requires one: the RFC-3881 Patient Number.
                 id_type_code: CodedValue::of(OBJECT_ID_PATIENT_NUMBER),
                 query: None,
+                name: None,
                 details: Vec::new(),
             })
             .collect();

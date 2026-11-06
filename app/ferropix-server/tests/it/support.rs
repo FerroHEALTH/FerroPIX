@@ -89,29 +89,24 @@ pool_size = 20
 migrate = false
 
 [auth]
-audience = ["https://pix.example.org/pix/fhir"]
-algorithms = ["RS256", "ES256"]
-token_profile = "rfc9068"
-clock_skew_seconds = 30
-jwks_max_age_seconds = 300
-jwks_refresh_interval_seconds = 30
-jwks_file = ""
-timeout_ms = 5000
 realm = "ferropix"
 product_scope = "__ferropix.steward"
-role_claims = ["roles"]
 capabilities = ["client-confidential-asymmetric"]
 scopes_supported = ["system/Patient.rs"]
 
 [[auth.issuer]]
 issuer = "https://idp.example.org/realms/pix"
+kind = "persons"
+profile = "rfc9068"
 audience = ["https://pix.example.org/pix/fhir"]
 algorithms = ["PS256"]
-token_profile = "jwt"
 clock_skew_seconds = 10
 jwks_max_age_seconds = 60
 jwks_refresh_interval_seconds = 10
 jwks_file = ""
+timeout_ms = 5000
+role_claims = ["roles"]
+first_party_clients = ["ferropix-console"]
 
 [[trust.issuer]]
 issuer = "https://idp.example.org/realms/pix"

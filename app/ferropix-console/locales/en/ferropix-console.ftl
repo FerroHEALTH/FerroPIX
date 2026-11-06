@@ -372,8 +372,6 @@ action-detail = Detail
 state-active = Active
 # An address.
 address = Address
-# A source admitted as a Basic user.
-admission-basic = Basic user, development only
 # A source an issuer vouches for.
 admission-issuer = Client of { $issuer }
 # A registered HL7 v2 sender.

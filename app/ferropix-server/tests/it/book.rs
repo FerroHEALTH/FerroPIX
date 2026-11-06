@@ -27,9 +27,9 @@ url = "postgres://db.invalid/pix"
 cache_ttl_seconds = 60
 
 [[auth.basic.users]]
-user = "dev-source"
+user = "dev-steward"
 password_hash = "{PHC}"
-scopes = ["system/Patient.cud"]
+scopes = ["__ferropix.steward"]
 
 [dev]
 loopback = true

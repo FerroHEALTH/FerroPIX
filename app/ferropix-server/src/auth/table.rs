@@ -568,6 +568,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
+    use ferrohealth_smart::kind::CallerKind;
     use ferrohealth_smart::resource::{Access, Caller, Honoured};
     use http::Method;
 
@@ -580,6 +581,7 @@ mod tests {
             scope,
             None,
             false,
+            CallerKind::System,
         )))
     }
 

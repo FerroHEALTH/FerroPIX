@@ -109,8 +109,12 @@ async fn an_issuer_behind_a_private_authority_is_read_with_the_ca_file_roots_and
         .await
     });
     let secrets = Secrets::new();
-    let table =
-        |ca: &str| format!("[auth]\nissuer = \"{issuer}\"\naudience = [\"{AUDIENCE}\"]\n{ca}");
+    let table = |ca: &str| {
+        format!(
+            "[auth]\n{ca}\n[[auth.issuer]]\nissuer = \"{issuer}\"\nkind = \"persons\"\n\
+             profile = \"rfc9068\"\naudience = [\"{AUDIENCE}\"]\nfirst_party_clients = [\"console\"]\n"
+        )
+    };
     let untrusted = settings(&table(""), &secrets);
     let refused = Smart::discover(untrusted.auth, &untrusted.domains)
         .await
@@ -166,9 +170,10 @@ async fn under_introspection_an_opaque_token_is_checked_at_the_configured_endpoi
     let secrets = Secrets::new();
     let settings = settings(
         &format!(
-            "[auth]\nissuer = \"{uri}\"\naudience = [\"{AUDIENCE}\"]\nmode = \"introspection\"\n\n\
-             [auth.introspection]\nendpoint = \"{uri}/introspect\"\n\n\
-             [auth.introspection.client]\nclient_id = \"ferropix\"\nclient_secret = \"synthetic-secret\"\n"
+            "[[auth.issuer]]\nissuer = \"{uri}\"\nkind = \"persons\"\nprofile = \"rfc9068\"\n\
+             audience = [\"{AUDIENCE}\"]\nfirst_party_clients = [\"console\"]\nmode = \"introspection\"\n\n\
+             [auth.issuer.introspection]\nendpoint = \"{uri}/introspect\"\n\n\
+             [auth.issuer.introspection.client]\nclient_id = \"ferropix\"\nclient_secret = \"synthetic-secret\"\n"
         ),
         &secrets,
     );

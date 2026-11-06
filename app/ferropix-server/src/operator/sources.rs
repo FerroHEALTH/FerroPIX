@@ -4,12 +4,12 @@
 //! `GET {base}/operator/sources` and `GET {base}/operator/sources/{id}`: the
 //! systems allowed to feed records.
 //!
-//! A source is a FHIR client an `[[auth.issuer]]` lists in its `clients`, a
-//! Basic user of the development profile, or an `[[hl7v2.senders]]` entry,
-//! so its admission is configuration and is read from the file, never kept
-//! twice: FerroPIX keeps no configuration store (FerroUI 0.3.7
-//! `design/COMPONENTS.md` rule 13, file mode), and a source is added or
-//! retired in the file. The domains a source feeds are read from the
+//! A source is a FHIR client a `[[trust.issuer]]` lists in its `clients` or
+//! an `[[hl7v2.senders]]` entry, so its admission is configuration and is
+//! read from the file, never kept twice: FerroPIX keeps no configuration
+//! store (FerroUI 0.3.7 `design/COMPONENTS.md` rule 13, file mode), and a
+//! source is added or retired in the file. A Basic user is a person's
+//! credential, never a source's. The domains a source feeds are read from the
 //! domains (one Source per domain, PIXm 3.1.0 §2:3.104.4.1.3), its FHIR
 //! activity from the steward actions its feeds recorded and its HL7 v2
 //! activity from the receipts of its messages, each row a time, a channel,
@@ -126,16 +126,6 @@ pub async fn read_all(operator: &Operator) -> Result<Vec<Source>, OperatorError>
                 last_activity: None,
             });
         }
-    }
-    for user in operator.sources.basic_users() {
-        sources.entry(user.clone()).or_insert_with(|| Source {
-            id: user.clone(),
-            name: user.clone(),
-            channel: Channel::Fhir,
-            admission: Admission::BasicUser,
-            domains: fed_by(user),
-            last_activity: None,
-        });
     }
     for sender in &operator.configured.senders {
         let id = sender_id(sender);

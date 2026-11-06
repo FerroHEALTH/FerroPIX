@@ -91,8 +91,10 @@ information and its query replaced by `***`.
 `app/ferropix-server/quickstart.toml` is the smallest production
 configuration: the loopback base, one issuer, one identifier domain, and
 both `[db]` secrets read from files under `/run/secrets/`. Its issuer is
-the development OpenID Provider of the compose quickstart, which signs plain
-JWT bearer tokens, so the entry sets `token_profile = "jwt"`. The compose
+the development OpenID Provider of the compose quickstart, a `persons`
+issuer: it signs the Sources' client credentials tokens and the console's
+logins, as plain JWT bearer tokens, so the entry sets `token_types =
+["JWT"]` and the claims those tokens carry. The compose
 quickstart mounts it beside PostgreSQL
 ([Deployment](deployment.md#the-compose-quickstart)).
 
@@ -249,90 +251,119 @@ to start. Afterwards the old key opens nothing, and you can destroy it.
 ### `[auth]`
 
 Every request to the FHIR face and the operator API carries a bearer token
-one of these issuers signed, or, under `mode = "introspection"`, a token the
-issuer's introspection endpoint vouches for. `[auth]` is the section every
-FerroHEALTH server shares, read by `ferrohealth-smart`, the FerroHEALTH
-resource server: each issuer is an `https` URL (plain `http` on a loopback
-host), at least one audience is set, and only asymmetric algorithms are
-admitted. A section with no issuer and no Basic user is refused, and so is
+one of the `[[auth.issuer]]` issuers signed, or, for an issuer under
+`mode = "introspection"`, a token that issuer's introspection endpoint
+vouches for. `[auth]` is the section every FerroHEALTH server shares, read by
+`ferrohealth-smart`, the FerroHEALTH resource server: each issuer is an
+`https` URL (plain `http` on a loopback host) with its `kind`, at least one
+audience is set on each, and only asymmetric algorithms are admitted. A
+section with no issuer and no Basic user is refused, and so is
 `enabled = false`: FerroPIX always authenticates its callers.
 
 | Key | Default | What it sets |
 |---|---|---|
 | `auth.enabled` | `true` | Must stay `true`. |
-| `auth.issuer` | `""` | One issuer identifier, every token's `iss`; or the `[[auth.issuer]]` list below. |
-| `auth.audience` | `[]` | The audiences, of which a token's `aud` must contain one. |
-| `auth.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
-| `auth.token_profile` | `"rfc9068"` | `"rfc9068"`, the JWT access token profile, or `"jwt"` for an authorization server that issues plain JWTs. |
-| `auth.clock_skew_seconds` | `60` | The clock skew a token's times are checked with, at most 300. |
-| `auth.jwks_max_age_seconds` | `600` | How long a fetched key set is used. |
-| `auth.jwks_refresh_interval_seconds` | `60` | The shortest time between two fetches of the key set. |
-| `auth.jwks_file` | `""` | A key set file to read in place of the issuer's `jwks_uri`. |
-| `auth.timeout_ms` | `10000` | How long one call to an authorization server may take. |
 | `auth.realm` | `""` | The protection space the `WWW-Authenticate` challenges name (RFC 9110 §11.5); empty for none. |
-| `auth.ca_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and under `mode = "introspection"` the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
-| `auth.mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. Introspection takes the flat `auth.issuer` and no `jwks_file`. |
+| `auth.ca_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and for an introspected issuer the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
 | `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
 | `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
-| `auth.role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. Beside several `[[auth.issuer]]` entries each path is written `<issuer>#<path>` and read from that issuer's tokens alone, and a bare path refuses the start, the default included: set `role_claims = []` there. |
-| `auth.scopeless_subjects` | `[]` | The exact `sub` values granted system-wide access without a scope. Beside several `[[auth.issuer]]` entries each is written `<issuer>#<sub>`, the issuer exactly as its entry names it, and admits that issuer's tokens alone, since a `sub` is unique only within its issuer (RFC 7519 §4.1.2); a bare entry, or one naming an issuer the section does not trust, refuses the start. |
+| `auth.scopeless_subjects` | `[]` | The subjects granted system-wide access without a scope, each a table `{ issuer, sub }` naming an issuer the section trusts, since a `sub` is unique only within its issuer (RFC 7519 §4.1.2). An entry admits only a machine's token of that issuer. |
 
-`[auth.introspection]` configures the introspection check, under
-`mode = "introspection"` only. FerroPIX authenticates its call with exactly
-one of `[auth.introspection.client]` (the client authentication of a token
-request, RFC 7662 §2.1) and `[auth.introspection.bearer]` (a token from the
-client credentials grant). Each takes the keys of an OAuth 2.0 client:
-`issuer` or `token_endpoint`, `client_id`, `client_auth`
-(`"client_secret_basic"` by default, `"client_secret_post"`,
-`"private_key_jwt"`, `"tls_client_auth"`, `"self_signed_tls_client_auth"`),
-`client_secret` or `client_secret_file`, `private_key_file`, `kid`,
-`assertion_alg`, `scope`, `resource`, `audience`, `refresh_margin_ms`,
-`timeout_ms`, `assertion_audience`, `ca_file`, `client_certificate_file`
-and `client_key_file`. `client` stands in the section's issuer when it
-names neither `issuer` nor `token_endpoint`.
+Each `[[auth.issuer]]` table names one trusted issuer with every setting of
+its tokens: no section-level value stands in for one the table leaves out.
+`kind` is required and says whose tokens the issuer signs:
 
-| Key | Default | What it sets |
-|---|---|---|
-| `auth.introspection.endpoint` | `""` | The introspection endpoint; empty for the one the issuer's metadata names. |
-| `auth.introspection.cache_max_age_seconds` | `60` | How long an active answer is used before the endpoint is asked again; `0` keeps none. |
-| `auth.introspection.cache_capacity` | `10000` | The most answers held at once. |
+- `"persons"`: people signing in through the deployment's own clients,
+  each listed in `first_party_clients`, and the client credentials tokens
+  of its machines;
+- `"machines"`: machines, through the client credentials grant (RFC 6749
+  §4.4) only;
+- `"patients"` and `"federation"`, the other two kinds `ferrohealth-smart`
+  defines: a patient's token and another party's.
 
-Each `[[auth.issuer]]` entry names one trusted issuer, when the server
-trusts more than one. A token field the entry leaves out takes the
-section's value. With more than one entry, `auth.role_claims` and
-`auth.scopeless_subjects` name the issuer of each of their entries:
+The profile is how the issuer's tokens read: `profile` picks a preset,
+`"rfc9068"` (the JWT access token profile of RFC 9068, the default),
+`"entra"`, `"keycloak"`, `"okta"` or `"nl"`, and any profile key set on the table
+takes the place of the preset's. A token whose `sub` is its client is a
+machine's under `"rfc9068"` (RFC 9068 §2.2).
 
 ```toml
 [auth]
-audience = ["https://pix.example.org/fhir"]
-role_claims = []
-scopeless_subjects = ["https://idp.example.org/realms/pix#service-account-sync"]
+scopeless_subjects = [
+  { issuer = "https://idp.example.org/realms/pix", sub = "service-account-sync" },
+]
 
 [[auth.issuer]]
 issuer = "https://idp.example.org/realms/pix"
+kind = "persons"
+profile = "keycloak"
+audience = ["https://pix.example.org/fhir"]
+first_party_clients = ["ferropix-console"]
 
 [[auth.issuer]]
 issuer = "https://partner.example.net"
+kind = "machines"
+profile = "rfc9068"
+audience = ["https://pix.example.org/fhir"]
 ```
 
 | Key | Default | What it sets |
 |---|---|---|
 | `auth.issuer[].issuer` | none, required | The issuer identifier every token's `iss` equals. |
-| `auth.issuer[].audience` | the section's | The audiences. |
-| `auth.issuer[].algorithms` | the section's | The signature algorithms. |
-| `auth.issuer[].token_profile` | the section's | The token profile. |
-| `auth.issuer[].clock_skew_seconds` | the section's | The clock skew. |
-| `auth.issuer[].jwks_max_age_seconds` | the section's | How long a key set is used. |
-| `auth.issuer[].jwks_refresh_interval_seconds` | the section's | The shortest time between two fetches. |
-| `auth.issuer[].jwks_file` | the section's | A key set file. |
+| `auth.issuer[].kind` | none, required | `"persons"`, `"machines"`, `"patients"` or `"federation"`. |
+| `auth.issuer[].profile` | `"rfc9068"` | The preset the issuer's profile starts from. |
+| `auth.issuer[].audience` | `[]` | The audiences, of which a token's `aud` must contain one; at least one. |
+| `auth.issuer[].algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
+| `auth.issuer[].clock_skew_seconds` | `60` | The clock skew a token's times are checked with, at most 300. |
+| `auth.issuer[].jwks_max_age_seconds` | `600` | How long a fetched key set is used. |
+| `auth.issuer[].jwks_refresh_interval_seconds` | `60` | The shortest time between two fetches of the key set. |
+| `auth.issuer[].jwks_file` | `""` | A key set file to read in place of the issuer's `jwks_uri`. |
+| `auth.issuer[].timeout_ms` | `10000` | How long one call to the authorization server may take. |
+| `auth.issuer[].mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. |
+| `auth.issuer[].sender_constraint` | `"none"` | `"required"` admits only a token bound to a `DPoP` key or a client certificate. |
+| `auth.issuer[].role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. |
+| `auth.issuer[].first_party_clients` | the profile's | The deployment's own clients, through which a person's token is admitted. |
+| `auth.issuer[].token_types` | the profile's | The `typ` header values admitted, `["at+jwt", "application/at+jwt"]` under `"rfc9068"`. |
+| `auth.issuer[].required_claims` | the profile's | The claims every token carries. |
+| `auth.issuer[].client_claims` | the profile's | The claims the client is read from, the first present. |
+
+The other profile keys of `ferrohealth-smart` (`person_key`,
+`tenant_claim`, `app_only`, `guest`, `delegates`, `scope_claim` and the
+rest) are set on the table the same way.
+
+`[auth.issuer.introspection]` configures the introspection check of an
+issuer under `mode = "introspection"`. FerroPIX authenticates its call with
+exactly one of `[auth.issuer.introspection.client]` (the client
+authentication of a token request, RFC 7662 §2.1) and
+`[auth.issuer.introspection.bearer]` (a token from the client credentials
+grant). Each takes the keys of an OAuth 2.0 client: `issuer` or
+`token_endpoint`, `client_id`, `client_auth` (`"client_secret_basic"` by
+default, `"client_secret_post"`, `"private_key_jwt"`, `"tls_client_auth"`,
+`"self_signed_tls_client_auth"`), `client_secret` or `client_secret_file`,
+`private_key_file`, `kid`, `assertion_alg`, `scope`, `resource`,
+`audience`, `refresh_margin_ms`, `timeout_ms`, `assertion_audience`,
+`ca_file`, `client_certificate_file` and `client_key_file`. `client` stands
+in the issuer when it names neither `issuer` nor `token_endpoint`.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `auth.issuer[].introspection.endpoint` | `""` | The introspection endpoint; empty for the one the issuer's metadata names. |
+| `auth.issuer[].introspection.cache_max_age_seconds` | `60` | How long an active answer is used before the endpoint is asked again; `0` keeps none. |
+| `auth.issuer[].introspection.cache_capacity` | `10000` | The most answers held at once. |
+
+The shapes of earlier releases refuse the start, each naming what replaces
+it: the flat `auth.issuer = "…"`, a section-level `audience`, `algorithms`,
+`clock_skew_seconds`, `jwks_max_age_seconds`,
+`jwks_refresh_interval_seconds`, `jwks_file`, `timeout_ms`, `mode`,
+`introspection` or `role_claims`, `token_profile` anywhere, and a
+`scopeless_subjects` entry written as a string.
 
 ### `[trust]`
 
 `[[trust.issuer]]` says, per issuer, which clients its tokens may vouch for
 as the Patient Identity Source of a domain (PIXm `ITI-104`). A `[[domain]]`
-whose `source_client_id` no entry lists, and no Basic user is named, is
-refused.
+whose `source_client_id` no entry lists is refused.
 
 | Key | Default | What it sets |
 |---|---|---|
@@ -340,8 +371,11 @@ refused.
 | `trust.issuer[].clients` | `[]` | The client ids this issuer may vouch for as a Patient Identity Source. |
 
 `[auth.basic]` holds Basic users, for the development profile only, and
-only beside the `[dev]` table. A Basic user's user-id also counts as a
-Source client id. Who needs which scope is on the
+only beside the `[dev]` table. A Basic user is a person, a steward or an
+administrator on your own machine, and never a Source: an entry granting a
+`system/` scope refuses the start, naming the user. A machine, a Source
+among them, signs in with a client credentials token of an
+`[[auth.issuer]]`. Who needs which scope is on the
 [Security and audit](security-and-audit.md#who-may-call-the-server) page.
 
 | Key | Default | What it sets |
@@ -350,7 +384,7 @@ Source client id. Who needs which scope is on the
 | `auth.basic.users[].user` | none | The user-id. |
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |
-| `auth.basic.users[].scopes` | `[]` | The scopes the user is granted. |
+| `auth.basic.users[].scopes` | `[]` | The scopes the user is granted, never a `system/` scope. |
 
 ### `[[domain]]`
 

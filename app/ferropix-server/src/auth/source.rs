@@ -9,10 +9,11 @@
 //!
 //! A domain has one Source, the client its `source_client_id` names. A
 //! bearer caller is that client when its token's `client_id` equals it and
-//! the issuer that signed the token lists it in its `clients`; a Basic user
-//! of the development profile is that client when its user-id equals it.
-//! The issuer binding is FerroPIX's own design: two authorization servers
-//! may each mint a token for a client of the same name. An administrator's
+//! the issuer that signed the token lists it in its `clients`. A Basic
+//! caller is never a Source: a Basic credential is a person's, and a
+//! machine authenticates with the client credentials grant (RFC 6749
+//! §4.4). The issuer binding is FerroPIX's own design: two authorization
+//! servers may each mint a token for a client of the same name. An administrator's
 //! write of a domain replaces the map at once ([`Sources::replace`]), so a
 //! new Source feeds and a replaced one stops without a restart.
 
@@ -33,8 +34,6 @@ pub struct Sources {
     master: Arc<RwLock<Option<String>>>,
     /// The Source clients each issuer may vouch for, by issuer.
     clients: BTreeMap<String, BTreeSet<String>>,
-    /// The user-ids of the Basic users.
-    basic_users: BTreeSet<String>,
 }
 
 /// Whether a caller may write to the domain a request names.
@@ -51,18 +50,13 @@ pub enum Verdict {
 
 impl Sources {
     /// Returns the Sources of `domains`, the ones the store holds after the
-    /// seed, with the `clients` each issuer lists and the Basic users.
+    /// seed, with the `clients` each issuer lists.
     #[must_use]
-    pub fn new(
-        domains: &[DomainSeed],
-        clients: BTreeMap<String, BTreeSet<String>>,
-        basic_users: BTreeSet<String>,
-    ) -> Self {
+    pub fn new(domains: &[DomainSeed], clients: BTreeMap<String, BTreeSet<String>>) -> Self {
         Self {
             domains: Arc::new(RwLock::new(map(domains))),
             master: Arc::new(RwLock::new(master(domains))),
             clients,
-            basic_users,
         }
     }
 
@@ -104,12 +98,6 @@ impl Sources {
         &self.clients
     }
 
-    /// Returns the user-ids of the Basic users of the development profile.
-    #[must_use]
-    pub fn basic_users(&self) -> &BTreeSet<String> {
-        &self.basic_users
-    }
-
     /// Returns the `source_client_id` of each unretired domain, by system.
     #[must_use]
     pub fn domains(&self) -> BTreeMap<String, String> {
@@ -120,11 +108,10 @@ impl Sources {
     }
 
     /// Returns whether `client` may be a Source: an issuer lists it in its
-    /// `clients`, or it is a Basic user.
+    /// `clients`.
     #[must_use]
     pub fn admits(&self, client: &str) -> bool {
         self.clients.values().any(|listed| listed.contains(client))
-            || self.basic_users.contains(client)
     }
 
     /// Returns whether `access` may write to the domain `system` names.
@@ -142,7 +129,7 @@ impl Sources {
     }
 
     /// Returns the Source client `access` authenticates as, or `None` when
-    /// it is no client a Source may be.
+    /// it is no client a Source may be: a Basic caller never is.
     #[must_use]
     pub fn client<'a>(&self, access: &'a Access) -> Option<&'a str> {
         let caller = access.caller()?;
@@ -155,10 +142,7 @@ impl Sources {
                     .is_some_and(|listed| listed.contains(client))
                     .then_some(client)
             }
-            Via::Basic => {
-                let user = caller.subject();
-                self.basic_users.contains(user).then_some(user)
-            }
+            Via::Basic => None,
         }
     }
 }
@@ -207,6 +191,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::Arc;
 
+    use ferrohealth_smart::kind::CallerKind;
     use ferrohealth_smart::resource::{Access, Caller};
 
     use super::{Sources, Verdict, domains_of};
@@ -228,7 +213,6 @@ mod tests {
                 String::from(ISSUER),
                 BTreeSet::from([String::from("east-lab"), String::from("west-lab")]),
             )]),
-            BTreeSet::from([String::from("dev-source")]),
         )
     }
 
@@ -240,6 +224,7 @@ mod tests {
                 "system/Patient.cud",
                 None,
                 false,
+                CallerKind::System,
             )
             .with_issuer(issuer.to_owned()),
         ))
@@ -267,9 +252,27 @@ mod tests {
             Verdict::Unknown,
             sources.verdict(&bearer("east-lab", ISSUER), "urn:oid:2.999.9")
         );
-        let basic = Access::Caller(Arc::new(Caller::basic(String::from("dev-source"), "")));
-        assert_eq!(Some("dev-source"), sources.client(&basic));
         assert_eq!(None, sources.client(&Access::Open));
+    }
+
+    #[test]
+    fn a_basic_caller_is_a_person_and_never_the_source_of_a_domain() {
+        let sources = sources();
+        let basic = Access::Caller(Arc::new(Caller::basic(
+            String::from("east-lab"),
+            "system/Patient.cud",
+        )));
+        let caller = basic.caller().expect("a Basic caller");
+        assert_eq!(&CallerKind::Person, caller.kind(), "never System");
+        assert_eq!(
+            None,
+            sources.client(&basic),
+            "a Basic user named as a Source client"
+        );
+        assert_eq!(
+            Verdict::Forbidden,
+            sources.verdict(&basic, "urn:oid:2.999.1.1")
+        );
     }
 
     #[test]
@@ -326,7 +329,6 @@ mod tests {
             guard.verdict(&bearer("west-lab", ISSUER), system)
         );
         assert!(sources.admits("east-lab"));
-        assert!(sources.admits("dev-source"));
         assert!(!sources.admits("north-lab"));
     }
 

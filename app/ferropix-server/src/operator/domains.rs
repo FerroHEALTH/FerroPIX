@@ -201,8 +201,7 @@ async fn feeds(connection: &mut PgConnection, id: Uuid) -> Result<Vec<Feed>, Ope
 pub const NOT_A_DOMAIN: &str = "a domain names an absolute URI as its system, a name and a Source, and is local or authoritative";
 
 /// The detail of a Source no issuer lists.
-pub const SOURCE_NOT_ADMITTED: &str =
-    "no [[auth.issuer]] lists this client among its clients, and no Basic user is it";
+pub const SOURCE_NOT_ADMITTED: &str = "no [[trust.issuer]] lists this client among its clients";
 
 /// The detail of a system another domain holds.
 pub const SYSTEM_TAKEN: &str = "another identifier domain holds this system";

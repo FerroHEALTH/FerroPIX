@@ -222,7 +222,7 @@ fn reveal_form(visit: &Visit, person: &str, kind: &'static str, id: &str, row: u
     Html::raw(format!(
         "<form method=\"post\" action=\"{}\" class=\"fui-form fui-inline-form\">{}{}{reason}<button type=\"submit\" class=\"{}\">{}</button></form>",
         Html::text(format!("/patients/{person}/{REVEAL}")),
-        hidden("target", kind),
+        hidden("kind", kind),
         hidden("id", id),
         Variant::Secondary.class(),
         label(Some(Glyph::EYE), visit.tr(Msg::Reveal)),

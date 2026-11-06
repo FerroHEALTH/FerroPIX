@@ -310,7 +310,9 @@ timeout, every signed-in page shows a warning with the time left,
 alive, at most once a minute; the page's own checks never do. When the
 session ends, or you sign out in another tab, every open tab of the console
 loads the sign-in page that says your session ended, and signing in again
-brings you back to the page you were on. Without the page's scripts there
+brings you back to the page you were on. The tab you sign out in shows the
+sign-in page that says you signed out, also when you sign out right after
+bringing it forward. Without the page's scripts there
 is no warning: the next page you open goes to the sign-in page.
 
 ## What the console never does

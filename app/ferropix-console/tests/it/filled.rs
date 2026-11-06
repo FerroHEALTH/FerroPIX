@@ -332,6 +332,34 @@ async fn the_patient_record_draws_its_four_tabs_marks_a_differing_field_and_keep
     Ok(())
 }
 
+// HTML, the form element's supported property names: a control's name shadows the
+// form's attribute of that name for every script that reads the form.
+#[tokio::test]
+async fn a_reveal_form_names_what_it_reveals_and_no_control_after_a_form_attribute()
+-> Result<(), Box<dyn Error>> {
+    let route = format!("/operator/persons/{PERSON}");
+    let filled = server(&[(
+        "GET",
+        route.as_str(),
+        serde_json::to_string(&person(false))?,
+    )])
+    .await;
+    let drawn = page(&filled, &format!("/patients/{PERSON}")).await?;
+    assert!(
+        drawn.contains("name=\"kind\" value=\"record\""),
+        "the reveal names what it reveals"
+    );
+    for attribute in [
+        "action", "method", "target", "enctype", "encoding", "name", "elements", "submit",
+    ] {
+        assert!(
+            !drawn.contains(&format!("name=\"{attribute}\"")),
+            "a control named {attribute} shadows the form's own"
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn a_refused_reveal_is_drawn_in_place_with_the_record() -> Result<(), Box<dyn Error>> {
     let route = format!("/operator/persons/{PERSON}");
@@ -347,7 +375,7 @@ async fn a_refused_reveal_is_drawn_in_place_with_the_record() -> Result<(), Box<
         post_form(
             &format!("/patients/{PERSON}/reveal"),
             &cookie,
-            "target=record&id=record-1&reason=Synthetic+check",
+            "kind=record&id=record-1&reason=Synthetic+check",
         )?,
     )
     .await?;

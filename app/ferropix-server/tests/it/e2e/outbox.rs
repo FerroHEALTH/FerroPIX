@@ -381,7 +381,7 @@ const HANDFUL: i64 = 25;
 const WATCHED: Duration = Duration::from_secs(4);
 
 /// Starts PostgreSQL with the store migrated and no domain seeded, and
-/// returns it with the store and a superuser pool.
+/// returns it with a store on fresh connections and a superuser pool.
 async fn bare_store() -> (
     ferropix_testkit::containers::Postgres,
     ferropix_server::store::Store,
@@ -391,13 +391,17 @@ async fn bare_store() -> (
         .await
         .expect("PostgreSQL starts");
     let owner = super::app_role(&postgres).await;
-    let store = ferropix_server::store::Store::start(
-        &super::settings(&owner, &super::fresh_key(), true),
-        &[],
-        ferropix_server::store::Job::Migrate,
-    )
-    .await
-    .expect("the store starts");
+    let db = super::settings(&owner, &super::fresh_key(), true);
+    let migrated =
+        ferropix_server::store::Store::start(&db, &[], ferropix_server::store::Job::Migrate)
+            .await
+            .expect("the store starts");
+    // NOTE: PostgreSQL 18 §27.2: a backend flushes its statistics at intervals and
+    // when it exits, so the migrating connections close before a case counts commits.
+    migrated.pool().close().await;
+    let store = ferropix_server::store::Store::connect(&db)
+        .await
+        .expect("the store connects");
     let admin = super::admin(&postgres).await;
     (postgres, store, admin)
 }

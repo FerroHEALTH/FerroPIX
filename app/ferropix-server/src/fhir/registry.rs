@@ -45,8 +45,8 @@ use uuid::Uuid;
 
 use crate::audit::Audit;
 use crate::audit::records::{self, Call};
-use crate::auth::guard::NOT_THE_SOURCE;
-use crate::auth::source::{Sources, Verdict};
+use crate::auth::guard::{NOT_THE_SOURCE, refusal};
+use crate::auth::source::Sources;
 use crate::auth::table::Route;
 use crate::config::section::matching::Matching;
 use crate::feed::master::MasterChange;
@@ -164,9 +164,9 @@ async fn receive(registry: Arc<Registry>, request: Request) -> Response {
         .get::<Access>()
         .cloned()
         .unwrap_or(Access::Open);
-    let admitted = registry.sources.verdict_master(&access) == Verdict::Admitted;
-    let (true, Some(system), Some(actor)) = (
-        admitted,
+    let refused_with = refusal(&[registry.sources.verdict_master(&access)]);
+    let (None, Some(system), Some(actor)) = (
+        refused_with,
         registry.sources.master(),
         registry.sources.client(&access),
     ) else {
@@ -174,7 +174,7 @@ async fn receive(registry: Arc<Registry>, request: Request) -> Response {
             StatusCode::FORBIDDEN,
             Severity::Error,
             IssueType::Forbidden,
-            NOT_THE_SOURCE,
+            refused_with.unwrap_or(NOT_THE_SOURCE),
         );
         return refuse(&registry, &parts, &call, &refusal, format).await;
     };

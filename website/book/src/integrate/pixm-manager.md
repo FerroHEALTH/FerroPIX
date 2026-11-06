@@ -13,8 +13,8 @@ Option ([Configuration](../operate/configuration.md)).
 Every request needs an access token or, on a development surface, a Basic
 user ([Security and audit](../operate/security-and-audit.md)). A Consumer
 holds `system/Patient.rs` or the IUA scope `ITI-83`; a Source holds
-`system/Patient.cud` or `ITI-104` and must be its domain's
-`source_client_id`.
+`system/Patient.cud` or `ITI-104`, is a machine with a client credentials
+token, and must be its domain's `source_client_id`.
 
 ## Ask for a patient's identifiers (ITI-83)
 

@@ -8,11 +8,12 @@
 //! Domain for which it is authorized" (PIXm 3.1.0 §2:3.104.5).
 //!
 //! A domain has one Source, the client its `source_client_id` names. A
-//! bearer caller is that client when its token's `client_id` equals it and
-//! the issuer that signed the token lists it in its `clients`. A Basic
-//! caller is never a Source: a Basic credential is a person's, and a
-//! machine authenticates with the client credentials grant (RFC 6749
-//! §4.4). The issuer binding is FerroPIX's own design: two authorization
+//! bearer caller is that client when its token's `client_id` equals it, the
+//! issuer that signed the token lists it in its `clients`, and the token is
+//! a machine's, classified [`CallerKind::System`]. A person is never a
+//! Source, through that client's token or a Basic credential: a machine
+//! authenticates with the client credentials grant (RFC 6749 §4.4). The
+//! machine rule and the issuer binding are FerroPIX's own design: two authorization
 //! servers may each mint a token for a client of the same name. An administrator's
 //! write of a domain replaces the map at once ([`Sources::replace`]), so a
 //! new Source feeds and a replaced one stops without a restart.
@@ -20,6 +21,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, PoisonError, RwLock};
 
+use ferrohealth_smart::kind::CallerKind;
 use ferrohealth_smart::resource::{Access, Via};
 
 use crate::config::section::domain::{DomainKind, DomainSeed};
@@ -46,6 +48,9 @@ pub enum Verdict {
     Unknown,
     /// The caller is not the domain's Source.
     Forbidden,
+    /// The caller names the domain's Source client, but its token is a
+    /// person's: only a machine feeds a domain.
+    NotAMachine,
 }
 
 impl Sources {
@@ -87,8 +92,11 @@ impl Sources {
     #[must_use]
     pub fn verdict_master(&self, access: &Access) -> Verdict {
         match self.master() {
-            Some(system) if self.verdict(access, &system) == Verdict::Admitted => Verdict::Admitted,
-            _ => Verdict::Forbidden,
+            Some(system) => match self.verdict(access, &system) {
+                Verdict::Unknown => Verdict::Forbidden,
+                verdict => verdict,
+            },
+            None => Verdict::Forbidden,
         }
     }
 
@@ -123,15 +131,25 @@ impl Sources {
         };
         if self.client(access) == Some(source.as_str()) {
             Verdict::Admitted
+        } else if self.listed(access) == Some(source.as_str()) {
+            Verdict::NotAMachine
         } else {
             Verdict::Forbidden
         }
     }
 
     /// Returns the Source client `access` authenticates as, or `None` when
-    /// it is no client a Source may be: a Basic caller never is.
+    /// it is no client a Source may be: a person never is.
     #[must_use]
     pub fn client<'a>(&self, access: &'a Access) -> Option<&'a str> {
+        let client = self.listed(access)?;
+        let caller = access.caller()?;
+        (caller.kind() == &CallerKind::System).then_some(client)
+    }
+
+    /// Returns the bearer token's `client_id` of `access` when the issuer
+    /// that signed it lists it in its `clients`, whoever the token is for.
+    fn listed<'a>(&self, access: &'a Access) -> Option<&'a str> {
         let caller = access.caller()?;
         match caller.via() {
             Via::Bearer => {
@@ -217,6 +235,10 @@ mod tests {
     }
 
     fn bearer(client: &str, issuer: &str) -> Access {
+        bearer_of(client, issuer, CallerKind::System)
+    }
+
+    fn bearer_of(client: &str, issuer: &str, kind: CallerKind) -> Access {
         Access::Caller(Arc::new(
             Caller::new(
                 String::from("synthetic-sub"),
@@ -224,7 +246,7 @@ mod tests {
                 "system/Patient.cud",
                 None,
                 false,
-                CallerKind::System,
+                kind,
             )
             .with_issuer(issuer.to_owned()),
         ))
@@ -272,6 +294,41 @@ mod tests {
         assert_eq!(
             Verdict::Forbidden,
             sources.verdict(&basic, "urn:oid:2.999.1.1")
+        );
+    }
+
+    #[test]
+    fn a_persons_token_through_the_source_client_is_not_a_machine() {
+        let sources = sources();
+        let system = "urn:oid:2.999.1.1";
+        for kind in [
+            CallerKind::Person,
+            CallerKind::Delegated { actor: None },
+            CallerKind::Guest(Box::new(CallerKind::System)),
+        ] {
+            let person = bearer_of("east-lab", ISSUER, kind.clone());
+            assert_eq!(None, sources.client(&person), "{kind:?}");
+            assert_eq!(
+                Verdict::NotAMachine,
+                sources.verdict(&person, system),
+                "{kind:?}"
+            );
+            assert_eq!(
+                Verdict::Forbidden,
+                sources.verdict(&bearer_of("west-lab", ISSUER, kind.clone()), system),
+                "{kind:?}: a person through another Source's client"
+            );
+        }
+        sources.replace(&[DomainSeed {
+            system: String::from("https://pix.example.org"),
+            name: String::from("Master"),
+            kind: DomainKind::Master,
+            source_client_id: String::from("east-lab"),
+            sensitive: false,
+        }]);
+        assert_eq!(
+            Verdict::NotAMachine,
+            sources.verdict_master(&bearer_of("east-lab", ISSUER, CallerKind::Person))
         );
     }
 

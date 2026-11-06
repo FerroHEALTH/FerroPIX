@@ -35,6 +35,10 @@ use crate::v2::notification::{self, Acknowledged, Party};
 /// The longest the sender sleeps without looking at the outbox.
 pub const IDLE: Duration = Duration::from_secs(30);
 
+/// The shortest the sender sleeps after a claim that took no row, so a row
+/// that reads as due but cannot be claimed never makes it spin.
+pub const NOTHING_CLAIMED: Duration = Duration::from_secs(1);
+
 /// How often the sender prunes the settled messages past their retention.
 pub const PRUNE_EVERY: Duration = Duration::from_secs(3600);
 
@@ -128,8 +132,10 @@ async fn run(
             prune(&store, retention).await;
             pruned = Some(tokio::time::Instant::now());
         }
+        let mut progressed = false;
         match outbox::claim(&store, BATCH, LEASE).await {
             Ok(claimed) => {
+                progressed = !claimed.is_empty();
                 for row in claimed {
                     deliver(&store, &channels, row).await;
                     if *stopped.borrow() {
@@ -142,14 +148,14 @@ async fn run(
                 tracing::error!(error = %ferrohealth_server::run::chain(&error), "the outbox could not be read");
             }
         }
-        let wait = match outbox::next_due(&store).await {
-            Ok(Some(due)) => due.min(IDLE),
-            Ok(None) => IDLE,
+        let due = match outbox::next_due(&store).await {
+            Ok(due) => due,
             Err(error) => {
                 tracing::error!(error = %ferrohealth_server::run::chain(&error), "the outbox could not be read");
-                IDLE
+                None
             }
         };
+        let wait = wait_after(progressed, due);
         if wait.is_zero() {
             continue;
         }
@@ -158,6 +164,19 @@ async fn run(
             () = wake.woken() => {}
             _ = stopped.wait_for(|stop| *stop) => return,
         }
+    }
+}
+
+/// How long the sender sleeps before its next claim: until the next row
+/// `due`, at most [`IDLE`], and at least [`NOTHING_CLAIMED`] unless the
+/// last claim `progressed`, so only a claim that took rows is followed at
+/// once by another.
+fn wait_after(progressed: bool, due: Option<Duration>) -> Duration {
+    let wait = due.unwrap_or(IDLE).min(IDLE);
+    if progressed {
+        wait
+    } else {
+        wait.max(NOTHING_CLAIMED)
     }
 }
 
@@ -454,7 +473,7 @@ async fn post(
 mod tests {
     use std::time::Duration;
 
-    use super::Backoff;
+    use super::{Backoff, IDLE, NOTHING_CLAIMED, wait_after};
 
     #[test]
     fn the_wait_doubles_from_the_first_retry_up_to_its_bound() {
@@ -468,5 +487,30 @@ mod tests {
                 .map(|attempt| u64::try_from(backoff.after(attempt).as_millis()).expect("small"))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn a_claim_that_took_nothing_is_never_followed_at_once_by_another() {
+        assert_eq!(NOTHING_CLAIMED, wait_after(false, Some(Duration::ZERO)));
+    }
+
+    #[test]
+    fn a_claim_that_took_rows_is_followed_at_once_while_a_row_is_due() {
+        assert_eq!(Duration::ZERO, wait_after(true, Some(Duration::ZERO)));
+    }
+
+    #[test]
+    fn with_nothing_waiting_the_sender_sleeps_its_idle_wait() {
+        assert_eq!(IDLE, wait_after(false, None));
+        assert_eq!(IDLE, wait_after(true, None));
+    }
+
+    #[test]
+    fn the_sender_sleeps_until_the_next_row_falls_due_within_its_idle_wait() {
+        assert_eq!(
+            Duration::from_secs(7),
+            wait_after(false, Some(Duration::from_secs(7)))
+        );
+        assert_eq!(IDLE, wait_after(true, Some(Duration::from_hours(1))));
     }
 }

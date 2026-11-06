@@ -49,7 +49,7 @@ to `v` plus the pinned version.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| FerroUI (`ferrohealth-ui`) | `=0.6.8` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.6.8` |
+| FerroUI (`ferrohealth-ui`) | `=0.6.9` | `Cargo.toml` `[workspace.dependencies]`; `app/ferropix-console/src/pages/about.rs` (`FERROUI`, held to the pin by its test); the FerroUI documents read at the tag `v0.6.9` |
 
 ## The console's browser journeys
 

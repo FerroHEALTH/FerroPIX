@@ -1,0 +1,1 @@
+- The console moves to `ferrohealth-ui` 0.6.9, whose session watch no longer throws on a form with a control named `target` or `method`.

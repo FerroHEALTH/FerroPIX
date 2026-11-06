@@ -26,7 +26,7 @@ use crate::visit::Visit;
 
 /// The FerroUI release the console is built on, as `Cargo.toml` pins it
 /// exactly (a test holds the two together).
-pub const FERROUI: &str = "0.6.8";
+pub const FERROUI: &str = "0.6.9";
 
 /// The route Download fetches the `CapabilityStatement` from.
 pub const METADATA_DOWNLOAD: &str = "/about/capability-statement.json";

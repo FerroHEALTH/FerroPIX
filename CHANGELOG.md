@@ -13,6 +13,41 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-11-06
+
+A patch release with two fixes. The outbox sender no longer spins while
+nothing waits in the outbox, which kept an idle server and its PostgreSQL
+busy at over a CPU core. `[auth] scopeless_subjects` and `role_claims` now
+hold per issuer (GHSA-pfgx-xq28-2629); a deployment that trusts several
+issuers rewrites those entries before it upgrades. The published crates
+`ihe-iti` and `nl-generic-functions` keep their versions.
+
+### Fixed
+
+- The outbox sender sleeps again while nothing waits in the outbox. Its look
+  at the next due row answered "due now" for an empty outbox, or one holding
+  only delivered or abandoned rows, so an idle server ran its claim back to
+  back: about 8,000 PostgreSQL transactions a second and over a CPU core
+  between the server and its database. A claim that takes no row is now
+  always followed by a wait of at least a second (#490).
+
+### Security
+
+Shipped with functional changes because: the one other change is the fix of the outbox sender's idle busy loop, which keeps over a CPU core busy on every running FerroPIX, and holding either fix back for a release of its own would leave a running deployment with one of the two defects for longer.
+
+- `[auth] scopeless_subjects` and `role_claims` hold per issuer, through
+  `ferrohealth-smart` 0.8.9 (GHSA-pfgx-xq28-2629, CWE-863, CWE-639). Before
+  it, beside several `[[auth.issuer]]` entries both lists applied to every
+  trusted issuer's tokens: a token from any of them whose `sub` was listed
+  was granted system-wide access without a scope, and any of them could
+  assert roles. An entry is now written `<issuer>#<value>` and holds for
+  that issuer alone; beside several issuers a bare entry, or one naming an
+  issuer the section does not trust, refuses the start. Upgrade step for a
+  deployment with several issuers: write each `scopeless_subjects` entry as
+  `<issuer>#<sub>`, and set `role_claims = []` (the permission table reads
+  scopes, not roles) or qualify each path, since the default `role_claims`
+  is bare and refused. A deployment with one issuer changes nothing (#488).
+
 ## [0.0.17] - 2026-11-05
 
 A family upkeep release. The server, the console and the testkit move to

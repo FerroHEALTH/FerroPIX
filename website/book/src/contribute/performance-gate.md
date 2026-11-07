@@ -70,7 +70,10 @@ GitHub's hosted runners mix CPU generations, and the same commit measures
 A runner whose model has no entry cannot be judged: the job exits 2 and
 names the model, and the idle limits still judge the run.
 
-The entries are measured on the CI runners, never on a workstation. To
+The entries are measured on the CI runners, never on a workstation. An update measures five load phases, each after its own warm-up, and
+writes each metric as their median and its noise floor as how far the
+worst phase strayed from it, so a tail that moves from run to run is
+judged against the movement it showed. To
 write or add one, run the job with `update: true` on the `perf` job's call
 of `.github/workflows/perf.yml`, take `perf/baseline.toml` from the
 `perf-report` artifact, and commit it; it holds the committed entries and

@@ -63,14 +63,23 @@ window whose second half differs from its first.
 
 ## Updating the baseline
 
-The baseline is measured on the CI runner, never on a workstation. To write
-it, run the job once with `update: true` on the `perf` job's call of
-`.github/workflows/perf.yml`, take `perf/baseline.toml` from the
-`perf-report` artifact, and commit it. On the same plan an update only
-moves each metric to the better of the baseline and the run, so the
-baseline is a ratchet. A change to the plan's rate, windows or request set
-writes it afresh. Raising a metric is a hand edit in a pull request that
-says why.
+GitHub's hosted runners mix CPU generations, and the same commit measures
+25 to 45 % slower on one than on another, so `perf/baseline.toml` holds one
+`[[baseline]]` entry per CPU model, keyed by the model name in
+`/proc/cpuinfo`. A run is judged against the entry of its runner's model.
+A runner whose model has no entry cannot be judged: the job exits 2 and
+names the model, and the idle limits still judge the run.
+
+The entries are measured on the CI runners, never on a workstation. To
+write or add one, run the job with `update: true` on the `perf` job's call
+of `.github/workflows/perf.yml`, take `perf/baseline.toml` from the
+`perf-report` artifact, and commit it; it holds the committed entries and
+the run's own. Re-run the job until every CPU model the runners serve has
+its entry. On the same plan an update only moves each metric of the
+runner's entry to the better of the entry and the run, and leaves the other
+entries as they were, so every entry is a ratchet. A change to the plan's
+rate, windows or request set writes the entry afresh. Raising a metric is a
+hand edit in a pull request that says why.
 
 ## The limits of the request set
 

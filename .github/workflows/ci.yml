@@ -762,6 +762,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/perf.yml
+    with:
+      update: true
 
   # The quickstart, run as an operator runs it: the server built for the
   # static musl target, the image built from that binary through the staged

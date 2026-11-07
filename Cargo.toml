@@ -37,7 +37,7 @@ toml = { version = "1.1.6", default-features = false, features = ["std", "parse"
 # exactly, moved in lockstep with every console (.claude/rules/console-ui.md),
 # and the console's own Fluent catalog. Verified against crates.io on
 # 2026-10-31 (0.6.2).
-ferrohealth-ui = "=0.6.8"
+ferrohealth-ui = "=0.6.9"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
@@ -52,23 +52,23 @@ fhir-types = { version = "0.1.128", default-features = false }
 # every setting on its `[[auth.issuer]]` table, with the required `kind`, and
 # classifies a Basic credential as a person. Verified against crates.io on
 # 2026-11-06.
-ferrohealth-smart = { version = "=0.9.0", default-features = false }
+ferrohealth-smart = { version = "=0.9.2", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
 # Verified against crates.io on 2026-11-06 (0.3.0, which requires
 # ferrohealth-smart 0.9.0).
-ferrohealth-session = { version = "=0.3.0", default-features = false }
+ferrohealth-session = { version = "=0.3.1", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
 # `--set` arguments of ferrohealth-server. Each pinned exactly, as a product
 # pins every family crate; ferrohealth-secret at the version ferrohealth-smart
 # requires. Verified against crates.io on 2026-11-04.
-ferrohealth-config = "=0.2.9"
+ferrohealth-config = "=0.2.10"
 ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.5.0", default-features = false }
+ferrohealth-server = { version = "=0.5.1", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition
@@ -89,7 +89,7 @@ ferrohealth-usage-report = { version = "=0.2.1", default-features = false }
 # parser and the original-mode acknowledgment, over the generated v2 tables,
 # pinned exactly as a product pins every family crate. Verified against
 # crates.io on 2026-11-04 (0.1.177, the sender under `mllp::sender`).
-ferrobridge-hl7v2 = { version = "=0.1.182", default-features = false }
+ferrobridge-hl7v2 = { version = "=0.1.187", default-features = false }
 hl7v2-types = "=0.1.127"
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`

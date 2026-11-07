@@ -387,7 +387,7 @@ among them, signs in with a client credentials token of an
 | `auth.basic.users[].user` | none | The user-id. |
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |
-| `auth.basic.users[].scopes` | `[]` | The scopes the user is granted, never a `system/` scope. |
+| `auth.basic.users[].scopes` | `[]` | The scopes the user is granted, never a `system/` scope: a `system/` scope fails the configuration load, naming the user and the scope. |
 
 ### `[[domain]]`
 

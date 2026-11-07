@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The performance gate (#506), called by ci.yml on a change that reaches the
+# server and by release.yml on the release commit. It builds the server in
+# release mode, installs ferrohealth-perf (FerroHEALTH/FerroSYS#249) at its
+# docs/VERSIONS.md pin, and runs scripts/perf/gate.sh: the idle phase with
+# every background worker running, the load phase over perf/plan.toml judged
+# against perf/baseline.toml, and the planted outbox poller the idle phase
+# must fail. The reports and the baseline are uploaded whatever the outcome,
+# so a baseline written with `update` is taken from the artifact. No
+# specification governs this: our own design.
+name: Perf
+
+on:
+  workflow_call:
+    inputs:
+      update:
+        description: Write perf/baseline.toml from a run that passes.
+        required: false
+        default: false
+        type: boolean
+      cache:
+        description: Restore and save the Rust build cache; the release lane passes false.
+        required: false
+        default: true
+        type: boolean
+
+permissions: {}
+
+jobs:
+  perf:
+    name: perf
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      FERROHEALTH_PERF_VERSION: 0.4.1
+      FERROPIX__USAGE_REPORT__ENABLED: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache: ${{ inputs.cache && 'true' || 'false' }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install ferrohealth-perf
+        run: cargo install ferrohealth-perf --version "=${FERROHEALTH_PERF_VERSION}" --locked
+      - name: Build the server
+        run: cargo build --release --locked -p ferropix-server
+      - name: Gate the performance
+        env:
+          UPDATE: ${{ inputs.update }}
+        run: |
+          set -euo pipefail
+          if [ "$UPDATE" = "true" ]; then
+            bash scripts/perf/gate.sh run --update
+          else
+            bash scripts/perf/gate.sh run
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: perf-report
+          path: |
+            target/perf/
+            perf/baseline.toml
+          if-no-files-found: ignore
+          retention-days: 30

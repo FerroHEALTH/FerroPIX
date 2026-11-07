@@ -1,0 +1,205 @@
+# The performance baseline of ferrohealth-perf, one [[baseline]] per host shape.
+# `ferrohealth-perf run --update` writes or lowers the entry of the runner's
+# model; a raise is a hand edit in a change that says why.
+schema = 3
+
+[[baseline]]
+tool = "0.4.1"
+written = "2026-11-07T12:31:27.460284Z"
+
+[baseline.plan]
+rate = 50.0
+warmup_secs = 10
+duration_secs = 60
+requests = 5
+groups = ["pdqm-match", "pdqm-search", "pixm-feed", "pixm-query", "pixm-query-post"]
+
+[baseline.host]
+arch = "x86_64"
+os = "linux"
+available_parallelism = 4
+cpu_model = "AMD EPYC 7763 64-Core Processor"
+total_memory_bytes = 16760344576
+
+[baseline.tolerance]
+latency = 0.25
+throughput = 0.2
+memory = 0.2
+cpu = 0.25
+transactions = 0.1
+
+[baseline.metrics]
+throughput_rps = 50.0
+peak_memory_bytes = 50667520.0
+cpu_per_request_ms = 1.84
+transactions_per_request = 3.404857142857143
+"pdqm-match.p50_ms" = 6.431
+"pdqm-match.p95_ms" = 7.215
+"pdqm-match.p99_ms" = 8.559
+"pdqm-search.p50_ms" = 6.491
+"pdqm-search.p95_ms" = 7.303
+"pdqm-search.p99_ms" = 8.583
+"pixm-feed.p50_ms" = 9.551
+"pixm-feed.p95_ms" = 10.599
+"pixm-feed.p99_ms" = 11.919
+"pixm-query.p50_ms" = 4.179
+"pixm-query.p95_ms" = 4.747
+"pixm-query.p99_ms" = 5.215
+"pixm-query-post.p50_ms" = 4.303
+"pixm-query-post.p95_ms" = 5.059
+"pixm-query-post.p99_ms" = 5.859
+
+[baseline.noise]
+throughput_rps = 1.0
+peak_memory_bytes = 1.0082457558609539
+cpu_per_request_ms = 1.0271739130434783
+transactions_per_request = 1.0041117730972562
+"pdqm-match.p50_ms" = 1.0261234644689785
+"pdqm-match.p95_ms" = 1.0338184338184337
+"pdqm-match.p99_ms" = 1.0261712816917865
+"pdqm-search.p50_ms" = 1.0197196117701433
+"pdqm-search.p95_ms" = 1.0257428454059976
+"pdqm-search.p99_ms" = 1.0102528253524408
+"pixm-feed.p50_ms" = 1.0309915192126478
+"pixm-feed.p95_ms" = 1.0301915275025946
+"pixm-feed.p99_ms" = 1.1496769863243559
+"pixm-query.p50_ms" = 1.0268006700167505
+"pixm-query.p95_ms" = 1.0337054982093954
+"pixm-query.p99_ms" = 1.1564717162032598
+"pixm-query-post.p50_ms" = 1.0362537764350452
+"pixm-query-post.p95_ms" = 1.0213480925084009
+"pixm-query-post.p99_ms" = 1.1911589008363201
+
+[[baseline]]
+tool = "0.4.1"
+written = "2026-11-07T12:31:27.460284Z"
+
+[baseline.plan]
+rate = 50.0
+warmup_secs = 10
+duration_secs = 60
+requests = 5
+groups = ["pdqm-match", "pdqm-search", "pixm-feed", "pixm-query", "pixm-query-post"]
+
+[baseline.host]
+arch = "x86_64"
+os = "linux"
+available_parallelism = 4
+cpu_model = "AMD EPYC 9V45 96-Core Processor"
+total_memory_bytes = 16760344576
+
+[baseline.tolerance]
+latency = 0.25
+throughput = 0.2
+memory = 0.2
+cpu = 0.25
+transactions = 0.1
+
+[baseline.metrics]
+throughput_rps = 50.0
+peak_memory_bytes = 51113984.0
+cpu_per_request_ms = 0.8666666666666667
+transactions_per_request = 3.407142857142857
+"pdqm-match.p50_ms" = 3.923
+"pdqm-match.p95_ms" = 4.503
+"pdqm-match.p99_ms" = 4.719
+"pdqm-search.p50_ms" = 4.075
+"pdqm-search.p95_ms" = 4.603
+"pdqm-search.p99_ms" = 4.755
+"pixm-feed.p50_ms" = 5.375
+"pixm-feed.p95_ms" = 5.931
+"pixm-feed.p99_ms" = 6.759
+"pixm-query.p50_ms" = 2.607
+"pixm-query.p95_ms" = 3.055
+"pixm-query.p99_ms" = 3.217
+"pixm-query-post.p50_ms" = 2.661
+"pixm-query-post.p95_ms" = 3.133
+"pixm-query-post.p99_ms" = 3.231
+
+[baseline.noise]
+throughput_rps = 1.0
+peak_memory_bytes = 1.0194727141597884
+cpu_per_request_ms = 1.3115384615384615
+transactions_per_request = 1.0043635143072922
+"pdqm-match.p50_ms" = 1.2059648228396636
+"pdqm-match.p95_ms" = 1.264712413946258
+"pdqm-match.p99_ms" = 2.8648018648018647
+"pdqm-search.p50_ms" = 1.1731938701045976
+"pdqm-search.p95_ms" = 1.2580925483380405
+"pdqm-search.p99_ms" = 2.2206098843322817
+"pixm-feed.p50_ms" = 1.201674418604651
+"pixm-feed.p95_ms" = 1.255606137244984
+"pixm-feed.p99_ms" = 2.3575972777038023
+"pixm-query.p50_ms" = 1.2514922403501791
+"pixm-query.p95_ms" = 1.2756137479541734
+"pixm-query.p99_ms" = 2.3198632266086414
+"pixm-query-post.p50_ms" = 1.2495171881035148
+"pixm-query-post.p95_ms" = 1.2527928503032237
+"pixm-query-post.p99_ms" = 2.1402042711234914
+
+[[baseline]]
+tool = "0.4.1"
+written = "2026-11-07T12:31:27.460284Z"
+
+[baseline.plan]
+rate = 50.0
+warmup_secs = 10
+duration_secs = 60
+requests = 5
+groups = ["pdqm-match", "pdqm-search", "pixm-feed", "pixm-query", "pixm-query-post"]
+
+[baseline.host]
+arch = "x86_64"
+os = "linux"
+available_parallelism = 4
+cpu_model = "AMD EPYC 9V74 80-Core Processor"
+total_memory_bytes = 16760344576
+
+[baseline.tolerance]
+latency = 0.25
+throughput = 0.2
+memory = 0.2
+cpu = 0.25
+transactions = 0.1
+
+[baseline.metrics]
+throughput_rps = 50.0
+peak_memory_bytes = 49954816.0
+cpu_per_request_ms = 1.6133333333333333
+transactions_per_request = 3.404857142857143
+"pdqm-match.p50_ms" = 5.299
+"pdqm-match.p95_ms" = 5.815
+"pdqm-match.p99_ms" = 6.015
+"pdqm-search.p50_ms" = 5.451
+"pdqm-search.p95_ms" = 5.975
+"pdqm-search.p99_ms" = 6.247
+"pixm-feed.p50_ms" = 8.375
+"pixm-feed.p95_ms" = 9.055
+"pixm-feed.p99_ms" = 9.279
+"pixm-query.p50_ms" = 3.339
+"pixm-query.p95_ms" = 3.773
+"pixm-query.p99_ms" = 3.895
+"pixm-query-post.p50_ms" = 3.433
+"pixm-query-post.p95_ms" = 3.939
+"pixm-query-post.p99_ms" = 4.031
+
+[baseline.noise]
+throughput_rps = 1.0
+peak_memory_bytes = 1.0077074450639554
+cpu_per_request_ms = 1.0020661157024793
+transactions_per_request = 1.003608290677184
+"pdqm-match.p50_ms" = 1.0656727684468768
+"pdqm-match.p95_ms" = 1.0522785898538263
+"pdqm-match.p99_ms" = 1.0418952618453867
+"pdqm-search.p50_ms" = 1.0491652907723354
+"pdqm-search.p95_ms" = 1.0421757322175733
+"pdqm-search.p99_ms" = 1.0268929085961263
+"pixm-feed.p50_ms" = 1.0353432835820895
+"pixm-feed.p95_ms" = 1.0353395913859746
+"pixm-feed.p99_ms" = 1.0353486367065416
+"pixm-query.p50_ms" = 1.079664570230608
+"pixm-query.p95_ms" = 1.0795123244102836
+"pixm-query.p99_ms" = 1.0801026957637998
+"pixm-query-post.p50_ms" = 1.0949606757937664
+"pixm-query-post.p95_ms" = 1.0771769484640772
+"pixm-query-post.p99_ms" = 1.0942694120565617

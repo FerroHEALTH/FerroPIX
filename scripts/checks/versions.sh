@@ -21,7 +21,8 @@
 #      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE,
 #      the lockfiles, JSON (which has no comment syntax), the raster images
 #      (PNG and ICO, which have none either), test fixtures and the fuzz
-#      seeds (bytes a target reads, written from the vendored examples)
+#      seeds (bytes a target reads, written from the vendored examples),
+#      the performance baseline (written whole by `ferrohealth-perf --update`)
 #      and the changelog fragments (text the release cut moves into
 #      CHANGELOG.md, which carries the header) carry no header.
 #
@@ -58,6 +59,7 @@ readonly REPEATED_ROWS=(
   "hadolint image"
   "Trivy"
   "cargo-auditable"
+  "ferrohealth-perf"
   "cargo-cyclonedx"
   "syft"
 )
@@ -307,7 +309,7 @@ fi
 # 5. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/* | changelog.d/[0-9]*.md) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/* | changelog.d/[0-9]*.md | perf/baseline.toml) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

@@ -17,6 +17,8 @@
 #       transactions. --update writes perf/baseline.toml from a run that
 #       passes. Exit 0 when both hold, 1 when the gate fails or the planted
 #       poller passes, 2 when the run cannot be judged or set up.
+#   scripts/perf/gate.sh build
+#       Builds the release server the gate measures.
 #   scripts/perf/gate.sh --self-test
 #       Proves the pin reader, the plan rendering and the agreement of the
 #       two plans' idle limits offline.
@@ -246,10 +248,14 @@ self_test() {
 }
 
 case "${1:-}" in
+  build)
+    cd "$root"
+    cargo build --release --locked -p ferropix-server
+    ;;
   run)
     shift
     run "$@"
     ;;
   --self-test) self_test ;;
-  *) die "usage: gate.sh run [--update] | --self-test" ;;
+  *) die "usage: gate.sh build | run [--update] | --self-test" ;;
 esac

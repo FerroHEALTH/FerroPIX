@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The plan of the performance gate (ferrohealth-perf, FerroHEALTH/FerroSYS
+# #249), run by scripts/perf/gate.sh in the tool's A/B mode against the base
+# and the head of a change, each with perf/ferropix.toml. The idle phase runs
+# the head's background workers with nothing to do, the outbox sender among
+# them (the FerroPIX #490 case); the load phase sends the hot paths of the
+# FHIR face and the HL7 v2 feed over MLLP to each server in turn. The gate
+# seeds the two patients of the testkit's ITI-104 fixtures first, so each
+# feed below is an update answered 200. The gate replaces {consumer_token}
+# and {source_token} with tokens of the stub OpenID Provider before the run.
+# No specification governs this: our own design.
+
+[idle]
+duration_secs = 60
+max_cpu_percent = 2.0
+# The outbox sender looks at the outbox at least every 30 s, which is one
+# transaction in 30 s; the gate itself adds at most two per phase.
+max_transactions_per_second = 1.0
+
+[load]
+rate = 50.0
+warmup_secs = 10
+duration_secs = 60
+
+# How far the head may stray from the base, beyond the noise the two arms
+# show: the family's tolerances (FerroHEALTH/FerroSYS#249).
+[tolerance]
+latency = 0.25
+throughput = 0.2
+memory = 0.2
+cpu = 0.25
+transactions = 0.1
+
+# PIXm ITI-83 by GET and by POST, as every FerroHEALTH client calls it.
+[[requests]]
+group = "pixm-query"
+method = "GET"
+path = "/fhir/Patient/$ihe-pix?sourceIdentifier=urn%3Aoid%3A2.999.1.2%7CL-200001&targetSystem=urn%3Aoid%3A2.999.1.1"
+status = 200
+headers = { authorization = "Bearer {consumer_token}" }
+
+[[requests]]
+group = "pixm-query-post"
+method = "POST"
+path = "/fhir/Patient/$ihe-pix"
+status = 200
+body = '{"resourceType":"Parameters","meta":{"profile":["https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Parameters.In"]},"parameter":[{"name":"sourceIdentifier","valueString":"urn:oid:2.999.1.2|L-200001"},{"name":"targetSystem","valueString":"urn:oid:2.999.1.1"},{"name":"targetSystem","valueString":"http://fhir.nl/fhir/NamingSystem/bsn"}]}'
+headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }
+
+# PIXm ITI-104, the patient feed, as a conditional update of a known patient.
+[[requests]]
+group = "pixm-feed"
+method = "PUT"
+path = "/fhir/Patient?identifier=urn%3Aoid%3A2.999.1.1%7CH-100001"
+status = 200
+body = '{"resourceType":"Patient","meta":{"profile":["https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Patient"]},"identifier":[{"system":"urn:oid:2.999.1.1","value":"H-100001"},{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"999990007"}],"active":true,"name":[{"use":"official","family":"Proefsma","given":["Ada"]}],"gender":"female","birthDate":"1961-04-12","address":[{"use":"home","line":["Voorbeeldstraat 1"],"city":"Teststad","postalCode":"0000 AA","country":"NL"}]}'
+headers = { authorization = "Bearer {source_token}", content-type = "application/fhir+json" }
+
+# PDQm ITI-78, a demographics search.
+[[requests]]
+group = "pdqm-search"
+method = "GET"
+path = "/fhir/Patient?family=Proefsma&birthdate=1961-04-12"
+status = 200
+headers = { authorization = "Bearer {consumer_token}" }
+
+# PDQm ITI-119, the match.
+[[requests]]
+group = "pdqm-match"
+method = "POST"
+path = "/fhir/Patient/$match"
+status = 200
+body = '{"resourceType":"Parameters","meta":{"profile":["https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchParametersIn"]},"parameter":[{"name":"resource","resource":{"resourceType":"Patient","meta":{"profile":["https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchInputPatient"]},"name":[{"family":"Proefsma","given":["Ada"]}],"gender":"female","birthDate":"1961-04-12"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
+headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }
+
+# ITI-8, the Patient Identity Feed over MLLP (#509): an ADT^A01 of one
+# clinic patient, so the first adds it and every later one revises it. The
+# tool sends each with a fresh MSH-10, since the server answers a repeated
+# one from its receipt; the gate names each server's listener.
+[[messages]]
+group = "iti-8"
+file = "perf/messages/iti-8-a01.hl7"

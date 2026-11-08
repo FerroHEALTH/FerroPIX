@@ -41,6 +41,7 @@
 
 - [Contributing](contribute/contributing.md)
 - [Keeping this book current](contribute/keeping-the-book-current.md)
+- [The performance gate](contribute/performance-gate.md)
 
 ---
 

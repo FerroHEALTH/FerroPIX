@@ -1,0 +1,91 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# The server the performance gate measures (scripts/perf/gate.sh): the
+# production profile on loopback, every face and background worker on as a
+# deployment runs them (the PIXm Manager, the PDQm Supplier, the PMIR
+# Registry with its ITI-93 feed, the MLLP listener, the operator API and the
+# outbox sender), over the PostgreSQL and the stub OpenID Provider the gate
+# starts from the testkit's pins. The gate runs the base and the head of a
+# change side by side: it hands each server its two secret files in
+# FERROPIX__DB__URL_FILE and FERROPIX__DB__DATA_KEY_FILE, its audit spool in
+# FERROPIX__AUDIT__SPOOL_DIR, and its two ports in FERROPIX__SERVER__LISTEN
+# and FERROPIX__HL7V2__LISTEN. No specification governs this: our own
+# design.
+
+profile = "production"
+public_base_url = "http://localhost:8080"
+
+[server]
+listen = "127.0.0.1:8080"
+
+# The development provider signs any client credentials request with the
+# client as `sub` and `client_id` (compose.yaml, the issuer service), so
+# every token it signs is a machine's.
+[[auth.issuer]]
+issuer = "http://localhost:8180/ferropix"
+kind = "machines"
+profile = "rfc9068"
+audience = ["http://localhost:8080/fhir"]
+token_types = ["JWT"]
+required_claims = ["iss", "exp", "aud", "sub"]
+client_claims = ["client_id", "azp"]
+
+[[trust.issuer]]
+issuer = "http://localhost:8180/ferropix"
+clients = ["perf-source"]
+
+# Identifier domains under the OID arc 2.999, reserved for examples (ITU-T
+# X.660), and the BSN, as the testkit's synthetic set names them.
+[[domain]]
+system = "urn:oid:2.999.1.1"
+name = "Perf hospital"
+kind = "local"
+source_client_id = "perf-source"
+
+[[domain]]
+system = "urn:oid:2.999.1.2"
+name = "Perf laboratory"
+kind = "local"
+source_client_id = "perf-source"
+
+# The domain the HL7 v2 feed (ITI-8) of the load phase feeds, through the
+# sender below.
+[[domain]]
+system = "urn:oid:2.999.1.3"
+name = "Perf clinic"
+kind = "local"
+source_client_id = "perf-source"
+
+[[domain]]
+system = "http://fhir.nl/fhir/NamingSystem/bsn"
+name = "BSN"
+kind = "authoritative"
+source_client_id = "perf-source"
+
+[pmir]
+enabled = true
+
+[hl7v2]
+enabled = true
+listen = "127.0.0.1:2575"
+
+[[hl7v2.senders]]
+application = "PERF"
+facility = "CLINIC"
+domain = "urn:oid:2.999.1.3"
+
+[hl7v2.namespaces]
+"urn:oid:2.999.1.3" = "CLINIC"
+
+[operator]
+enabled = true
+
+# No audit repository runs beside the gate, so every record stays in the
+# spool; it is sized for the records of the runs one job makes.
+[audit]
+spool_max_bytes = 1073741824
+spool_max_events = 1000000
+
+[usage_report]
+enabled = false

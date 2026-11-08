@@ -4,9 +4,13 @@
 # The release lane, dormant until a `v*` tag is pushed. Every ordering in it
 # is a `needs` edge:
 #
-#   plan ── github-release (draft) ─┬─ build-binaries ── build-image ─┬─ vulnerability-record ─┬─ finalize-release ── crates ── milestone
-#                                   ├─ build-console ──────────────────┤                        └─ scan-and-tag ── chart ─────────┘
-#                                   └─ crate (reusable) ───────────────┘
+#   plan ── perf ── github-release (draft) ─┬─ build-binaries ── build-image ─┬─ vulnerability-record ─┬─ finalize-release ── crates ── milestone
+#                                           ├─ build-console ──────────────────┤                        └─ scan-and-tag ── chart ─────────┘
+#                                           └─ crate (reusable) ───────────────┘
+#
+# perf runs the performance gate on the tagged commit (#506, perf.yml), judged
+# against the previous release built beside it, with no build cache, so a
+# release the gate fails is never drafted.
 #
 # plan runs every release fact of scripts/release/plan.sh at the tagged
 # commit: it refuses a tag whose milestone (titled exactly as the tag) is
@@ -181,10 +185,20 @@ jobs:
           name: release-notes
           path: release-notes.md
 
+  # ---- perf: the performance gate on the release commit ---------------------
+  perf:
+    name: perf
+    needs: plan
+    permissions:
+      contents: read
+    uses: ./.github/workflows/perf.yml
+    with:
+      cache: false
+
   # ---- github-release: create the release as a DRAFT ------------------------
   github-release:
     name: github release (draft)
-    needs: plan
+    needs: [plan, perf]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -531,7 +545,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-rust
         with:
-          cache: "false"
+          cache: false
       - id: auth
         name: Exchange the OIDC identity for a temporary crates.io token
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6

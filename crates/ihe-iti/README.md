@@ -46,9 +46,11 @@ authenticate is not sent.
 
 With `smart`, `ihe_iti::authorizer::smart::TokenAuthorizer` is that
 authorizer over a `ferrohealth_smart::client::cache::TokenSource`: each
-request carries the source's current token as a bearer token, marked
-sensitive, and a `401` drops the refused token, so the one resend carries a
-new one. A token the source cannot obtain is an `AuthorizerError` whose
+request carries the source's current token, marked sensitive: as a bearer
+token, or for a grant bound to a `DPoP` key as a `DPoP` token with a proof of
+the request (RFC 9449 §7.1). A `401` that demands a `DPoP` nonce keeps the
+token, so the one resend carries a proof with the nonce (§9); any other
+`401` drops the refused token, so the one resend carries a new one. A token the source cannot obtain is an `AuthorizerError` whose
 source is the `TokenError`, and nothing is sent.
 
 ## PIXm (`pixm`)

@@ -10,6 +10,11 @@
 //! identifier value) and zero or more `targetSystem` domains, answered with the
 //! identifiers the other domains hold for the same patient.
 //!
+//! [`PixmClient::capabilities`] reads the PIX Manager's `CapabilityStatement`
+//! (`GET [base]/metadata`), which a consumer asks at boot to learn that the
+//! configured base is a FHIR server that answers, through the same transport
+//! and authorizer as ITI-83.
+//!
 //! [`PixmClient::cross_reference`] makes the HTTP request and reads the answer
 //! into an [`identifier::CrossReference`] or an [`error::PixmError`]. The
 //! request is the `GET` ITI-83 prescribes, or, for a client
@@ -70,6 +75,7 @@
 
 #[cfg(feature = "balp")]
 pub mod audit;
+pub mod capabilities;
 pub mod error;
 pub mod identifier;
 mod request;
@@ -87,7 +93,9 @@ use url::Url;
 
 use crate::authorizer::{self, Authorizable, Authorizer};
 use crate::exchange::{self, Unanswered};
+use capabilities::CapabilitiesError;
 use error::{InvalidInput, PixmError};
+use fhir_types::r4::capability_statement::CapabilityStatement;
 use identifier::{CrossReference, SourceIdentifier, TargetSystem};
 use ihe_atna::redact::RedactedUrl;
 use ihe_atna::user::OnBehalfOf;
@@ -128,6 +136,7 @@ pub enum Invocation {
 #[derive(Clone)]
 pub struct PixmClient {
     endpoint: Url,
+    metadata: Url,
     invocation: Invocation,
     http: reqwest::Client,
     authorizer: Option<Arc<dyn Authorizer>>,
@@ -152,8 +161,11 @@ impl PixmClient {
     /// [`InvalidInput::Base`] when `base` is not an `http` or `https` URL
     /// without a query or a fragment.
     pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
+        let metadata = ihe_atna::fhir_base::under_base(base.clone(), capabilities::INTERACTION)
+            .ok_or(InvalidInput::Base)?;
         Ok(Self {
             endpoint: request::endpoint(base)?,
+            metadata,
             invocation: Invocation::default(),
             http,
             authorizer: None,
@@ -189,6 +201,39 @@ impl PixmClient {
     #[must_use]
     pub fn endpoint(&self) -> &Url {
         &self.endpoint
+    }
+
+    /// Reads the PIX Manager's `CapabilityStatement` with `GET [base]/metadata`
+    /// (FHIR R4 http.html §capabilities, <http://hl7.org/fhir/R4/http.html#capabilities>),
+    /// through this client's transport and authorizer, within `timeout`.
+    ///
+    /// The request names no patient, so it carries no audit record of its own.
+    ///
+    /// # Errors
+    /// [`CapabilitiesError::Refused`] with the status for an answer other than
+    /// `200`; [`CapabilitiesError::NotAFhirServer`] for a `200` whose body is no
+    /// FHIR R4 `CapabilityStatement`; [`CapabilitiesError::Timeout`],
+    /// [`CapabilitiesError::Transport`] or
+    /// [`CapabilitiesError::Unauthenticated`] when no answer was had.
+    pub async fn capabilities(
+        &self,
+        timeout: Duration,
+    ) -> Result<CapabilityStatement, CapabilitiesError> {
+        let request = self
+            .http
+            .get(self.metadata.clone())
+            .header(ACCEPT, FHIR_JSON)
+            .build()
+            .map_err(CapabilitiesError::failed)?;
+        let response = authorizer::send::<CapabilitiesError>(
+            &self.http,
+            self.authorizer.as_deref(),
+            request,
+            timeout,
+        )
+        .await?;
+        let answer = exchange::read(response, capabilities::LIMIT, capabilities::too_large).await?;
+        capabilities::read(answer.status, answer.media.as_deref(), &answer.body)
     }
 
     /// Asks the PIX Manager for the identifiers the `targets` domains hold for

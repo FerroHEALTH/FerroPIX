@@ -7,6 +7,7 @@
 
 mod answers;
 mod authorized;
+mod capabilities;
 mod contract;
 mod hygiene;
 #[cfg(feature = "pixm-server")]

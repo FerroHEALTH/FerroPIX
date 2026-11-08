@@ -25,7 +25,7 @@ use super::budget::Budget;
 use super::client::{CareResource, CareService, Found, McsdClient, Updates, Version};
 use super::directory::Directory;
 use super::error::{DirectoryError, McsdError};
-use crate::rest::escape;
+use fhir_search::escape::escape;
 
 /// Which resources of the directory the replica holds.
 ///

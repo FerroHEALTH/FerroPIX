@@ -20,7 +20,9 @@
 
 use std::fmt;
 
-use ihe_iti::pdqm::query::{DatePrefix, Gender, StringMatch};
+use fhir_search::date::SearchDate;
+use fhir_search::prefix::Prefix;
+use ihe_iti::pdqm::query::{Gender, StringMatch};
 use ihe_iti::pdqm::server::search::{Criterion, PatientSearch, StringParameter, Token};
 use jiff::ToSpan as _;
 use jiff::civil::Date;
@@ -197,7 +199,7 @@ fn push_criterion(
             for value in values {
                 if let Some((low, high)) = range(value.date().expose_secret()) {
                     query.push(" OR ");
-                    push_date(query, value.prefix(), low, high)?;
+                    push_date(query, value.prefix(), low, high);
                 }
             }
         }
@@ -343,12 +345,7 @@ fn push_telecom(query: &mut QueryBuilder<Postgres>, tokens: &[Token]) {
 /// Writes the comparison of the stored birth date with the days
 /// `[low, high)` a search value covers, as `prefix` asks (FHIR R4 search,
 /// prefixes).
-fn push_date(
-    query: &mut QueryBuilder<Postgres>,
-    prefix: DatePrefix,
-    low: Date,
-    high: Date,
-) -> Result<(), PdqError> {
+fn push_date(query: &mut QueryBuilder<Postgres>, prefix: Prefix, low: Date, high: Date) {
     let stored = "pix.birth_range(s.demographics->>'birthDate')";
     let mut bind = |query: &mut QueryBuilder<Postgres>, date: Date| {
         query.push_bind(date.to_string());
@@ -363,38 +360,38 @@ fn push_date(
         query.push(")");
     };
     match prefix {
-        DatePrefix::Ne => {
+        Prefix::Ne => {
             query.push("NOT (");
             within(query, &mut bind);
             query.push(")");
         }
-        DatePrefix::Gt | DatePrefix::Ge => {
+        Prefix::Gt | Prefix::Ge => {
             query.push(format!("(upper({stored}) > "));
             bind(query, high);
-            if prefix == DatePrefix::Ge {
+            if prefix == Prefix::Ge {
                 query.push(" OR ");
                 within(query, &mut bind);
             }
             query.push(")");
         }
-        DatePrefix::Lt | DatePrefix::Le => {
+        Prefix::Lt | Prefix::Le => {
             query.push(format!("(lower({stored}) < "));
             bind(query, low);
-            if prefix == DatePrefix::Le {
+            if prefix == Prefix::Le {
                 query.push(" OR ");
                 within(query, &mut bind);
             }
             query.push(")");
         }
-        DatePrefix::Sa => {
+        Prefix::Sa => {
             query.push(format!("lower({stored}) >= "));
             bind(query, high);
         }
-        DatePrefix::Eb => {
+        Prefix::Eb => {
             query.push(format!("upper({stored}) <= "));
             bind(query, low);
         }
-        DatePrefix::Ap => {
+        Prefix::Ap => {
             let (low, high) = approximately(low, high);
             query.push(format!("{stored} && daterange("));
             bind(query, low);
@@ -402,33 +399,19 @@ fn push_date(
             bind(query, high);
             query.push(")");
         }
-        DatePrefix::Eq => within(query, &mut bind),
-        _ => return Err(PdqError::Unsupported),
+        Prefix::Eq => within(query, &mut bind),
     }
-    Ok(())
 }
 
 /// Returns the days `[low, high)` the FHIR `date` `text` covers at its
-/// precision: a year, a month or a day.
+/// precision: a year, a month or a day, read by the FHIR search grammar
+/// (FHIR R4 search.html §3.1.1.4.7). `None` when the range runs past the
+/// year 9999, which no birth date reaches.
 fn range(text: &str) -> Option<(Date, Date)> {
-    let mut parts = text.split('-');
-    let year: i16 = parts.next()?.parse().ok().filter(|year| *year >= 1)?;
-    let month: Option<i8> = parts.next().map(str::parse).transpose().ok()?;
-    let day: Option<i8> = parts.next().map(str::parse).transpose().ok()?;
-    match (month, day) {
-        (None, _) => {
-            let low = Date::new(year, 1, 1).ok()?;
-            Some((low, low.checked_add(1.year()).ok()?))
-        }
-        (Some(month), None) => {
-            let low = Date::new(year, month, 1).ok()?;
-            Some((low, low.checked_add(1.month()).ok()?))
-        }
-        (Some(month), Some(day)) => {
-            let low = Date::new(year, month, day).ok()?;
-            Some((low, low.checked_add(1.day()).ok()?))
-        }
-    }
+    // NOTE: no specification governs this: our own design; the reader held the
+    // value to a FHIR date, so a value that does not read here is no birth date.
+    let range = SearchDate::parse(text).ok()?.range();
+    Some((range.low().first_day(), range.high()?.first_day()))
 }
 
 /// Returns `[low, high)` widened on each side by a tenth of the days

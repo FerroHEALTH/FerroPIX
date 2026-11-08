@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.43"
+version = "0.0.44"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -100,7 +100,7 @@ jsonwebtoken = { workspace = true, optional = true }
 # held to, and the authorizer and send the NVI client authenticates through;
 # the international crate sits below the national one, and a caret
 # requirement, as a shared crate takes on another family shared crate.
-ihe-iti = { version = "0.0.76", path = "../ihe-iti", default-features = false, optional = true }
+ihe-iti = { version = "0.0.77", path = "../ihe-iti", default-features = false, optional = true }
 # The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.

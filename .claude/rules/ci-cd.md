@@ -134,6 +134,23 @@ exists.
 - **Always `--locked`**, and `Cargo.lock` is committed.
 - **The crates publish through Trusted Publishing** (OIDC, no long-lived
   token), with a dry run on every pull request.
+- **A tool a gating lane downloads comes through
+  `.github/actions/cached-download`** (#515). The action restores the file
+  from the Actions cache, keyed by the tool's name, pinned version and
+  sha256, and fetches it from its URL only on a miss, with five retries and
+  exponential backoff. `fetch.sh` checks the file against its pinned sha256
+  whichever source it came from and runs no `curl` on a cache hit, so a
+  warm run makes no request to the release host; its self-test shows both.
+  On 2026-11-08 GitHub answered 504 for every release asset for hours and
+  turned `main` red with no code change. Today it carries yq (`vex`), and
+  helm and kubeconform (`helm-chart`).
+- **Known exposures to the release host.** The publishing lanes
+  (`build-chart.yml`'s helm and kubeconform, `install-trivy.sh` in
+  `release.yml`, `scan-and-tag.yml` and `image-scan.yml`) restore no cache
+  by the rule above, so they retry and still fail while the host is down;
+  a release waits for it. The CodeQL CLI that `github/codeql-action`
+  downloads is fetched inside that action, which this repository does not
+  control.
 
 ## Never
 

@@ -1335,7 +1335,7 @@ dependencies = [
  "base64 0.23.1",
  "cookie",
  "ferrohealth-secret",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.9.2",
  "ferrohealth-ui",
  "http",
  "jiff",
@@ -1370,6 +1370,30 @@ dependencies = [
  "tokio",
  "toml",
  "tower",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "ferrohealth-smart"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1a6712399c0e488b58f1c54d139bd87bcd9cb19f051c82964368ba572e5260f"
+dependencies = [
+ "argon2",
+ "aws-lc-rs",
+ "base64 0.23.1",
+ "ferrohealth-secret",
+ "http",
+ "jiff",
+ "jsonwebtoken",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "toml",
  "tracing",
  "url",
 ]
@@ -1458,7 +1482,7 @@ dependencies = [
  "ferrohealth-secret",
  "ferrohealth-server",
  "ferrohealth-session",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.9.2",
  "ferrohealth-telemetry",
  "ferrohealth-ui",
  "ferropix-operator-api",
@@ -1505,7 +1529,7 @@ dependencies = [
  "ferrohealth-health",
  "ferrohealth-secret",
  "ferrohealth-server",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.9.2",
  "ferrohealth-telemetry",
  "ferrohealth-usage-report",
  "ferropix-console",
@@ -2323,11 +2347,11 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.77"
+version = "0.0.78"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.10.0",
  "fhir-types",
  "http",
  "ihe-atna",
@@ -2768,11 +2792,11 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.10.0",
  "fhir-types",
  "http",
  "ihe-iti",
@@ -4432,7 +4456,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

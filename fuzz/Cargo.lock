@@ -191,6 +191,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fhir-search"
+version = "0.1.129"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26e0b37d7eaa56d365aee1c65b7f1fd3f99da67a603cc9ac97d42e98ef08643a"
+dependencies = [
+ "thiserror",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "fhir-types"
 version = "0.1.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -496,8 +506,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.78"
+version = "0.0.79"
 dependencies = [
+ "fhir-search",
  "fhir-types",
  "http",
  "ihe-atna",
@@ -1302,6 +1313,15 @@ name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "untrusted"

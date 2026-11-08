@@ -99,15 +99,25 @@ pub struct Gateway {
     wake: Wake,
 }
 
+/// Why the gateway's delivery client could not be built.
+#[derive(Debug, thiserror::Error)]
+pub enum GatewayError {
+    /// The HTTP client could not be built.
+    #[error("the delivery's HTTP client could not be built")]
+    Client(#[from] reqwest::Error),
+    /// The client refused the outbound TLS material of `[xcpd.tls]`.
+    #[error("the delivery's HTTP client refused the outbound TLS material")]
+    Tls(#[from] ferrohealth_server::tls_client::TlsClientError),
+}
+
 impl Gateway {
     /// Returns the gateway over `store`, scoring with `matching`, answering
     /// as `settings` names it at `public_base_url`, recording to `audit`.
     ///
     /// # Errors
-    /// Returns the client's error when the HTTP client that posts an
-    /// asynchronous answer cannot be built, the configured client identity is
-    /// no PEM certificate chain and private key it reads, or the trusted
-    /// certificates are no PEM bundle it reads.
+    /// Returns [`GatewayError::Client`] when the HTTP client that posts an
+    /// asynchronous answer cannot be built, and [`GatewayError::Tls`] when it
+    /// refuses the client identity or a trust root of `[xcpd.tls]`.
     pub fn new(
         store: &Store,
         matching: &Matching,
@@ -115,7 +125,7 @@ impl Gateway {
         public_base_url: &url::Url,
         audit: &Audit,
         wake: Wake,
-    ) -> Result<Self, reqwest::Error> {
+    ) -> Result<Self, GatewayError> {
         let master = public_base_url.as_str().trim_end_matches('/').to_owned();
         let endpoint = url::Url::parse(&format!("{master}{XCPD}")).map_or_else(
             |_| NetworkAddress::uri(public_base_url),
@@ -124,14 +134,7 @@ impl Gateway {
         let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(settings.delivery.timeout);
-        if let Some(pem) = &settings.delivery.trust {
-            for certificate in reqwest::Certificate::from_pem_bundle(pem.as_bytes())? {
-                builder = builder.add_root_certificate(certificate);
-            }
-        }
-        if let Some(pem) = &settings.delivery.identity {
-            builder = builder.identity(reqwest::Identity::from_pem(pem.expose().as_bytes())?);
-        }
+        builder = settings.delivery.tls.apply(builder)?;
         let client = builder.build()?;
         Ok(Self {
             store: store.clone(),

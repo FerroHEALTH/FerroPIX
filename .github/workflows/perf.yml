@@ -40,7 +40,7 @@ on:
 permissions: {}
 
 env:
-  FERROHEALTH_PERF_VERSION: 0.5.0
+  FERROHEALTH_PERF_VERSION: 0.5.2
   FERROPIX__USAGE_REPORT__ENABLED: "false"
   # The CPU models whose runners stall every route for 100 to 300 ms for a
   # whole job (FerroPIX #511), one per line. A breach is retried only on one

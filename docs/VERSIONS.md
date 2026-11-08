@@ -151,12 +151,16 @@ the workspace version.
 `.github/workflows/perf.yml` installs `ferrohealth-perf`, the family's
 performance gate (FerroHEALTH/FerroSYS#249), from crates.io at this exact
 version, and `scripts/perf/gate.sh` starts PostgreSQL and the stub OpenID
-Provider from the two test image rows above. No specification governs the
-choice: our own design.
+Provider from the two test image rows above. 0.5.1 makes the count of A/B
+pairs even, four by default (FerroHEALTH/FerroSYS#283), and 0.5.2 runs the
+two phases of a pair at once, each server at the plan's rate, so a runner
+whose speed moves from one phase to the next no longer favours either side
+(FerroHEALTH/FerroSYS#287). No specification governs the choice: our own
+design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| ferrohealth-perf | `0.5.0` | `.github/workflows/perf.yml` |
+| ferrohealth-perf | `0.5.2` | `.github/workflows/perf.yml` |
 
 ## The duplication guard
 

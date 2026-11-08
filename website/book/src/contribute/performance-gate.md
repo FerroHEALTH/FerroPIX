@@ -57,10 +57,12 @@ over `perf/plan.toml`:
    These limits are absolute and compared with nothing: the outbox sender
    looks at the outbox at most every 30 seconds when it has nothing to
    send.
-2. **Load, in pairs.** Three pairs of load phases, each phase 50 arrivals a
-   second for 60 seconds after a 10-second warm-up, open loop, against one
-   server: the base first in the first pair, the head first in the second,
-   the base first in the third. The arrivals go over PIXm ITI-83 by `GET`
+2. **Load, in pairs.** Four pairs, each a load phase against both servers
+   at once: 50 arrivals a second to each for 60 seconds after a 10-second
+   warm-up, open loop, one server's arrivals half an interval after the
+   other's, the server that leads alternating by pair. Run side by side,
+   both arms see the same runner, whose speed can move by a third from one
+   minute to the next. The arrivals go over PIXm ITI-83 by `GET`
    and by `POST`, the ITI-104 feed, PDQm ITI-78, the ITI-119 match, and
    the HL7 v2 feed, ITI-8, as an `ADT^A01` over MLLP
    ([#509](https://github.com/FerroHEALTH/FerroPIX/issues/509)). Every
@@ -76,7 +78,7 @@ gate still catches the case it was built for.
 
 Each load metric (throughput, latency p50, p95 and p99 per group, peak
 memory, CPU time per request and transactions per request) is the median of
-an arm's three phases. Its noise floor is the worse of the two arms' spread,
+an arm's four phases. Its noise floor is the worse of the two arms' spread,
 how far an arm's worst phase strayed from its median. A metric breaches when
 the head's median is worse than the base's by more than the larger of its
 tolerance and that floor; the tolerances are the plan's `[tolerance]`

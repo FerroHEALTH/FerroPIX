@@ -13,6 +13,36 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-11-08
+
+A security release that breaks a configuration with a Basic machine user.
+FerroPIX moves to `ferrohealth-smart` 0.9.2, which makes a Basic credential
+a person's: a Basic user holding a `system/` scope is refused when the
+configuration loads, so give each Basic user only `user/` scopes and move
+each machine on Basic to a client credentials client before you upgrade.
+`ihe-iti` 0.0.77 and `nl-generic-functions` 0.0.44 move to `ihe-atna` 0.5.1,
+and the console moves to FerroUI 0.6.9.
+
+### Changed
+
+- `ihe-iti` 0.0.77 requires `ihe-atna` 0.5 (caret `0.5.1`), and
+  `nl-generic-functions` 0.0.44 requires `ihe-iti` 0.0.77. `ihe-iti`'s
+  public API names `ihe-atna` types (the PIXm consumer's `OnBehalfOf`, the
+  `xcpd` audit message), so a product on `ihe-atna` 0.5 needs this release.
+  `ihe-atna`'s API did not change between 0.4.0 and 0.5.1, so no `ihe-iti`
+  signature moves. The server pins `ihe-atna` 0.5.1. Upgrade: move
+  `ihe-atna` to 0.5.1 beside `ihe-iti` 0.0.77 (#512).
+
+### Fixed
+
+- The console moves to `ferrohealth-ui` 0.6.9, whose session watch no longer throws on a form with a control named `target` or `method` (#508).
+
+### Security
+
+Shipped with functional changes because: the fix is the dependency move itself, which carries the family's other patch releases with it.
+
+- A Basic user holding a `system/` scope is refused when the configuration loads, naming the user and the scope: `ferrohealth-smart` 0.9.1 makes a Basic credential a person's, and FerroPIX on 0.9.0 gave such a user system-wide reach (GHSA-jhg2-jwjp-hq74, CWE-269, CWE-863). Upgrade step: give each Basic user only `user/` scopes, and move each machine on Basic to a client credentials client of a `machines` issuer (#508).
+
 ## [0.0.20] - 2026-11-06
 
 A fix release with one change to who may feed a domain. A Patient Identity

@@ -156,7 +156,7 @@ choice: our own design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| ferrohealth-perf | `0.4.2` | `.github/workflows/perf.yml` |
+| ferrohealth-perf | `0.5.0` | `.github/workflows/perf.yml` |
 
 ## The duplication guard
 

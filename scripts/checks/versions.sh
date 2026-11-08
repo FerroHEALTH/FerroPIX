@@ -22,7 +22,7 @@
 #      the lockfiles, JSON (which has no comment syntax), the raster images
 #      (PNG and ICO, which have none either), test fixtures and the fuzz
 #      seeds (bytes a target reads, written from the vendored examples),
-#      the performance baseline (written whole by `ferrohealth-perf --update`)
+#      the HL7 v2 messages of the performance gate (bytes the tool sends)
 #      and the changelog fragments (text the release cut moves into
 #      CHANGELOG.md, which carries the header) carry no header.
 #
@@ -309,7 +309,7 @@ fi
 # 5. Licence.
 while IFS= read -r file; do
   case "$file" in
-    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/* | changelog.d/[0-9]*.md | perf/baseline.toml) continue ;;
+    LICENSE | */LICENSE | NOTICE | Cargo.lock | */Cargo.lock | *.json | *.png | *.ico | */img/console/captured-version.txt | docs/specs/* | */testdata/* | */fixtures/* | fuzz/seeds/* | changelog.d/[0-9]*.md | perf/messages/*) continue ;;
     *) ;;
   esac
   [[ -f "$file" ]] || continue

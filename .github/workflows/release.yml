@@ -8,8 +8,9 @@
 #                                           ├─ build-console ──────────────────┤                        └─ scan-and-tag ── chart ─────────┘
 #                                           └─ crate (reusable) ───────────────┘
 #
-# perf runs the performance gate on the tagged commit (#506, perf.yml), with
-# no build cache, so a release the gate fails is never drafted.
+# perf runs the performance gate on the tagged commit (#506, perf.yml), judged
+# against the previous release built beside it, with no build cache, so a
+# release the gate fails is never drafted.
 #
 # plan runs every release fact of scripts/release/plan.sh at the tagged
 # commit: it refuses a tag whose milestone (titled exactly as the tag) is

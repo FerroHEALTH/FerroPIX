@@ -119,7 +119,7 @@ jobs:
           for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
-      - name: The performance gate reads its pins, renders its plan and holds its two idle tables equal
+      - name: The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
         run: bash scripts/perf/gate.sh --self-test
       - name: The release milestone script refuses open items and closes only after every leg
         run: bash scripts/release/milestone.sh --self-test
@@ -752,9 +752,11 @@ jobs:
           tool: cargo-nextest
       - run: cargo nextest run -p ferropix-testkit -p ferropix-server --locked -E 'test(/e2e::/)'
 
-  # The performance gate (#506): the idle phase and the load phase of
-  # ferrohealth-perf against the release build, in perf.yml, which the
-  # release lane calls on the release commit too.
+  # The performance gate (#506): ferrohealth-perf's A/B mode, the release
+  # build judged against the build of its base on the same runner, in
+  # perf.yml, which the release lane calls on the release commit too. The
+  # base is the pull request's base, the merge group's, or the commit before
+  # a push; a dispatch takes the previous release.
   perf:
     name: perf
     needs: detect
@@ -762,6 +764,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/perf.yml
+    with:
+      base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
 
   # The quickstart, run as an operator runs it: the server built for the
   # static musl target, the image built from that binary through the staged

@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: BUSL-1.1
 
 # The plan of the performance gate (ferrohealth-perf, FerroHEALTH/FerroSYS
-# #249), run by scripts/perf/gate.sh against the server of perf/ferropix.toml.
-# The idle phase runs every background worker with nothing to do, the outbox
-# sender among them (the FerroPIX #490 case); the load phase sends the hot
-# paths of the FHIR face. The gate seeds the two patients of the testkit's
-# ITI-104 fixtures first, so each feed below is an update answered 200. The
-# gate replaces {consumer_token} and {source_token} with tokens of the stub
-# OpenID Provider before the run. No specification governs this: our own
-# design.
+# #249), run by scripts/perf/gate.sh in the tool's A/B mode against the base
+# and the head of a change, each with perf/ferropix.toml. The idle phase runs
+# the head's background workers with nothing to do, the outbox sender among
+# them (the FerroPIX #490 case); the load phase sends the hot paths of the
+# FHIR face and the HL7 v2 feed over MLLP to each server in turn. The gate
+# seeds the two patients of the testkit's ITI-104 fixtures first, so each
+# feed below is an update answered 200. The gate replaces {consumer_token}
+# and {source_token} with tokens of the stub OpenID Provider before the run.
+# No specification governs this: our own design.
 
 [idle]
 duration_secs = 60
@@ -22,6 +23,15 @@ max_transactions_per_second = 1.0
 rate = 50.0
 warmup_secs = 10
 duration_secs = 60
+
+# How far the head may stray from the base, beyond the noise the two arms
+# show: the family's tolerances (FerroHEALTH/FerroSYS#249).
+[tolerance]
+latency = 0.25
+throughput = 0.2
+memory = 0.2
+cpu = 0.25
+transactions = 0.1
 
 # PIXm ITI-83 by GET and by POST, as every FerroHEALTH client calls it.
 [[requests]]
@@ -64,3 +74,11 @@ path = "/fhir/Patient/$match"
 status = 200
 body = '{"resourceType":"Parameters","meta":{"profile":["https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchParametersIn"]},"parameter":[{"name":"resource","resource":{"resourceType":"Patient","meta":{"profile":["https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchInputPatient"]},"name":[{"family":"Proefsma","given":["Ada"]}],"gender":"female","birthDate":"1961-04-12"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
 headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }
+
+# ITI-8, the Patient Identity Feed over MLLP (#509): an ADT^A01 of one
+# clinic patient, so the first adds it and every later one revises it. The
+# tool sends each with a fresh MSH-10, since the server answers a repeated
+# one from its receipt; the gate names each server's listener.
+[[messages]]
+group = "iti-8"
+file = "perf/messages/iti-8-a01.hl7"

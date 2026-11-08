@@ -82,7 +82,8 @@ struct Parameter {
 /// # Examples
 ///
 /// ```
-/// use ihe_iti::pdqm::query::{DatePrefix, Gender, PatientQuery, StringMatch};
+/// use fhir_search::prefix::Prefix;
+/// use ihe_iti::pdqm::query::{Gender, PatientQuery, StringMatch};
 /// use secrecy::SecretString;
 ///
 /// let query = PatientQuery::default()

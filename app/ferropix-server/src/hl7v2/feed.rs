@@ -16,7 +16,7 @@
 //! Manager audit record (§3.8.5.1.2, §3.8.5.2.2) and a receipt, so a
 //! message sent again is acknowledged again and not applied twice.
 
-use ferrobridge_hl7v2::ack::Code;
+use ferrobridge_hl7v2::ack::{Code, Error, Header};
 use ferrobridge_hl7v2::parse::{Message, Segment};
 use fhir_search::escape::escape;
 use fhir_types::codec::Value;
@@ -30,10 +30,10 @@ use crate::audit::records::{self, Call, Identifier};
 use crate::config::section::hl7v2::Sender;
 use crate::feed::{Action, Applied, Context, FeedError};
 use crate::hl7v2::{Answer, Face, acknowledge, receipt, sender_key};
+use crate::hl7v2::{fault, fault_at, location};
 use crate::store::record::Channel;
 use crate::v2::pid::{self, Cx};
 use crate::v2::stamped::Stamped;
-use crate::v2::write::{Fault, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// What applying a message settled: the code, the faults, and whether the
@@ -42,14 +42,14 @@ struct Settled {
     /// MSA-1.
     code: Code,
     /// The ERR segments.
-    faults: Vec<Fault>,
+    faults: Vec<Error>,
     /// Whether a resend is answered with this code without being applied.
     final_outcome: bool,
 }
 
 impl Settled {
     /// A refusal that is final: the same message is refused again.
-    fn refused(fault: Fault) -> Self {
+    fn refused(fault: Error) -> Self {
         Self {
             code: Code::Error,
             faults: vec![fault],
@@ -62,7 +62,7 @@ impl Settled {
     fn rejected(text: &'static str) -> Self {
         Self {
             code: Code::Reject,
-            faults: vec![Fault::anywhere(ErrorCode::Application, text)],
+            faults: vec![fault(ErrorCode::Application, text)],
             final_outcome: false,
         }
     }
@@ -72,6 +72,7 @@ impl Settled {
 pub(super) async fn receive(
     face: &Face,
     message: &Message,
+    header: &Header,
     sender: &Sender,
     call: &Call,
     merge: bool,
@@ -80,9 +81,9 @@ pub(super) async fn receive(
     let key = sender_key(sender);
     let Some(control_id) = message.control_id() else {
         return acknowledge(
-            message,
+            header,
             Code::Error,
-            &[Fault::at(
+            &[fault_at(
                 location("MSH", 1, 10, None, None),
                 ErrorCode::RequiredFieldMissing,
                 "MSH-10 is required to acknowledge the message",
@@ -104,19 +105,19 @@ pub(super) async fn receive(
                     } else {
                         Code::Error
                     },
-                    vec![Fault::anywhere(
+                    vec![fault(
                         ErrorCode::Application,
                         "the message was answered before and is not applied again",
                     )],
                 ),
             };
-            return acknowledge(message, code, &faults, stamped);
+            return acknowledge(header, code, &faults, stamped);
         }
         Ok(None) => {}
         Err(error) => {
             tracing::error!(error = %ferrohealth_server::run::chain(&error), "the receipts could not be read");
             let settled = Settled::rejected("the store could not be read; send the message again");
-            return acknowledge(message, settled.code, &settled.faults, stamped);
+            return acknowledge(header, settled.code, &settled.faults, stamped);
         }
     }
     let settled = apply(face, message, sender, call, merge).await;
@@ -126,7 +127,7 @@ pub(super) async fn receive(
     {
         tracing::warn!(error = %ferrohealth_server::run::chain(&error), "the receipt of a message could not be written");
     }
-    acknowledge(message, settled.code, &settled.faults, stamped)
+    acknowledge(header, settled.code, &settled.faults, stamped)
 }
 
 /// Reads, applies and audits one ITI-8 message.
@@ -138,14 +139,14 @@ async fn apply(
     merge: bool,
 ) -> Settled {
     let Some(domain) = sender.feeds() else {
-        return Settled::refused(Fault::anywhere(
+        return Settled::refused(fault(
             ErrorCode::Application,
             "the sender feeds no identifier domain",
         ));
     };
     let read = match read(face, message, domain, merge) {
         Ok(read) => read,
-        Err(fault) => return Settled::refused(fault),
+        Err(fault) => return Settled::refused(*fault),
     };
     let place = match face.audit.reserve() {
         Ok(place) => place,
@@ -178,7 +179,7 @@ async fn apply(
     if let Err(error) = recorded {
         tracing::error!(error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-8 message could not be stored");
         return if applied.is_ok() {
-            Settled::refused(Fault::anywhere(
+            Settled::refused(fault(
                 ErrorCode::Application,
                 "the message was applied, and its audit record could not be stored",
             ))
@@ -214,9 +215,9 @@ struct Read {
 
 /// Reads `message` as the ITI-104 message of the same patient, fed into
 /// `domain`.
-fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Read, Fault> {
+fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Read, Box<Error>> {
     let pid = segment(message, "PID").ok_or_else(|| {
-        Fault::at(
+        fault_at(
             location("PID", 1, 3, None, None),
             ErrorCode::RequiredFieldMissing,
             "the message carries no PID segment",
@@ -224,18 +225,18 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
     })?;
     let carried = pid::identifiers(pid.field(3), &face.authorities, domain);
     if carried.is_empty() {
-        return Err(Fault::at(
+        return Err(Box::new(fault_at(
             location("PID", 1, 3, None, None),
             ErrorCode::RequiredFieldMissing,
             "PID-3 carries no identifier",
-        ));
+        )));
     }
     let own = carried
         .iter()
         .find(|cx| cx.system.as_deref() == Some(domain))
         .cloned()
         .ok_or_else(|| {
-            Fault::at(
+            fault_at(
                 location("PID", 1, 3, Some(1), Some(4)),
                 ErrorCode::UnknownKeyIdentifier,
                 "PID-3 carries no identifier in the domain the sender feeds",
@@ -247,7 +248,7 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
         .collect();
     let (identifiers, links, subsumed) = if merge {
         let mrg = segment(message, "MRG").ok_or_else(|| {
-            Fault::at(
+            fault_at(
                 location("MRG", 1, 1, None, None),
                 ErrorCode::RequiredFieldMissing,
                 "an A40 carries the subsumed identifier in MRG-1",
@@ -257,18 +258,18 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
             .into_iter()
             .next()
             .ok_or_else(|| {
-                Fault::at(
+                fault_at(
                     location("MRG", 1, 1, None, None),
                     ErrorCode::RequiredFieldMissing,
                     "MRG-1 carries no identifier",
                 )
             })?;
         if subsumed.system.as_deref() != Some(domain) {
-            return Err(Fault::at(
+            return Err(Box::new(fault_at(
                 location("MRG", 1, 1, Some(1), Some(4)),
                 ErrorCode::UnknownKeyIdentifier,
                 "MRG-1 is not in the domain the sender feeds",
-            ));
+            )));
         }
         let mut identifiers = vec![(domain.to_owned(), subsumed.value.clone())];
         identifiers.extend(known.into_iter().filter(|(system, _)| system != domain));
@@ -278,20 +279,19 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
         (known, Vec::new(), None)
     };
     let patient = pid::patient(pid, &identifiers, links).map_err(|_date| {
-        Fault::at(
+        fault_at(
             location("PID", 1, 7, None, None),
             ErrorCode::DataType,
             "PID-7 is no date",
         )
     })?;
     let condition = subsumed.as_ref().unwrap_or(&own);
-    let body = serde_json::to_vec(&Value::Object(patient)).map_err(|_json| {
-        Fault::anywhere(ErrorCode::Application, "the patient could not be written")
-    })?;
+    let body = serde_json::to_vec(&Value::Object(patient))
+        .map_err(|_json| fault(ErrorCode::Application, "the patient could not be written"))?;
     let query = format!("identifier={}", query_part(domain, &condition.value));
     let feed = Feed::from_update(&query, Format::Json, &body).map_err(|error| {
         tracing::debug!(%error, "an ITI-8 message is no feed the Manager applies");
-        Fault::at(
+        fault_at(
             location("PID", 1, 3, None, None),
             ErrorCode::Application,
             error.to_string(),
@@ -334,32 +334,33 @@ fn records(call: &Call, read: &Read, applied: Result<&Applied, &FeedError>) -> V
 fn refusal(error: &FeedError) -> Settled {
     let identifier = || location("PID", 1, 3, Some(1), Some(1));
     match error {
-        FeedError::UnknownDomain => Settled::refused(Fault::at(
+        FeedError::UnknownDomain => Settled::refused(fault_at(
             location("PID", 1, 3, Some(1), Some(4)),
             ErrorCode::UnknownKeyIdentifier,
             "the domain the sender feeds is not known to the store",
         )),
-        FeedError::Identifier { .. } => Settled::refused(Fault::at(
+        FeedError::Identifier { .. } => Settled::refused(fault_at(
             identifier(),
             ErrorCode::DataType,
             "an identifier is refused by its domain's rule",
         )),
-        FeedError::Subsumed => Settled::refused(Fault::at(
+        FeedError::Subsumed => Settled::refused(fault_at(
             identifier(),
             ErrorCode::Application,
             "the identifier was merged into another and takes no new version",
         )),
-        FeedError::SurvivorNotFound | FeedError::NotFound => Settled::refused(Fault::at(
+        FeedError::SurvivorNotFound | FeedError::NotFound => Settled::refused(fault_at(
             identifier(),
             ErrorCode::UnknownKeyIdentifier,
             "the surviving identifier names no active record of the domain",
         )),
-        FeedError::Demographics(_) | FeedError::Evidence | FeedError::Notice => {
-            Settled::refused(Fault::anywhere(
-                ErrorCode::Application,
-                "the demographics could not be stored",
-            ))
-        }
+        FeedError::Demographics(_)
+        | FeedError::Evidence
+        | FeedError::Notice
+        | FeedError::Notification(_) => Settled::refused(fault(
+            ErrorCode::Application,
+            "the demographics could not be stored",
+        )),
         FeedError::Contention => {
             Settled::rejected("concurrent messages moved the same persons; send the message again")
         }

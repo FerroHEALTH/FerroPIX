@@ -17,12 +17,12 @@
 //! A query answer's `Patient` is written back as a PID by the inverse of the
 //! same maps, with the fields ITI TF-2 §3.21.4.2.2.5 names.
 
-use ferrobridge_hl7v2::parse::{Field, Repetition, Segment};
+use ferrobridge_hl7v2::parse;
+use ferrobridge_hl7v2::write::value::{Component, Field, Repetition, Segment};
 use fhir_types::codec::{Object, Value};
 
 use crate::config::section::hl7v2::authority::Authorities;
 use crate::matching::subject::MOTHERS_MAIDEN_NAME;
-use crate::v2::write::Writer;
 
 /// One identifier of PID-3 or MRG-1: its domain, when its assigning
 /// authority names one the face knows, and its value.
@@ -50,7 +50,11 @@ impl std::fmt::Debug for Cx {
 /// configuration of the Patient Identity Source); a repetition with no CX-1
 /// is left out.
 #[must_use]
-pub fn identifiers(field: Option<&Field>, authorities: &Authorities, default: &str) -> Vec<Cx> {
+pub fn identifiers(
+    field: Option<&parse::Field>,
+    authorities: &Authorities,
+    default: &str,
+) -> Vec<Cx> {
     let Some(field) = field else {
         return Vec::new();
     };
@@ -85,7 +89,7 @@ pub enum PidError {
 /// # Errors
 /// Returns [`PidError::BirthDate`] when PID-7 is valued and no date.
 pub fn patient(
-    pid: &Segment,
+    pid: &parse::Segment,
     identifiers: &[(String, String)],
     links: Vec<Value>,
 ) -> Result<Object, PidError> {
@@ -117,7 +121,7 @@ pub fn patient(
     if let Some(gender) = pid.text(8).and_then(gender) {
         patient.insert(text("gender"), string(gender));
     }
-    if let Some(born) = pid.field(7).and_then(Field::text) {
+    if let Some(born) = pid.field(7).and_then(parse::Field::text) {
         patient.insert(
             text("birthDate"),
             Value::String(birth_date(born).ok_or(PidError::BirthDate)?),
@@ -183,13 +187,13 @@ fn gender(code: &str) -> Option<&'static str> {
 }
 
 /// The family name of an XPN: the surname of its first component.
-fn family(name: &Repetition) -> Option<String> {
+fn family(name: &parse::Repetition) -> Option<String> {
     name.component(1)?.subcomponent(1).map(str::to_owned)
 }
 
 /// The `HumanName` of an XPN (`datatype-xpn-to-humanname`), `None` when no
 /// part is valued.
-fn human_name(name: &Repetition) -> Option<Value> {
+fn human_name(name: &parse::Repetition) -> Option<Value> {
     let part = |position: usize| name.component(position).and_then(|c| c.subcomponent(1));
     let mut human = Object::new();
     if let Some(code) = part(7).and_then(name_use) {
@@ -228,7 +232,7 @@ fn name_use(code: &str) -> Option<&'static str> {
 
 /// The `Address` of an XAD (`datatype-xad-to-address`), `None` when no part
 /// is valued.
-fn address(address: &Repetition) -> Option<Value> {
+fn address(address: &parse::Repetition) -> Option<Value> {
     let part = |position: usize| address.component(position).and_then(|c| c.subcomponent(1));
     let mut fhir = Object::new();
     match part(7) {
@@ -269,7 +273,7 @@ fn address_use(code: &str) -> Option<&'static str> {
 
 /// The `ContactPoint` of an XTN (`datatype-xtn-to-contactpoint`), with `use`
 /// when XTN-2 names none (`segment-pid-to-patient`, PID-13 and PID-14).
-fn contact_point(xtn: &Repetition, default_use: &'static str) -> Option<Value> {
+fn contact_point(xtn: &parse::Repetition, default_use: &'static str) -> Option<Value> {
     let part = |position: usize| xtn.component(position).and_then(|c| c.subcomponent(1));
     let equipment = part(3);
     let email = matches!(equipment, Some("Internet" | "X.400"));
@@ -307,10 +311,10 @@ fn contact_point(xtn: &Repetition, default_use: &'static str) -> Option<Value> {
 }
 
 /// The repetitions of field `position` of `segment`.
-fn reps(segment: &Segment, position: usize) -> impl Iterator<Item = &Repetition> {
+fn reps(segment: &parse::Segment, position: usize) -> impl Iterator<Item = &parse::Repetition> {
     segment
         .field(position)
-        .map(Field::repetitions)
+        .map(parse::Field::repetitions)
         .unwrap_or_default()
         .iter()
 }
@@ -360,69 +364,56 @@ pub enum Shown {
 /// JSON.
 #[must_use]
 pub fn segment(
-    writer: &Writer<'_>,
     authorities: &Authorities,
     set_id: usize,
     identifiers: &[(String, String)],
     patient: Option<&Object>,
     shown: Shown,
-) -> String {
-    let cx: Vec<String> = identifiers
+) -> Segment {
+    let cx: Field = identifiers
         .iter()
         .map(|(system, value)| {
             let [namespace, universal, kind] = authorities.of_system(system);
-            writer.components(&[
-                writer.escape(value),
-                String::new(),
-                String::new(),
-                writer.subcomponents(&[&namespace, &universal, &kind]),
+            Repetition::from_iter([
+                Component::from(value.as_str()),
+                Component::default(),
+                Component::default(),
+                Component::from_iter([namespace, universal, kind]),
             ])
         })
         .collect();
-    let mut fields = vec![String::new(); 14];
-    if let Some(slot) = fields.get_mut(0) {
-        *slot = set_id.to_string();
-    }
-    if let Some(slot) = fields.get_mut(2) {
-        *slot = writer.repetitions(&cx);
-    }
+    let mut fields = vec![Field::default(); 14];
+    put(&mut fields, 1, Field::from(set_id.to_string()));
+    put(&mut fields, 3, cx);
     match (shown, patient) {
         (Shown::Pseudonymous, _) => {
-            if let Some(slot) = fields.get_mut(4) {
-                let pseudo = writer.components(&[
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::from("S"),
-                ]);
-                *slot = writer.repetitions(&[String::new(), pseudo]);
-            }
+            let pseudo = Repetition::from_iter(["", "", "", "", "", "", "S"]);
+            put(
+                &mut fields,
+                5,
+                Field::from_iter([Repetition::default(), pseudo]),
+            );
         }
-        (Shown::Space, _) => {
-            if let Some(slot) = fields.get_mut(4) {
-                *slot = String::from(" ");
-            }
-        }
-        (Shown::Demographics, Some(patient)) => demographics(writer, patient, &mut fields),
+        (Shown::Space, _) => put(&mut fields, 5, Field::from(" ")),
+        (Shown::Demographics, Some(patient)) => demographics(patient, &mut fields),
         (Shown::Demographics, None) => {}
     }
-    writer.segment("PID", &fields)
+    Segment::new("PID", fields)
+}
+
+/// Puts `value` at field `position` of `fields`, PID-1 at index 0.
+fn put(fields: &mut [Field], position: usize, value: Field) {
+    if let Some(slot) = position
+        .checked_sub(1)
+        .and_then(|index| fields.get_mut(index))
+    {
+        *slot = value;
+    }
 }
 
 /// Writes the demographics of `patient` into `fields`, PID-1 at index 0.
-fn demographics(writer: &Writer<'_>, patient: &Object, fields: &mut [String]) {
-    let mut put = |position: usize, value: String| {
-        if let Some(slot) = position
-            .checked_sub(1)
-            .and_then(|index| fields.get_mut(index))
-        {
-            *slot = value;
-        }
-    };
-    let names: Vec<String> = list(patient, "name")
+fn demographics(patient: &Object, fields: &mut [Field]) {
+    let names: Field = list(patient, "name")
         .filter_map(Value::as_object)
         .map(|name| {
             let given: Vec<&str> = strings(name, "given").collect();
@@ -430,35 +421,40 @@ fn demographics(writer: &Writer<'_>, patient: &Object, fields: &mut [String]) {
                 .get(1..)
                 .map(|rest| rest.join(" "))
                 .unwrap_or_default();
-            writer.components(&[
-                writer.escape(member(name, "family").unwrap_or_default()),
-                writer.escape(given.first().copied().unwrap_or_default()),
-                writer.escape(&more),
-                writer.escape(&strings(name, "suffix").collect::<Vec<_>>().join(" ")),
-                writer.escape(&strings(name, "prefix").collect::<Vec<_>>().join(" ")),
+            Repetition::from_iter([
+                String::from(member(name, "family").unwrap_or_default()),
+                String::from(given.first().copied().unwrap_or_default()),
+                more,
+                strings(name, "suffix").collect::<Vec<_>>().join(" "),
+                strings(name, "prefix").collect::<Vec<_>>().join(" "),
                 String::new(),
-                member(name, "use")
-                    .and_then(name_type)
-                    .unwrap_or_default()
-                    .to_owned(),
+                String::from(member(name, "use").and_then(name_type).unwrap_or_default()),
             ])
         })
         .collect();
-    put(5, writer.repetitions(&names));
+    put(fields, 5, names);
     let maiden = list(patient, "extension")
         .filter_map(Value::as_object)
         .filter(|extension| member(extension, "url") == Some(MOTHERS_MAIDEN_NAME))
         .find_map(|extension| member(extension, "valueString"));
     if let Some(maiden) = maiden {
-        put(6, writer.escape(maiden));
+        put(fields, 6, Field::from(maiden));
     }
     if let Some(born) = member(patient, "birthDate") {
-        put(7, born.chars().filter(char::is_ascii_digit).collect());
+        put(
+            fields,
+            7,
+            Field::from(
+                born.chars()
+                    .filter(char::is_ascii_digit)
+                    .collect::<String>(),
+            ),
+        );
     }
     if let Some(code) = member(patient, "gender").and_then(administrative_sex) {
-        put(8, code.to_owned());
+        put(fields, 8, Field::from(code));
     }
-    let addresses: Vec<String> = list(patient, "address")
+    let addresses: Field = list(patient, "address")
         .filter_map(Value::as_object)
         .map(|address| {
             let lines: Vec<&str> = strings(address, "line").collect();
@@ -467,34 +463,32 @@ fn demographics(writer: &Writer<'_>, patient: &Object, fields: &mut [String]) {
             } else {
                 member(address, "use").and_then(address_type)
             };
-            writer.components(&[
-                writer.escape(lines.first().copied().unwrap_or_default()),
-                writer.escape(
-                    &lines
-                        .get(1..)
-                        .map(|rest| rest.join(" "))
-                        .unwrap_or_default(),
-                ),
-                writer.escape(member(address, "city").unwrap_or_default()),
-                writer.escape(member(address, "state").unwrap_or_default()),
-                writer.escape(member(address, "postalCode").unwrap_or_default()),
-                writer.escape(member(address, "country").unwrap_or_default()),
-                kind.unwrap_or_default().to_owned(),
+            Repetition::from_iter([
+                String::from(lines.first().copied().unwrap_or_default()),
+                lines
+                    .get(1..)
+                    .map(|rest| rest.join(" "))
+                    .unwrap_or_default(),
+                String::from(member(address, "city").unwrap_or_default()),
+                String::from(member(address, "state").unwrap_or_default()),
+                String::from(member(address, "postalCode").unwrap_or_default()),
+                String::from(member(address, "country").unwrap_or_default()),
+                String::from(kind.unwrap_or_default()),
             ])
         })
         .collect();
-    put(11, writer.repetitions(&addresses));
+    put(fields, 11, addresses);
     let (work, home): (Vec<&Object>, Vec<&Object>) = list(patient, "telecom")
         .filter_map(Value::as_object)
         .partition(|point| member(point, "use") == Some("work"));
-    put(13, telecom(writer, &home));
-    put(14, telecom(writer, &work));
+    put(fields, 13, telecom(&home));
+    put(fields, 14, telecom(&work));
 }
 
 /// Writes `points` as an XTN list: XTN-2 the use, XTN-3 the equipment, and
 /// the value in XTN-4 for an address and XTN-12 for a number.
-fn telecom(writer: &Writer<'_>, points: &[&Object]) -> String {
-    let written: Vec<String> = points
+fn telecom(points: &[&Object]) -> Field {
+    points
         .iter()
         .filter_map(|point| {
             let value = member(point, "value")?;
@@ -514,21 +508,20 @@ fn telecom(writer: &Writer<'_>, points: &[&Object]) -> String {
                 _ if equipment == "Internet" => "NET",
                 _ => "PRN",
             };
-            let mut parts = vec![String::new(); 12];
+            let mut parts = vec![""; 12];
             if let Some(slot) = parts.get_mut(1) {
-                use_code.clone_into(slot);
+                *slot = use_code;
             }
             if let Some(slot) = parts.get_mut(2) {
-                equipment.clone_into(slot);
+                *slot = equipment;
             }
             let index = if equipment == "Internet" { 3 } else { 11 };
             if let Some(slot) = parts.get_mut(index) {
-                *slot = writer.escape(value);
+                *slot = value;
             }
-            Some(writer.components(&parts))
+            Some(Repetition::from_iter(parts))
         })
-        .collect();
-    writer.repetitions(&written)
+        .collect()
 }
 
 /// The table 0200 code of a `name-use`, the inverse of [`name_use`].
@@ -600,7 +593,7 @@ mod tests {
 
     use super::{Shown, birth_date, identifiers, patient, segment};
     use crate::config::section::hl7v2::authority::Authorities;
-    use crate::v2::write::Writer;
+    use ferrobridge_hl7v2::write::Writer;
 
     fn feed() -> String {
         let family = FAMILY_NAMES[0];
@@ -695,15 +688,14 @@ mod tests {
             .expect("a PID");
         let known = vec![(HOSPITAL_DOMAIN.to_owned(), String::from("PAT-1"))];
         let object = patient(pid, &known, Vec::new()).expect("the PID reads");
-        let writer = Writer::of(&lexed.message);
-        let written = segment(
-            &writer,
+        let writer = Writer::new(*lexed.message.delimiters());
+        let written = writer.segment(&segment(
             &authorities(),
             1,
             &known,
             Some(&object),
             Shown::Demographics,
-        );
+        ));
         let family = FAMILY_NAMES[0];
         let given = GIVEN_NAMES[0];
         let mother = FAMILY_NAMES[1];
@@ -713,14 +705,13 @@ mod tests {
                 "PID|1||PAT-1^^^EAST&2.999.1.1&ISO||{family}^{given}^B^^Dr^^L~{family}^{given}^^^^^N|{mother}|19800229|F|||Dorpsstraat 1^^Proefdorp^^1234 AB^NL^H||^PRN^PH^^^^^^^^^+31201234567~^NET^Internet^ada@example.org|^WPN^PH^^^^^^^^^+31207654321"
             )
         );
-        let pseudonymous = segment(
-            &writer,
+        let pseudonymous = writer.segment(&segment(
             &authorities(),
             1,
             &known,
             None,
             Shown::Pseudonymous,
-        );
+        ));
         assert_eq!(pseudonymous, "PID|1||PAT-1^^^EAST&2.999.1.1&ISO||~^^^^^^S");
     }
 }

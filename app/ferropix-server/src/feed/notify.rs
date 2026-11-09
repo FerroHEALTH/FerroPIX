@@ -82,7 +82,8 @@ pub async fn notify(
                 &settings.authorities,
                 &identifiers,
                 &Stamped::now(),
-            );
+            )
+            .map_err(FeedError::Notification)?;
             outbox::enqueue(
                 &mut *connection,
                 store.sealer(),

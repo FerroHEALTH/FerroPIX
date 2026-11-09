@@ -77,7 +77,7 @@ console are that open part, and they are FerroPIX's own design.
 | IHE ITI TF-2, the PIX and PDQ transactions | ITI-8, ITI-9 and ITI-10 at Revision 20.0, ITI-21 at Revision 20.2, ITI-22 at Revision 20.1, each page by sha256 (`docs/VERSIONS.md`) | the HL7 v2 face (section 7); vendored cache only, since each page reproduces HL7 tables |
 | HL7 FHIR | R4 (4.0.1) | the resources, search and REST interactions the profiles constrain |
 | HL7 v2 | the version each transaction names in ITI TF-2 | the segments and fields of the v2 messages |
-| `hl7v2-types`, `ferrobridge-hl7v2` | FerroBRIDGE's published line, pinned exactly | the v2 tables, the MLLP codec, the parser and the acknowledgment; FerroPIX writes no second parser (`CLAUDE.md` §Scope) |
+| `hl7v2-types`, `ferrobridge-hl7v2` | FerroBRIDGE's published line, pinned exactly | the v2 tables, the MLLP codec, the parser, the acknowledgment and the message writer; FerroPIX writes no second parser and no second writer (`CLAUDE.md` §Scope) |
 | `ihe-atna` | the FerroAUDIT line, pinned exactly | the BALP `AuditEvent` builder and the audit spool |
 | `ferrohealth-smart` | the FerroAUTH line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users; and the console's OpenID Connect relying-party client |
 | `ferrohealth-ui` | the FerroUI line, pinned exactly | every component the console draws (`.claude/memory/ferroui-lockstep.md`) |

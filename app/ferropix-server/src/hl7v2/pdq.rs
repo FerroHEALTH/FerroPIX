@@ -24,8 +24,9 @@
 
 use std::collections::BTreeMap;
 
-use ferrobridge_hl7v2::ack::Code;
+use ferrobridge_hl7v2::ack::{Code, Error, Header};
 use ferrobridge_hl7v2::parse::{Message, Segment};
+use ferrobridge_hl7v2::write;
 use fhir_types::codec::{Json as _, Object, Value};
 use fhir_types::r4::resource::Resource;
 use ihe_atna::balp::Outcome;
@@ -38,12 +39,12 @@ use crate::config::section::hl7v2::Sender;
 use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
 use crate::hl7v2::feed::{query_part, url_encoded};
-use crate::hl7v2::{Answer, Face, acknowledge, sender_key};
+use crate::hl7v2::{Answer, Conformance, Face, Response, acknowledge, respond, sender_key};
+use crate::hl7v2::{fault, fault_at, location};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
 use crate::v2::pid::{self, Shown};
 use crate::v2::stamped::Stamped;
-use crate::v2::write::{Fault, Writer, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
 use fhir_search::escape::escape;
 
@@ -60,7 +61,7 @@ struct Settled {
     /// QAK-2, a table 0208 code.
     status: &'static str,
     /// The ERR segments.
-    faults: Vec<Fault>,
+    faults: Vec<Error>,
     /// The persons of the increment, each with the identifiers its PID-3
     /// carries.
     found: Vec<Row>,
@@ -70,7 +71,7 @@ struct Settled {
 
 impl Settled {
     /// An `AE` with `faults`.
-    fn error(faults: Vec<Fault>) -> Self {
+    fn error(faults: Vec<Error>) -> Self {
         Self {
             code: Code::Error,
             status: "AE",
@@ -85,7 +86,7 @@ impl Settled {
         Self {
             code: Code::Reject,
             status: "AR",
-            faults: vec![Fault::anywhere(ErrorCode::Application, text)],
+            faults: vec![fault(ErrorCode::Application, text)],
             found: Vec::new(),
             pointer: None,
         }
@@ -96,6 +97,7 @@ impl Settled {
 pub(super) async fn query(
     face: &Face,
     message: &Message,
+    header: &Header,
     sender: &Sender,
     call: &Call,
     text: &str,
@@ -106,6 +108,7 @@ pub(super) async fn query(
         Err(error) => {
             tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 query is refused: its audit record has no room");
             return answer(
+                header,
                 message,
                 &Settled::rejected(
                     "the audit record could not be stored, so the query was not answered",
@@ -137,6 +140,7 @@ pub(super) async fn query(
     if let Err(error) = place.record(&exchange).await {
         tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 answer is withheld: its audit record could not be stored");
         return answer(
+            header,
             message,
             &Settled::rejected(
                 "the audit record could not be stored, so the query was not answered",
@@ -145,18 +149,24 @@ pub(super) async fn query(
             stamped,
         );
     }
-    answer(message, &settled, face, stamped)
+    answer(header, message, &settled, face, stamped)
 }
 
 /// Gives up the continuation pointers of the query QCN^J01 names in QID-1,
 /// acknowledged with an `ACK` (ITI TF-2 §3.21.4.3.2).
-pub(super) fn cancel(face: &Face, message: &Message, sender: &Sender, stamped: &Stamped) -> Answer {
+pub(super) fn cancel(
+    face: &Face,
+    message: &Message,
+    header: &Header,
+    sender: &Sender,
+    stamped: &Stamped,
+) -> Answer {
     let tag = segment(message, "QID")
         .and_then(|qid| qid.text(1))
         .unwrap_or_default();
     let removed = face.cursors.cancel(&sender_key(sender), tag);
     tracing::info!(removed, "a query is cancelled");
-    acknowledge(message, Code::Accept, &[], stamped)
+    acknowledge(header, Code::Accept, &[], stamped)
 }
 
 /// Reads the query, runs the search and settles the case.
@@ -168,7 +178,7 @@ async fn settle(face: &Face, message: &Message, sender: &Sender) -> Settled {
         .to_owned();
     let increment = match increment(message) {
         Ok(increment) => increment,
-        Err(fault) => return Settled::error(vec![fault]),
+        Err(fault) => return Settled::error(vec![*fault]),
     };
     let pointer = segment(message, "DSC").and_then(|dsc| dsc.text(1));
     let (search, filtered, after, increment) = match pointer {
@@ -180,7 +190,7 @@ async fn settle(face: &Face, message: &Message, sender: &Sender) -> Settled {
                 Some(place.increment),
             ),
             None => {
-                return Settled::error(vec![Fault::at(
+                return Settled::error(vec![fault_at(
                     location("DSC", 1, 1, None, None),
                     ErrorCode::UnknownKeyIdentifier,
                     "the continuation pointer is unknown or past its bound",
@@ -234,7 +244,7 @@ async fn settle(face: &Face, message: &Message, sender: &Sender) -> Settled {
 }
 
 /// Reads RCP-2, the records an increment holds, `None` when it names none.
-fn increment(message: &Message) -> Result<Option<u32>, Fault> {
+fn increment(message: &Message) -> Result<Option<u32>, Box<Error>> {
     let Some(quantity) = segment(message, "RCP")
         .and_then(|rcp| rcp.field(2))
         .and_then(|field| field.repetitions().first())
@@ -251,18 +261,18 @@ fn increment(message: &Message) -> Result<Option<u32>, Fault> {
         return Ok(None);
     };
     let refused = || {
-        Fault::at(
+        fault_at(
             location("RCP", 1, 2, None, None),
             ErrorCode::DataType,
             "RCP-2 is no number of records above 0 in RD",
         )
     };
     if units.is_some_and(|units| units != "RD") {
-        return Err(refused());
+        return Err(Box::new(refused()));
     }
     match amount.parse::<u32>() {
         Ok(amount) if amount > 0 => Ok(Some(amount)),
-        _ => Err(refused()),
+        _ => Err(Box::new(refused())),
     }
 }
 
@@ -352,7 +362,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
             })
             .unwrap_or_default();
         let Some(parameter) = parameter(name) else {
-            return Err(Settled::error(vec![Fault::at(
+            return Err(Settled::error(vec![fault_at(
                 at(),
                 ErrorCode::Application,
                 "QPD-3 names a field this Supplier does not search on",
@@ -371,7 +381,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
                 let dates: Option<Vec<String>> =
                     values.iter().map(|value| pid::birth_date(value)).collect();
                 let Some(dates) = dates else {
-                    return Err(Settled::error(vec![Fault::at(
+                    return Err(Settled::error(vec![fault_at(
                         at(),
                         ErrorCode::DataType,
                         "a @PID.7 value is no date",
@@ -382,7 +392,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
             }
             Parameter::Gender => {
                 let Some(gender) = gender(first) else {
-                    return Err(Settled::error(vec![Fault::at(
+                    return Err(Settled::error(vec![fault_at(
                         at(),
                         ErrorCode::DataType,
                         "the @PID.8 value is no administrative sex",
@@ -429,7 +439,7 @@ async fn criteria(face: &Face, message: &Message) -> Result<Option<Criteria>, Se
         let Some(hd) = authorities.get(field).filter(|hd| !hd.is_empty()) else {
             // NOTE: ITI TF-2 §3.21.4.1.2.3, "specifying @PID.3.1 without @PID.3.4 is
             // not allowed" (Appendix E); the field is refused as missing.
-            return Err(Settled::error(vec![Fault::at(
+            return Err(Settled::error(vec![fault_at(
                 location("QPD", 1, 3, None, None),
                 ErrorCode::RequiredFieldMissing,
                 "an identifier parameter names no assigning authority",
@@ -441,7 +451,7 @@ async fn criteria(face: &Face, message: &Message) -> Result<Option<Criteria>, Se
         }
     }
     if pairs.is_empty() && !unmatchable {
-        return Err(Settled::error(vec![Fault::at(
+        return Err(Settled::error(vec![fault_at(
             location("QPD", 1, 3, None, None),
             ErrorCode::RequiredFieldMissing,
             "QPD-3 names no parameter",
@@ -494,7 +504,7 @@ async fn domains(face: &Face, qpd: Option<&Segment>) -> Result<Vec<String>, Sett
             });
         match system {
             Some(system) => systems.push(system),
-            None => faults.push(Fault::at(
+            None => faults.push(fault_at(
                 location("QPD", 1, 8, Some(index.saturating_add(1)), None),
                 ErrorCode::UnknownKeyIdentifier,
                 "a domain of QPD-8 is not recognized",
@@ -530,7 +540,7 @@ async fn run(
         };
         let parsed = PatientSearch::from_query(&text).map_err(|error| {
             tracing::debug!(%error, "an ITI-21 query reads as no ITI-78 search");
-            Settled::error(vec![Fault::at(
+            Settled::error(vec![fault_at(
                 location("QPD", 1, 3, None, None),
                 ErrorCode::DataType,
                 "a QPD-3 value cannot be searched on",
@@ -545,7 +555,7 @@ async fn run(
                 Settled::rejected("the store could not be read")
             })?;
         let Searched::Found { answer, persons } = searched else {
-            return Err(Settled::error(vec![Fault::at(
+            return Err(Settled::error(vec![fault_at(
                 location("QPD", 1, 8, None, None),
                 ErrorCode::UnknownKeyIdentifier,
                 "a domain of QPD-8 is not recognized",
@@ -617,37 +627,43 @@ fn segment<'m>(message: &'m Message, id: &str) -> Option<&'m Segment> {
 }
 
 /// Writes the RSP^K22 of `settled`.
-fn answer(message: &Message, settled: &Settled, face: &Face, stamped: &Stamped) -> Answer {
-    let writer = Writer::of(message);
-    let mut segments = vec![
-        writer.header(message, &["RSP", "K22", "RSP_K21"], stamped),
-        writer.msa(message, settled.code.as_str()),
-    ];
-    segments.extend(settled.faults.iter().map(|fault| writer.err(fault)));
-    segments.push(writer.segment(
-        "QAK",
-        &[writer.echoed(message, "QPD", 2), settled.status.to_owned()],
-    ));
-    if let Some(qpd) = writer.echo_segment(message, "QPD") {
-        segments.push(qpd);
-    }
-    for (index, (_, patient, identifiers)) in settled.found.iter().enumerate() {
-        segments.push(pid::segment(
-            &writer,
-            &face.authorities,
-            index.saturating_add(1),
-            identifiers,
-            Some(patient),
-            Shown::Demographics,
-        ));
-    }
+fn answer(
+    header: &Header,
+    message: &Message,
+    settled: &Settled,
+    face: &Face,
+    stamped: &Stamped,
+) -> Answer {
+    let mut body: Vec<write::value::Segment> = settled
+        .found
+        .iter()
+        .enumerate()
+        .map(|(index, (_, patient, identifiers))| {
+            pid::segment(
+                &face.authorities,
+                index.saturating_add(1),
+                identifiers,
+                Some(patient),
+                Shown::Demographics,
+            )
+        })
+        .collect();
     if let Some(pointer) = &settled.pointer {
-        segments.push(writer.segment("DSC", &[writer.escape(pointer), String::from("I")]));
+        body.push(write::value::Segment::new("DSC", [pointer.as_str(), "I"]));
     }
-    Answer {
-        code: settled.code,
-        text: Writer::message(&segments),
-    }
+    respond(
+        header,
+        message,
+        Response {
+            message_type: ["RSP", "K22", "RSP_K21"],
+            code: settled.code,
+            faults: &settled.faults,
+            status: settled.status,
+            body,
+            check: Conformance::Unchecked,
+        },
+        stamped,
+    )
 }
 
 #[cfg(test)]

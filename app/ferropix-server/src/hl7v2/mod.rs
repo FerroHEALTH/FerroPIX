@@ -39,7 +39,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use ferrobridge_hl7v2::ack::{self, Code, Header};
+use ferrobridge_hl7v2::ack::{self, Code, Error, Header};
 use ferrobridge_hl7v2::decode::{self, Charset};
 use ferrobridge_hl7v2::inbound::{self, Inbound, Received};
 use ferrobridge_hl7v2::mllp::listener::{self, Connection, Handler, Timeouts};
@@ -65,8 +65,8 @@ use crate::hl7v2::cursor::Cursors;
 use crate::pdqm::Supplier;
 use crate::store::Store;
 use crate::v2::stamped::Stamped;
-use crate::v2::write::{Fault, Writer};
-use ferrobridge_hl7v2::parse::ErrorCode;
+use ferrobridge_hl7v2::parse::{ErrorCode, Location};
+use ferrobridge_hl7v2::write::value::{Field, Repetition, Segment};
 
 /// The answer to one message: its acknowledgment code and its text, before
 /// it is encoded in the message's character set.
@@ -172,7 +172,7 @@ impl Face {
                 Received::Parsed(inbound) => {
                     let answer = self.settle(&inbound, message, connection, &stamped).await;
                     tracing::info!(ack = answer.code.as_str(), "message answered");
-                    Some(encoded(inbound.parsed().message(), &answer, &stamped))
+                    Some(encoded(&inbound, &answer, &stamped))
                 }
             }
         }
@@ -197,12 +197,13 @@ impl Face {
         stamped: &Stamped,
     ) -> Answer {
         let message = inbound.parsed().message();
+        let header = inbound.header();
         let Some(sender) = self.senders.iter().find(|sender| names(sender, message)) else {
             connection.refuse();
             return acknowledge(
-                message,
+                header,
                 Code::Reject,
-                &[Fault::anywhere(
+                &[fault(
                     ErrorCode::Application,
                     "the sending application and facility are not accepted",
                 )],
@@ -212,33 +213,42 @@ impl Face {
         let call = self.call(sender, message, connection.peer());
         match (message.message_type(1), message.message_type(2)) {
             (Some("ADT"), Some("A01" | "A04" | "A05" | "A08")) => {
-                feed::receive(self, message, sender, &call, false, stamped).await
+                feed::receive(self, message, header, sender, &call, false, stamped).await
             }
             (Some("ADT"), Some("A40")) => {
-                feed::receive(self, message, sender, &call, true, stamped).await
+                feed::receive(self, message, header, sender, &call, true, stamped).await
             }
             (Some("QBP"), Some("Q23")) => {
-                pix::query(self, message, &call, &self.text(raw), stamped).await
+                pix::query(self, message, header, &call, &self.text(raw), stamped).await
             }
             (Some("QBP"), Some("Q22")) => {
-                pdq::query(self, message, sender, &call, &self.text(raw), stamped).await
+                pdq::query(
+                    self,
+                    message,
+                    header,
+                    sender,
+                    &call,
+                    &self.text(raw),
+                    stamped,
+                )
+                .await
             }
-            (Some("QCN"), Some("J01")) => pdq::cancel(self, message, sender, stamped),
+            (Some("QCN"), Some("J01")) => pdq::cancel(self, message, header, sender, stamped),
             // NOTE: ITI TF-2 §3.22.4.2.2.7 and Table 3.22-4: a Supplier answers a PV1 per patient and
             // searches at least one visit field, and FerroPIX keeps no visit data.
             (Some("QBP"), Some("ZV1")) => acknowledge(
-                message,
+                header,
                 Code::Reject,
-                &[Fault::anywhere(
+                &[fault(
                     ErrorCode::UnsupportedMessageType,
                     "ITI-22 is not answered: this Supplier keeps no visit data; query with ITI-21",
                 )],
                 stamped,
             ),
             _ => acknowledge(
-                message,
+                header,
                 Code::Reject,
-                &[Fault::anywhere(
+                &[fault(
                     ErrorCode::UnsupportedMessageType,
                     "the message type and trigger event are not ones this Manager answers",
                 )],
@@ -299,16 +309,16 @@ fn client_network(peer: Option<SocketAddr>, endpoint: &NetworkAddress) -> Networ
 
 /// Encodes `answer` in the character set of `message`; an answer that holds
 /// a character the set lacks is replaced by an `AE` that says so.
-fn encoded(message: &Message, answer: &Answer, stamped: &Stamped) -> (Code, Vec<u8>) {
-    let charset = message.charset();
+fn encoded(inbound: &Inbound, answer: &Answer, stamped: &Stamped) -> (Code, Vec<u8>) {
+    let charset = inbound.parsed().message().charset();
     if let Ok(bytes) = decode::encode(&answer.text, charset) {
         return (answer.code, bytes);
     }
     tracing::warn!("the answer holds a character the message's character set lacks");
     let fallback = acknowledge(
-        message,
+        inbound.header(),
         Code::Error,
-        &[Fault::anywhere(
+        &[fault(
             ErrorCode::Application,
             "the answer holds a character the message's character set cannot carry",
         )],
@@ -346,21 +356,150 @@ pub fn names(sender: &Sender, message: &Message) -> bool {
     named(3, &sender.application) && named(4, &sender.facility)
 }
 
-/// Returns the acknowledgment of `message`: `ACK` with the message's
-/// trigger event, MSA with `code`, and one `ERR` per fault.
+/// Returns the acknowledgment of the message `header` opens: `ACK` with its
+/// trigger event, MSA with `code`, and one `ERR` per fault, as
+/// `ferrobridge-hl7v2` renders it.
 #[must_use]
-pub fn acknowledge(message: &Message, code: Code, faults: &[Fault], stamped: &Stamped) -> Answer {
-    let writer = Writer::of(message);
-    let event = message.message_type(2).unwrap_or_default();
-    let mut segments = vec![
-        writer.header(message, &["ACK", event, "ACK"], stamped),
-        writer.msa(message, code.as_str()),
-    ];
-    segments.extend(faults.iter().map(|fault| writer.err(fault)));
+pub fn acknowledge(header: &Header, code: Code, faults: &[Error], stamped: &Stamped) -> Answer {
     Answer {
         code,
-        text: Writer::message(&segments),
+        text: ack::render(header, code, faults, stamped.stamp()),
     }
+}
+
+/// A query response: its MSH-9, its code, its faults, the QAK-2 status and
+/// the segments after the echoed QPD.
+#[derive(Debug)]
+pub struct Response<'a> {
+    /// MSH-9: the message code, trigger event and structure.
+    pub message_type: [&'static str; 3],
+    /// MSA-1.
+    pub code: Code,
+    /// One `ERR` each.
+    pub faults: &'a [Error],
+    /// QAK-2, the query response status.
+    pub status: &'a str,
+    /// The segments after QPD.
+    pub body: Vec<Segment>,
+    /// Whether the response is checked against its structure.
+    pub check: Conformance,
+}
+
+/// Whether a response is checked against the structure MSH-9 declares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Conformance {
+    /// Checked by `Writer::compose`; one that does not conform is answered
+    /// `AE`.
+    Structure,
+    /// Written unchecked.
+    // TODO(#538): check the RSP^K22 once the crate composes under the ITI-21 constraint on QRI.
+    Unchecked,
+}
+
+/// Writes `response` to `message`, which `header` opens.
+///
+/// The segments are MSH, MSA, one ERR per fault, QAK with QPD-2 echoed, the
+/// QPD echoed and the body (ITI TF-2 §3.9.4.2.2 and §3.21.4.2.2), checked
+/// against the structure MSH-9 declares when `response.check` asks for it. A
+/// checked response that does not conform is answered `AE` instead.
+#[must_use]
+pub fn respond(
+    header: &Header,
+    message: &Message,
+    response: Response<'_>,
+    stamped: &Stamped,
+) -> Answer {
+    let writer = header.writer();
+    let message_type = Repetition::from_iter(response.message_type);
+    let mut segments = vec![
+        header.reply(Field::from(message_type), stamped.stamp()),
+        header.msa(response.code),
+    ];
+    segments.extend(response.faults.iter().map(Segment::from));
+    let qpd = message
+        .segments()
+        .iter()
+        .find(|segment| segment.id() == "QPD");
+    let tag = qpd
+        .and_then(|qpd| qpd.field(2))
+        .map(|field| writer.echo(field, message.delimiters()))
+        .transpose();
+    let echoed = writer.echo_segment(message, "QPD");
+    let (Ok(tag), Ok(echoed)) = (tag, echoed) else {
+        return unwritten(header, stamped);
+    };
+    segments.push(Segment::new(
+        "QAK",
+        [tag.unwrap_or_default(), Field::from(response.status)],
+    ));
+    segments.extend(echoed);
+    segments.extend(response.body);
+    if response.check == Conformance::Unchecked {
+        return Answer {
+            code: response.code,
+            text: writer.message(&segments),
+        };
+    }
+    match writer.compose(&segments, structure_declared, message.charset()) {
+        Ok(composed) => Answer {
+            code: response.code,
+            text: composed.into_text(),
+        },
+        Err(error) => {
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "a query response does not conform to its structure");
+            unwritten(header, stamped)
+        }
+    }
+}
+
+/// The `AE` that answers a message whose response could not be written.
+fn unwritten(header: &Header, stamped: &Stamped) -> Answer {
+    acknowledge(
+        header,
+        Code::Error,
+        &[fault(
+            ErrorCode::Application,
+            "the response could not be written",
+        )],
+        stamped,
+    )
+}
+
+/// An `ERR` at `location`, with a text that quotes nothing from the message.
+#[must_use]
+pub fn fault_at(location: Location, code: ErrorCode, text: impl Into<String>) -> Error {
+    Error {
+        location: Some(location),
+        code,
+        text: text.into(),
+    }
+}
+
+/// An `ERR` with no location, with a text that quotes nothing from the
+/// message.
+#[must_use]
+pub fn fault(code: ErrorCode, text: impl Into<String>) -> Error {
+    Error {
+        location: None,
+        code,
+        text: text.into(),
+    }
+}
+
+/// Returns the location of field `field` of the `sequence`th segment `id`,
+/// narrowed to `repetition` and `component` when they are given.
+#[must_use]
+pub fn location(
+    id: &str,
+    sequence: usize,
+    field: usize,
+    repetition: Option<usize>,
+    component: Option<usize>,
+) -> Location {
+    let mut location = Location::segment(id, sequence).with_field(field);
+    location.repetition = repetition;
+    location.component = component;
+    location
 }
 
 /// Whether the MLLP listener's socket is accepting, the readiness indicator
@@ -501,10 +640,19 @@ mod tests {
         assert_eq!(listener, super::client_network(None, &listener));
     }
 
-    use super::{acknowledge, names, sender_key};
+    use std::collections::BTreeMap;
+
+    use ferrobridge_hl7v2::write;
+    use fhir_types::codec::Value;
+
+    use super::{
+        Conformance, Response, acknowledge, fault, fault_at, location, names, respond, sender_key,
+    };
     use crate::config::section::hl7v2::Sender;
+    use crate::config::section::hl7v2::authority::Authorities;
+    use crate::v2::pid::{self, Shown};
     use crate::v2::stamped::Stamped;
-    use crate::v2::write::Fault;
+    use ferrobridge_hl7v2::ack::Header;
     use ferrobridge_hl7v2::parse::ErrorCode;
 
     fn sender(application: &str, facility: &str) -> Sender {
@@ -532,26 +680,158 @@ mod tests {
 
     #[test]
     fn an_acknowledgment_names_the_trigger_event_and_echoes_msh_10() {
-        let message = lex(
-            "MSH|^~\\&|ADT|EAST|PIX|NORTH|20261025||ADT^A01^ADT_A01|M-3|P|2.5\r",
-            Charset::Ascii,
-        )
-        .expect("the header lexes")
-        .message;
+        let header =
+            Header::from_text("MSH|^~\\&|ADT|EAST|PIX|NORTH|20261025||ADT^A01^ADT_A01|M-3|P|2.5\r")
+                .expect("the header reads");
         let stamped = Stamped {
             control_id: String::from("ACK-3"),
             timestamp: String::from("20261025120000+0000"),
         };
         let answer = acknowledge(
-            &message,
+            &header,
             Code::Reject,
-            &[Fault::anywhere(ErrorCode::Application, "refused")],
+            &[fault(ErrorCode::Application, "refused")],
             &stamped,
         );
         assert_eq!(answer.code, Code::Reject);
         assert_eq!(
             answer.text,
             "MSH|^~\\&|PIX|NORTH|ADT|EAST|20261025120000+0000||ACK^A01^ACK|ACK-3|P|2.5\rMSA|AR|M-3\rERR|||207^Application error^HL70357|E||||refused\r"
+        );
+    }
+
+    const PIX_QUERY: &str = "MSH|^~\\&|PORTAL|NORTH|PIX|NORTH|20261025100000||QBP^Q23^QBP_Q21|Q-1|P|2.5\rQPD|IHE PIX Query|T-1|A\\S\\1^^^EAST&2.999.1.1&ISO|^^^&2.999.1.2&ISO\rRCP|I\r";
+
+    fn stamp() -> Stamped {
+        Stamped {
+            control_id: String::from("ANSWER-1"),
+            timestamp: String::from("20261025100001+0000"),
+        }
+    }
+
+    #[test]
+    fn a_pix_response_echoes_the_query_and_names_the_identifiers_pseudonymously() {
+        let message = lex(PIX_QUERY, Charset::Ascii)
+            .expect("the query lexes")
+            .message;
+        let header = Header::from_text(PIX_QUERY).expect("the header reads");
+        let authorities = Authorities::new(&BTreeMap::from([(
+            String::from("urn:oid:2.999.1.2"),
+            String::from("WEST"),
+        )]));
+        let identifiers = [(String::from("urn:oid:2.999.1.2"), String::from("W-1"))];
+        let answer = respond(
+            &header,
+            &message,
+            Response {
+                message_type: ["RSP", "K23", "RSP_K23"],
+                code: Code::Accept,
+                faults: &[],
+                status: "OK",
+                check: Conformance::Structure,
+                body: vec![pid::segment(
+                    &authorities,
+                    1,
+                    &identifiers,
+                    None,
+                    Shown::Pseudonymous,
+                )],
+            },
+            &stamp(),
+        );
+        assert_eq!(answer.code, Code::Accept);
+        assert_eq!(
+            answer.text,
+            "MSH|^~\\&|PIX|NORTH|PORTAL|NORTH|20261025100001+0000||RSP^K23^RSP_K23|ANSWER-1|P|2.5\r\
+             MSA|AA|Q-1\r\
+             QAK|T-1|OK\r\
+             QPD|IHE PIX Query|T-1|A\\S\\1^^^EAST&2.999.1.1&ISO|^^^&2.999.1.2&ISO\r\
+             PID|1||W-1^^^WEST&2.999.1.2&ISO||~^^^^^^S\r"
+        );
+    }
+
+    #[test]
+    fn an_error_response_carries_an_err_per_fault_before_the_qak() {
+        let message = lex(PIX_QUERY, Charset::Ascii)
+            .expect("the query lexes")
+            .message;
+        let header = Header::from_text(PIX_QUERY).expect("the header reads");
+        let answer = respond(
+            &header,
+            &message,
+            Response {
+                message_type: ["RSP", "K23", "RSP_K23"],
+                code: Code::Error,
+                faults: &[fault_at(
+                    location("QPD", 1, 3, Some(1), Some(4)),
+                    ErrorCode::UnknownKeyIdentifier,
+                    "a domain of QPD-3 is not recognized",
+                )],
+                status: "AE",
+                check: Conformance::Structure,
+                body: Vec::new(),
+            },
+            &stamp(),
+        );
+        assert_eq!(answer.code, Code::Error);
+        assert_eq!(
+            answer.text,
+            "MSH|^~\\&|PIX|NORTH|PORTAL|NORTH|20261025100001+0000||RSP^K23^RSP_K23|ANSWER-1|P|2.5\r\
+             MSA|AE|Q-1\r\
+             ERR||QPD^1^3^1^4|204^Unknown key identifier^HL70357|E||||a domain of QPD-3 is not recognized\r\
+             QAK|T-1|AE\r\
+             QPD|IHE PIX Query|T-1|A\\S\\1^^^EAST&2.999.1.1&ISO|^^^&2.999.1.2&ISO\r"
+        );
+    }
+
+    #[test]
+    fn a_pdq_response_writes_each_patient_and_the_continuation_pointer() {
+        let query = "MSH|^~\\&|PORTAL|NORTH|PIX|NORTH|20261025100000||QBP^Q22^QBP_Q21|Q-2|P|2.5\rQPD|IHE PDQ Query|T-2|@PID.8^F\rRCP|I|1^RD\r";
+        let message = lex(query, Charset::Ascii).expect("the query lexes").message;
+        let header = Header::from_text(query).expect("the header reads");
+        let authorities = Authorities::new(&BTreeMap::from([(
+            String::from("urn:oid:2.999.1.1"),
+            String::from("EAST"),
+        )]));
+        let identifiers = [(String::from("urn:oid:2.999.1.1"), String::from("E-1"))];
+        let mut patient = fhir_types::codec::Object::new();
+        patient.insert(
+            String::from("gender"),
+            Value::String(String::from("female")),
+        );
+        patient.insert(
+            String::from("birthDate"),
+            Value::String(String::from("1980-02-29")),
+        );
+        let answer = respond(
+            &header,
+            &message,
+            Response {
+                message_type: ["RSP", "K22", "RSP_K21"],
+                code: Code::Accept,
+                faults: &[],
+                status: "OK",
+                check: Conformance::Unchecked,
+                body: vec![
+                    pid::segment(
+                        &authorities,
+                        1,
+                        &identifiers,
+                        Some(&patient),
+                        Shown::Demographics,
+                    ),
+                    write::value::Segment::new("DSC", ["P-1", "I"]),
+                ],
+            },
+            &stamp(),
+        );
+        assert_eq!(answer.code, Code::Accept, "{}", answer.text);
+        assert!(
+            answer
+                .text
+                .ends_with("QPD|IHE PDQ Query|T-2|@PID.8^F\rPID|1||E-1^^^EAST&2.999.1.1&ISO||||19800229|F\rDSC|P-1|I\r"),
+            "{}",
+            answer.text
         );
     }
 }

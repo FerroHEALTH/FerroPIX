@@ -142,7 +142,7 @@ async fn apply(face: &Face, parsed: &Parsed, sender: &Sender, call: &Call, merge
     let message = parsed.message();
     let read = match read(face, parsed, domain, merge).await {
         Ok(read) => read,
-        Err(fault) => return Settled::refused(*fault),
+        Err(settled) => return *settled,
     };
     let place = match face.audit.reserve() {
         Ok(place) => place,
@@ -211,7 +211,12 @@ struct Read {
 
 /// Reads `message` as the ITI-104 message of the same patient, fed into
 /// `domain`.
-async fn read(face: &Face, parsed: &Parsed, domain: &str, merge: bool) -> Result<Read, Box<Error>> {
+async fn read(
+    face: &Face,
+    parsed: &Parsed,
+    domain: &str,
+    merge: bool,
+) -> Result<Read, Box<Settled>> {
     let message = parsed.message();
     let (index, pid) = message
         .segments()
@@ -227,11 +232,11 @@ async fn read(face: &Face, parsed: &Parsed, domain: &str, merge: bool) -> Result
         })?;
     let carried = pid::identifiers(pid.field(3), &face.authorities, domain);
     if carried.is_empty() {
-        return Err(Box::new(fault_at(
+        return Err(Box::new(Settled::refused(fault_at(
             location("PID", 1, 3, None, None),
             ErrorCode::RequiredFieldMissing,
             "PID-3 carries no identifier",
-        )));
+        ))));
     }
     let own = carried
         .iter()
@@ -267,11 +272,11 @@ async fn read(face: &Face, parsed: &Parsed, domain: &str, merge: bool) -> Result
                 )
             })?;
         if subsumed.system.as_deref() != Some(domain) {
-            return Err(Box::new(fault_at(
+            return Err(Box::new(Settled::refused(fault_at(
                 location("MRG", 1, 1, Some(1), Some(4)),
                 ErrorCode::UnknownKeyIdentifier,
                 "MRG-1 is not in the domain the sender feeds",
-            )));
+            ))));
         }
         let mut identifiers = vec![(domain.to_owned(), subsumed.value.clone())];
         identifiers.extend(known.into_iter().filter(|(system, _)| system != domain));
@@ -280,7 +285,7 @@ async fn read(face: &Face, parsed: &Parsed, domain: &str, merge: bool) -> Result
     } else {
         (known, Vec::new(), None)
     };
-    let patient = pid::patient(parsed, index, &identifiers, links)
+    let patient = pid::patient(parsed, index, &identifiers, links, &face.terminology)
         .await
         .map_err(|error| Box::new(unmapped(&error)))?;
     let condition = subsumed.as_ref().unwrap_or(&own);
@@ -302,17 +307,33 @@ async fn read(face: &Face, parsed: &Parsed, domain: &str, merge: bool) -> Result
     })
 }
 
-/// The fault of a PID that could not be read as a `Patient`.
-fn unmapped(error: &PidError) -> Error {
-    if matches!(error, PidError::BirthDate) {
-        return fault_at(
+/// The answer to a PID that could not be read as a `Patient`: a refusal,
+/// or a rejection the same message may pass when the terminology server
+/// did not translate a table value.
+fn unmapped(error: &PidError) -> Settled {
+    match error {
+        PidError::BirthDate => Settled::refused(fault_at(
             location("PID", 1, 7, None, None),
             ErrorCode::DataType,
             "PID-7 is no date",
-        );
+        )),
+        PidError::Terminology(_) => {
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 PID is not mapped: the terminology server did not translate");
+            Settled::rejected(
+                "the terminology server did not translate a table value; send the message again",
+            )
+        }
+        _ => {
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 PID could not be mapped");
+            Settled::refused(fault(ErrorCode::Application, "the PID could not be mapped"))
+        }
     }
-    tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 PID could not be mapped");
-    fault(ErrorCode::Application, "the PID could not be mapped")
+}
+
+impl From<Error> for Box<Settled> {
+    fn from(fault: Error) -> Self {
+        Box::new(Settled::refused(fault))
+    }
 }
 
 /// Returns the records of a message read as `read` that ended in `applied`

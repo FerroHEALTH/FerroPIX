@@ -40,6 +40,29 @@
 #   docker compose --profile console up --wait
 #   open http://localhost:3000/
 #
+# THE HL7 v2 FACE. The `hl7v2` profile runs FerroTERM, the family's FHIR
+# terminology server, beside the server, and the face translates every v2
+# table value on it (https://ferropix.eu/docs/integrate/hl7v2-face.html).
+# Load it with HL7 Terminology, the v2-to-FHIR guide's package and
+# FerroBRIDGE's value package of the ferrobridge-hl7v2 FerroPIX runs, each
+# in its own directory under ./terminology:
+#
+#   mkdir -p terminology/hl7.terminology terminology/hl7.fhir.uv.v2mappings \
+#     terminology/ferrobridge-hl7v2-values
+#   curl -sL https://packages.fhir.org/hl7.terminology/7.5.0 \
+#     | tar -xz -C terminology/hl7.terminology
+#   curl -sL https://packages.fhir.org/hl7.fhir.uv.v2mappings/1.0.0 \
+#     | tar -xz -C terminology/hl7.fhir.uv.v2mappings
+#   curl -sL https://codeload.github.com/FerroHEALTH/FerroBRIDGE/tar.gz/8de54079117d76491171f93257e0008559a01913 \
+#     | tar -xz -C terminology/ferrobridge-hl7v2-values --strip-components=3 \
+#       FerroBRIDGE-8de54079117d76491171f93257e0008559a01913/terminology/hl7v2-values
+#   FERROPIX__HL7V2__ENABLED=true \
+#     FERROPIX__TERMINOLOGY__BASE_URL=http://localhost:8280/r4 \
+#     docker compose --profile hl7v2 up --wait
+#
+# The face listens on port 2575 for the sender quickstart.toml lists
+# (QUICKSTART at HOSPITAL, feeding the quickstart hospital domain).
+#
 # THE ISSUER. The server reads its authorization server's metadata at start and
 # accepts plain http only on loopback (RFC 8414 §2), so the development
 # provider, NAV's mock-oauth2-server, owns the network namespace and the server
@@ -86,6 +109,9 @@ services:
       - "${FERROPIX_BIND_HOST:-127.0.0.1}:${FERROPIX_ISSUER_PORT:-8180}:8180"
       # The console's port, which answers only under the `console` profile.
       - "${FERROPIX_BIND_HOST:-127.0.0.1}:${FERROPIX_CONSOLE_PORT:-3000}:3000"
+      # The HL7 v2 face's MLLP port, which answers only with
+      # FERROPIX__HL7V2__ENABLED=true.
+      - "${FERROPIX_BIND_HOST:-127.0.0.1}:${FERROPIX_MLLP_PORT:-2575}:2575"
     environment:
       # The server listens on 8080 in this namespace, so the provider moves.
       SERVER_PORT: "8180"
@@ -134,6 +160,10 @@ services:
       FERROPIX__USAGE_REPORT__ENABLED: ${FERROPIX__USAGE_REPORT__ENABLED:-true}
       FERROPIX__USAGE_REPORT__DEPLOYMENT: compose
       FERROPIX__USAGE_REPORT__STATE_DIR: /var/lib/ferropix
+      # The HL7 v2 face and the terminology server it translates on, passed
+      # through when set (THE HL7 v2 FACE above).
+      FERROPIX__HL7V2__ENABLED:
+      FERROPIX__TERMINOLOGY__BASE_URL:
     secrets:
       - ferropix-db-url
       - ferropix-data-key
@@ -208,6 +238,41 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # The FHIR terminology server the HL7 v2 face translates every table value
+  # on, under the `hl7v2` profile. It joins the issuer's network namespace,
+  # so the server reaches it on loopback (http://localhost:8280/r4), the one
+  # place FerroPIX admits a plain `http` terminology server.
+  terminology:
+    image: ghcr.io/ferrohealth/ferroterm:0.4.2@sha256:1853486ae6f85a66424561cbf90f9905027c38d506bdeb24a9e1a831b4b97424
+    profiles: [hl7v2]
+    restart: unless-stopped
+    network_mode: service:issuer
+    depends_on:
+      issuer:
+        condition: service_started
+    environment:
+      FERROTERM__SERVER__LISTEN: 127.0.0.1:8280
+      FERROTERM__TERMINOLOGY__CODE_SYSTEMS: /data/packages/hl7.terminology/package,/data/packages/hl7.fhir.uv.v2mappings/package,/data/packages/ferrobridge-hl7v2-values
+      FERROTERM__USAGE_REPORT__ENABLED: ${FERROTERM__USAGE_REPORT__ENABLED:-true}
+      FERROTERM__USAGE_REPORT__DEPLOYMENT: compose
+      FERROTERM__USAGE_REPORT__STATE_DIR: /data/state
+    volumes:
+      - type: bind
+        source: ${FERROPIX_TERMINOLOGY_DIR:-./terminology}
+        target: /data/packages
+        read_only: true
+      - ferroterm-state:/data/state
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/ferroterm", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
   # The cross-reference store. The server connects as the `ferropix` role
   # docker/postgres/10-ferropix-role.sh creates on the first start; the
   # superuser's password is the postgres-password secret.
@@ -256,3 +321,4 @@ secrets:
 volumes:
   ferropix-state:
   postgres-data:
+  ferroterm-state:

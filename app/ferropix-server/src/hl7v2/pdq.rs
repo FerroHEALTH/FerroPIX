@@ -43,7 +43,7 @@ use crate::hl7v2::{Answer, Face, Response, acknowledge, respond, sender_key};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
-use crate::v2::pid;
+use crate::v2::pid::{self, PidError};
 use crate::v2::stamped::Stamped;
 use ferrobridge_hl7v2::parse::ErrorCode;
 use ferrobridge_hl7v2::parse::profile::IHE_ITI_21;
@@ -163,10 +163,20 @@ async fn written(face: &Face, settled: Settled) -> (Settled, Vec<write::value::S
             index.saturating_add(1),
             identifiers,
             patient,
+            &face.terminology,
         )
         .await
         {
             Ok(segment) => body.push(segment),
+            Err(error @ PidError::Terminology(_)) => {
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 answer is withheld: the terminology server did not translate");
+                return (
+                    Settled::rejected(
+                        "the terminology server did not translate a table value; send the query again",
+                    ),
+                    Vec::new(),
+                );
+            }
             Err(error) => {
                 tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 answer is withheld: a Patient could not be written as a PID");
                 return (

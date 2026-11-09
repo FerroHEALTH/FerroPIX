@@ -59,6 +59,40 @@ pub enum Error {
         /// The key that replaces it.
         replacement: &'static str,
     },
+    /// A `[<lane>.credentials]` table breaks a rule of `ferrohealth-smart`.
+    #[error("{key} is refused")]
+    Credentials {
+        /// The table.
+        key: &'static str,
+        /// The rule.
+        #[source]
+        source: Box<ferrohealth_smart::config::ConfigError>,
+    },
+    /// The client credentials token source of a lane could not be built.
+    #[error("the token source of {key} could not be built")]
+    Token {
+        /// The table.
+        key: &'static str,
+        /// Why.
+        #[source]
+        source: Box<ferrohealth_smart::client::TokenError>,
+    },
+    /// The HTTP client of an outbound lane could not be built.
+    #[error("the HTTP client of [{key}] could not be built")]
+    HttpClient {
+        /// The section.
+        key: &'static str,
+        /// Why.
+        #[source]
+        source: Box<reqwest::Error>,
+    },
+    /// The terminology client refused its configuration.
+    #[error("the terminology client could not be built")]
+    Terminology {
+        /// Why.
+        #[source]
+        source: Box<ferrobridge_term::error::Error>,
+    },
     /// The outbound TLS material of a table could not be read.
     #[error("the outbound TLS material could not be read")]
     TlsClient(#[source] ferrohealth_server::tls_client::TlsClientError),

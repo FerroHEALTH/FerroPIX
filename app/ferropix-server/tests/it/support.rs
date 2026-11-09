@@ -165,6 +165,15 @@ application = "LAB"
 facility = "EAST"
 domain = "urn:oid:2.999.1.1"
 
+[terminology]
+base_url = "https://tx.example.org/fhir/r4"
+timeout_ms = 5000
+
+[terminology.retry]
+max_attempts = 2
+initial_backoff_ms = 100
+max_backoff_ms = 1000
+
 [xcpd]
 enabled = true
 home_community_id = "urn:oid:2.999.60.1"

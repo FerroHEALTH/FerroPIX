@@ -7,23 +7,22 @@
 //! same patient, so the v2 feed and the FHIR feed write the same version
 //! (ITI TF-2 §3.8.4.1.3; PIXm 3.1.0 §2:3.104.4.1.2.1 names the PDQm Patient
 //! elements the Manager accepts). The PID maps through the HL7 v2-to-FHIR
-//! 1.0.0 maps `ferrobridge-hl7v2` ships with its supplements:
-//! `segment-pid-to-patient`, its data type maps and its table maps, answered
-//! in process. A query answer's `Patient` is written back as a PID by the
-//! inverse of the same maps, with the fields ITI TF-2 §3.21.4.2.2.5 names.
-//! PID-1 and PID-3 are FerroPIX's own, from its identifier domains, and so
-//! are the PID-5 forms of ITI-9 and ITI-10.
+//! 1.0.0 structure maps `ferrobridge-hl7v2` is built with, FerroBRIDGE's
+//! corrections over them: `segment-pid-to-patient` and its data type maps,
+//! with every table value translated by `ConceptMap/$translate` on the
+//! terminology server `[terminology]` names. A query answer's `Patient` is
+//! written back as a PID by the inverse of the same maps, with the fields
+//! ITI TF-2 §3.21.4.2.2.5 names. PID-1 and PID-3 are FerroPIX's own, from
+//! its identifier domains, and so are the PID-5 forms of ITI-9 and ITI-10.
 
-use std::sync::OnceLock;
-
-use ferrobridge_hl7v2::map::Outcome;
-use ferrobridge_hl7v2::map::corpus::{Corpus, CorpusError};
 use ferrobridge_hl7v2::map::inverse::{self, InverseError};
+use ferrobridge_hl7v2::map::maps::Maps;
 use ferrobridge_hl7v2::map::single::{self, SegmentError};
-use ferrobridge_hl7v2::map::translate::Translator;
+use ferrobridge_hl7v2::map::{MapError, Outcome};
 use ferrobridge_hl7v2::parse::structure::segment_of;
 use ferrobridge_hl7v2::parse::{self, Parsed};
 use ferrobridge_hl7v2::write::value::{Component, Field, Repetition, Segment};
+use ferrobridge_term::client::Client;
 use fhir_types::codec::{Object, Value};
 
 use crate::config::section::hl7v2::authority::Authorities;
@@ -88,29 +87,17 @@ pub enum PidError {
     /// No placed PID segment is at the index read.
     #[error("the message places no PID at the index read")]
     Unplaced,
-    /// The v2-to-FHIR maps the crate ships did not load.
-    #[error("the v2-to-FHIR maps did not load")]
-    Corpus(#[source] Box<CorpusError>),
+    /// The terminology server refused a translation or could not be
+    /// reached, so the PID or the `Patient` was not mapped; a later try may
+    /// pass.
+    #[error("the terminology server did not translate a table value")]
+    Terminology(#[source] Box<dyn std::error::Error + Send + Sync>),
     /// The segment map refused the PID.
     #[error("the PID could not be mapped")]
     Map(#[source] Box<SegmentError>),
     /// The segment map refused to write the `Patient` back.
     #[error("the Patient could not be written as a PID")]
     Inverse(#[source] Box<InverseError>),
-}
-
-/// The v2-to-FHIR maps with FerroBRIDGE's supplements, loaded once.
-static CORPUS: OnceLock<Corpus> = OnceLock::new();
-
-/// Returns the shipped v2-to-FHIR maps with their supplements.
-fn corpus() -> Result<&'static Corpus, PidError> {
-    if let Some(corpus) = CORPUS.get() {
-        return Ok(corpus);
-    }
-    let loaded = Corpus::shipped()
-        .and_then(Corpus::with_shipped_supplements)
-        .map_err(|error| PidError::Corpus(Box::new(error)))?;
-    Ok(CORPUS.get_or_init(|| loaded))
 }
 
 /// Returns the PID of the HL7 v2.5 tables, the version every answer is
@@ -126,32 +113,41 @@ fn pid_2_5() -> Result<&'static hl7v2_types::model::Segment, PidError> {
 /// entries.
 ///
 /// The PID maps through `segment-pid-to-patient` of the HL7 v2-to-FHIR
-/// 1.0.0 maps `ferrobridge-hl7v2` ships, with their table maps answered in
-/// process. PID-3 is FerroPIX's own: the Manager reads each CX-4 against its
-/// identifier domains (ITI TF-2 §3.8.4.1.3), so `identifiers` replace the
-/// map's `identifier`.
+/// 1.0.0 maps, with every table value translated on `terminology`. PID-3 is
+/// FerroPIX's own: the Manager reads each CX-4 against its identifier
+/// domains (ITI TF-2 §3.8.4.1.3), so `identifiers` replace the map's
+/// `identifier`. A table value the server translates to nothing is left
+/// out and counted, as a value the hand-written map knew no code for was.
 ///
 /// # Errors
-/// Returns [`PidError::BirthDate`] when PID-7 is valued and no date, and the
-/// other variants when the maps do not load or refuse the PID.
+/// Returns [`PidError::BirthDate`] when PID-7 is valued and no date,
+/// [`PidError::Terminology`] when the terminology server refuses a
+/// translation or cannot be reached, and the other variants when the maps
+/// refuse the PID.
 pub async fn patient(
     parsed: &Parsed,
     index: usize,
     identifiers: &[(String, String)],
     links: Vec<Value>,
+    terminology: &Client,
 ) -> Result<Object, PidError> {
-    let corpus = corpus()?;
     let mapped = single::segment(
         parsed,
         index,
         "Patient",
-        corpus,
-        Some(Translator::Offline(corpus)),
+        Maps::corrected(),
+        Some(terminology),
     )
     .await
-    .map_err(|error| PidError::Map(Box::new(error)))?;
+    .map_err(|error| match error {
+        SegmentError::Map(MapError::Terminology { source, .. }) => PidError::Terminology(source),
+        other => PidError::Map(Box::new(other)),
+    })?;
     if mapped.outcomes().iter().any(birth_date_refused) {
         return Err(PidError::BirthDate);
+    }
+    for outcome in mapped.outcomes() {
+        tracing::debug!(kind = outcome.kind(), "a PID element is not mapped");
     }
     let Some(Value::Object(mut patient)) = mapped.resource().map(|built| built.resource.clone())
     else {
@@ -280,15 +276,16 @@ pub fn segment(
 /// authority of its domain.
 ///
 /// # Errors
-/// Returns [`PidError::Corpus`] when the maps do not load and
-/// [`PidError::Inverse`] when they refuse the `Patient`.
+/// Returns [`PidError::Terminology`] when the terminology server refuses a
+/// translation or cannot be reached, and [`PidError::Inverse`] when the
+/// maps refuse the `Patient`.
 pub async fn demographics(
     authorities: &Authorities,
     set_id: usize,
     identifiers: &[(String, String)],
     patient: &Object,
+    terminology: &Client,
 ) -> Result<Segment, PidError> {
-    let corpus = corpus()?;
     let mut demographics = patient.clone();
     demographics.insert(text("resourceType"), string("Patient"));
     demographics.remove("identifier");
@@ -296,11 +293,14 @@ pub async fn demographics(
     let inverted = inverse::segment(
         &Value::Object(demographics),
         pid_2_5()?,
-        corpus,
-        Some(Translator::Offline(corpus)),
+        Maps::corrected(),
+        Some(terminology),
     )
     .await
-    .map_err(|error| PidError::Inverse(Box::new(error)))?;
+    .map_err(|error| match error {
+        InverseError::Terminology { source, .. } => PidError::Terminology(source),
+        other => PidError::Inverse(Box::new(other)),
+    })?;
     for outcome in inverted.outcomes() {
         tracing::debug!(
             kind = outcome.kind(),
@@ -336,6 +336,27 @@ fn identify(
     pid.set(3, cx);
 }
 
+/// A client of a terminology stub holding the PID rows, with the stub and
+/// its server, which the suites keep alive while they translate.
+#[cfg(test)]
+pub(crate) async fn stub_terminology() -> (
+    wiremock::MockServer,
+    ferropix_testkit::terminology::Translations,
+    Client,
+) {
+    let stub = ferropix_testkit::terminology::Translations::v2_pid();
+    let (server, base) = stub.serve().await.expect("the stub serves");
+    let client = crate::config::section::terminology::Terminology {
+        base_url: base.to_string(),
+        ..crate::config::section::terminology::Terminology::default()
+    }
+    .resolve(crate::config::Profile::Development)
+    .expect("the section resolves")
+    .expect("a terminology server")
+    .client;
+    (server, stub, client)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -349,7 +370,10 @@ mod tests {
     use fhir_types::codec::{Json as _, Path, Value};
     use fhir_types::r4::patient::Patient;
 
-    use super::{PidError, Shown, birth_date, demographics, identifiers, patient, segment};
+    use super::{
+        PidError, Shown, birth_date, demographics, identifiers, patient, segment,
+        stub_terminology as terminology,
+    };
     use crate::config::section::hl7v2::authority::Authorities;
 
     fn feed() -> String {
@@ -391,6 +415,7 @@ mod tests {
     /// The `Patient` of the PID of `text`, carrying the identifiers the
     /// face reads from PID-3 in the hospital domain.
     async fn read(text: &str) -> fhir_types::codec::Object {
+        let (_server, stub, client) = terminology().await;
         let parsed = parsed(text);
         let pid = parsed.message().segments().get(2).expect("a PID").clone();
         let known: Vec<(String, String)> =
@@ -398,9 +423,16 @@ mod tests {
                 .into_iter()
                 .filter_map(|cx| Some((cx.system?, cx.value)))
                 .collect();
-        patient(&parsed, 2, &known, Vec::new())
+        let read = patient(&parsed, 2, &known, Vec::new(), &client)
             .await
-            .expect("the PID reads")
+            .expect("the PID reads");
+        assert!(
+            stub.asked().iter().any(|(map, code)| map
+                .ends_with("table-hl70001-to-administrative-gender")
+                && code == "F"),
+            "PID-8 is translated on the terminology server"
+        );
+        read
     }
 
     #[tokio::test]
@@ -466,9 +498,41 @@ mod tests {
 
     #[tokio::test]
     async fn a_pid_7_that_is_no_date_is_refused() {
+        let (_server, _stub, client) = terminology().await;
         let parsed = parsed(&message("PID|1||PAT-1^^^EAST||Proefsma||19801329|F"));
-        let refused = patient(&parsed, 2, &[], Vec::new()).await;
+        let refused = patient(&parsed, 2, &[], Vec::new(), &client).await;
         assert!(matches!(refused, Err(PidError::BirthDate)), "{refused:?}");
+    }
+
+    #[tokio::test]
+    async fn a_terminology_server_that_does_not_answer_is_a_terminology_refusal() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port");
+        let client = crate::config::section::terminology::Terminology {
+            base_url: format!("http://{closed}/r4"),
+            ..crate::config::section::terminology::Terminology::default()
+        }
+        .resolve(crate::config::Profile::Development)
+        .expect("the section resolves")
+        .expect("a terminology server")
+        .client;
+        let parsed = parsed(&message("PID|1||PAT-1^^^EAST||Proefsma||19800229|F"));
+        let refused = patient(&parsed, 2, &[], Vec::new(), &client).await;
+        assert!(
+            matches!(refused, Err(PidError::Terminology(_))),
+            "{refused:?}"
+        );
+        let mut found = fhir_types::codec::Object::new();
+        found.insert(
+            String::from("gender"),
+            Value::String(String::from("female")),
+        );
+        let refused = demographics(&authorities(), 1, &[], &found, &client).await;
+        assert!(
+            matches!(refused, Err(PidError::Terminology(_))),
+            "{refused:?}"
+        );
     }
 
     #[test]
@@ -490,12 +554,19 @@ mod tests {
         let text = feed();
         let known = vec![(HOSPITAL_DOMAIN.to_owned(), String::from("PAT-1"))];
         let object = read(&text).await;
+        let (_server, stub, client) = terminology().await;
         let lexed = lex(&text, Charset::Ascii).expect("the feed lexes");
         let writer = Writer::new(*lexed.message.delimiters());
         let written = writer.segment(
-            &demographics(&authorities(), 1, &known, &object)
+            &demographics(&authorities(), 1, &known, &object, &client)
                 .await
                 .expect("the Patient writes back"),
+        );
+        assert!(
+            stub.asked().iter().any(|(map, code)| map
+                .ends_with("table-administrative-gender-to-hl70001")
+                && code == "female"),
+            "the gender is translated back on the terminology server"
         );
         let family = FAMILY_NAMES[0];
         let given = GIVEN_NAMES[0];

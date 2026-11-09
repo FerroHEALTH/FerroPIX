@@ -18,6 +18,8 @@ config:
       - application: ADT
         facility: EAST
         domain: "urn:oid:2.999.1.1"
+  terminology:
+    base_url: "https://tx.example.org/fhir/r4"
 networkPolicy:
   ingressFrom:
     - namespaceSelector:

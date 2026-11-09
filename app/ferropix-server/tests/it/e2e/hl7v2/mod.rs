@@ -20,7 +20,9 @@ use std::time::Duration;
 
 use ferrobridge_hl7v2::mllp::{CARRIAGE_RETURN, END_BLOCK, START_BLOCK};
 use ferropix_server::audit::Audit;
+use ferropix_server::config::Profile;
 use ferropix_server::config::section::hl7v2::{Hl7v2, Sender};
+use ferropix_server::config::section::terminology::Terminology;
 use ferropix_server::hl7v2::cursor::Cursors;
 use ferropix_server::hl7v2::{Face, Listener, Listening, serve_until};
 use ferropix_testkit::containers::e2e_enabled;
@@ -28,6 +30,7 @@ use ferropix_testkit::mllp;
 use ferropix_testkit::synthetic::{
     FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN,
 };
+use ferropix_testkit::terminology::Translations;
 use http::StatusCode;
 use serde_json::Value;
 use tokio::net::TcpListener;
@@ -64,6 +67,8 @@ struct V2 {
     served: Option<JoinHandle<std::io::Result<()>>>,
     /// The face's audit spool's parent directory.
     spool: tempfile::TempDir,
+    /// The terminology stub the face translates on.
+    terminology: (wiremock::MockServer, Translations),
 }
 
 impl V2 {
@@ -87,8 +92,16 @@ impl V2 {
                 .collect(),
             ..Hl7v2::default()
         };
+        let stub = Translations::v2_pid();
+        let (stub_server, base) = stub.serve().await.expect("the stub serves");
+        let terminology = Terminology {
+            base_url: base.to_string(),
+            ..Terminology::default()
+        }
+        .resolve(Profile::Development)
+        .expect("the terminology section resolves");
         let settings = section
-            .resolve()
+            .resolve(terminology.as_ref())
             .expect("the section resolves")
             .expect("the face is on");
         let spool = tempfile::tempdir().expect("a temporary directory");
@@ -127,6 +140,7 @@ impl V2 {
             stop: Some(stop),
             served: Some(served),
             spool,
+            terminology: (stub_server, stub),
         }
     }
 
@@ -455,6 +469,12 @@ async fn each_trigger_event_writes_the_version_a_fhir_feed_writes() {
             .await;
         assert_eq!(code(&answer), "AA", "{event}: {answer}");
     }
+    assert!(
+        v2.terminology.1.asked().iter().any(|(map, code)| {
+            map.ends_with("/table-hl70001-to-administrative-gender") && code == "F"
+        }),
+        "PID-8 is translated on the terminology server"
+    );
     let body: fhir_types::codec::Value = serde_json::from_value(serde_json::json!({
         "resourceType": "Patient",
         "identifier": [{"system": LABORATORY_DOMAIN, "value": "L-1"}],

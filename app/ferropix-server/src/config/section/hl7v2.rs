@@ -37,6 +37,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
 use crate::config::section::socket_address;
+use crate::config::section::terminology::TerminologySettings;
 
 /// One `[[hl7v2.senders]]` entry.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -177,7 +178,7 @@ impl Default for Hl7v2 {
 }
 
 /// The `[hl7v2]` section, resolved.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Hl7v2Settings {
     /// The socket address the listener binds.
     pub listen: SocketAddr,
@@ -199,6 +200,9 @@ pub struct Hl7v2Settings {
     pub consumers: Vec<Consumer>,
     /// The retry bounds of the notifications.
     pub notification: Notification,
+    /// The terminology server every v2 table value is translated on
+    /// (`[terminology]`).
+    pub terminology: ferrobridge_term::client::Client,
 }
 
 impl Hl7v2 {
@@ -212,12 +216,23 @@ impl Hl7v2 {
     /// names two domains, an empty Manager application or facility, a
     /// consumer without its name, its `host:port`, its application or
     /// facility, with an empty domain or a zero timeout, two consumers of one
-    /// name, and retry bounds out of order, and [`Error::DuplicateSender`]
-    /// for a sender named twice.
-    pub fn resolve(&self) -> Result<Option<Hl7v2Settings>, Error> {
+    /// name, retry bounds out of order, and no `terminology` while the
+    /// face is on, and [`Error::DuplicateSender`] for a sender named twice.
+    pub fn resolve(
+        &self,
+        terminology: Option<&TerminologySettings>,
+    ) -> Result<Option<Hl7v2Settings>, Error> {
         if !self.enabled {
             return Ok(None);
         }
+        // NOTE: no specification governs this: our own design; the face translates every
+        // v2 table value on the terminology server and holds no copy of a table.
+        let Some(terminology) = terminology else {
+            return Err(value(
+                "terminology.base_url",
+                "set while [hl7v2] is on: the HL7 v2 face translates every table value on it",
+            ));
+        };
         let listen = socket_address("hl7v2.listen", &self.listen)?;
         let Some(default_charset) = Charset::from_code(self.default_charset.trim()) else {
             return Err(value(
@@ -282,6 +297,7 @@ impl Hl7v2 {
             manager: (self.application.clone(), self.facility.clone()),
             consumers: self.consumers.clone(),
             notification: self.notification,
+            terminology: terminology.client.clone(),
         }))
     }
 
@@ -373,7 +389,20 @@ fn value(key: &str, rule: &'static str) -> Error {
 #[cfg(test)]
 mod tests {
     use super::{Consumer, Hl7v2, Sender};
+    use crate::config::Profile;
     use crate::config::error::Error;
+    use crate::config::section::terminology::{Terminology, TerminologySettings};
+
+    /// A terminology server the face translates on; none is reached.
+    fn tx() -> TerminologySettings {
+        Terminology {
+            base_url: String::from("https://tx.example.org/r4"),
+            ..Terminology::default()
+        }
+        .resolve(Profile::Production)
+        .expect("the section resolves")
+        .expect("a terminology server")
+    }
 
     fn sender(application: &str, facility: &str) -> Sender {
         Sender {
@@ -385,7 +414,12 @@ mod tests {
 
     #[test]
     fn the_listener_is_off_by_default_and_resolves_when_on() {
-        assert_eq!(None, Hl7v2::default().resolve().expect("off resolves"));
+        assert!(
+            Hl7v2::default()
+                .resolve(None)
+                .expect("off resolves")
+                .is_none()
+        );
         let mut west = sender("LAB", "WEST");
         west.domain = String::from("urn:oid:2.999.2");
         let on = Hl7v2 {
@@ -393,7 +427,7 @@ mod tests {
             senders: vec![sender("LAB", "EAST"), west],
             ..Hl7v2::default()
         };
-        let resolved = on.resolve().expect("on resolves").expect("on");
+        let resolved = on.resolve(Some(&tx())).expect("on resolves").expect("on");
         assert_eq!(2575, resolved.listen.port());
     }
 
@@ -405,7 +439,7 @@ mod tests {
             ..Hl7v2::default()
         };
         assert!(matches!(
-            twice.resolve(),
+            twice.resolve(Some(&tx())),
             Err(Error::DuplicateSender { index: 1 })
         ));
         let incomplete = Hl7v2 {
@@ -413,26 +447,35 @@ mod tests {
             senders: vec![sender("LAB", " ")],
             ..Hl7v2::default()
         };
-        assert!(matches!(incomplete.resolve(), Err(Error::Value { .. })));
+        assert!(matches!(
+            incomplete.resolve(Some(&tx())),
+            Err(Error::Value { .. })
+        ));
         let zero = Hl7v2 {
             enabled: true,
             frame_limit_bytes: 0,
             ..Hl7v2::default()
         };
-        assert!(matches!(zero.resolve(), Err(Error::Value { .. })));
+        assert!(matches!(
+            zero.resolve(Some(&tx())),
+            Err(Error::Value { .. })
+        ));
         let charset = Hl7v2 {
             enabled: true,
             default_charset: String::new(),
             ..Hl7v2::default()
         };
-        assert!(matches!(charset.resolve(), Err(Error::Value { .. })));
+        assert!(matches!(
+            charset.resolve(Some(&tx())),
+            Err(Error::Value { .. })
+        ));
         let unknown_charset = Hl7v2 {
             enabled: true,
             default_charset: String::from("EBCDIC"),
             ..Hl7v2::default()
         };
         assert!(matches!(
-            unknown_charset.resolve(),
+            unknown_charset.resolve(Some(&tx())),
             Err(Error::Value { .. })
         ));
     }
@@ -462,7 +505,7 @@ mod tests {
             }],
             ..Hl7v2::default()
         };
-        let resolved = on.resolve().expect("resolves").expect("on");
+        let resolved = on.resolve(Some(&tx())).expect("resolves").expect("on");
         assert_eq!(2, resolved.consumers.len());
         assert!(resolved.consumers[0].wants("urn:oid:2.999.1"));
         assert!(!resolved.consumers[0].wants("urn:oid:2.999.2"));
@@ -520,7 +563,7 @@ mod tests {
             };
             change(&mut faulty);
             assert!(
-                matches!(faulty.resolve(), Err(Error::Value { ref key, .. }) if key == wanted),
+                matches!(faulty.resolve(Some(&tx())), Err(Error::Value { ref key, .. }) if key == wanted),
                 "{wanted}"
             );
         }
@@ -536,7 +579,7 @@ mod tests {
             ..Hl7v2::default()
         };
         assert!(matches!(
-            two.resolve(),
+            two.resolve(Some(&tx())),
             Err(Error::Value { key, .. }) if key == "hl7v2.senders[1].domain"
         ));
         let mut querying = sender("PORTAL", "EAST");
@@ -551,7 +594,7 @@ mod tests {
             ..Hl7v2::default()
         };
         let resolved = query_only
-            .resolve()
+            .resolve(Some(&tx()))
             .expect("query-only senders resolve")
             .expect("on");
         assert_eq!(None, resolved.senders[1].feeds());
@@ -565,6 +608,9 @@ mod tests {
             .collect(),
             ..Hl7v2::default()
         };
-        assert!(matches!(shared.resolve(), Err(Error::Value { .. })));
+        assert!(matches!(
+            shared.resolve(Some(&tx())),
+            Err(Error::Value { .. })
+        ));
     }
 }

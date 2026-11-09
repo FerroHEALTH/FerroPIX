@@ -75,6 +75,21 @@ kind = "authoritative"
 source_client_id = "quickstart-source"
 sensitive = true
 
+# The HL7 v2 face, off until FERROPIX__HL7V2__ENABLED=true with a
+# terminology server named in FERROPIX__TERMINOLOGY__BASE_URL (compose.yaml,
+# the `hl7v2` profile). One sender feeds the quickstart hospital domain,
+# whose assigning authority namespace id is QUICKHOSP.
+[hl7v2]
+enabled = false
+
+[[hl7v2.senders]]
+application = "QUICKSTART"
+facility = "HOSPITAL"
+domain = "urn:oid:2.999.1.1"
+
+[hl7v2.namespaces]
+"urn:oid:2.999.1.1" = "QUICKHOSP"
+
 # The steward's API, which the console reads and writes (compose.yaml, the
 # `console` profile).
 [operator]

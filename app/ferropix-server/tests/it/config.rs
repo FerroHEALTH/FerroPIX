@@ -102,6 +102,8 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[pmir.feed]", "[pmir.feed]\n"),
         ("[hl7v2]", "[hl7v2]\n"),
         ("[[hl7v2.senders]]", "[[hl7v2.senders]]\n"),
+        ("[terminology]", "[terminology]\n"),
+        ("[terminology.retry]", "[terminology.retry]\n"),
         ("[xcpd]", "[xcpd]\n"),
         ("[outbox]", "[outbox]\n"),
         ("[audit]", "[audit]\n"),
@@ -439,6 +441,18 @@ fn the_old_issuer_shapes_fail_at_boot_naming_the_new_one() {
         let said = chain(&error);
         assert!(said.contains(names), "{case}: {said}");
     }
+}
+
+#[test]
+fn the_hl7v2_face_needs_a_terminology_server() {
+    let secrets = Secrets::new();
+    let text = FULL.replacen("base_url = \"https://tx.example.org/fhir/r4\"\n", "", 1);
+    assert_ne!(FULL, text);
+    let error = resolve(&text, &secrets).expect_err("the face translates on the server");
+    assert!(
+        matches!(&error, Error::Value { key, .. } if key == "terminology.base_url"),
+        "{error:?}"
+    );
 }
 
 #[test]

@@ -72,8 +72,11 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ferrohealth-health" },
   # FerroSYS's installation report to FerroPULSE.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-usage-report" },
-  # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
+  # FerroBRIDGE's HL7 v2 face with its v2-to-FHIR maps, the FHIR path model
+  # they write through and the terminology client they translate on.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },
+  { allow = ["BUSL-1.1"], crate = "fhirconnect" },
+  { allow = ["BUSL-1.1"], crate = "ferrobridge-term" },
   # FerroBRIDGE's FHIR search value grammar, which ihe-iti reads and writes
   # every search value with.
   { allow = ["BUSL-1.1"], crate = "fhir-search" },

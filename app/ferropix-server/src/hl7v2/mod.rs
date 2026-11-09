@@ -104,6 +104,8 @@ pub struct Face {
     master: String,
     /// The usage report's window each message is counted in.
     usage: Option<Arc<Window>>,
+    /// The terminology server every v2 table value is translated on.
+    terminology: ferrobridge_term::client::Client,
 }
 
 impl Face {
@@ -131,6 +133,7 @@ impl Face {
             endpoint: NetworkAddress::Ip(settings.listen.ip()),
             master: public_base_url.as_str().trim_end_matches('/').to_owned(),
             usage: None,
+            terminology: settings.terminology.clone(),
         }
     }
 
@@ -787,6 +790,7 @@ mod tests {
             String::from("EAST"),
         )]));
         let identifiers = [(String::from("urn:oid:2.999.1.1"), String::from("E-1"))];
+        let (_server, _stub, terminology) = pid::stub_terminology().await;
         respond(
             &header,
             &message,
@@ -797,7 +801,7 @@ mod tests {
                 status: "OK",
                 profile: &IHE_ITI_21,
                 body: vec![
-                    pid::demographics(&authorities, 1, &identifiers, patient)
+                    pid::demographics(&authorities, 1, &identifiers, patient, &terminology)
                         .await
                         .expect("the Patient writes back"),
                     write::value::Segment::new("DSC", ["P-1", "I"]),

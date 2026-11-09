@@ -74,8 +74,9 @@ a BSN among them, are carried as a FHIR feed carries them.
 
 The face reads PID as the `Patient` a FHIR Source would send for the same
 patient (name, birth date, gender, address, telecom and the mother's maiden
-name, through the HL7 v2-to-FHIR maps that FerroBRIDGE's `ferrobridge-hl7v2`
-ships and interprets) and applies it through the same feed
+name, through the HL7 v2-to-FHIR structure maps that FerroBRIDGE's
+`ferrobridge-hl7v2` is built with, every table value translated on the
+[terminology server](#the-terminology-server)) and applies it through the same feed
 transaction as ITI-104, so the version written, the deterministic match and
 the merge are the same. An A40 is the Resolve Duplicate message: the
 subsumed record is replaced by the survivor, its person merged into the
@@ -89,12 +90,49 @@ The acknowledgment is in original mode:
 | `AE`, ERR `PID^1^3^1^4` code `204` | PID-3 carries no identifier in the sender's domain. |
 | `AE`, ERR code `101` | PID-3 or MRG-1 is missing. |
 | `AE`, ERR `MRG^1^1^1^4` code `204` | MRG-1 is not in the sender's domain. |
+| `AE`, ERR `PID^1^7` code `102` | PID-7 is no date. |
 | `AE`, ERR code `204` | An A40 names a survivor FerroPIX does not hold. |
 | `AR`, ERR code `200` | Any other message type or trigger event. |
-| `AR`, ERR code `207` | The store or the audit spool cannot take the message; send it again. |
+| `AR`, ERR code `207` | The store, the audit spool or the terminology server cannot take the message; send it again. |
 
 A message sent again with the same MSH-10 from the same sender is
 acknowledged with the code it got the first time and is not applied again.
+
+## The terminology server
+
+The face maps PID to a `Patient`, and a `Patient` back into the PID of an
+ITI-21 answer, through the structure maps of the HL7 v2-to-FHIR 1.0.0 guide
+(`hl7.fhir.uv.v2mappings`) with FerroBRIDGE's corrections, which
+`ferrobridge-hl7v2` is built with. A table value (PID-8 by table 0001, the
+name type by 0200, the address type by 0190, the telecommunication use and
+equipment type by 0201 and 0202) is a code of a terminology, so the face
+translates each one by `ConceptMap/$translate` on the FHIR R4 terminology
+server `[terminology]` names, and holds no copy of a table. FerroTERM is
+the family's terminology server.
+
+Load three FHIR packages into it, as FerroBRIDGE's book says for its own
+HL7 v2 face: HL7 Terminology (`hl7.terminology`, which holds the v2 tables'
+code systems and the value sets the table maps name), the guide's package
+`hl7.fhir.uv.v2mappings` 1.0.0 (both from the FHIR package registry), and
+FerroBRIDGE's value package, `terminology/hl7v2-values/` of the FerroBRIDGE
+release whose `ferrobridge-hl7v2` FerroPIX runs. For FerroTERM, name the
+three directories in its `terminology.code_systems`:
+
+```toml
+[terminology]
+code_systems = [
+  "/srv/hl7.terminology/package",
+  "/srv/hl7.fhir.uv.v2mappings/package",
+  "/srv/ferrobridge-hl7v2-values",
+]
+```
+
+Then point FerroPIX's [`[terminology]`](../operate/configuration.md#terminology)
+section at the server's R4 base. The server refuses to start with the HL7
+v2 face on and no terminology server. A call the terminology server refuses
+or does not answer is answered `AR`, never mapped without the value, so
+the sender sends the message again; a code its map translates to nothing
+is left out of the `Patient`.
 
 ## ITI-9, the PIX query
 
@@ -132,8 +170,12 @@ parameter, so the persons found are the ones a PDQm search finds:
 | `@PID.18.1` with `@PID.18.4` | `identifier` |
 
 The answer, RSP^K22, holds one PID per person with its identifiers and
-demographics. A QPD-8 domain FerroPIX does not know answers `AE` with an
-ERR at `QPD^1^8^n`, and a field FerroPIX does not search on answers `AE`.
+demographics, written back through the same maps and checked against
+RSP_K21 as IHE ITI TF-2 Table 3.21-6 constrains it (QRI optional): an
+answer that does not conform, such as a PID with no name, is answered `AE`.
+A QPD-8 domain FerroPIX does not know answers `AE` with an ERR at
+`QPD^1^8^n`, and a field FerroPIX does not search on answers `AE`. When
+the terminology server does not translate, the query is answered `AR`.
 
 RCP-2 (`2^RD`) asks for increments of that many records. An answer that
 holds fewer than match ends with a DSC whose pointer you send back in a DSC

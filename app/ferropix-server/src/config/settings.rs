@@ -105,7 +105,8 @@ impl Config {
         let pseudonym_domains = pseudonym::resolve(&self.pseudonym_domain, &domains)?;
         let matching = self.matching.resolve()?;
         let pmir = self.pmir.resolve()?;
-        let hl7v2 = self.hl7v2.resolve()?;
+        let terminology = self.terminology.resolve(self.profile)?;
+        let hl7v2 = self.hl7v2.resolve(terminology.as_ref())?;
         let xcpd = self.xcpd.resolve()?;
         let outbox = self.outbox.resolve()?;
         let audit = self.audit.resolve(self.profile)?;

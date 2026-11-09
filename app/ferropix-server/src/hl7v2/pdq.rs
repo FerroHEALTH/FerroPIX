@@ -39,13 +39,14 @@ use crate::config::section::hl7v2::Sender;
 use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
 use crate::hl7v2::feed::{query_part, url_encoded};
-use crate::hl7v2::{Answer, Conformance, Face, Response, acknowledge, respond, sender_key};
+use crate::hl7v2::{Answer, Face, Response, acknowledge, respond, sender_key};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
-use crate::v2::pid::{self, Shown};
+use crate::v2::pid;
 use crate::v2::stamped::Stamped;
 use ferrobridge_hl7v2::parse::ErrorCode;
+use ferrobridge_hl7v2::parse::profile::IHE_ITI_21;
 use fhir_search::escape::escape;
 
 /// One person of an answer: its id and its `Patient`'s JSON.
@@ -113,12 +114,12 @@ pub(super) async fn query(
                 &Settled::rejected(
                     "the audit record could not be stored, so the query was not answered",
                 ),
-                face,
+                Vec::new(),
                 stamped,
             );
         }
     };
-    let settled = settle(face, message, sender).await;
+    let (settled, body) = written(face, settle(face, message, sender).await).await;
     let persons: Vec<String> = settled
         .found
         .iter()
@@ -145,11 +146,40 @@ pub(super) async fn query(
             &Settled::rejected(
                 "the audit record could not be stored, so the query was not answered",
             ),
-            face,
+            Vec::new(),
             stamped,
         );
     }
-    answer(header, message, &settled, face, stamped)
+    answer(header, message, &settled, body, stamped)
+}
+
+/// Writes the PID of each person `settled` found, or an `AE` with none
+/// when a `Patient` cannot be written as a PID.
+async fn written(face: &Face, settled: Settled) -> (Settled, Vec<write::value::Segment>) {
+    let mut body = Vec::with_capacity(settled.found.len());
+    for (index, (_, patient, identifiers)) in settled.found.iter().enumerate() {
+        match pid::demographics(
+            &face.authorities,
+            index.saturating_add(1),
+            identifiers,
+            patient,
+        )
+        .await
+        {
+            Ok(segment) => body.push(segment),
+            Err(error) => {
+                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 answer is withheld: a Patient could not be written as a PID");
+                return (
+                    Settled::error(vec![fault(
+                        ErrorCode::Application,
+                        "a patient found could not be written as a PID",
+                    )]),
+                    Vec::new(),
+                );
+            }
+        }
+    }
+    (settled, body)
 }
 
 /// Gives up the continuation pointers of the query QCN^J01 names in QID-1,
@@ -626,28 +656,14 @@ fn segment<'m>(message: &'m Message, id: &str) -> Option<&'m Segment> {
     message.segments().iter().find(|segment| segment.id() == id)
 }
 
-/// Writes the RSP^K22 of `settled`.
+/// Writes the RSP^K22 of `settled`, its PID segments `body`.
 fn answer(
     header: &Header,
     message: &Message,
     settled: &Settled,
-    face: &Face,
+    mut body: Vec<write::value::Segment>,
     stamped: &Stamped,
 ) -> Answer {
-    let mut body: Vec<write::value::Segment> = settled
-        .found
-        .iter()
-        .enumerate()
-        .map(|(index, (_, patient, identifiers))| {
-            pid::segment(
-                &face.authorities,
-                index.saturating_add(1),
-                identifiers,
-                Some(patient),
-                Shown::Demographics,
-            )
-        })
-        .collect();
     if let Some(pointer) = &settled.pointer {
         body.push(write::value::Segment::new("DSC", [pointer.as_str(), "I"]));
     }
@@ -660,7 +676,7 @@ fn answer(
             faults: &settled.faults,
             status: settled.status,
             body,
-            check: Conformance::Unchecked,
+            profile: &IHE_ITI_21,
         },
         stamped,
     )

@@ -17,7 +17,7 @@
 //! message sent again is acknowledged again and not applied twice.
 
 use ferrobridge_hl7v2::ack::{Code, Error, Header};
-use ferrobridge_hl7v2::parse::{Message, Segment};
+use ferrobridge_hl7v2::parse::{Message, Parsed, Segment};
 use fhir_search::escape::escape;
 use fhir_types::codec::Value;
 use ihe_atna::balp::{Exchange, Outcome};
@@ -32,7 +32,7 @@ use crate::feed::{Action, Applied, Context, FeedError};
 use crate::hl7v2::{Answer, Face, acknowledge, receipt, sender_key};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::store::record::Channel;
-use crate::v2::pid::{self, Cx};
+use crate::v2::pid::{self, Cx, PidError};
 use crate::v2::stamped::Stamped;
 use ferrobridge_hl7v2::parse::ErrorCode;
 
@@ -71,13 +71,14 @@ impl Settled {
 /// Answers one ITI-8 message of `sender`; `merge` for an A40.
 pub(super) async fn receive(
     face: &Face,
-    message: &Message,
+    parsed: &Parsed,
     header: &Header,
     sender: &Sender,
     call: &Call,
     merge: bool,
     stamped: &Stamped,
 ) -> Answer {
+    let message = parsed.message();
     let key = sender_key(sender);
     let Some(control_id) = message.control_id() else {
         return acknowledge(
@@ -120,7 +121,7 @@ pub(super) async fn receive(
             return acknowledge(header, settled.code, &settled.faults, stamped);
         }
     }
-    let settled = apply(face, message, sender, call, merge).await;
+    let settled = apply(face, parsed, sender, call, merge).await;
     if settled.final_outcome
         && let Err(error) =
             receipt::record(face.store.pool(), &key, control_id, settled.code.as_str()).await
@@ -131,20 +132,15 @@ pub(super) async fn receive(
 }
 
 /// Reads, applies and audits one ITI-8 message.
-async fn apply(
-    face: &Face,
-    message: &Message,
-    sender: &Sender,
-    call: &Call,
-    merge: bool,
-) -> Settled {
+async fn apply(face: &Face, parsed: &Parsed, sender: &Sender, call: &Call, merge: bool) -> Settled {
     let Some(domain) = sender.feeds() else {
         return Settled::refused(fault(
             ErrorCode::Application,
             "the sender feeds no identifier domain",
         ));
     };
-    let read = match read(face, message, domain, merge) {
+    let message = parsed.message();
+    let read = match read(face, parsed, domain, merge).await {
         Ok(read) => read,
         Err(fault) => return Settled::refused(*fault),
     };
@@ -215,14 +211,20 @@ struct Read {
 
 /// Reads `message` as the ITI-104 message of the same patient, fed into
 /// `domain`.
-fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Read, Box<Error>> {
-    let pid = segment(message, "PID").ok_or_else(|| {
-        fault_at(
-            location("PID", 1, 3, None, None),
-            ErrorCode::RequiredFieldMissing,
-            "the message carries no PID segment",
-        )
-    })?;
+async fn read(face: &Face, parsed: &Parsed, domain: &str, merge: bool) -> Result<Read, Box<Error>> {
+    let message = parsed.message();
+    let (index, pid) = message
+        .segments()
+        .iter()
+        .enumerate()
+        .find(|(_, segment)| segment.id() == "PID")
+        .ok_or_else(|| {
+            fault_at(
+                location("PID", 1, 3, None, None),
+                ErrorCode::RequiredFieldMissing,
+                "the message carries no PID segment",
+            )
+        })?;
     let carried = pid::identifiers(pid.field(3), &face.authorities, domain);
     if carried.is_empty() {
         return Err(Box::new(fault_at(
@@ -278,13 +280,9 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
     } else {
         (known, Vec::new(), None)
     };
-    let patient = pid::patient(pid, &identifiers, links).map_err(|_date| {
-        fault_at(
-            location("PID", 1, 7, None, None),
-            ErrorCode::DataType,
-            "PID-7 is no date",
-        )
-    })?;
+    let patient = pid::patient(parsed, index, &identifiers, links)
+        .await
+        .map_err(|error| Box::new(unmapped(&error)))?;
     let condition = subsumed.as_ref().unwrap_or(&own);
     let body = serde_json::to_vec(&Value::Object(patient))
         .map_err(|_json| fault(ErrorCode::Application, "the patient could not be written"))?;
@@ -302,6 +300,19 @@ fn read(face: &Face, message: &Message, domain: &str, merge: bool) -> Result<Rea
         own: identifier(domain, &own),
         subsumed: subsumed.as_ref().map(|cx| identifier(domain, cx)),
     })
+}
+
+/// The fault of a PID that could not be read as a `Patient`.
+fn unmapped(error: &PidError) -> Error {
+    if matches!(error, PidError::BirthDate) {
+        return fault_at(
+            location("PID", 1, 7, None, None),
+            ErrorCode::DataType,
+            "PID-7 is no date",
+        );
+    }
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 PID could not be mapped");
+    fault(ErrorCode::Application, "the PID could not be mapped")
 }
 
 /// Returns the records of a message read as `read` that ended in `applied`

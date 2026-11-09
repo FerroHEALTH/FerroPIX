@@ -74,7 +74,8 @@ a BSN among them, are carried as a FHIR feed carries them.
 
 The face reads PID as the `Patient` a FHIR Source would send for the same
 patient (name, birth date, gender, address, telecom and the mother's maiden
-name, after the HL7 v2-to-FHIR maps) and applies it through the same feed
+name, through the HL7 v2-to-FHIR maps that FerroBRIDGE's `ferrobridge-hl7v2`
+ships and interprets) and applies it through the same feed
 transaction as ITI-104, so the version written, the deterministic match and
 the merge are the same. An A40 is the Resolve Duplicate message: the
 subsumed record is replaced by the survivor, its person merged into the

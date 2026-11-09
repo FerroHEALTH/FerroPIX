@@ -45,6 +45,7 @@ use ferrobridge_hl7v2::inbound::{self, Inbound, Received};
 use ferrobridge_hl7v2::mllp::listener::{self, Connection, Handler, Timeouts};
 use ferrobridge_hl7v2::mllp::{Codec, Malformed};
 use ferrobridge_hl7v2::parse::Message;
+use ferrobridge_hl7v2::parse::profile::Profile;
 use ferrobridge_hl7v2::parse::structure::structure_declared;
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 use ferrohealth_usage_report::window::Window;
@@ -213,10 +214,19 @@ impl Face {
         let call = self.call(sender, message, connection.peer());
         match (message.message_type(1), message.message_type(2)) {
             (Some("ADT"), Some("A01" | "A04" | "A05" | "A08")) => {
-                feed::receive(self, message, header, sender, &call, false, stamped).await
+                feed::receive(
+                    self,
+                    inbound.parsed(),
+                    header,
+                    sender,
+                    &call,
+                    false,
+                    stamped,
+                )
+                .await
             }
             (Some("ADT"), Some("A40")) => {
-                feed::receive(self, message, header, sender, &call, true, stamped).await
+                feed::receive(self, inbound.parsed(), header, sender, &call, true, stamped).await
             }
             (Some("QBP"), Some("Q23")) => {
                 pix::query(self, message, header, &call, &self.text(raw), stamped).await
@@ -381,27 +391,17 @@ pub struct Response<'a> {
     pub status: &'a str,
     /// The segments after QPD.
     pub body: Vec<Segment>,
-    /// Whether the response is checked against its structure.
-    pub check: Conformance,
-}
-
-/// Whether a response is checked against the structure MSH-9 declares.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Conformance {
-    /// Checked by `Writer::compose`; one that does not conform is answered
-    /// `AE`.
-    Structure,
-    /// Written unchecked.
-    // TODO(#538): check the RSP^K22 once the crate composes under the ITI-21 constraint on QRI.
-    Unchecked,
+    /// The integration profile whose constraints the structure MSH-9
+    /// declares is checked under, [`Profile::BASE`] for none.
+    pub profile: &'static Profile,
 }
 
 /// Writes `response` to `message`, which `header` opens.
 ///
 /// The segments are MSH, MSA, one ERR per fault, QAK with QPD-2 echoed, the
 /// QPD echoed and the body (ITI TF-2 §3.9.4.2.2 and §3.21.4.2.2), checked
-/// against the structure MSH-9 declares when `response.check` asks for it. A
-/// checked response that does not conform is answered `AE` instead.
+/// against the structure MSH-9 declares as `response.profile` constrains
+/// it. A response that does not conform is answered `AE` instead.
 #[must_use]
 pub fn respond(
     header: &Header,
@@ -409,7 +409,7 @@ pub fn respond(
     response: Response<'_>,
     stamped: &Stamped,
 ) -> Answer {
-    let writer = header.writer();
+    let writer = header.writer().with_profile(response.profile);
     let message_type = Repetition::from_iter(response.message_type);
     let mut segments = vec![
         header.reply(Field::from(message_type), stamped.stamp()),
@@ -434,12 +434,6 @@ pub fn respond(
     ));
     segments.extend(echoed);
     segments.extend(response.body);
-    if response.check == Conformance::Unchecked {
-        return Answer {
-            code: response.code,
-            text: writer.message(&segments),
-        };
-    }
     match writer.compose(&segments, structure_declared, message.charset()) {
         Ok(composed) => Answer {
             code: response.code,
@@ -645,15 +639,14 @@ mod tests {
     use ferrobridge_hl7v2::write;
     use fhir_types::codec::Value;
 
-    use super::{
-        Conformance, Response, acknowledge, fault, fault_at, location, names, respond, sender_key,
-    };
+    use super::{Response, acknowledge, fault, fault_at, location, names, respond, sender_key};
     use crate::config::section::hl7v2::Sender;
     use crate::config::section::hl7v2::authority::Authorities;
     use crate::v2::pid::{self, Shown};
     use crate::v2::stamped::Stamped;
     use ferrobridge_hl7v2::ack::Header;
     use ferrobridge_hl7v2::parse::ErrorCode;
+    use ferrobridge_hl7v2::parse::profile::{IHE_ITI_21, Profile};
 
     fn sender(application: &str, facility: &str) -> Sender {
         Sender {
@@ -728,12 +721,11 @@ mod tests {
                 code: Code::Accept,
                 faults: &[],
                 status: "OK",
-                check: Conformance::Structure,
+                profile: &Profile::BASE,
                 body: vec![pid::segment(
                     &authorities,
                     1,
                     &identifiers,
-                    None,
                     Shown::Pseudonymous,
                 )],
             },
@@ -768,7 +760,7 @@ mod tests {
                     "a domain of QPD-3 is not recognized",
                 )],
                 status: "AE",
-                check: Conformance::Structure,
+                profile: &Profile::BASE,
                 body: Vec::new(),
             },
             &stamp(),
@@ -784,8 +776,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_pdq_response_writes_each_patient_and_the_continuation_pointer() {
+    /// The RSP^K22 of one found `patient`, written with the PDQ query's
+    /// header.
+    async fn pdq_answer(patient: &fhir_types::codec::Object) -> super::Answer {
         let query = "MSH|^~\\&|PORTAL|NORTH|PIX|NORTH|20261025100000||QBP^Q22^QBP_Q21|Q-2|P|2.5\rQPD|IHE PDQ Query|T-2|@PID.8^F\rRCP|I|1^RD\r";
         let message = lex(query, Charset::Ascii).expect("the query lexes").message;
         let header = Header::from_text(query).expect("the header reads");
@@ -794,16 +787,7 @@ mod tests {
             String::from("EAST"),
         )]));
         let identifiers = [(String::from("urn:oid:2.999.1.1"), String::from("E-1"))];
-        let mut patient = fhir_types::codec::Object::new();
-        patient.insert(
-            String::from("gender"),
-            Value::String(String::from("female")),
-        );
-        patient.insert(
-            String::from("birthDate"),
-            Value::String(String::from("1980-02-29")),
-        );
-        let answer = respond(
+        respond(
             &header,
             &message,
             Response {
@@ -811,25 +795,52 @@ mod tests {
                 code: Code::Accept,
                 faults: &[],
                 status: "OK",
-                check: Conformance::Unchecked,
+                profile: &IHE_ITI_21,
                 body: vec![
-                    pid::segment(
-                        &authorities,
-                        1,
-                        &identifiers,
-                        Some(&patient),
-                        Shown::Demographics,
-                    ),
+                    pid::demographics(&authorities, 1, &identifiers, patient)
+                        .await
+                        .expect("the Patient writes back"),
                     write::value::Segment::new("DSC", ["P-1", "I"]),
                 ],
             },
             &stamp(),
-        );
+        )
+    }
+
+    /// A found `Patient`, with a name when `named`.
+    fn found(named: bool) -> fhir_types::codec::Object {
+        let mut text = String::from(r#"{"gender": "female", "birthDate": "1980-02-29""#);
+        if named {
+            text.push_str(r#", "name": [{"family": "Family", "given": ["Given"]}]"#);
+        }
+        text.push('}');
+        match Value::from_serde_json(serde_json::from_str(&text).expect("a JSON literal")) {
+            Value::Object(object) => object,
+            other => panic!("not an object: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_pdq_response_writes_each_patient_and_the_continuation_pointer() {
+        let answer = pdq_answer(&found(true)).await;
         assert_eq!(answer.code, Code::Accept, "{}", answer.text);
         assert!(
-            answer
-                .text
-                .ends_with("QPD|IHE PDQ Query|T-2|@PID.8^F\rPID|1||E-1^^^EAST&2.999.1.1&ISO||||19800229|F\rDSC|P-1|I\r"),
+            answer.text.ends_with(
+                "QPD|IHE PDQ Query|T-2|@PID.8^F\rPID|1||E-1^^^EAST&2.999.1.1&ISO||Family^Given||19800229|F\rDSC|P-1|I\r"
+            ),
+            "{}",
+            answer.text
+        );
+    }
+
+    #[tokio::test]
+    async fn a_pdq_response_that_does_not_conform_to_rsp_k21_is_answered_ae() {
+        // NOTE: HL7 v2.5 PID-5 is required, and IHE ITI TF-2 §3.21.4.2.2 Table 3.21-6 keeps PID in
+        // the query response group, so a PID with no name does not conform.
+        let answer = pdq_answer(&found(false)).await;
+        assert_eq!(answer.code, Code::Error, "{}", answer.text);
+        assert!(
+            answer.text.contains("the response could not be written"),
             "{}",
             answer.text
         );

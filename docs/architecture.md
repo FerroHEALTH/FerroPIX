@@ -773,7 +773,8 @@ transaction reads its text in full.
   all three subcomponents (ITI TF-2 §3.9.4.2.2.5). No specification governs
   the mapping to a FHIR system: our own design.
 - **One feed path.** An ITI-8 message is read as the ITI-104 message of the
-  same patient (PID through the HL7 v2-to-FHIR maps, an A40 as the Resolve
+  same patient (PID through the HL7 v2-to-FHIR maps `ferrobridge-hl7v2`
+  ships and interprets, an A40 as the Resolve
   Duplicate message) and applied by the same feed transaction, and ITI-21
   is read as the ITI-78 search it names, so the two faces cannot drift.
 - **ITI-8** (ADT A01, A04, A05, A08 add and revise, ITI TF-2 §3.8.4.1.1; A40

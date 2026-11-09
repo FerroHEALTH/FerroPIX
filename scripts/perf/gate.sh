@@ -22,7 +22,8 @@
 #   scripts/perf/gate.sh run
 #       Starts PostgreSQL, the provider and both servers, the head on 8080
 #       and MLLP 2575 with perf/ferropix.toml, the base on 8081 and 2576
-#       with the base's own perf/ferropix.toml when it has one, seeds the
+#       with the base's own perf/ferropix.toml when it has one, each arm
+#       reading only the configuration its own tree defines (#568), seeds the
 #       two patients the request set feeds into each, renders perf/plan.toml
 #       with a Consumer's and the Source's token, and runs `ferrohealth-perf
 #       ab`: the head's idle phase, then pairs of load phases in turn. Then
@@ -129,6 +130,18 @@ wait_for() {
     sleep 1
   done
   die "$what did not come up"
+}
+
+# server_up NAME URL TRIES [LOG]: waits for the server NAME to answer its
+# readiness at URL, else exits 2 quoting the end of its own log, which names
+# why it refused to start (#568).
+server_up() {
+  local name="$1" url="$2" tries="$3" log="${4:-$WORK/$1/server.log}"
+  for _ in $(seq 1 "$tries"); do
+    curl --fail --silent "$url/health/readiness" > /dev/null 2>&1 && return 0
+    sleep 1
+  done
+  die "the $name server did not come up: $(tail -n 5 "$log" 2> /dev/null | tr '\n' ' ')"
 }
 
 # base_rev [BASE] [AT]: the commit the base is built from, as `build` names
@@ -289,7 +302,6 @@ serve() {
     FERROPIX__AUDIT__SPOOL_DIR="$dir/audit" \
     FERROPIX__SERVER__LISTEN="127.0.0.1:$port" \
     FERROPIX__HL7V2__LISTEN="$mllp" \
-    FERROPIX__TERMINOLOGY__BASE_URL="$TERMINOLOGY" \
     "$binary" serve --config "$config" > "$dir/server.log" 2>&1 &
   echo "$!"
 }
@@ -340,8 +352,8 @@ start() {
 
   head_pid="$(serve head target/release/ferropix "$CONFIG" ferropix 8080 "$HEAD_MLLP")"
   base_pid="$(serve base "$BASE_TREE/ferropix" "$base_config" ferropix_base 8081 "$BASE_MLLP")"
-  wait_for "the head server" 60 curl --fail --silent "$HEAD_URL/health/readiness"
-  wait_for "the base server" 60 curl --fail --silent "$BASE_URL/health/readiness"
+  server_up head "$HEAD_URL" 60
+  server_up base "$BASE_URL" 60
 }
 
 # seed URL SOURCE: feeds the two patients of the testkit's ITI-104 fixtures
@@ -514,6 +526,20 @@ self_test() {
   check "with no tag before it the base is the first parent" \
     "$(git -C "$repo" rev-parse v0.0.1~1)" "$(base_rev "" v0.0.1)"
   root="$saved_root"
+  # NOTE: #568, an arm reads [terminology] from its own tree's configuration
+  # only, so a base that predates the section never meets it.
+  check "no server is handed a terminology variable" 0 \
+    "$(declare -f serve | grep -c FERROPIX__TERMINOLOGY || true)"
+  check "the head's configuration names the gate's terminology server" "$TERMINOLOGY" \
+    "$(awk -F'"' '/^\[terminology\]/ { inside = 1; next } /^\[/ { inside = 0 }
+       inside && $1 ~ /^base_url/ { print $2 }' "$root/$CONFIG")"
+  printf 'ferropix: the configuration is refused: a reason\n' > "$work/server.log"
+  local refused code
+  refused="$( (server_up base http://127.0.0.1:9 1 "$work/server.log") 2>&1)" && code=0 || code=$?
+  check "a server that does not come up exits 2" 2 "$code"
+  check "a server that does not come up is named with its log" \
+    "perf-gate: the base server did not come up: ferropix: the configuration is refused: a reason " \
+    "$refused"
   [[ "$failed" -eq 0 ]] || exit 1
   echo "perf-gate: self-test OK ($n checks)."
 }

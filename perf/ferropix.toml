@@ -10,9 +10,8 @@
 # change side by side: it hands each server its two secret files in
 # FERROPIX__DB__URL_FILE and FERROPIX__DB__DATA_KEY_FILE, its audit spool in
 # FERROPIX__AUDIT__SPOOL_DIR, and its two ports in FERROPIX__SERVER__LISTEN
-# and FERROPIX__HL7V2__LISTEN, and the terminology server the HL7 v2 face
-# translates on in FERROPIX__TERMINOLOGY__BASE_URL (#564). No specification
-# governs this: our own design.
+# and FERROPIX__HL7V2__LISTEN. No specification governs this: our own
+# design.
 
 profile = "production"
 public_base_url = "http://localhost:8080"
@@ -70,6 +69,13 @@ enabled = true
 [hl7v2]
 enabled = true
 listen = "127.0.0.1:2575"
+
+# The terminology server the HL7 v2 face translates every table value on,
+# which the gate runs (#564). It is named here and never in the environment,
+# so a base whose tree predates [terminology] reads its own file without it
+# (#568).
+[terminology]
+base_url = "http://127.0.0.1:8280/r4"
 
 [[hl7v2.senders]]
 application = "PERF"

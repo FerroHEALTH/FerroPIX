@@ -75,10 +75,10 @@ pub struct Feed {
     pub initial_backoff: Span,
     /// The longest wait between two retries.
     pub max_backoff: Span,
-    /// Retired in v0.0.23 for `initial_backoff`.
+    /// Retired in v0.0.24 for `initial_backoff`.
     #[serde(skip_serializing)]
     pub initial_backoff_ms: Removed,
-    /// Retired in v0.0.23 for `max_backoff`.
+    /// Retired in v0.0.24 for `max_backoff`.
     #[serde(skip_serializing)]
     pub max_backoff_ms: Removed,
 }

@@ -144,7 +144,7 @@ pub struct Pix {
     /// The scope the server's `[operator] admin_scope` names: the console draws
     /// an administrator's forms only when the provider granted it.
     pub admin_scope: String,
-    /// Retired in v0.0.23 for `timeout`.
+    /// Retired in v0.0.24 for `timeout`.
     #[serde(skip_serializing)]
     pub timeout_ms: Removed,
 }
@@ -160,13 +160,13 @@ impl Default for Pix {
     }
 }
 
-/// `pix.timeout_ms`, renamed in v0.0.23 when the console wrote every span of
+/// `pix.timeout_ms`, renamed in v0.0.24 when the console wrote every span of
 /// time as `ferrohealth-config`'s units, and refused by name for that one
 /// release (the owner's rule of 2026-11-09).
 pub const PIX_TIMEOUT_MS: Retired = Retired::replaced(
     "pix.timeout_ms",
     "pix.timeout, a duration such as `30s`",
-    "0.0.23",
+    "0.0.24",
 );
 
 impl Pix {

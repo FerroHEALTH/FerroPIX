@@ -371,7 +371,7 @@ fn chain(error: &Error) -> String {
 }
 
 #[test]
-fn every_key_v0_0_23_renamed_is_refused_naming_its_replacement() {
+fn every_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
     let secrets = Secrets::new();
     let text = FULL
         .replacen("[outbox]\n", "[outbox]\nretention_days = 14\n", 1)

@@ -56,7 +56,7 @@ fn an_override_wins_over_the_file_and_reads_as_toml_or_text() {
 }
 
 #[test]
-fn the_timeout_v0_0_23_renamed_is_refused_naming_its_replacement() {
+fn the_timeout_v0_0_24_renamed_is_refused_naming_its_replacement() {
     let error = Config::from_sources(Some("[pix]\ntimeout_ms = 2000\n"), &BTreeMap::new())
         .expect("the tree reads")
         .resolve()

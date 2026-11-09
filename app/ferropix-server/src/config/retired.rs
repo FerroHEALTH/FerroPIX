@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The keys of FerroPIX's own sections that v0.0.23 renamed, each refused by
+//! The keys of FerroPIX's own sections that v0.0.24 renamed, each refused by
 //! name for that one release.
 //!
-//! v0.0.23 writes every span of time and size as `ferrohealth-config`'s
+//! v0.0.24 writes every span of time and size as `ferrohealth-config`'s
 //! units, a string of a whole number and its unit under a key that names
 //! none (`timeout = "10s"`, never `timeout_ms = 10000`). A section keeps
 //! each old key as a `Removed` field and declares it here with the release
@@ -17,7 +17,7 @@
 use ferrohealth_config::removed::Retired;
 
 /// The release that renamed the keys below.
-pub const SINCE: &str = "0.0.23";
+pub const SINCE: &str = "0.0.24";
 
 /// A key `key` replaced by `replacement`, with the form of its value.
 const fn renamed(key: &'static str, replacement: &'static str) -> Retired {

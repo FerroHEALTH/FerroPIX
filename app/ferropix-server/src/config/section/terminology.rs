@@ -50,7 +50,7 @@ pub struct Terminology {
     /// The outbound TLS: the client identity presented for mutual TLS and
     /// the roots trusted beside the platform's.
     pub tls: TlsClientSection,
-    /// Retired in v0.0.23 for `timeout`.
+    /// Retired in v0.0.24 for `timeout`.
     #[serde(skip_serializing)]
     pub timeout_ms: Removed,
 }
@@ -78,10 +78,10 @@ pub struct Retry {
     pub initial_backoff: Span,
     /// The longest wait between two attempts.
     pub max_backoff: Span,
-    /// Retired in v0.0.23 for `initial_backoff`.
+    /// Retired in v0.0.24 for `initial_backoff`.
     #[serde(skip_serializing)]
     pub initial_backoff_ms: Removed,
-    /// Retired in v0.0.23 for `max_backoff`.
+    /// Retired in v0.0.24 for `max_backoff`.
     #[serde(skip_serializing)]
     pub max_backoff_ms: Removed,
 }

@@ -117,7 +117,7 @@ as `"512KiB"` or `"1MiB"`; a bare number is refused, and a key that holds one
 carries no unit in its name. FerroPIX's own sections write them the same
 way. The keys of FerroPIX's own sections that held a number of
 milliseconds, seconds, days or bytes (`timeout_ms`, `retention_days`,
-`spool_max_bytes` and the rest) were renamed in v0.0.23: in that release
+`spool_max_bytes` and the rest) were renamed in v0.0.24: in that release
 each refuses the start and names the key that replaces it, all of them in
 one refusal, and from the next release each fails as an unknown key. The
 keys of the family sections (`[server]`, `[auth]`, `[telemetry]`) fail as

@@ -40,16 +40,16 @@ pub struct Audit {
     pub timeout: Span,
     /// The longest wait between two delivery attempts.
     pub retry_max: Span,
-    /// Retired in v0.0.23 for `spool_max_size`.
+    /// Retired in v0.0.24 for `spool_max_size`.
     #[serde(skip_serializing)]
     pub spool_max_bytes: Removed,
-    /// Retired in v0.0.23 for `spool_write_timeout`.
+    /// Retired in v0.0.24 for `spool_write_timeout`.
     #[serde(skip_serializing)]
     pub spool_write_timeout_ms: Removed,
-    /// Retired in v0.0.23 for `timeout`.
+    /// Retired in v0.0.24 for `timeout`.
     #[serde(skip_serializing)]
     pub timeout_ms: Removed,
-    /// Retired in v0.0.23 for `retry_max`.
+    /// Retired in v0.0.24 for `retry_max`.
     #[serde(skip_serializing)]
     pub retry_max_ms: Removed,
 }

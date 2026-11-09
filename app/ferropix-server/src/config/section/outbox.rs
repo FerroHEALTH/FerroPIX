@@ -24,7 +24,7 @@ pub struct Outbox {
     pub retention: Span,
     /// The most messages one prune deletes in one statement.
     pub prune_batch: u32,
-    /// Retired in v0.0.23 for `retention`.
+    /// Retired in v0.0.24 for `retention`.
     #[serde(skip_serializing)]
     pub retention_days: Removed,
 }

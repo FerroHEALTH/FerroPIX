@@ -84,10 +84,10 @@ pub struct Consumer {
     pub connect_timeout: Span,
     /// How long the acknowledgment may take once connected.
     pub reply_timeout: Span,
-    /// Retired in v0.0.23 for `connect_timeout`.
+    /// Retired in v0.0.24 for `connect_timeout`.
     #[serde(skip_serializing)]
     pub connect_timeout_ms: Removed,
-    /// Retired in v0.0.23 for `reply_timeout`.
+    /// Retired in v0.0.24 for `reply_timeout`.
     #[serde(skip_serializing)]
     pub reply_timeout_ms: Removed,
 }
@@ -127,10 +127,10 @@ pub struct Notification {
     pub initial_backoff: Span,
     /// The longest wait between two attempts.
     pub max_backoff: Span,
-    /// Retired in v0.0.23 for `initial_backoff`.
+    /// Retired in v0.0.24 for `initial_backoff`.
     #[serde(skip_serializing)]
     pub initial_backoff_ms: Removed,
-    /// Retired in v0.0.23 for `max_backoff`.
+    /// Retired in v0.0.24 for `max_backoff`.
     #[serde(skip_serializing)]
     pub max_backoff_ms: Removed,
 }
@@ -175,13 +175,13 @@ pub struct Hl7v2 {
     pub consumers: Vec<Consumer>,
     /// The retry bounds of the notifications.
     pub notification: Notification,
-    /// Retired in v0.0.23 for `frame_limit`.
+    /// Retired in v0.0.24 for `frame_limit`.
     #[serde(skip_serializing)]
     pub frame_limit_bytes: Removed,
-    /// Retired in v0.0.23 for `idle_timeout`.
+    /// Retired in v0.0.24 for `idle_timeout`.
     #[serde(skip_serializing)]
     pub idle_timeout_ms: Removed,
-    /// Retired in v0.0.23 for `frame_timeout`.
+    /// Retired in v0.0.24 for `frame_timeout`.
     #[serde(skip_serializing)]
     pub frame_timeout_ms: Removed,
 }

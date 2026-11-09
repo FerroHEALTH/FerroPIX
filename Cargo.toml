@@ -58,7 +58,7 @@ fhir-search = { version = "=0.1.130", default-features = false }
 # material itself, and the server and the console hand it `server-tls`'s
 # builder over ferrohealth-server (#561). Verified against crates.io on
 # 2026-11-09.
-ferrohealth-smart = { version = "=0.15.0", default-features = false }
+ferrohealth-smart = { version = "=0.15.1", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every

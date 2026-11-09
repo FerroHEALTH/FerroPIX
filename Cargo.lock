@@ -2458,9 +2458,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "404c590505ae8c34a1ea8afe8d6a6d223c816c887a311844d591a2b14ef15f82"
+checksum = "99a0a38390ed7f8739f30232b41bd19ca726d039e6e525f301ef0246aaa59af2"
 dependencies = [
  "async-trait",
  "base64 0.23.1",

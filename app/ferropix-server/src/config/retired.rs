@@ -19,142 +19,159 @@ use ferrohealth_config::removed::Retired;
 /// The release that renamed the keys below.
 pub const SINCE: &str = "0.0.24";
 
-/// A key `key` replaced by `replacement`, with the form of its value.
-const fn renamed(key: &'static str, replacement: &'static str) -> Retired {
-    Retired::replaced(key, replacement, SINCE)
-}
-
 /// `[audit]`.
 pub mod audit {
-    use super::{Retired, renamed};
+    use super::{Retired, SINCE};
 
     /// `audit.spool_max_bytes`.
-    pub const SPOOL_MAX_BYTES: Retired = renamed(
+    pub const SPOOL_MAX_BYTES: Retired = Retired::replaced(
         "audit.spool_max_bytes",
         "audit.spool_max_size, a size such as `64MiB`",
+        SINCE,
     );
     /// `audit.spool_write_timeout_ms`.
-    pub const SPOOL_WRITE_TIMEOUT_MS: Retired = renamed(
+    pub const SPOOL_WRITE_TIMEOUT_MS: Retired = Retired::replaced(
         "audit.spool_write_timeout_ms",
         "audit.spool_write_timeout, a duration such as `2s`",
+        SINCE,
     );
     /// `audit.timeout_ms`.
-    pub const TIMEOUT_MS: Retired =
-        renamed("audit.timeout_ms", "audit.timeout, a duration such as `5s`");
+    pub const TIMEOUT_MS: Retired = Retired::replaced(
+        "audit.timeout_ms",
+        "audit.timeout, a duration such as `5s`",
+        SINCE,
+    );
     /// `audit.retry_max_ms`.
-    pub const RETRY_MAX_MS: Retired = renamed(
+    pub const RETRY_MAX_MS: Retired = Retired::replaced(
         "audit.retry_max_ms",
         "audit.retry_max, a duration such as `1min`",
+        SINCE,
     );
 }
 
 /// `[outbox]`.
 pub mod outbox {
-    use super::{Retired, renamed};
+    use super::{Retired, SINCE};
 
     /// `outbox.retention_days`.
-    pub const RETENTION_DAYS: Retired = renamed(
+    pub const RETENTION_DAYS: Retired = Retired::replaced(
         "outbox.retention_days",
         "outbox.retention, a duration such as `30d`",
+        SINCE,
     );
 }
 
 /// `[pmir.feed]`.
 pub mod pmir {
-    use super::{Retired, renamed};
+    use super::{Retired, SINCE};
 
     /// `pmir.feed.initial_backoff_ms`.
-    pub const INITIAL_BACKOFF_MS: Retired = renamed(
+    pub const INITIAL_BACKOFF_MS: Retired = Retired::replaced(
         "pmir.feed.initial_backoff_ms",
         "pmir.feed.initial_backoff, a duration such as `500ms`",
+        SINCE,
     );
     /// `pmir.feed.max_backoff_ms`.
-    pub const MAX_BACKOFF_MS: Retired = renamed(
+    pub const MAX_BACKOFF_MS: Retired = Retired::replaced(
         "pmir.feed.max_backoff_ms",
         "pmir.feed.max_backoff, a duration such as `1min`",
+        SINCE,
     );
 }
 
 /// `[hl7v2]`, its consumers and its notification bounds.
 pub mod hl7v2 {
-    use super::{Retired, renamed};
+    use super::{Retired, SINCE};
 
     /// `hl7v2.frame_limit_bytes`.
-    pub const FRAME_LIMIT_BYTES: Retired = renamed(
+    pub const FRAME_LIMIT_BYTES: Retired = Retired::replaced(
         "hl7v2.frame_limit_bytes",
         "hl7v2.frame_limit, a size such as `1MiB`",
+        SINCE,
     );
     /// `hl7v2.idle_timeout_ms`.
-    pub const IDLE_TIMEOUT_MS: Retired = renamed(
+    pub const IDLE_TIMEOUT_MS: Retired = Retired::replaced(
         "hl7v2.idle_timeout_ms",
         "hl7v2.idle_timeout, a duration such as `5min`",
+        SINCE,
     );
     /// `hl7v2.frame_timeout_ms`.
-    pub const FRAME_TIMEOUT_MS: Retired = renamed(
+    pub const FRAME_TIMEOUT_MS: Retired = Retired::replaced(
         "hl7v2.frame_timeout_ms",
         "hl7v2.frame_timeout, a duration such as `30s`",
+        SINCE,
     );
     /// `connect_timeout_ms` of a `[[hl7v2.consumers]]` entry.
-    pub const CONNECT_TIMEOUT_MS: Retired = renamed(
+    pub const CONNECT_TIMEOUT_MS: Retired = Retired::replaced(
         "connect_timeout_ms",
         "connect_timeout, a duration such as `5s`",
+        SINCE,
     );
     /// `reply_timeout_ms` of a `[[hl7v2.consumers]]` entry.
-    pub const REPLY_TIMEOUT_MS: Retired = renamed(
+    pub const REPLY_TIMEOUT_MS: Retired = Retired::replaced(
         "reply_timeout_ms",
         "reply_timeout, a duration such as `30s`",
+        SINCE,
     );
     /// `hl7v2.notification.initial_backoff_ms`.
-    pub const INITIAL_BACKOFF_MS: Retired = renamed(
+    pub const INITIAL_BACKOFF_MS: Retired = Retired::replaced(
         "hl7v2.notification.initial_backoff_ms",
         "hl7v2.notification.initial_backoff, a duration such as `1s`",
+        SINCE,
     );
     /// `hl7v2.notification.max_backoff_ms`.
-    pub const MAX_BACKOFF_MS: Retired = renamed(
+    pub const MAX_BACKOFF_MS: Retired = Retired::replaced(
         "hl7v2.notification.max_backoff_ms",
         "hl7v2.notification.max_backoff, a duration such as `5min`",
+        SINCE,
     );
 }
 
 /// `[xcpd]`.
 pub mod xcpd {
-    use super::{Retired, renamed};
+    use super::{Retired, SINCE};
 
     /// `xcpd.delivery_initial_backoff_ms`.
-    pub const DELIVERY_INITIAL_BACKOFF_MS: Retired = renamed(
+    pub const DELIVERY_INITIAL_BACKOFF_MS: Retired = Retired::replaced(
         "xcpd.delivery_initial_backoff_ms",
         "xcpd.delivery_initial_backoff, a duration such as `1s`",
+        SINCE,
     );
     /// `xcpd.delivery_max_backoff_ms`.
-    pub const DELIVERY_MAX_BACKOFF_MS: Retired = renamed(
+    pub const DELIVERY_MAX_BACKOFF_MS: Retired = Retired::replaced(
         "xcpd.delivery_max_backoff_ms",
         "xcpd.delivery_max_backoff, a duration such as `1min`",
+        SINCE,
     );
     /// `xcpd.delivery_timeout_ms`.
-    pub const DELIVERY_TIMEOUT_MS: Retired = renamed(
+    pub const DELIVERY_TIMEOUT_MS: Retired = Retired::replaced(
         "xcpd.delivery_timeout_ms",
         "xcpd.delivery_timeout, a duration such as `10s`",
+        SINCE,
     );
 }
 
 /// `[terminology]`.
 pub mod terminology {
-    use super::{Retired, renamed};
+    use super::{Retired, SINCE};
 
     /// `terminology.timeout_ms`.
-    pub const TIMEOUT_MS: Retired = renamed(
+    pub const TIMEOUT_MS: Retired = Retired::replaced(
         "terminology.timeout_ms",
         "terminology.timeout, a duration such as `10s`",
+        SINCE,
     );
     /// `terminology.retry.initial_backoff_ms`.
-    pub const INITIAL_BACKOFF_MS: Retired = renamed(
+    pub const INITIAL_BACKOFF_MS: Retired = Retired::replaced(
         "terminology.retry.initial_backoff_ms",
         "terminology.retry.initial_backoff, a duration such as `200ms`",
+        SINCE,
     );
     /// `terminology.retry.max_backoff_ms`.
-    pub const MAX_BACKOFF_MS: Retired = renamed(
+    pub const MAX_BACKOFF_MS: Retired = Retired::replaced(
         "terminology.retry.max_backoff_ms",
         "terminology.retry.max_backoff, a duration such as `2s`",
+        SINCE,
     );
 }
 

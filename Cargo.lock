@@ -1286,9 +1286,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45c647dff461b43e2b4293345edd2b5bef5e86b0b32288f8eb69a2f4273f3988"
+checksum = "e76de0ef1572c995e09f153b8c632549c7ed3064caffd23b1c694a113eb68a85"
 dependencies = [
  "bytes",
  "chumsky",
@@ -1312,13 +1312,13 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-term"
-version = "0.1.153"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7404db9051aec2bfa26bf76b1aef4131acf5d4d237bed6e941d00eed30303997"
+checksum = "e1b5cf22f6c786e380a16e181982f2a22518e5a6a4ec702ebd8d2c840f861817"
 dependencies = [
  "async-trait",
  "backon",
- "ferrohealth-smart 0.13.0",
+ "ferrohealth-smart",
  "fhir-types",
  "http",
  "reqwest",
@@ -1410,7 +1410,7 @@ dependencies = [
  "cookie",
  "ferrohealth-config",
  "ferrohealth-secret",
- "ferrohealth-smart 0.15.1",
+ "ferrohealth-smart",
  "ferrohealth-ui",
  "http",
  "jiff",
@@ -1419,31 +1419,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "ferrohealth-smart"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfe7a2900512b6ffdc66ce45bb9b545262d3ac7e997ebc35155378d9fe8cc805"
-dependencies = [
- "argon2",
- "aws-lc-rs",
- "base64 0.23.1",
- "ferrohealth-secret",
- "http",
- "jiff",
- "jsonwebtoken",
- "reqwest",
- "rustls",
- "secrecy",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "toml",
  "tracing",
  "url",
 ]
@@ -1566,7 +1541,7 @@ dependencies = [
  "ferrohealth-secret",
  "ferrohealth-server",
  "ferrohealth-session",
- "ferrohealth-smart 0.15.1",
+ "ferrohealth-smart",
  "ferrohealth-telemetry",
  "ferrohealth-ui",
  "ferropix-operator-api",
@@ -1614,7 +1589,7 @@ dependencies = [
  "ferrohealth-health",
  "ferrohealth-secret",
  "ferrohealth-server",
- "ferrohealth-smart 0.15.1",
+ "ferrohealth-smart",
  "ferrohealth-telemetry",
  "ferrohealth-usage-report",
  "ferropix-console",
@@ -2486,7 +2461,7 @@ version = "0.0.84"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
- "ferrohealth-smart 0.15.1",
+ "ferrohealth-smart",
  "fhir-search",
  "fhir-types",
  "http",
@@ -2965,7 +2940,7 @@ version = "0.0.51"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
- "ferrohealth-smart 0.15.1",
+ "ferrohealth-smart",
  "fhir-search",
  "fhir-types",
  "http",

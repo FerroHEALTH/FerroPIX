@@ -7,8 +7,8 @@ description: >-
   verdict: it reports the exit code, the runner's CPU model and whether a
   retry on a fresh runner may help, and the perf workflow's verdict job
   decides. A retry may help when the gate ended with exit 2, a run that
-  could not be judged, on any CPU model, or with exit 1, a breach, on a CPU
-  model the workflow lists as stall-prone. The calling job checks out
+  could not be judged, which includes a breach on a runner whose disk
+  syncs too slowly to judge the server (#511). The calling job checks out
   the repository and installs the Rust toolchain first. No specification
   governs this: our own design.
 inputs:
@@ -21,9 +21,6 @@ inputs:
     default: ""
   version:
     description: The ferrohealth-perf version to install, exactly.
-    required: true
-  stall-prone:
-    description: The CPU models whose runners stall the gate, one per line.
     required: true
 outputs:
   code:
@@ -53,7 +50,6 @@ runs:
       shell: bash
       env:
         ATTEMPT: ${{ inputs.attempt }}
-        STALL_PRONE: ${{ inputs.stall-prone }}
       run: |
         set -uo pipefail
         code=0
@@ -63,14 +59,8 @@ runs:
         if [ -n "$latest" ]; then
           model="$(jq -r '.host.cpu_model // ""' "$latest")"
         fi
-        prone=false
-        while IFS= read -r listed; do
-          if [ -n "$listed" ] && [ "$listed" = "$model" ]; then prone=true; fi
-        done <<< "$STALL_PRONE"
         retryable=false
         if [ "$code" = 2 ]; then
-          retryable=true
-        elif [ "$code" = 1 ] && [ "$prone" = true ]; then
           retryable=true
         fi
         case "$code" in
@@ -81,14 +71,12 @@ runs:
         esac
         if [ "$retryable" = true ] && [ "$ATTEMPT" -ge 3 ]; then
           why="no attempt is left to retry it"
-        elif [ "$retryable" = true ] && [ "$code" = 2 ]; then
-          why="a retry runs on a fresh runner, since a run that could not be judged says nothing about the code"
         elif [ "$retryable" = true ]; then
-          why="a retry runs on a fresh runner, since ${model} is listed as stall-prone"
+          why="a retry runs on a fresh runner, since a run that could not be judged says nothing about the code"
         elif [ "$code" = 0 ]; then
           why="no retry is needed"
         elif [ "$code" = 1 ]; then
-          why="no retry runs, since ${model:-an unnamed CPU} is not listed as stall-prone"
+          why="no retry runs, since a breach on a runner whose disk syncs in time is the code's"
         else
           why="no retry runs after exit ${code}"
         fi

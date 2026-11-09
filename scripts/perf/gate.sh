@@ -23,7 +23,7 @@
 #       Starts PostgreSQL, the provider and both servers, the head on 8080
 #       and MLLP 2575 with perf/ferropix.toml, the base on 8081 and 2576
 #       with the base's own perf/ferropix.toml when it has one, each arm
-#       reading only the configuration its own tree defines (#568), seeds the
+#       handed only the settings its own tree defines (#568), seeds the
 #       two patients the request set feeds into each, renders perf/plan.toml
 #       with a Consumer's and the Source's token, and runs `ferrohealth-perf
 #       ab`: the head's idle phase, then pairs of load phases in turn. Then
@@ -290,13 +290,24 @@ packages() {
 
 # serve NAME BINARY CONFIG DB PORT MLLP: starts one server in the
 # background, its secrets and spool under $WORK/NAME, and prints its pid.
+# knows_terminology TREE: whether the source tree TREE defines the
+# `[terminology]` section, which the server of v0.0.22 and later needs while
+# its HL7 v2 face is on and an earlier one refuses as unknown (#568).
+knows_terminology() {
+  [[ -f "$1/app/ferropix-server/src/config/section/terminology.rs" ]]
+}
+
+# serve NAME BINARY CONFIG DB PORT MLLP TREE: as above, the terminology
+# server handed over only when TREE, the arm's source, defines the section.
 serve() {
-  local binary="$2" config="$3" db="$4" port="$5" mllp="$6" dir="$WORK/$1"
+  local binary="$2" config="$3" db="$4" port="$5" mllp="$6" tree="$7" dir="$WORK/$1"
+  local terminology=()
+  knows_terminology "$tree" && terminology=("FERROPIX__TERMINOLOGY__BASE_URL=$TERMINOLOGY")
   mkdir -p "$dir/audit"
   chmod 0700 "$dir" "$dir/audit"
   server_url "$db" > "$dir/db-url"
   openssl rand -base64 32 > "$dir/data-key"
-  FERROPIX__USAGE_REPORT__ENABLED=false \
+  env ${terminology[@]+"${terminology[@]}"} FERROPIX__USAGE_REPORT__ENABLED=false \
     FERROPIX__DB__URL_FILE="$dir/db-url" \
     FERROPIX__DB__DATA_KEY_FILE="$dir/data-key" \
     FERROPIX__AUDIT__SPOOL_DIR="$dir/audit" \
@@ -350,8 +361,8 @@ start() {
     "$tx_image" > /dev/null
   wait_for "the terminology server" 120 curl --fail --silent "http://127.0.0.1:8280/health/readiness"
 
-  head_pid="$(serve head target/release/ferropix "$CONFIG" ferropix 8080 "$HEAD_MLLP")"
-  base_pid="$(serve base "$BASE_TREE/ferropix" "$base_config" ferropix_base 8081 "$BASE_MLLP")"
+  head_pid="$(serve head target/release/ferropix "$CONFIG" ferropix 8080 "$HEAD_MLLP" "$root")"
+  base_pid="$(serve base "$BASE_TREE/ferropix" "$base_config" ferropix_base 8081 "$BASE_MLLP" "$BASE_TREE/src")"
   server_up head "$HEAD_URL" 60
   server_up base "$BASE_URL" 60
 }
@@ -526,13 +537,13 @@ self_test() {
   check "with no tag before it the base is the first parent" \
     "$(git -C "$repo" rev-parse v0.0.1~1)" "$(base_rev "" v0.0.1)"
   root="$saved_root"
-  # NOTE: #568, an arm reads [terminology] from its own tree's configuration
-  # only, so a base that predates the section never meets it.
-  check "no server is handed a terminology variable" 0 \
-    "$(declare -f serve | grep -c FERROPIX__TERMINOLOGY || true)"
-  check "the head's configuration names the gate's terminology server" "$TERMINOLOGY" \
-    "$(awk -F'"' '/^\[terminology\]/ { inside = 1; next } /^\[/ { inside = 0 }
-       inside && $1 ~ /^base_url/ { print $2 }' "$root/$CONFIG")"
+  mkdir -p "$work/new/app/ferropix-server/src/config/section" "$work/old"
+  : > "$work/new/app/ferropix-server/src/config/section/terminology.rs"
+  check "a tree that defines [terminology] is handed the terminology server" 0 \
+    "$(knows_terminology "$work/new" && echo 0 || echo 1)"
+  check "a tree before [terminology] is not" 1 \
+    "$(knows_terminology "$work/old" && echo 0 || echo 1)"
+  check "this tree defines [terminology]" 0 "$(knows_terminology "$root" && echo 0 || echo 1)"
   printf 'ferropix: the configuration is refused: a reason\n' > "$work/server.log"
   local refused code
   refused="$( (server_up base http://127.0.0.1:9 1 "$work/server.log") 2>&1)" && code=0 || code=$?

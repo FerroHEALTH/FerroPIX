@@ -107,7 +107,7 @@ ihe-iti = { version = "0.0.84", path = "../ihe-iti", default-features = false, o
 # The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.
-ferrohealth-smart = { version = "0.15.0", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.16.1", default-features = false, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }

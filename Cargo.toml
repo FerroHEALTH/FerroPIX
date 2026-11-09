@@ -58,14 +58,14 @@ fhir-search = { version = "=0.1.130", default-features = false }
 # material itself, and the server and the console hand it `server-tls`'s
 # builder over ferrohealth-server (#561). Verified against crates.io on
 # 2026-11-09.
-ferrohealth-smart = { version = "=0.15.1", default-features = false }
+ferrohealth-smart = { version = "=0.16.1", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
 # Verified against crates.io on 2026-11-09 (0.9.0, the release on
 # ferrohealth-smart 0.15 and ferrohealth-config 0.4, #561).
-ferrohealth-session = { version = "=0.9.0", default-features = false }
+ferrohealth-session = { version = "=0.10.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -74,9 +74,9 @@ ferrohealth-session = { version = "=0.9.0", default-features = false }
 # requires. 0.4.0 and 0.8.0 write every span of time and size as a string
 # with its unit, under a key that names none (#561). Verified against
 # crates.io on 2026-11-09.
-ferrohealth-config = "=0.4.0"
+ferrohealth-config = "=0.4.1"
 ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.8.0", default-features = false }
+ferrohealth-server = { version = "=0.8.1", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition
@@ -112,7 +112,7 @@ http = "1.5.0"
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
 # Verified against crates.io on 2026-11-09 (0.9.1, on `ferrohealth-smart`
 # 0.15, #561).
-ihe-atna = { version = "=0.9.1", default-features = false }
+ihe-atna = { version = "=0.10.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60.2", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

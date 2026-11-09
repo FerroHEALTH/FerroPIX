@@ -57,7 +57,7 @@ ferropix-operator-api = { path = "../ferropix-operator-api" }
 # users of the development profile. `axum` adds the layer that guards every
 # route of the FHIR face and the operator API, and `fetch` reads each
 # issuer's metadata and key set.
-ferrohealth-smart = { workspace = true, features = ["axum", "fetch"] }
+ferrohealth-smart = { workspace = true, features = ["axum", "fetch", "server-tls"] }
 # The configuration loader, the secret types and the `--config` and `--set`
 # arguments the family shares.
 ferrohealth-config.workspace = true

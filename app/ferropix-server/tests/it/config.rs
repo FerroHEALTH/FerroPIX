@@ -31,8 +31,8 @@ fn every_section_loads_and_resolves() {
         "https://pix.example.org/pix",
         settings.public_base_url.as_str()
     );
-    assert_eq!(1000, settings.server.drain_delay_ms);
-    assert_eq!(5000, settings.server.shutdown_timeout_ms);
+    assert_eq!(1000, settings.server.drain_delay.as_millis());
+    assert_eq!(5000, settings.server.shutdown_timeout.as_millis());
     assert_eq!(8080, settings.server.listen.port());
     assert!(
         settings
@@ -370,8 +370,10 @@ fn chain(error: &Error) -> String {
     text
 }
 
+// NOTE: `ferrohealth-smart` 0.15 dropped the named refusal of each removed key one release
+// after it removed them (FerroHEALTH/FerroAUTH#388), so each fails as an unknown key.
 #[test]
-fn every_removed_auth_key_fails_at_boot_naming_what_replaces_it() {
+fn every_removed_auth_key_fails_at_boot_as_an_unknown_key() {
     let secrets = Secrets::new();
     for (key, line) in [
         (
@@ -393,15 +395,14 @@ fn every_removed_auth_key_fails_at_boot_naming_what_replaces_it() {
     ] {
         let text = FULL.replacen("[auth]\n", &format!("[auth]\n{line}\n"), 1);
         let error = resolve(&text, &secrets).expect_err("a section-level issuer key is removed");
-        assert!(matches!(error, Error::Auth { .. }), "{key}: {error:?}");
+        assert!(matches!(error, Error::Load(_)), "{key}: {error:?}");
         let said = chain(&error);
-        assert!(said.contains(key), "{key}: {said}");
-        assert!(said.contains("removed"), "{key}: {said}");
+        assert!(said.contains(&format!("auth.{key}")), "{key}: {said}");
     }
 }
 
 #[test]
-fn the_old_issuer_shapes_fail_at_boot_naming_the_new_one() {
+fn the_old_issuer_shapes_fail_at_boot_naming_their_key() {
     let secrets = Secrets::new();
     let issuer = "issuer = \"https://idp.example.org/realms/pix\"\n";
     let table = FULL
@@ -414,7 +415,7 @@ fn the_old_issuer_shapes_fail_at_boot_naming_the_new_one() {
             "the flat issuer",
             FULL.replacen(table, "", 1)
                 .replacen("[auth]\n", &format!("[auth]\n{issuer}"), 1),
-            "[[auth.issuer]] table with its own kind",
+            "auth.issuer",
         ),
         (
             "token_profile on an issuer",
@@ -432,12 +433,12 @@ fn the_old_issuer_shapes_fail_at_boot_naming_the_new_one() {
                 "[auth]\nscopeless_subjects = [\"https://idp.example.org/realms/pix#east-lab\"]\n",
                 1,
             ),
-            "{ issuer, sub }",
+            "auth.scopeless_subjects",
         ),
     ] {
         assert_ne!(FULL, text, "{case}");
         let error = resolve(&text, &secrets).expect_err("the old shape is refused");
-        assert!(matches!(error, Error::Auth { .. }), "{case}: {error:?}");
+        assert!(matches!(error, Error::Load(_)), "{case}: {error:?}");
         let said = chain(&error);
         assert!(said.contains(names), "{case}: {said}");
     }

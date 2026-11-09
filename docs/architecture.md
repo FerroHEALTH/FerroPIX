@@ -175,10 +175,10 @@ message and position without quoting the line.
 | Section | Holds |
 |---|---|
 | `public_base_url` | the top-level key: the `[base]` the `CapabilityStatement` and every `targetId` name |
-| `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit_bytes`, `request_timeout_ms`, `header_read_timeout_ms`, `idle_timeout_ms` (a kept-alive connection idle that long is closed), `drain_delay_ms` and `shutdown_timeout_ms` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
+| `[server]` | `ferrohealth-server`'s `ServerSection`: `listen`, `base_path`, `body_limit`, `request_timeout`, `header_read_timeout`, `idle_timeout` (a kept-alive connection idle that long is closed), `drain_delay` and `shutdown_timeout` (the bounded drain on `SIGTERM`), the overload bound, the trusted proxies, the compression and `[server.tls]`; `[server.caller_rate]` is refused, since no per-caller limit is mounted |
 | `[telemetry]` | `ferrohealth-telemetry`'s section: the filter, the format, the logged query parameters and `[telemetry.otlp]` |
 | `[db]` | `url` or `url_file`, the pool size, `migrate`, `data_key_file` (the sealing key of section 4) |
-| `[auth]` | `ferrohealth-smart`'s `AuthSection`: the `[[auth.issuer]]` tables, each with its `kind`, its profile, its audience and its RFC 8414 metadata, key set or RFC 7662 introspection, `ca_file`, `[[auth.basic.users]]` under the development profile only, each a person and never granted a `system/` scope, and `product_scope`, the steward scope |
+| `[auth]` | `ferrohealth-smart`'s `AuthSection`: the `[[auth.issuer]]` tables, each with its `kind`, its profile, its audience and its RFC 8414 metadata, key set or RFC 7662 introspection, `[auth.tls]`, `[[auth.basic.users]]` under the development profile only, each a person and never granted a `system/` scope, and `product_scope`, the steward scope |
 | `[trust]` | `[[trust.issuer]]`: the `clients` each issuer may vouch for as a Source |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |

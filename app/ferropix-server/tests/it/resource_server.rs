@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The `[auth]` keys of `ferrohealth-smart` the server honours beyond the
-//! issuer list: `ca_file`, the trust roots an issuer behind a private
+//! issuer list: `[auth.tls] trust_roots_file`, the roots an issuer behind a private
 //! certificate authority is read with, and `mode = "introspection"`, the
 //! RFC 7662 check of an opaque token. Every key and certificate is generated
 //! when the case runs.
@@ -67,7 +67,7 @@ fn pki(directory: &Path) -> (std::path::PathBuf, std::path::PathBuf, std::path::
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn an_issuer_behind_a_private_authority_is_read_with_the_ca_file_roots_and_not_without() {
+async fn an_issuer_behind_a_private_authority_is_read_with_the_trusted_roots_and_not_without() {
     let directory = tempfile::tempdir().expect("a temporary directory");
     let (authority, certificate, key_file) = pki(directory.path());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -121,7 +121,10 @@ async fn an_issuer_behind_a_private_authority_is_read_with_the_ca_file_roots_and
         .expect_err("the platform's roots do not hold the private authority");
     assert!(matches!(refused, SmartError::Issuer { .. }), "{refused:?}");
     let trusted = settings(
-        &table(&format!("ca_file = \"{}\"\n", authority.display())),
+        &table(&format!(
+            "[auth.tls]\ntrust_roots_file = \"{}\"\n",
+            authority.display()
+        )),
         &secrets,
     );
     let (app, smart, _spool) = application(trusted).await;

@@ -44,7 +44,7 @@ jiff.workspace = true
 # authorization request with PKCE, the code exchange, the ID Token check, the
 # refresh grant and the end-session URL.
 ferrohealth-session = { workspace = true, features = ["axum"] }
-ferrohealth-smart = { workspace = true, features = ["oidc"] }
+ferrohealth-smart = { workspace = true, features = ["oidc", "server-tls"] }
 # The configuration loader, the secret types and the `--config` and `--set`
 # arguments the family shares.
 ferrohealth-config.workspace = true

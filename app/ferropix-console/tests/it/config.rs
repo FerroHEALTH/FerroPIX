@@ -202,8 +202,8 @@ fn each_oidc_or_session_value_its_key_does_not_admit_is_refused_by_key() {
             "session.max_sessions",
         ),
         (
-            String::from("[session]\nidle_timeout_s = 0\n"),
-            "session.idle_timeout_s",
+            String::from("[session]\nidle_timeout = \"0s\"\n"),
+            "session.idle_timeout",
         ),
     ] {
         let error = Config::from_sources(Some(&text), &BTreeMap::new())

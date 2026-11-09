@@ -10,7 +10,7 @@
 )]
 
 use std::collections::BTreeSet;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use ferropix_server::config::section::matching::Matching;
 use ferropix_server::config::section::profiles::Deprecated;
@@ -201,9 +201,9 @@ async fn the_first_page_of_a_search_over_100000_records_answers_within_the_reque
     let served = serve(Deprecated::Inactive, &Matching::default()).await;
     bulk(&served.started.store, 100_000, "load", None).await;
     let token = served.consumer();
-    let timeout = Duration::from_millis(
-        ferrohealth_server::section::ServerSection::default().request_timeout_ms,
-    );
+    let timeout = ferrohealth_server::section::ServerSection::default()
+        .request_timeout
+        .get();
     for query in [
         "family=Proefsma&birthdate=1961-04-12",
         "family=proef",

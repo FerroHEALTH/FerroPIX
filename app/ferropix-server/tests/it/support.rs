@@ -72,10 +72,10 @@ public_base_url = "https://pix.example.org/pix"
 [server]
 listen = "0.0.0.0:8080"
 base_path = "/pix"
-body_limit_bytes = 2097152
-request_timeout_ms = 20000
-drain_delay_ms = 1000
-shutdown_timeout_ms = 5000
+body_limit = "2MiB"
+request_timeout = "20s"
+drain_delay = "1s"
+shutdown_timeout = "5s"
 
 [telemetry]
 filter = "info,ferropix_server=debug"
@@ -100,11 +100,11 @@ kind = "persons"
 profile = "rfc9068"
 audience = ["https://pix.example.org/pix/fhir"]
 algorithms = ["PS256"]
-clock_skew_seconds = 10
-jwks_max_age_seconds = 60
-jwks_refresh_interval_seconds = 10
+clock_skew = "10s"
+jwks_max_age = "1min"
+jwks_refresh_interval = "10s"
 jwks_file = ""
-timeout_ms = 5000
+timeout = "5s"
 role_claims = ["roles"]
 first_party_clients = ["ferropix-console"]
 

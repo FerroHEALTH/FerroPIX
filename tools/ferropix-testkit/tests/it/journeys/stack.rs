@@ -133,7 +133,11 @@ impl Stack {
     /// Starts the provider, a refusing stand-in and a console whose
     /// sessions idle out after `seconds`.
     pub(crate) async fn start_idle(seconds: u64) -> Self {
-        Self::start_session(Server::Refusing, &format!("idle_timeout_s = {seconds}\n")).await
+        Self::start_session(
+            Server::Refusing,
+            &format!("idle_timeout = \"{seconds}s\"\n"),
+        )
+        .await
     }
 
     /// Starts the provider, a stand-in answering as `answers` says and the

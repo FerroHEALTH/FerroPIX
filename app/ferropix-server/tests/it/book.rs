@@ -24,7 +24,7 @@ profile = "development"
 url = "postgres://db.invalid/pix"
 
 [auth.basic]
-cache_ttl_seconds = 60
+cache_ttl = "1min"
 
 [[auth.basic.users]]
 user = "dev-steward"

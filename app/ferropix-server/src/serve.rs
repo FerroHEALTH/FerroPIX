@@ -148,7 +148,7 @@ pub async fn serve_settings(
                     settings,
                 )
                 .with_usage(Arc::clone(&window)),
-                server.shutdown_timeout(),
+                server.shutdown_timeout.get(),
                 listening,
                 stopped_by(stopped.clone()),
             )
@@ -164,7 +164,7 @@ pub async fn serve_settings(
     wound_down(
         mllp,
         sender,
-        server.shutdown_timeout(),
+        server.shutdown_timeout.get(),
         [draining, reporting],
     )
     .await;
@@ -174,7 +174,7 @@ pub async fn serve_settings(
 
 /// Serves `app` on `listener` as `server` configures it, over TLS when
 /// `[server.tls]` is set, until `stopped` is raised, then drains within
-/// `server.drain_delay_ms` and `server.shutdown_timeout_ms`.
+/// `server.drain_delay` and `server.shutdown_timeout`.
 ///
 /// # Errors
 /// Returns [`ServeError::Serve`] when the TLS files cannot be read or the

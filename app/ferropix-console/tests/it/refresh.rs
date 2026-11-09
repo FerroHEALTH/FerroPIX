@@ -228,8 +228,11 @@ async fn the_absolute_timeout_ends_a_session_whatever_its_refresh_token()
     // The extensions land one and three seconds in, the second at the idle
     // timeout the sign-in alone would have reached.
     let time = ManualClock::new(START);
-    let (provider, state, service, cookie) =
-        due_session_on("idle_timeout_s = 3\nabsolute_timeout_s = 4", time.clock()).await?;
+    let (provider, state, service, cookie) = due_session_on(
+        "idle_timeout = \"3s\"\nabsolute_timeout = \"4s\"",
+        time.clock(),
+    )
+    .await?;
     provider
         .answer_refresh(OPERATOR_REFRESH, &refreshed("synthetic-access-2", None))
         .await?;

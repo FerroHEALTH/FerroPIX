@@ -83,7 +83,7 @@ the request's `MessageID` and `To` naming the endpoint.
   payload sealed under the store's key, before the request is accepted with
   `202`. A restart delivers what the outbox still holds, and on `SIGTERM`
   the sender finishes the answer in flight within `[server]
-  shutdown_timeout_ms`.
+  shutdown_timeout`.
 - **Mutual TLS:** with `[xcpd.tls] client_identity_file` set, one PEM
   holding the certificate chain and its private key, the delivery presents
   that certificate to the reply endpoint, as the mutual TLS of an ATNA

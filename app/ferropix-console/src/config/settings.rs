@@ -142,7 +142,7 @@ impl Config {
 /// redirection endpoint and the scopes to their rules and reads the client
 /// secret, and the console's own rule for a post-logout redirect.
 fn resolve_oidc(oidc: &OidcSection) -> Result<OidcSettings, Error> {
-    let checked = oidc.check()?;
+    let checked = oidc.check_with_tls(&ferrohealth_smart::config::ServerTls)?;
     let redirect_uri = Url::parse(&oidc.redirect_uri).map_err(|source| Error::Url {
         key: String::from("oidc.redirect_uri"),
         source,

@@ -23,7 +23,8 @@ use std::time::Duration;
 use ferrobridge_term::client::Client;
 use ferrobridge_term::config::{Config, Credentials, RetryPolicy, WireVersion};
 use ferrobridge_term::smart::SmartToken;
-use ferrohealth_server::tls_client::{TlsClient, TlsClientSection};
+use ferrohealth_config::tls::TlsClientSection;
+use ferrohealth_server::tls_client::TlsClient;
 use ferrohealth_smart::client::cache::TokenSource;
 use ferrohealth_smart::config::credentials::{CredentialsSection, Outbound};
 use serde::{Deserialize, Serialize};
@@ -144,7 +145,7 @@ impl Terminology {
             });
         match self
             .credentials
-            .resolve()
+            .resolve_with_tls(&ferrohealth_smart::config::ServerTls)
             .map_err(|source| Error::Credentials {
                 key: "terminology.credentials",
                 source: Box::new(source),

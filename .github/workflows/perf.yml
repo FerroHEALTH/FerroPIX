@@ -12,12 +12,12 @@
 # fail. The base is the merge base of the commit with the `base` input, or
 # with none the previous release. An attempt that ends with exit 2 could not
 # be judged and says nothing about the code, so it is retried on a fresh
-# runner on any CPU model. Some runners stall the gate for a whole job
-# (#511), so an attempt that ends with exit 1 on a CPU model STALL_PRONE
-# lists is retried too. At most two retries run. The verdict job passes the
-# gate when the last attempt that ran passed; a breach on any other model
-# fails at once, with no retry. No specification governs this: our own
-# design.
+# runner on any CPU model. Some runners' disks sync so slowly that every
+# route stalls (#511); the gate measures the runner's sync beside the run and
+# a breach on such a runner exits 2 too. At most two retries run. The verdict
+# job passes the gate when the last attempt that ran passed; a breach on a
+# runner whose disk syncs in time fails at once, with no retry. No
+# specification governs this: our own design.
 name: Perf
 
 on:
@@ -42,11 +42,6 @@ permissions: {}
 env:
   FERROHEALTH_PERF_VERSION: 0.5.2
   FERROPIX__USAGE_REPORT__ENABLED: "false"
-  # The CPU models whose runners stall every route for 100 to 300 ms for a
-  # whole job (FerroPIX #511), one per line. A breach is retried only on one
-  # of them; an exit 2 is retried on any model.
-  STALL_PRONE: |
-    AMD EPYC 9V74 80-Core Processor
 
 jobs:
   perf:
@@ -74,7 +69,6 @@ jobs:
           attempt: "1"
           base: ${{ inputs.base }}
           version: ${{ env.FERROHEALTH_PERF_VERSION }}
-          stall-prone: ${{ env.STALL_PRONE }}
 
   perf-retry:
     name: perf (attempt 2)
@@ -103,7 +97,6 @@ jobs:
           attempt: "2"
           base: ${{ inputs.base }}
           version: ${{ env.FERROHEALTH_PERF_VERSION }}
-          stall-prone: ${{ env.STALL_PRONE }}
 
   perf-retry-2:
     name: perf (attempt 3)
@@ -132,7 +125,6 @@ jobs:
           attempt: "3"
           base: ${{ inputs.base }}
           version: ${{ env.FERROHEALTH_PERF_VERSION }}
-          stall-prone: ${{ env.STALL_PRONE }}
 
   # The gate passes when the last attempt that ran passed; an attempt job
   # that did not finish fails it.

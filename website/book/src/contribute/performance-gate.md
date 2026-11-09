@@ -106,27 +106,37 @@ stalled, and a base that fell behind the schedule.
 
 ## Retries
 
-Some runners stall every route for a whole job: on an AMD EPYC 9V74 the
-tails reach 100 to 300 ms while the p50 holds
-([FerroPIX #511](https://github.com/FerroHEALTH/FerroPIX/issues/511)). A
-phase where every route's p99 is over ten times its p50 at once is a stalled
-runner: it is reported, left out of the judgement, and the run exits 2. An
-attempt that ends with exit 2 runs again on a fresh runner on any CPU model,
-since a run that cannot be judged says nothing about the code. An attempt
-that ends with exit 1 runs again only on a CPU model the perf workflow lists
-in `STALL_PRONE`. At most two retries run, and the gate passes when the last
-attempt passed. A breach on any other model fails at once. The job summary
-names each attempt's CPU model, its verdict and why a retry ran.
+Some runners stall every route for a whole job: the tails reach 100 to
+500 ms while the p50 holds
+([FerroPIX #511](https://github.com/FerroHEALTH/FerroPIX/issues/511)). The
+cause is the runner's disk. Every audited request waits until its record is
+synced to disk ([Deployment](../operate/deployment.md#disk-latency)), and on
+those runners a sync takes up to hundreds of milliseconds. On 2026-11-09 one
+job measured a sync p99 of 270 ms on an AMD EPYC 9V74 runner that stalled,
+and 8 ms on an EPYC 7763 runner that did not. Neither runner showed steal,
+and both CPU clocks held.
 
-While the tool runs, the script samples the runner four times a second
-into `target/perf/runner.tsv`, part of the attempt's artifact: how long a
-16 KiB record takes to reach the disk the way the audit spool stores one,
-the disks' flushes and their mean time, the CPU time stolen by the
-hypervisor and spent waiting on I/O, and the CPU clock. The job summary
-gives its percentiles. Every audited request waits for its record's flush
-([Deployment](../operate/deployment.md#disk-latency)), so a stall the
-sampler sees in the disk's flush time is the runner's disk, and one it
-does not see is worth a look at the server.
+So the script samples the runner four times a second while the tool runs,
+into `target/perf/runner.tsv`, part of the attempt's artifact. Each sample
+records how long a 16 KiB record takes to reach the disk the way the audit
+spool stores one (the file synced, renamed, its directory synced, on the
+spool's file system), the CPU time stolen by the hypervisor and spent
+waiting on I/O, and the CPU clock. The job summary gives the percentiles.
+
+An attempt is not judged, and exits 2, when:
+
+- a phase stalled: every route's p99 is over ten times its p50 at once. The
+  tool reports the phase and leaves it out of the judgement;
+- the head breached on a runner whose sync p99 is over 50 ms
+  (`SLOW_SYNC_MS` in `scripts/perf/gate.sh`). That bound is six times the
+  8 ms of a steady runner and a fifth of the 270 ms of a stalling one.
+
+An attempt that ends with exit 2 runs again on a fresh runner, since a run
+that cannot be judged says nothing about the code. At most two retries run,
+and the gate passes when the last attempt passed. A breach on a runner whose
+disk syncs in time fails at once, whatever its CPU model. The job summary
+names each attempt's CPU model, its verdict, the runner's samples and why a
+retry ran.
 
 ## Changing the plan or the tolerances
 

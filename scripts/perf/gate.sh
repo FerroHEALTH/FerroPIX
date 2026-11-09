@@ -28,7 +28,8 @@
 #       hold, 1 when the gate fails or the planted poller passes, 2 when the
 #       run cannot be judged or set up. While the tool runs, the runner is
 #       sampled into target/perf/runner.tsv (#511): a spool-shaped disk
-#       sync, the disks' flushes, steal, I/O wait and the CPU clock.
+#       sync, steal, I/O wait and the CPU clock. A breach on a runner whose
+#       sync p99 is over SLOW_SYNC_MS is not judged and exits 2.
 #   scripts/perf/gate.sh --self-test
 #       Proves the pin reader, the plan rendering, the base resolution, the
 #       agreement of the two plans' idle limits and the runner summary
@@ -142,19 +143,23 @@ build() {
   cargo build --release --locked -p ferropix-server
 }
 
+# The p99 of the runner's spool-shaped sync, in ms, above which the gate
+# cannot judge the server (#511): every audited request waits for such a
+# sync, so a disk this slow stalls every route at once. A runner that kept
+# the gate steady measured 8 ms, one that stalled it 270 ms.
+readonly SLOW_SYNC_MS=50
+
 # sample OUT: every quarter second until killed, appends one line to OUT of
 # what the runner did since the line before (#511): the Unix time; the
 # milliseconds a 16 KiB record took to reach the disk the way the audit
 # spool stores one (a file synced, renamed, its directory synced), on the
-# spool's file system; the disks' flushes and their mean milliseconds; the
-# share of CPU time stolen by the hypervisor and spent waiting on I/O; and
-# the mean clock of the CPUs in MHz.
+# spool's file system; the share of CPU time stolen by the hypervisor and
+# spent waiting on I/O; and the mean clock of the CPUs in MHz.
 sample() {
-  local out="$1" probe="$WORK/probe" t0 t1 cpu0 cpu1 disk0 disk1
+  local out="$1" probe="$WORK/probe" t0 t1 cpu0 cpu1
   mkdir -p "$probe"
-  printf 'time\tsync_ms\tflushes\tflush_ms\tsteal_pct\tiowait_pct\tmhz\n' > "$out"
+  printf 'time\tsync_ms\tsteal_pct\tiowait_pct\tmhz\n' > "$out"
   cpu0="$(cpu_ticks)"
-  disk0="$(disk_flushes)"
   while :; do
     t0="$EPOCHREALTIME"
     dd if=/dev/zero of="$probe/record.partial" bs=16k count=1 conv=fsync status=none
@@ -163,16 +168,12 @@ sample() {
     t1="$EPOCHREALTIME"
     sleep 0.25
     cpu1="$(cpu_ticks)"
-    disk1="$(disk_flushes)"
-    awk -v t0="$t0" -v t1="$t1" -v b="$cpu0 $disk0" -v a="$cpu1 $disk1" -v mhz="$(cpu_mhz)" 'BEGIN {
-      split(b, x, " "); split(a, y, " ")
-      total = y[1] - x[1]; flushes = y[4] - x[4]
-      printf "%.3f\t%.3f\t%d\t%.3f\t%.2f\t%.2f\t%.0f\n", t0, (t1 - t0) * 1000, flushes,
-        (flushes > 0 ? (y[5] - x[5]) / flushes : 0), (total > 0 ? 100 * (y[2] - x[2]) / total : 0),
-        (total > 0 ? 100 * (y[3] - x[3]) / total : 0), mhz
+    awk -v t0="$t0" -v t1="$t1" -v b="$cpu0" -v a="$cpu1" -v mhz="$(cpu_mhz)" 'BEGIN {
+      split(b, x, " "); split(a, y, " "); total = y[1] - x[1]
+      printf "%.3f\t%.3f\t%.2f\t%.2f\t%.0f\n", t0, (t1 - t0) * 1000,
+        (total > 0 ? 100 * (y[2] - x[2]) / total : 0), (total > 0 ? 100 * (y[3] - x[3]) / total : 0), mhz
     }' >> "$out"
     cpu0="$cpu1"
-    disk0="$disk1"
   done
 }
 
@@ -181,32 +182,43 @@ cpu_ticks() {
   awk '$1 == "cpu" { t = 0; for (i = 2; i <= NF; i++) t += $i; print t, $9, $6; exit }' /proc/stat
 }
 
-# disk_flushes: the flush requests completed and the milliseconds spent on
-# them, summed over the whole disks (the kernel's iostats.rst, fields 16
-# and 17, the last two of a line).
-disk_flushes() {
-  awk '$3 !~ /^(loop|ram|zram|dm-|sr|md)/ && $3 !~ /[0-9]p[0-9]+$/ && $3 !~ /^[a-z]+[a-z][0-9]+$/ { f += $(NF - 1); m += $NF }
-    END { print f + 0, m + 0 }' /proc/diskstats
-}
-
 # cpu_mhz: the mean clock of the CPUs (proc(5) cpuinfo).
 cpu_mhz() {
   awk -F': ' '/^cpu MHz/ { s += $2; n++ } END { if (n) printf "%.0f", s / n; else print 0 }' /proc/cpuinfo
 }
 
+# sync_p99 OUT: the p99 of the sync times sample wrote to OUT, in whole ms,
+# or nothing when it wrote none.
+sync_p99() {
+  tail -n +2 "$1" | cut -f 2 | sort -g | awk '{ s[++n] = $1 }
+    END { if (!n) exit; k = int(n * 0.99 + 0.5); if (k < 1) k = 1; if (k > n) k = n; printf "%d", s[k] }'
+}
+
+# judged CODE P99: the gate's exit code once the runner's sync p99 is
+# known: a breach (1) on a runner whose disk syncs slower than SLOW_SYNC_MS
+# could not be judged (2), since every request waited on that disk; any
+# other code stands.
+judged() {
+  if [[ "$1" -eq 1 && -n "$2" && "$2" -gt "$SLOW_SYNC_MS" ]]; then
+    echo 2
+  else
+    echo "$1"
+  fi
+}
+
 # summarize OUT: one line over the samples sample wrote to OUT: the sync
-# time's p50, p99 and maximum, the samples over 50 ms, the mean flush time,
-# the mean and largest steal and I/O wait, and the clock's range.
+# time's p50, p99 and maximum, the samples over 50 ms, the mean and largest
+# steal and I/O wait, and the clock's range.
 summarize() {
   sort -t "$(printf '\t')" -k2,2g <(tail -n +2 "$1") | awk -F'\t' '
-    { n++; s[n] = $2; if ($2 > 50) slow++; f += $3; fm += $3 * $4
-      st += $5; if ($5 > stmax) stmax = $5; io += $6; if ($6 > iomax) iomax = $6
-      if (n == 1 || $7 < lo) lo = $7; if ($7 > hi) hi = $7 }
+    { n++; s[n] = $2; if ($2 > 50) slow++
+      st += $3; if ($3 > stmax) stmax = $3; io += $4; if ($4 > iomax) iomax = $4
+      if (n == 1 || $5 < lo) lo = $5; if ($5 > hi) hi = $5 }
     function at(q, k) { k = int(n * q + 0.5); if (k < 1) k = 1; if (k > n) k = n; return s[k] }
     END {
       if (!n) { print "no samples"; exit }
-      printf "%d samples; spool-shaped sync p50 %.1f ms, p99 %.1f ms, max %.1f ms, %d over 50 ms; disk flush mean %.1f ms; steal mean %.2f %%, max %.2f %%; I/O wait mean %.2f %%, max %.2f %%; clock %d to %d MHz\n",
-        n, at(0.50), at(0.99), s[n], slow, (f > 0 ? fm / f : 0), st / n, stmax, io / n, iomax, lo, hi
+      printf "%d samples; spool-shaped sync p50 %.1f ms, p99 %.1f ms, max %.1f ms, %d over 50 ms; steal mean %.2f %%, max %.2f %%; I/O wait mean %.2f %%, max %.2f %%; clock %d to %d MHz\n",
+        n, at(0.50), at(0.99), s[n], slow + 0, st / n, stmax, io / n, iomax, lo, hi
     }'
 }
 
@@ -362,9 +374,19 @@ run() {
   local runner
   runner="$(summarize target/perf/runner.tsv 2> /dev/null)" || runner="the runner was not sampled"
   echo "perf-gate: the runner: $runner" >&2
+  local p99 verdict
+  p99="$(sync_p99 target/perf/runner.tsv 2> /dev/null)" || p99=""
+  verdict="$(judged "$code" "$p99")"
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf "### The runner\n\n%s (\`target/perf/runner.tsv\`, #511).\n\n" "$runner" >> "$GITHUB_STEP_SUMMARY"
+    if [[ "$verdict" != "$code" ]]; then
+      printf "The breach is not judged: the runner's disk synced at p99 %s ms, over %s ms, and every audited request waits on it.\n\n" "$p99" "$SLOW_SYNC_MS" >> "$GITHUB_STEP_SUMMARY"
+    fi
   fi
+  if [[ "$verdict" != "$code" ]]; then
+    echo "perf-gate: the breach is not judged: the runner's disk synced at p99 ${p99} ms, over ${SLOW_SYNC_MS} ms" >&2
+  fi
+  code="$verdict"
   busy_loop || { [[ "$code" -ne 0 ]] || code=1; }
   if [[ "$code" -ne 0 ]]; then
     for server in head base; do
@@ -405,16 +427,22 @@ self_test() {
     failed=1
   }
   {
-    printf 'time\tsync_ms\tflushes\tflush_ms\tsteal_pct\tiowait_pct\tmhz\n'
-    printf '1.0\t2.0\t10\t1.0\t0.00\t1.00\t2400\n'
-    printf '2.0\t180.0\t30\t20.0\t0.50\t9.00\t2450\n'
-    printf '3.0\t4.0\t0\t0.000\t0.00\t2.00\t2400\n'
+    printf 'time\tsync_ms\tsteal_pct\tiowait_pct\tmhz\n'
+    printf '1.0\t2.0\t0.00\t1.00\t2400\n'
+    printf '2.0\t180.0\t0.50\t9.00\t2450\n'
+    printf '3.0\t4.0\t0.00\t2.00\t2400\n'
   } > "$work/runner.tsv"
   check "the runner's samples are summarized" \
-    "3 samples; spool-shaped sync p50 4.0 ms, p99 180.0 ms, max 180.0 ms, 1 over 50 ms; disk flush mean 15.2 ms; steal mean 0.17 %, max 0.50 %; I/O wait mean 4.00 %, max 9.00 %; clock 2400 to 2450 MHz" \
+    "3 samples; spool-shaped sync p50 4.0 ms, p99 180.0 ms, max 180.0 ms, 1 over 50 ms; steal mean 0.17 %, max 0.50 %; I/O wait mean 4.00 %, max 9.00 %; clock 2400 to 2450 MHz" \
     "$(summarize "$work/runner.tsv")"
-  printf 'time\tsync_ms\tflushes\tflush_ms\tsteal_pct\tiowait_pct\tmhz\n' > "$work/empty.tsv"
+  check "the sync p99 is read in whole ms" 180 "$(sync_p99 "$work/runner.tsv")"
+  printf 'time\tsync_ms\tsteal_pct\tiowait_pct\tmhz\n' > "$work/empty.tsv"
   check "a runner with no samples says so" "no samples" "$(summarize "$work/empty.tsv")"
+  check "a runner with no samples has no sync p99" "" "$(sync_p99 "$work/empty.tsv")"
+  check "a breach on a slow disk is not judged" 2 "$(judged 1 180)"
+  check "a breach on a fast disk stands" 1 "$(judged 1 8)"
+  check "a pass on a slow disk stands" 0 "$(judged 0 180)"
+  check "a breach with no samples stands" 1 "$(judged 1 "")"
   local repo="$work/repo" saved_root="$root"
   git init --quiet "$repo"
   commit() { git -C "$repo" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c tag.gpgsign=false commit --quiet --allow-empty -m "$1"; }

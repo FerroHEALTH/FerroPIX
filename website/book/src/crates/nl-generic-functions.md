@@ -60,4 +60,6 @@ Definition says they answer it, and never puts a credential, the
 presentation, a key, a proof or the token in an error or a `Debug`
 rendering. The authorization server's issuer is an `https` URL, or plain
 `http` on a loopback host for a test, under the RFC 8414 rules of
-[`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart).
+[`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart). An answer that is not JSON, repeats a name or has another shape is refused
+by its line and column alone, read through that crate's 0.13 refusal type,
+which quotes no part of the answer.

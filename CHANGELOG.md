@@ -13,6 +13,117 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-11-09
+
+A release that breaks the HL7 v2 face's configuration. The face maps PID
+through `ferrobridge-hl7v2` 0.2.0 and translates every v2 table value on a
+FHIR R4 terminology server, so a server with `[hl7v2]` on needs the new
+`[terminology]` section, pointing at a server loaded with HL7 Terminology,
+`hl7.fhir.uv.v2mappings` 1.0.0 and FerroBRIDGE's value package, before you
+upgrade. The XCPD gateway reads its outbound TLS from `[xcpd.tls]`, and the
+three keys it replaces are refused by name in this release only. `ihe-iti`
+0.0.83 and `nl-generic-functions` 0.0.50 are on `ferrohealth-smart` 0.13
+and `ihe-atna` 0.8, and the workspace holds one copy of each.
+
+### Added
+
+- `ihe-iti`: `PixmClient::capabilities` reads the PIX Manager's
+  `CapabilityStatement` with `GET [base]/metadata` (FHIR R4 http.html
+  §capabilities) through the client's own transport and authorizer, and
+  answers every other outcome as a typed `CapabilitiesError`: refused with
+  the status, not a FHIR server, timeout, transport or unauthenticated.
+  `nl-generic-functions` follows `ihe-iti` 0.0.79 (#522).
+
+### Changed
+
+- `ihe-iti` 0.0.78 and `nl-generic-functions` 0.0.45 require
+  `ferrohealth-smart` 0.10 (caret `0.10.0`), and `nl-generic-functions`
+  0.0.45 requires `ihe-iti` 0.0.78. Both name `ferrohealth-smart` types in
+  their public API (`ihe-iti`'s `authorizer::smart::TokenAuthorizer` over
+  `client::cache::TokenSource`, the Nuts grant's issuer rule), so a product
+  on `ferrohealth-smart` 0.10 needs this release. No signature of either
+  crate moves: the one 0.10.0 break is the `cache` field of
+  `config::onward::OnwardSection`, which neither builds. Upgrade: move
+  `ferrohealth-smart` to 0.10.0 beside `ihe-iti` 0.0.78 and
+  `nl-generic-functions` 0.0.45 (#518).
+- The server and the operator console run on `ferrohealth-smart` 0.10.1,
+  `ferrohealth-session` 0.4.0 and `ihe-atna` 0.5.2, the releases the
+  published `ihe-iti` and `nl-generic-functions` already build on, so the
+  lock holds one `ferrohealth-smart` (#521).
+- `ihe-iti` reads and writes every FHIR search value through the family's
+  FHIR R4 search grammar, `fhir-search` (exact `=0.1.129`, with no default
+  feature), the one copy FerroBRIDGE's facade and `ihe-atna` read theirs
+  with: the PIXm Manager, the PDQm Supplier and the PMIR Registry read their
+  tokens, splits and escapes through it, and the PDQm `birthdate` its prefix
+  and date. As FHIR R4 search.html §3.1.1.4.19 requires, a `\` before any
+  character other than `\`, `,`, `$` and `|` is refused
+  (`SearchError::Escape` and `pixm::server::query::QueryError::Escape`, both
+  new), and a token with a second unescaped `|` is refused where it was read
+  into the code. A `birthdate` must be a calendar day, so `1923-02-30` is
+  refused. `pdqm::query::DatePrefix` gives way to
+  `fhir_search::prefix::Prefix`; to upgrade, pass `Prefix` to
+  `PatientQuery::birthdate` and read it from `DateValue::prefix`.
+  `nl-generic-functions` escapes its NVI search values with the same
+  grammar (#523).
+- The HL7 v2 face writes every answer through `ferrobridge-hl7v2` 0.1.203:
+  the acknowledgment by its `ack::render`, and the RSP^K23, the RSP^K22 and
+  ITI-10's ADT^A31 by its `write::Writer`. The RSP^K23 and the ADT^A31 are
+  checked against their structure before they leave: a RSP^K23 that does
+  not conform is answered `AE`, and an ADT^A31 that does not conform fails
+  the change that would queue it (#524).
+- The HL7 v2 face maps PID to a `Patient`, and a `Patient` back into the PID of an ITI-21 answer, through the HL7 v2-to-FHIR structure maps of `ferrobridge-hl7v2` 0.2.0, in place of FerroPIX's own copy of them, and translates every table value (PID-8, the name type, the address type, the telecommunication use and equipment type) by `ConceptMap/$translate` on a FHIR R4 terminology server. Breaking for an operator of the HL7 v2 face: name the server in the new `[terminology]` section (`base_url`, `timeout_ms`, `[terminology.retry]`, `[terminology.credentials]` with HTTP Basic or the client credentials grant, and `[terminology.tls]`), loaded with HL7 Terminology, the guide's package `hl7.fhir.uv.v2mappings` 1.0.0 and FerroBRIDGE's value package; with `[hl7v2]` on and no `terminology.base_url` the server refuses to start. A feed or a query the terminology server does not translate is answered `AR`, so the sender sends it again. A cell phone (XTN-3 `CP`) is fed as a `phone` in `mobile` use, a number with no equipment type keeps a `system` carrying the data-absent-reason `unknown` where the face fed `phone` before, and an ITI-21 PID leaves XTN-2 empty on an email the `Patient` gives no `use`, where it wrote `NET` (#525).
+- The XCPD Responding Gateway reads its delivery's outbound TLS from
+  `[xcpd.tls]`, the family's `TlsClientSection` of `ferrohealth-server`
+  0.6.3: `client_identity_file` (or `client_identity`) holds the client
+  certificate chain and its private key in one PEM, `trust_roots_file` the
+  roots trusted beside the platform's, and `min_version` the oldest TLS
+  version, `1.3` unless lowered to `1.2`. Upgrade: join the files of
+  `[xcpd] client_certificate_file` and `client_key_file` into one PEM and
+  name it in `[xcpd.tls] client_identity_file`, and move
+  `[xcpd] reply_trust_file` to `[xcpd.tls] trust_roots_file`; the old keys
+  refuse to load and name their replacement. A reply endpoint that speaks
+  only TLS 1.2 now needs `[xcpd.tls] min_version = "1.2"` (#526).
+- `ihe-iti` requires `ihe-atna` 0.6 and the server pins `ihe-atna` 0.6.0.
+  None of the APIs they use change: the syslog `Repository` now takes its
+  TLS configuration from the caller and ITI-81 reads through `fhir-search`,
+  and neither crate builds a syslog repository or reads ITI-81 (#528).
+- `ihe-iti` 0.0.81 and `nl-generic-functions` 0.0.48 require
+  `ferrohealth-smart` 0.12 (caret `0.12.0`), and `nl-generic-functions`
+  0.0.48 requires `ihe-iti` 0.0.81. Both name `ferrohealth-smart` types in
+  their public API, so a product on `ferrohealth-smart` 0.12 needs this
+  release. No signature of either crate moves. Upgrade: move
+  `ferrohealth-smart` to 0.12.0 beside `ihe-iti` 0.0.81 and
+  `nl-generic-functions` 0.0.48 (#530).
+- `ihe_iti::authorizer::smart::TokenAuthorizer` proves each request when
+  its `TokenSource` binds tokens to a `DPoP` key
+  (`ClientCredentials::with_dpop`): the token goes as `Authorization: DPoP`
+  with a `DPoP` proof of the request's method and URL and the token's
+  `ath` (RFC 9449 §4.2, §7.1). A `401` whose `DPoP` challenge demands a
+  nonce keeps the token and sends the request once more with a proof
+  carrying the nonce (§9); any other `401` still drops the token and
+  resends once with a new one. A bearer source is sent as before (#530).
+- `ihe-iti` requires `ihe-atna` 0.7.1, the release on `fhir-search`
+  0.1.129, and the server and the operator console pin `ihe-atna` 0.7.1, `ferrohealth-smart` 0.12.0 and
+  `ferrohealth-session` 0.6.0, so the workspace builds on a single
+  `ferrohealth-smart`, the 0.12 line `ihe-iti` and `nl-generic-functions`
+  take. None of the APIs they use change (#536).
+- `ihe-iti` 0.0.83 requires `ferrohealth-smart` 0.13 and `ihe-atna` 0.8,
+  and `nl-generic-functions` 0.0.50 requires `ferrohealth-smart` 0.13. The
+  server and the operator console pin `ferrohealth-smart` 0.13.0,
+  `ferrohealth-session` 0.7.0 and `ihe-atna` 0.8.0, so the lock holds one
+  `ferrohealth-smart`. The 0.13 line refuses a malformed JSON document
+  without quoting it (GHSA-mhv7-3975-6xq3) and bounds the token endpoint's
+  answer; none of the APIs these crates use change (#540).
+- `SECURITY.md` names `security@cadasto.com` as the email route for a
+  vulnerability report, in place of `info@cadasto.com`, which stays the
+  address for licensing and other business questions (#547).
+- The named refusal of `[xcpd] client_certificate_file`, `client_key_file` and `reply_trust_file`, which names the `[xcpd.tls]` key that replaces each, holds for this release only: from v0.0.23 each key fails the start as an unknown key of `[xcpd]` (#558).
+
+### Removed
+
+- `ihe_iti::rest::escape`, replaced by `fhir_search::escape::escape`, which
+  the `rest` feature now brings in (#523).
+
 ## [0.0.21] - 2026-11-08
 
 A security release that breaks a configuration with a Basic machine user.

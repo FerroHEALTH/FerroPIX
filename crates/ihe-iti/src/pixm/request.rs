@@ -10,7 +10,7 @@ use fhir_types::r4::parameters::{Parameters, ParametersParameter, ParametersPara
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
-use crate::rest::escape;
+use fhir_search::escape::escape;
 
 use super::Invocation;
 use super::error::InvalidInput;
@@ -216,6 +216,7 @@ mod tests {
         };
         assert_eq!(name, "sourceIdentifier");
         let read = token(text);
+        let read = read.expect("a token");
         assert_eq!(read.system.as_deref(), Some("urn:oid:2.999.1"));
         assert_eq!(read.code.expose_secret(), value);
     }

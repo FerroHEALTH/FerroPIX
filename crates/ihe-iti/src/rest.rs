@@ -3,25 +3,11 @@
 
 //! The FHIR R4 REST pieces every FHIR client shares, with no FHIR model.
 //!
-//! They are the value syntax of a search parameter
-//! (<http://hl7.org/fhir/R4/search.html>) and the JSON media types of an
-//! answer (<http://hl7.org/fhir/R4/http.html#mime-type>). The URL of an
-//! interaction under a FHIR base is `ihe_atna::fhir_base`'s.
-
-/// Returns `part` with the characters FHIR search gives a meaning to escaped
-/// by a backslash: `\`, `|`, `,` and `$` (FHIR R4 search, Escaping Search
-/// Parameters, <http://hl7.org/fhir/R4/search.html#escaping>).
-#[must_use]
-pub fn escape(part: &str) -> String {
-    let mut escaped = String::with_capacity(part.len());
-    for character in part.chars() {
-        if matches!(character, '\\' | '|' | ',' | '$') {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
-}
+//! They are the JSON media types of an answer
+//! (<http://hl7.org/fhir/R4/http.html#mime-type>). The value syntax of a
+//! search parameter is the family's FHIR search grammar, `fhir-search`
+//! (<http://hl7.org/fhir/R4/search.html>), and the URL of an interaction
+//! under a FHIR base is `ihe_atna::fhir_base`'s.
 
 /// Whether `media` is FHIR JSON (ITI TF-2 Appendix Z.6), or plain JSON, which
 /// FHIR R4 accepts for the same content (<http://hl7.org/fhir/R4/http.html#mime-type>).
@@ -38,7 +24,9 @@ pub fn fhir_json(media: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{escape, fhir_json};
+    use fhir_search::escape::escape;
+
+    use super::fhir_json;
 
     #[test]
     fn the_separators_fhir_search_defines_are_escaped() {

@@ -37,7 +37,7 @@ use crate::audit::records::{self, Call, V2Query};
 use crate::config::section::hl7v2::Sender;
 use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
-use crate::hl7v2::feed::{fhir_escape, query_part, url_encoded};
+use crate::hl7v2::feed::{query_part, url_encoded};
 use crate::hl7v2::{Answer, Face, acknowledge, sender_key};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
@@ -45,6 +45,7 @@ use crate::v2::pid::{self, Shown};
 use crate::v2::stamped::Stamped;
 use crate::v2::write::{Fault, Writer, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
+use fhir_search::escape::escape;
 
 /// One person of an answer: its id and its `Patient`'s JSON.
 type Found = (Uuid, Object);
@@ -362,7 +363,7 @@ fn parameters(qpd: Option<&Segment>) -> Result<Parameters, Settled> {
         };
         match parameter {
             Parameter::Plain(name) => {
-                let joined: Vec<String> = values.iter().map(|value| fhir_escape(value)).collect();
+                let joined: Vec<String> = values.iter().map(|value| escape(value)).collect();
                 read.pairs
                     .push(format!("{name}={}", url_encoded(&joined.join(","))));
             }
@@ -453,7 +454,7 @@ async fn criteria(face: &Face, message: &Message) -> Result<Option<Criteria>, Se
     if !domains.is_empty() {
         let filter: Vec<String> = domains
             .iter()
-            .map(|system| format!("{}|", fhir_escape(system)))
+            .map(|system| format!("{}|", escape(system)))
             .collect();
         pairs.push(format!("identifier={}", url_encoded(&filter.join(","))));
     }

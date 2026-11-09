@@ -13,7 +13,7 @@ use fhir_types::r4::subscription::{Subscription, SubscriptionChannel};
 use url::Url;
 
 use crate::rest;
-use crate::rest::escape;
+use fhir_search::escape::escape;
 use ihe_atna::redact::RedactedUrl;
 
 use super::error::{InvalidInput, SubscriptionMalformation};

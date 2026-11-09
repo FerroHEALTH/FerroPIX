@@ -19,9 +19,13 @@ use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
 use crate::outcome::IssueType;
-use crate::pdqm::query::{DatePrefix, Gender, StringMatch, fhir_date};
+use crate::pdqm::query::{Gender, StringMatch};
 use crate::server::answer::{Answer, Severity};
 use crate::server::token;
+use fhir_search::date::{DateValue as Grammar, Precision};
+use fhir_search::escape::{split, unescape};
+use fhir_search::prefix::Prefix;
+use fhir_search::token::TokenError;
 use ihe_atna::redact::REDACTED;
 
 /// The system of the `administrative-gender` code system, which a `gender`
@@ -104,14 +108,14 @@ impl fmt::Debug for Token {
 /// search, date).
 #[derive(Clone)]
 pub struct DateValue {
-    prefix: DatePrefix,
+    prefix: Prefix,
     date: SecretString,
 }
 
 impl DateValue {
     /// Returns the comparison.
     #[must_use]
-    pub fn prefix(&self) -> DatePrefix {
+    pub fn prefix(&self) -> Prefix {
         self.prefix
     }
 
@@ -268,7 +272,7 @@ impl PatientSearch {
             ("_id", None | Some("exact")) => Criterion::Id(alternatives(text, id)?),
             ("active", None) => Criterion::Active(alternatives(text, active)?),
             ("identifier", None) => {
-                let tokens = alternatives(text, |part| Ok(token::token(part)))?;
+                let tokens = alternatives(text, read_token)?;
                 if tokens.iter().all(|token| {
                     token.system.as_deref().is_some_and(|s| !s.is_empty())
                         && token.code.expose_secret().is_empty()
@@ -281,7 +285,7 @@ impl PatientSearch {
                 Criterion::Identifier(identifiers(tokens)?)
             }
             ("telecom", None) => {
-                let tokens = alternatives(text, |part| Ok(token::token(part)))?;
+                let tokens = alternatives(text, read_token)?;
                 Criterion::Telecom(identifiers(tokens)?)
             }
             ("birthdate", None) => Criterion::Birthdate(alternatives(text, birthdate)?),
@@ -301,7 +305,9 @@ impl PatientSearch {
                         StringMatch::StartsWith
                     },
                     values: alternatives(text, |part| {
-                        Ok(SecretString::from(token::unescape(part)))
+                        unescape(part)
+                            .map(SecretString::from)
+                            .map_err(|_illegal| SearchError::Escape)
                     })?,
                 }
             }
@@ -410,20 +416,28 @@ fn alternatives<T>(
     text: &str,
     read: impl Fn(&str) -> Result<T, SearchError>,
 ) -> Result<Vec<T>, SearchError> {
-    token::split(text, ',')
+    split(text, ',')
         .into_iter()
         .map(|part| {
             if part.is_empty() {
                 Err(SearchError::EmptyValue)
             } else {
-                read(part)
+                read(&part)
             }
         })
         .collect()
 }
 
+/// One token alternative, read by the shared grammar.
+fn read_token(part: &str) -> Result<token::Token, SearchError> {
+    token::token(part).map_err(|error| match error {
+        TokenError::Empty => SearchError::EmptyValue,
+        _ => SearchError::Escape,
+    })
+}
+
 fn id(part: &str) -> Result<SecretString, SearchError> {
-    let id = token::unescape(part);
+    let id = unescape(part).map_err(|_illegal| SearchError::Escape)?;
     let valid = (1..=64).contains(&id.len())
         && id
             .bytes()
@@ -461,24 +475,23 @@ fn identifiers(tokens: Vec<token::Token>) -> Result<Vec<Token>, SearchError> {
 }
 
 fn birthdate(part: &str) -> Result<DateValue, SearchError> {
-    let (prefix, date) = DatePrefix::split(part);
-    if fhir_date(date) {
-        Ok(DateValue {
-            prefix,
-            date: SecretString::from(date),
-        })
-    } else {
-        Err(SearchError::Date)
+    let value = Grammar::parse(part).map_err(|_not_a_date| SearchError::Date)?;
+    if value.date().precision() > Precision::Day {
+        return Err(SearchError::Date);
     }
+    Ok(DateValue {
+        prefix: value.prefix(),
+        date: SecretString::from(value.date().to_string()),
+    })
 }
 
 /// The one gender code of a `gender` value (§2:3.78.4.1.2.1).
 fn gender(text: &str) -> Result<Gender, SearchError> {
-    let parts = token::split(text, ',');
+    let parts = split(text, ',');
     let [part] = parts.as_slice() else {
         return Err(SearchError::GenderValues);
     };
-    let token = token::token(part);
+    let token = token::token(part).map_err(|_unreadable| SearchError::GenderCode)?;
     if token
         .system
         .as_deref()
@@ -505,6 +518,10 @@ pub enum SearchError {
     /// An `active` value is neither `true` nor `false`.
     #[error("an active value is not a boolean")]
     Active,
+    /// A value breaks the escaping rules of FHIR R4 search
+    /// (search.html §3.1.1.4.19), or a token carries a second unescaped `|`.
+    #[error("a search value breaks the escaping rules of FHIR search")]
+    Escape,
     /// A `birthdate` value is not a FHIR `date` behind an optional prefix.
     #[error("a birthdate value is not a date")]
     Date,
@@ -539,6 +556,10 @@ impl SearchError {
         let (code, diagnostics) = match self {
             Self::EmptyValue => (IssueType::Invalid, "a search value is empty"),
             Self::Id => (IssueType::Value, "an _id value is not a FHIR id"),
+            Self::Escape => (
+                IssueType::Value,
+                "a search value breaks the escaping rules of FHIR search",
+            ),
             Self::Active => (IssueType::Value, "an active value is not true or false"),
             Self::Date => (IssueType::Value, "a birthdate value is not a FHIR date"),
             Self::GenderValues => (
@@ -567,7 +588,8 @@ mod tests {
     use url::Url;
 
     use super::{Criterion, PatientSearch, SearchError, StringParameter};
-    use crate::pdqm::query::{DatePrefix, Gender, StringMatch};
+    use crate::pdqm::query::{Gender, StringMatch};
+    use fhir_search::prefix::Prefix;
 
     #[test]
     fn and_and_or_are_read_as_criteria() {
@@ -598,7 +620,7 @@ mod tests {
         let Criterion::Birthdate(dates) = &criteria[3] else {
             panic!("birthdate");
         };
-        assert_eq!(dates[0].prefix(), DatePrefix::Ge);
+        assert_eq!(dates[0].prefix(), Prefix::Ge);
         assert!(matches!(criteria[4], Criterion::Gender(Gender::Female)));
     }
 

@@ -1535,6 +1535,7 @@ dependencies = [
  "ferropix-console",
  "ferropix-operator-api",
  "ferropix-testkit",
+ "fhir-search",
  "fhir-types",
  "hl7v2-types",
  "http",
@@ -1597,6 +1598,17 @@ dependencies = [
  "tonic",
  "url",
  "wiremock",
+]
+
+[[package]]
+name = "fhir-search"
+version = "0.1.129"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26e0b37d7eaa56d365aee1c65b7f1fd3f99da67a603cc9ac97d42e98ef08643a"
+dependencies = [
+ "jiff",
+ "thiserror",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -2346,11 +2358,12 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.0.79"
+version = "0.0.80"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
  "ferrohealth-smart 0.11.0",
+ "fhir-search",
  "fhir-types",
  "http",
  "ihe-atna",
@@ -2792,11 +2805,12 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
  "ferrohealth-smart 0.11.0",
+ "fhir-search",
  "fhir-types",
  "http",
  "ihe-iti",
@@ -4456,7 +4470,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

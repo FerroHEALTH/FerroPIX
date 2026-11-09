@@ -84,11 +84,13 @@ the request's `MessageID` and `To` naming the endpoint.
   `202`. A restart delivers what the outbox still holds, and on `SIGTERM`
   the sender finishes the answer in flight within `[server]
   shutdown_timeout_ms`.
-- **Mutual TLS:** with `client_certificate_file` and `client_key_file` set,
-  the delivery presents that certificate to the reply endpoint, as the
-  mutual TLS of an ATNA Secure Node asks. `reply_trust_file` adds the PEM
-  certificates of a community's own authority to the system roots the
-  delivery trusts for the endpoint's server certificate.
+- **Mutual TLS:** with `[xcpd.tls] client_identity_file` set, one PEM
+  holding the certificate chain and its private key, the delivery presents
+  that certificate to the reply endpoint, as the mutual TLS of an ATNA
+  Secure Node asks. `[xcpd.tls] trust_roots_file` adds the PEM certificates
+  of a community's own authority to the platform roots the delivery trusts
+  for the endpoint's server certificate. The delivery speaks TLS 1.3 unless
+  `[xcpd.tls] min_version = "1.2"`.
 
 ## Audit
 

@@ -45,6 +45,7 @@ use ferrobridge_hl7v2::inbound::{self, Inbound, Received};
 use ferrobridge_hl7v2::mllp::listener::{self, Connection, Handler, Timeouts};
 use ferrobridge_hl7v2::mllp::{Codec, Malformed};
 use ferrobridge_hl7v2::parse::Message;
+use ferrobridge_hl7v2::parse::profile::Profile;
 use ferrobridge_hl7v2::parse::structure::structure_declared;
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
 use ferrohealth_usage_report::window::Window;
@@ -393,27 +394,17 @@ pub struct Response<'a> {
     pub status: &'a str,
     /// The segments after QPD.
     pub body: Vec<Segment>,
-    /// Whether the response is checked against its structure.
-    pub check: Conformance,
-}
-
-/// Whether a response is checked against the structure MSH-9 declares.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Conformance {
-    /// Checked by `Writer::compose`; one that does not conform is answered
-    /// `AE`.
-    Structure,
-    /// Written unchecked.
-    // TODO(#538): check the RSP^K22 once the crate's IHE_ITI_21 lets QPD-3 repeat (FerroBRIDGE#1805).
-    Unchecked,
+    /// The integration profile whose constraints the structure MSH-9
+    /// declares is checked under, [`Profile::BASE`] for none.
+    pub profile: &'static Profile,
 }
 
 /// Writes `response` to `message`, which `header` opens.
 ///
 /// The segments are MSH, MSA, one ERR per fault, QAK with QPD-2 echoed, the
 /// QPD echoed and the body (ITI TF-2 §3.9.4.2.2 and §3.21.4.2.2), checked
-/// against the structure MSH-9 declares when `response.check` asks for it. A
-/// checked response that does not conform is answered `AE` instead.
+/// against the structure MSH-9 declares as `response.profile` constrains
+/// it. A response that does not conform is answered `AE` instead.
 #[must_use]
 pub fn respond(
     header: &Header,
@@ -421,7 +412,7 @@ pub fn respond(
     response: Response<'_>,
     stamped: &Stamped,
 ) -> Answer {
-    let writer = header.writer();
+    let writer = header.writer().with_profile(response.profile);
     let message_type = Repetition::from_iter(response.message_type);
     let mut segments = vec![
         header.reply(Field::from(message_type), stamped.stamp()),
@@ -446,12 +437,6 @@ pub fn respond(
     ));
     segments.extend(echoed);
     segments.extend(response.body);
-    if response.check == Conformance::Unchecked {
-        return Answer {
-            code: response.code,
-            text: writer.message(&segments),
-        };
-    }
     match writer.compose(&segments, structure_declared, message.charset()) {
         Ok(composed) => Answer {
             code: response.code,
@@ -657,15 +642,14 @@ mod tests {
     use ferrobridge_hl7v2::write;
     use fhir_types::codec::Value;
 
-    use super::{
-        Conformance, Response, acknowledge, fault, fault_at, location, names, respond, sender_key,
-    };
+    use super::{Response, acknowledge, fault, fault_at, location, names, respond, sender_key};
     use crate::config::section::hl7v2::Sender;
     use crate::config::section::hl7v2::authority::Authorities;
     use crate::v2::pid::{self, Shown};
     use crate::v2::stamped::Stamped;
     use ferrobridge_hl7v2::ack::Header;
     use ferrobridge_hl7v2::parse::ErrorCode;
+    use ferrobridge_hl7v2::parse::profile::{IHE_ITI_21, Profile};
 
     fn sender(application: &str, facility: &str) -> Sender {
         Sender {
@@ -740,7 +724,7 @@ mod tests {
                 code: Code::Accept,
                 faults: &[],
                 status: "OK",
-                check: Conformance::Structure,
+                profile: &Profile::BASE,
                 body: vec![pid::segment(
                     &authorities,
                     1,
@@ -779,7 +763,7 @@ mod tests {
                     "a domain of QPD-3 is not recognized",
                 )],
                 status: "AE",
-                check: Conformance::Structure,
+                profile: &Profile::BASE,
                 body: Vec::new(),
             },
             &stamp(),
@@ -815,7 +799,7 @@ mod tests {
                 code: Code::Accept,
                 faults: &[],
                 status: "OK",
-                check: Conformance::Unchecked,
+                profile: &IHE_ITI_21,
                 body: vec![
                     pid::demographics(&authorities, 1, &identifiers, patient, &terminology)
                         .await
@@ -848,6 +832,19 @@ mod tests {
             answer.text.ends_with(
                 "QPD|IHE PDQ Query|T-2|@PID.8^F\rPID|1||E-1^^^EAST&2.999.1.1&ISO||Family^Given||19800229|F\rDSC|P-1|I\r"
             ),
+            "{}",
+            answer.text
+        );
+    }
+
+    #[tokio::test]
+    async fn a_pdq_response_that_does_not_conform_to_rsp_k21_is_answered_ae() {
+        // NOTE: HL7 v2.5 PID-5 is required, and IHE ITI TF-2 §3.21.4.2.2 Table 3.21-6 keeps PID in
+        // the query response group, so a PID with no name does not conform.
+        let answer = pdq_answer(&found(false)).await;
+        assert_eq!(answer.code, Code::Error, "{}", answer.text);
+        assert!(
+            answer.text.contains("the response could not be written"),
             "{}",
             answer.text
         );

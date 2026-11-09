@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use ihe_iti::rest::escape;
+use fhir_search::escape::escape;
 use secrecy::ExposeSecret;
 use url::Url;
 

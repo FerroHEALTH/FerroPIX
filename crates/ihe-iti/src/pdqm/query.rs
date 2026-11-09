@@ -10,7 +10,9 @@ use std::fmt;
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
-use crate::rest::escape;
+use fhir_search::date::{Precision, SearchDate};
+use fhir_search::escape::escape;
+use fhir_search::prefix::Prefix;
 
 use super::error::InvalidInput;
 
@@ -25,75 +27,6 @@ pub enum StringMatch {
     StartsWith,
     /// The field equals the value exactly: the `:exact` modifier.
     Exact,
-}
-
-/// The comparison of a `birthdate` value (FHIR R4 search, prefixes,
-/// <http://hl7.org/fhir/R4/search.html#prefix>).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum DatePrefix {
-    /// `eq`: the birth date lies within the value's precision.
-    #[default]
-    Eq,
-    /// `ne`
-    Ne,
-    /// `gt`
-    Gt,
-    /// `lt`
-    Lt,
-    /// `ge`
-    Ge,
-    /// `le`
-    Le,
-    /// `sa`: the birth date starts after the value.
-    Sa,
-    /// `eb`: the birth date ends before the value.
-    Eb,
-    /// `ap`: the birth date is approximately the value.
-    Ap,
-}
-
-impl DatePrefix {
-    /// The prefix a `date` search value opens with, and the rest of the
-    /// value; a value with no prefix is `eq` (FHIR R4 search, prefixes).
-    #[cfg(feature = "pdqm-server")]
-    pub(super) fn split(value: &str) -> (Self, &str) {
-        for prefix in [
-            Self::Ne,
-            Self::Gt,
-            Self::Lt,
-            Self::Ge,
-            Self::Le,
-            Self::Sa,
-            Self::Eb,
-            Self::Ap,
-            Self::Eq,
-        ] {
-            let code = if prefix == Self::Eq {
-                "eq"
-            } else {
-                prefix.code()
-            };
-            if let Some(rest) = value.strip_prefix(code) {
-                return (prefix, rest);
-            }
-        }
-        (Self::Eq, value)
-    }
-
-    pub(super) fn code(self) -> &'static str {
-        match self {
-            Self::Eq => "",
-            Self::Ne => "ne",
-            Self::Gt => "gt",
-            Self::Lt => "lt",
-            Self::Ge => "ge",
-            Self::Le => "le",
-            Self::Sa => "sa",
-            Self::Eb => "eb",
-            Self::Ap => "ap",
-        }
-    }
 }
 
 /// The administrative gender a `gender` parameter asks for (FHIR R4
@@ -149,12 +82,13 @@ struct Parameter {
 /// # Examples
 ///
 /// ```
-/// use ihe_iti::pdqm::query::{DatePrefix, Gender, PatientQuery, StringMatch};
+/// use fhir_search::prefix::Prefix;
+/// use ihe_iti::pdqm::query::{Gender, PatientQuery, StringMatch};
 /// use secrecy::SecretString;
 ///
 /// let query = PatientQuery::default()
 ///     .family(&SecretString::from("Schmidt"), StringMatch::Exact)?
-///     .birthdate(DatePrefix::Eq, &SecretString::from("1923-07-25"))?
+///     .birthdate(Prefix::Eq, &SecretString::from("1923-07-25"))?
 ///     .gender(Gender::Male);
 /// let names: Vec<&str> = query.names().collect();
 /// assert_eq!(names, ["family:exact", "birthdate", "gender"]);
@@ -259,12 +193,22 @@ impl PatientQuery {
     ///
     /// # Errors
     /// [`InvalidInput::Date`] when `date` is not a FHIR `date`
-    /// (<http://hl7.org/fhir/R4/datatypes.html#date>).
-    pub fn birthdate(self, prefix: DatePrefix, date: &SecretString) -> Result<Self, InvalidInput> {
-        if !fhir_date(date.expose_secret()) {
+    /// (<http://hl7.org/fhir/R4/datatypes.html#date>): a year, a month or a
+    /// day of the calendar, read by the FHIR search grammar.
+    pub fn birthdate(self, prefix: Prefix, date: &SecretString) -> Result<Self, InvalidInput> {
+        let read =
+            SearchDate::parse(date.expose_secret()).map_err(|_not_a_date| InvalidInput::Date)?;
+        if read.precision() > Precision::Day {
             return Err(InvalidInput::Date);
         }
-        let value = format!("{}{}", prefix.code(), date.expose_secret());
+        // NOTE: FHIR R4 search.html §3.1.1.4.5, a value with no prefix is `eq`, so
+        // the query writes none for it.
+        let code = if prefix == Prefix::Eq {
+            ""
+        } else {
+            prefix.code()
+        };
+        let value = format!("{code}{read}");
         Ok(self.with("birthdate", SecretString::from(value)))
     }
 
@@ -430,40 +374,13 @@ fn absolute_uri(text: &str) -> Result<&str, InvalidInput> {
     Ok(text)
 }
 
-/// Whether `text` is a FHIR `date`: `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, with a
-/// month of 01 to 12 and a day of 01 to 31
-/// (<http://hl7.org/fhir/R4/datatypes.html#date>).
-pub(super) fn fhir_date(text: &str) -> bool {
-    let mut parts = text.split('-');
-    let year = parts.next();
-    let month = parts.next();
-    let day = parts.next();
-    if parts.next().is_some() || !year.is_some_and(|year| digits(year, 4)) {
-        return false;
-    }
-    let in_range = |part: &str, high: u8| {
-        digits(part, 2)
-            && part
-                .parse::<u8>()
-                .is_ok_and(|number| (1..=high).contains(&number))
-    };
-    match (month, day) {
-        (None, None) => true,
-        (Some(month), None) => in_range(month, 12),
-        (Some(month), Some(day)) => in_range(month, 12) && in_range(day, 31),
-        (None, Some(_)) => false,
-    }
-}
-
-fn digits(part: &str, length: usize) -> bool {
-    part.len() == length && part.bytes().all(|byte| byte.is_ascii_digit())
-}
-
 #[cfg(test)]
 mod tests {
     use secrecy::SecretString;
 
-    use super::{DatePrefix, Gender, InvalidInput, PatientQuery, StringMatch, fhir_date};
+    use fhir_search::prefix::Prefix;
+
+    use super::{Gender, InvalidInput, PatientQuery, StringMatch};
 
     fn secret(text: &str) -> SecretString {
         SecretString::from(text)
@@ -471,6 +388,11 @@ mod tests {
 
     #[test]
     fn a_fhir_date_has_a_year_and_optionally_a_month_and_a_day() {
+        let fhir_date = |date: &str| {
+            PatientQuery::default()
+                .birthdate(Prefix::Eq, &secret(date))
+                .is_ok()
+        };
         for date in ["1923", "1923-07", "1923-07-25", "2000-12-31"] {
             assert!(fhir_date(date), "{date} is a FHIR date");
         }
@@ -485,6 +407,8 @@ mod tests {
             "1923--25",
             "1923-07-25-01",
             "abcd",
+            "1923-02-30",
+            "ge1923",
         ] {
             assert!(!fhir_date(date), "{date} is not a FHIR date");
         }
@@ -495,7 +419,7 @@ mod tests {
         let query = PatientQuery::default()
             .family(&secret("Schmidt"), StringMatch::Exact)
             .and_then(|query| query.given(&secret("Jo,hn"), StringMatch::StartsWith))
-            .and_then(|query| query.birthdate(DatePrefix::Ge, &secret("1923")))
+            .and_then(|query| query.birthdate(Prefix::Ge, &secret("1923")))
             .map(|query| query.gender(Gender::Other).active(true))
             .expect("a query");
         let pairs: Vec<(String, String)> = url::form_urlencoded::parse(query.form().as_bytes())
@@ -556,7 +480,7 @@ mod tests {
         assert_eq!(domains.err(), Some(InvalidInput::EmptyValue), "no domain");
         let id = PatientQuery::default().id(&secret("a/b"));
         assert_eq!(id.err(), Some(InvalidInput::Id), "a slash in an id");
-        let date = PatientQuery::default().birthdate(DatePrefix::Eq, &secret("25-07-1923"));
+        let date = PatientQuery::default().birthdate(Prefix::Eq, &secret("25-07-1923"));
         assert_eq!(date.err(), Some(InvalidInput::Date), "a day-first date");
     }
 }

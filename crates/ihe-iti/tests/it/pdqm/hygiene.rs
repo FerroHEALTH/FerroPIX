@@ -10,10 +10,11 @@ use std::error::Error;
 use std::fmt::Write;
 use std::time::Duration;
 
+use fhir_search::prefix::Prefix;
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::PdqmClient;
 use ihe_iti::pdqm::error::PdqmError;
-use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
+use ihe_iti::pdqm::query::{PatientQuery, StringMatch};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
 use url::Url;
@@ -47,7 +48,7 @@ fn query() -> PatientQuery {
         .and_then(|query| query.telecom(&sentinel))
         .and_then(|query| query.address_postalcode(&sentinel, StringMatch::Exact))
         .and_then(|query| query.mothers_maiden_name(&sentinel, StringMatch::Exact))
-        .and_then(|query| query.birthdate(DatePrefix::Eq, &SecretString::from(BIRTH_DATE)))
+        .and_then(|query| query.birthdate(Prefix::Eq, &SecretString::from(BIRTH_DATE)))
         .expect("a query")
 }
 

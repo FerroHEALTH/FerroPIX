@@ -22,6 +22,8 @@ use crate::pixm::identifier::{SourceIdentifier, TargetSystem};
 use crate::server::answer::{Answer, Severity};
 use crate::server::format::{BodyError, Format};
 use crate::server::token;
+use fhir_search::escape::unescape;
+use fhir_search::token::TokenError;
 
 /// One `$ihe-pix` request: the patient asked about, the domains asked for,
 /// and the `_format` asked, the same whichever form carried it.
@@ -160,7 +162,10 @@ impl Reader {
         if self.source.is_some() {
             return Err(QueryError::SecondSourceIdentifier);
         }
-        let token = token::token(value.expose_secret());
+        let token = token::token(value.expose_secret()).map_err(|error| match error {
+            TokenError::Empty => QueryError::NoAssigningAuthority,
+            _ => QueryError::Escape,
+        })?;
         let system = token
             .system
             .filter(|system| !system.is_empty())
@@ -176,7 +181,7 @@ impl Reader {
     }
 
     fn target(&mut self, value: &str) -> Result<(), QueryError> {
-        let system = token::unescape(value);
+        let system = unescape(value).map_err(|_illegal| QueryError::Escape)?;
         if system.is_empty() {
             return Err(QueryError::EmptyTargetSystem);
         }
@@ -234,6 +239,10 @@ pub enum QueryError {
     /// domain the Manager recognises (§2:3.83.4.2.2.3).
     #[error("the sourceIdentifier's assigning authority is not an absolute URI")]
     SourceDomain,
+    /// A value breaks the escaping rules of FHIR R4 search
+    /// (search.html §3.1.1.4.19), or a token carries a second unescaped `|`.
+    #[error("a parameter value breaks the escaping rules of FHIR search")]
+    Escape,
     /// A `targetSystem` is empty.
     #[error("a targetSystem is empty")]
     EmptyTargetSystem,
@@ -299,6 +308,10 @@ impl QueryError {
                 "sourceIdentifier shall include the identifier value",
             ),
             Self::EmptyTargetSystem => bad(IssueType::Invalid, "targetSystem is empty"),
+            Self::Escape => bad(
+                IssueType::Value,
+                "a parameter value breaks the escaping rules of FHIR search",
+            ),
             Self::SecondFormat => bad(IssueType::Invalid, "_format is allowed once"),
             Self::EmptyFormat => bad(IssueType::Invalid, "_format is empty"),
             Self::NotAString => bad(IssueType::Value, "a parameter value is not a FHIR string"),

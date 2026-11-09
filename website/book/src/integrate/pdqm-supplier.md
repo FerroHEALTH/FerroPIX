@@ -53,7 +53,7 @@ parameters in its URL join those of the body.
 | `family`, `given` | a name part that starts with the value |
 | `identifier` | `system\|value` in that domain, or `value` in any domain, found by the value's HMAC; the master domain's value is the person's id |
 | `telecom` | a contact point's value, in the `ContactPoint.system` the token names |
-| `birthdate` | the birth date, with the FHIR prefixes `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `sa`, `eb` and `ap`, each value at its own precision |
+| `birthdate` | the birth date, with the FHIR prefixes `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `sa`, `eb` and `ap`, each value at its own precision: a year, a month or a day of the calendar |
 | `address` | any part of an address that starts with the value: a line, the city, the district, the state, the postal code, the country or the text |
 | `address-city`, `address-country`, `address-postalcode`, `address-state` | that part of an address |
 | `gender` | one administrative gender code |

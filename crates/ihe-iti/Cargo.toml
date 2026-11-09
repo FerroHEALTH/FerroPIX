@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.0.80"
+version = "0.0.81"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -124,10 +124,10 @@ pmir = [
 # through, and what another crate's Appendix V transaction, such as the Mitz
 # question of `nl-generic-functions`, sends and reads its own through.
 # The FHIR R4 RESTful API pieces every FHIR client shares, with no FHIR
-# model and no dependency: the search value escaping and the JSON media
-# types of an answer, which the NVI client of `nl-generic-functions` reads
-# its answers with too.
-rest = []
+# model: the JSON media types of an answer, which the NVI client of
+# `nl-generic-functions` reads its answers with too, and the family's FHIR
+# search value grammar every search and token is read and written with.
+rest = ["dep:fhir-search"]
 soap = ["dep:http", "dep:quick-xml", "dep:reqwest", "dep:thiserror"]
 # XCPD, cross-community patient discovery (ITI-55): the HTTP client the
 # SOAP 1.2 envelope travels on, the envelope reader of `soap`, the XML writer
@@ -183,6 +183,7 @@ async-trait = { workspace = true, optional = true }
 # A shared crate takes a caret requirement on another family shared crate
 # (crates-publishing rule), so a patch of either reaches a product's lockfile.
 ferrohealth-smart = { version = "0.12.0", default-features = false, optional = true }
+fhir-search = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 ihe-atna = { version = "0.6.0", default-features = false, optional = true }
@@ -198,6 +199,7 @@ uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
+fhir-search = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true }
 secrecy = { workspace = true }

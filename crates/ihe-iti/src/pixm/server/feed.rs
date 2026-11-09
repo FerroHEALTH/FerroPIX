@@ -225,10 +225,10 @@ fn condition(query: &str) -> Result<SourceIdentifier, FeedError> {
     for (name, value) in token::url_query(query) {
         match name.as_str() {
             "identifier" => {
-                if found.is_some() || token::split(&value, ',').len() > 1 {
+                if found.is_some() || fhir_search::escape::split(&value, ',').len() > 1 {
                     return Err(FeedError::SecondIdentifier);
                 }
-                let token = token::token(&value);
+                let token = token::token(&value).map_err(|_unreadable| FeedError::Identifier)?;
                 let system = token
                     .system
                     .filter(|system| !system.is_empty())

@@ -18,11 +18,14 @@
 use ferrobridge_hl7v2::decode::{Charset, decode};
 use ferrobridge_hl7v2::parse::Delimiters;
 use ferrobridge_hl7v2::parse::lex::lex;
+use ferrobridge_hl7v2::parse::structure::structure_declared;
+use ferrobridge_hl7v2::write::header::Msh;
+use ferrobridge_hl7v2::write::value::{Field, Repetition, Segment};
+use ferrobridge_hl7v2::write::{ComposeError, Writer};
 
 use crate::config::section::hl7v2::authority::{Authorities, Hd};
 use crate::v2::pid::{self, Shown};
 use crate::v2::stamped::Stamped;
-use crate::v2::write::Writer;
 
 /// The delimiters a notification declares in MSH-1 and MSH-2. No
 /// specification governs the choice, which the message declares: our own
@@ -58,56 +61,54 @@ impl Party<'_> {
 }
 
 /// Writes the ADT^A31 that notifies `consumer` of `identifiers`, each a
-/// domain's system and a value, from `manager`, stamped `stamped`.
+/// domain's system and a value, from `manager`, stamped `stamped`, checked
+/// against the `ADT_A05` structure of the 2.5 tables.
 ///
 /// A message whose text is not all ASCII declares `UNICODE UTF-8` in MSH-18
 /// and travels as UTF-8; one that is leaves MSH-18 empty, read as ASCII.
-#[must_use]
+///
+/// # Errors
+///
+/// Returns [`ComposeError`] when the message does not conform to its
+/// structure.
 pub fn adt_a31(
     manager: Party<'_>,
     consumer: Party<'_>,
     authorities: &Authorities,
     identifiers: &[(String, String)],
     stamped: &Stamped,
-) -> String {
-    let writer = Writer::with(&DELIMITERS);
+) -> Result<String, ComposeError> {
     let ascii = identifiers
         .iter()
         .all(|(system, value)| system.is_ascii() && value.is_ascii())
         && [manager, consumer]
             .iter()
             .all(|party| party.application.is_ascii() && party.facility.is_ascii());
-    let mut header = vec![
-        writer.encoding_characters(),
-        writer.escape(manager.application),
-        writer.escape(manager.facility),
-        writer.escape(consumer.application),
-        writer.escape(consumer.facility),
-        writer.escape(&stamped.timestamp),
-        String::new(),
-        writer.components(&[
-            String::from("ADT"),
-            String::from("A31"),
-            String::from("ADT_A05"),
-        ]),
-        writer.escape(&stamped.control_id),
-        String::from("P"),
-        String::from(VERSION),
-    ];
-    if !ascii {
-        header.resize(16, String::new());
-        header.push(Charset::Utf8.code().to_owned());
-    }
+    let header = Msh {
+        sending_application: Field::from(manager.application),
+        sending_facility: Field::from(manager.facility),
+        receiving_application: Field::from(consumer.application),
+        receiving_facility: Field::from(consumer.facility),
+        timestamp: Field::from(stamped.timestamp.as_str()),
+        message_type: Field::from(Repetition::from_iter(["ADT", "A31", "ADT_A05"])),
+        control_id: Field::from(stamped.control_id.as_str()),
+        processing_id: Field::from("P"),
+        version: Field::from(VERSION),
+        charset: if ascii {
+            Field::default()
+        } else {
+            Field::from(Charset::Utf8.code())
+        },
+    };
     let segments = [
-        writer.segment("MSH", &header),
-        writer.segment(
-            "EVN",
-            &[String::from("A31"), writer.escape(&stamped.timestamp)],
-        ),
-        pid::segment(&writer, authorities, 1, identifiers, None, Shown::Space),
-        writer.segment("PV1", &[String::new(), String::from("N")]),
+        Segment::from(header),
+        Segment::new("EVN", ["A31", stamped.timestamp.as_str()]),
+        pid::segment(authorities, 1, identifiers, None, Shown::Space),
+        Segment::new("PV1", ["", "N"]),
     ];
-    Writer::message(&segments)
+    let composed =
+        Writer::new(DELIMITERS).compose(&segments, structure_declared, Charset::Ascii)?;
+    Ok(composed.into_text())
 }
 
 /// What the Manager reads back from a notification it wrote, for its audit
@@ -238,6 +239,7 @@ mod tests {
             ],
             &stamp(),
         )
+        .expect("the notification composes")
     }
 
     #[test]
@@ -281,7 +283,8 @@ mod tests {
             &authorities(),
             &[(EAST.to_owned(), String::from("É-1"))],
             &stamp(),
-        );
+        )
+        .expect("the notification composes");
         assert!(
             text.split('\r')
                 .next()

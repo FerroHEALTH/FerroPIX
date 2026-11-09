@@ -41,7 +41,10 @@ facility = "NORTH"
   connection idle past `idle_timeout_ms` closes.
 - **Character sets:** MSH-18 names the set a message is read in; a message
   with an empty MSH-18 is read in `default_charset`. The answer is written
-  in the set the message came in.
+  in the set the message came in, by `ferrobridge-hl7v2`'s writer: the
+  acknowledgment by `ack::render`, and the RSP^K23 checked against its
+  structure before it leaves, so a response that does not conform is
+  answered `AE` instead.
 - **Senders:** each `[[hl7v2.senders]]` entry names a sending application
   (MSH-3) and facility (MSH-4), matched by namespace id or universal id.
   A message from a sender not listed is answered `AR` and not applied. A
@@ -164,7 +167,8 @@ domain. Each notification is an ADT^A31 in HL7 v2.5: MSH-9
 `ADT^A31^ADT_A05`, an EVN, one PID whose PID-3 lists the patient's
 identifiers in the consumer's domains with all three subcomponents of each
 assigning authority and whose PID-5 is a single space, and a PV1 with
-PV1-2 `N` (ITI TF-2 3.10.4.1.2). A merge sends the survivor's identifiers;
+PV1-2 `N` (ITI TF-2 3.10.4.1.2), checked against the 2.5 `ADT_A05`
+structure when it is written. A merge sends the survivor's identifiers;
 a patient whose last record was removed holds none, so it sends nothing.
 
 The notification is written to the outbox in the transaction that made the

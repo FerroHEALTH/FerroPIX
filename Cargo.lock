@@ -1245,15 +1245,18 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.1.187"
+version = "0.1.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16079daa82937f81c9f8dbe65d13f5c2465c3871d3483fae90ac3c49f0dc8cf6"
+checksum = "b5510c8c883b80c52cc2909598aac130555d06b2d6d0a34999a10dec02f95214"
 dependencies = [
  "bytes",
  "encoding_rs",
  "hl7v2-types",
+ "rustls",
+ "rustls-webpki",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tracing",
 ]

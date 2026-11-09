@@ -16,20 +16,20 @@
 //! (no specification governs this: our own design). The record of each
 //! query is stored before the answer leaves (§3.9.5.1.2).
 
-use ferrobridge_hl7v2::ack::Code;
+use ferrobridge_hl7v2::ack::{Code, Error, Header};
 use ferrobridge_hl7v2::parse::{Field, Message};
 use ihe_atna::balp::Outcome;
 use secrecy::SecretString;
 
 use crate::audit::records::{self, Call, Identifier, V2Query};
 use crate::config::section::hl7v2::authority::Hd;
-use crate::hl7v2::{Answer, Face};
+use crate::hl7v2::{Answer, Conformance, Face, Response, respond};
+use crate::hl7v2::{fault, fault_at, location};
 use crate::store::identifier::Rule;
 use crate::store::record;
 use crate::store::xref::{self, Lookup};
 use crate::v2::pid::{self, Shown};
 use crate::v2::stamped::Stamped;
-use crate::v2::write::{Fault, Writer, location};
 use ferrobridge_hl7v2::parse::ErrorCode;
 
 /// What a query settled.
@@ -39,7 +39,7 @@ struct Settled {
     /// QAK-2, a table 0208 code.
     status: &'static str,
     /// The ERR segments.
-    faults: Vec<Fault>,
+    faults: Vec<Error>,
     /// The identifiers PID-3 carries, `None` for no PID.
     identifiers: Option<Vec<(String, String)>>,
     /// The person found, `Patient/{id}`.
@@ -48,7 +48,7 @@ struct Settled {
 
 impl Settled {
     /// An `AE` with `faults`.
-    fn error(faults: Vec<Fault>) -> Self {
+    fn error(faults: Vec<Error>) -> Self {
         Self {
             code: Code::Error,
             status: "AE",
@@ -63,7 +63,7 @@ impl Settled {
         Self {
             code: Code::Reject,
             status: "AR",
-            faults: vec![Fault::anywhere(ErrorCode::Application, text)],
+            faults: vec![fault(ErrorCode::Application, text)],
             identifiers: None,
             persons: Vec::new(),
         }
@@ -74,6 +74,7 @@ impl Settled {
 pub(super) async fn query(
     face: &Face,
     message: &Message,
+    header: &Header,
     call: &Call,
     text: &str,
     stamped: &Stamped,
@@ -97,6 +98,7 @@ pub(super) async fn query(
         Err(error) => {
             tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-9 query is refused: its audit record has no room");
             return answer(
+                header,
                 message,
                 &Settled::rejected(
                     "the audit record could not be stored, so the query was not answered",
@@ -138,7 +140,7 @@ pub(super) async fn query(
             }
         }
     };
-    answer(message, &settled, face, stamped)
+    answer(header, message, &settled, face, stamped)
 }
 
 /// Reads the cross-reference of `value` in `system` and settles the case.
@@ -149,7 +151,7 @@ async fn settle(
     wanted: Option<&Field>,
 ) -> Settled {
     let unknown_domain = || {
-        Settled::error(vec![Fault::at(
+        Settled::error(vec![fault_at(
             location("QPD", 1, 3, Some(1), Some(4)),
             ErrorCode::UnknownKeyIdentifier,
             "the assigning authority of QPD-3 is not recognized",
@@ -159,7 +161,7 @@ async fn settle(
         return unknown_domain();
     };
     let Some(value) = value else {
-        return Settled::error(vec![Fault::at(
+        return Settled::error(vec![fault_at(
             location("QPD", 1, 3, Some(1), Some(1)),
             ErrorCode::RequiredFieldMissing,
             "QPD-3 carries no identifier",
@@ -189,14 +191,14 @@ async fn settle(
     let cross_reference = match found {
         Lookup::Found(cross_reference) => cross_reference,
         Lookup::Ambiguous => {
-            return Settled::error(vec![Fault::at(
+            return Settled::error(vec![fault_at(
                 location("QPD", 1, 3, Some(1), Some(1)),
                 ErrorCode::Application,
                 "the identifier is carried in the records of more than one person",
             )]);
         }
         Lookup::UnknownDomain | Lookup::NotFound => {
-            return Settled::error(vec![Fault::at(
+            return Settled::error(vec![fault_at(
                 location("QPD", 1, 3, Some(1), Some(1)),
                 ErrorCode::UnknownKeyIdentifier,
                 "the identifier of QPD-3 is not recognized",
@@ -255,7 +257,7 @@ async fn targets(
         let target = face.authorities.system(&Hd::of(repetition.component(4)));
         match target.filter(|target| domains.iter().any(|d| d.system == *target && !d.retired)) {
             Some(target) => targets.push(target),
-            None => faults.push(Fault::at(
+            None => faults.push(fault_at(
                 location("QPD", 1, 4, Some(index.saturating_add(1)), None),
                 ErrorCode::UnknownKeyIdentifier,
                 "a domain of QPD-4 is not recognized",
@@ -270,32 +272,31 @@ async fn targets(
 }
 
 /// Writes the RSP^K23 of `settled`.
-fn answer(message: &Message, settled: &Settled, face: &Face, stamped: &Stamped) -> Answer {
-    let writer = Writer::of(message);
-    let mut segments = vec![
-        writer.header(message, &["RSP", "K23", "RSP_K23"], stamped),
-        writer.msa(message, settled.code.as_str()),
-    ];
-    segments.extend(settled.faults.iter().map(|fault| writer.err(fault)));
-    segments.push(writer.segment(
-        "QAK",
-        &[writer.echoed(message, "QPD", 2), settled.status.to_owned()],
-    ));
-    if let Some(qpd) = writer.echo_segment(message, "QPD") {
-        segments.push(qpd);
-    }
-    if let Some(identifiers) = &settled.identifiers {
-        segments.push(pid::segment(
-            &writer,
-            &face.authorities,
-            1,
-            identifiers,
-            None,
-            Shown::Pseudonymous,
-        ));
-    }
-    Answer {
-        code: settled.code,
-        text: Writer::message(&segments),
-    }
+fn answer(
+    header: &Header,
+    message: &Message,
+    settled: &Settled,
+    face: &Face,
+    stamped: &Stamped,
+) -> Answer {
+    let body = settled
+        .identifiers
+        .iter()
+        .map(|identifiers| {
+            pid::segment(&face.authorities, 1, identifiers, None, Shown::Pseudonymous)
+        })
+        .collect();
+    respond(
+        header,
+        message,
+        Response {
+            message_type: ["RSP", "K23", "RSP_K23"],
+            code: settled.code,
+            faults: &settled.faults,
+            status: settled.status,
+            body,
+            check: Conformance::Structure,
+        },
+        stamped,
+    )
 }

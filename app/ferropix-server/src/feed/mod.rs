@@ -607,6 +607,10 @@ pub enum FeedError {
     /// The ITI-93 message announcing the change cannot be written.
     #[error("the ITI-93 message announcing the change cannot be written")]
     Notice,
+    /// The ITI-10 notification of a consumer does not conform to its
+    /// structure.
+    #[error("the ITI-10 notification cannot be composed")]
+    Notification(#[source] ferrobridge_hl7v2::write::ComposeError),
     /// Concurrent transactions moved what this one read.
     #[error("concurrent transactions moved the persons this feed joins")]
     Contention,

@@ -55,16 +55,17 @@ fhir-search = { version = "=0.1.129", default-features = false }
 # the published crates take their own caret requirement on it. 0.9.0 holds
 # every setting on its `[[auth.issuer]]` table, with the required `kind`, and
 # classifies a Basic credential as a person; 0.10.1 is the release the
-# published crates here take since #518, so the lock holds one copy (#521).
-# Verified against crates.io on 2026-11-08.
-ferrohealth-smart = { version = "=0.10.1", default-features = false }
+# published crates here take since #518; 0.12.0 is the line ihe-iti,
+# nl-generic-functions and ihe-atna 0.7 take, so the lock holds one copy
+# (#536). Verified against crates.io on 2026-11-09.
+ferrohealth-smart = { version = "=0.12.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-08 (0.4.0, the release on
-# ferrohealth-smart 0.10, #521).
-ferrohealth-session = { version = "=0.4.0", default-features = false }
+# Verified against crates.io on 2026-11-09 (0.6.0, the release on
+# ferrohealth-smart 0.12, #536).
+ferrohealth-session = { version = "=0.6.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -100,8 +101,9 @@ http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
-# Verified against crates.io on 2026-11-08 (0.6.0, #528).
-ihe-atna = { version = "=0.6.0", default-features = false }
+# Verified against crates.io on 2026-11-09 (0.7.0, on `ferrohealth-smart`
+# 0.12, #536).
+ihe-atna = { version = "=0.7.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60.2", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

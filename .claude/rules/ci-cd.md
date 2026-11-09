@@ -21,7 +21,10 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
   ratchet, the `TODO(#N)` guard,
   the released-changelog guard, and on pull requests the changelog guard
   and the crate-version guard, and hadolint
-over every Dockerfile) and the Rust
+over every Dockerfile; the linters run as the steps of one `lint` job and
+the guards as the steps of one `guards` job, each step under `!cancelled()`
+so every check reports, because each job waits for a shared runner of its
+own, #553) and the Rust
   tier once the workspace has a member (`cargo fmt --all --check`; `cargo
   clippy --workspace --all-targets --locked -- -D warnings` with and without
   `--all-features`; `cargo nextest run --workspace --locked` with and

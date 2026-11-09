@@ -266,8 +266,10 @@ starts.
 not the implementer.** Fable plans, coordinates, reviews, and does the taste-
 and intelligence-heavy work itself; it fans implementation out to subagents
 via the `Agent` tool (`model: 'opus'`, the newest Opus; the
-`.claude/agents/*` definitions with `model: opus` pick it up) or a `Workflow`
-(per-agent `model`). The main loop does not auto-delegate, so this section is
+`.claude/agents/*` definitions with `model: opus` pick it up), never a
+`Workflow`, whose agents cannot be messaged (owner 2026-11-01). Every
+subagent runs on Opus, research and review included; never pass `fable` to
+`Agent` (owner 2026-10-30). The main loop does not auto-delegate, so this section is
 the standing instruction that it should.
 
 | model     | cost | intelligence | taste |
@@ -282,8 +284,8 @@ project; never pass them to `Agent` or `Workflow`.
   decisions, spec-conformance judgement, and the hard bespoke logic (the
   linking and merge rules, the pseudonym model, the transaction semantics).
 - **Delegate to Opus 5 subagents:** bulk implementation on a clear spec,
-  file-heavy investigation and codebase analysis. At most 5 implementation
-  workers at once. Prefer one worker with the full spec over splitting a
+  file-heavy investigation and codebase analysis. Up to 10 implementation
+  workers at once across the family (owner cap since 2026-11-03). Prefer one worker with the full spec over splitting a
   coherent task. Tell workers not to spawn their own subagents, to write
   scratch files only under their own scratchpad subfolder, and never to wait
   with a self-matching `pgrep -f`.
@@ -295,6 +297,17 @@ Discipline is unchanged for subagents: they obey the hard rules below.
 
 ## IMPORTANT hard rules
 
+- **Family rules carried in `.claude/memory/` (index `MEMORY.md`).** A removal
+  aid (a named refusal of a removed or renamed config key, flag, env variable,
+  route or format) lives exactly one release and the next release deletes it
+  fully; no legacy support is ever kept (owner hard rule 2026-11-09,
+  `no-compat-shims.md`). Build the proper solution even when it breaks an API
+  and moves the minor version (owner 2026-11-08, `no-half-solutions.md`). A
+  production value map goes only through the terminology server, never an
+  embedded copy (owner 2026-11-09, `terminology-via-server.md`). Where the
+  EHDS Regulation conflicts with an openEHR or other standard's text, the
+  Regulation wins, and EHDS work is never reverted to pass a conformance row
+  (owner 2026-11-09, `ehds-above-openehr.md`).
 - **The specification text is the oracle**: the IHE ITI Technical Framework
   (Volumes 1 and 2), the IHE PIXm, PDQm and PMIR implementation guides, HL7
   FHIR R4, and the HL7 v2 PIX and PDQ transactions where in scope, as

@@ -21,7 +21,10 @@ Actions Security Cheat Sheet, SLSA v1.0, OpenSSF Scorecard, and Sigstore.
   ratchet, the `TODO(#N)` guard,
   the released-changelog guard, and on pull requests the changelog guard
   and the crate-version guard, and hadolint
-over every Dockerfile) and the Rust
+over every Dockerfile; the linters run as the steps of one `lint` job and
+the guards as the steps of one `guards` job, each step under `!cancelled()`
+so every check reports, because each job waits for a shared runner of its
+own, #553) and the Rust
   tier once the workspace has a member (`cargo fmt --all --check`; `cargo
   clippy --workspace --all-targets --locked -- -D warnings` with and without
   `--all-features`; `cargo nextest run --workspace --locked` with and
@@ -107,6 +110,21 @@ placeholder tree). The
 - `.github/workflows/publish-crates.yml`: the manual crates.io lane, a dry
   run unless `publish` is set, sharing `scripts/release/publish-crates.sh`
   with the release lane.
+
+## The merge queue proves the merged tree
+
+Every pull-request run and every merge-group run of `ci.yml` finishes in
+under 20 minutes of wall time, runner queue included (owner, 2026-11-09).
+The functional gates (build, clippy, the tests, e2e, the journeys, the
+quickstart, the guards) run in the merge group. The performance gate runs
+on the pull request that reaches the server and on every push to `main`; in
+a merge group `perf.yml` builds nothing and its `perf verdict` job passes
+with a step summary that says why (#551). No gate is weakened: the
+thresholds, the phases and the retry rule are the same, and only the event
+the gate runs on changes. A regression two pull requests cause only
+together surfaces on the push to `main`, and its fix is a follow-up pull
+request. A new long non-functional job takes the same merge-group skip in
+the change that adds it.
 
 ## Workflow security (every workflow, no exceptions)
 

@@ -103,6 +103,8 @@ pub struct Face {
     master: String,
     /// The usage report's window each message is counted in.
     usage: Option<Arc<Window>>,
+    /// The terminology server every v2 table value is translated on.
+    terminology: ferrobridge_term::client::Client,
 }
 
 impl Face {
@@ -130,6 +132,7 @@ impl Face {
             endpoint: NetworkAddress::Ip(settings.listen.ip()),
             master: public_base_url.as_str().trim_end_matches('/').to_owned(),
             usage: None,
+            terminology: settings.terminology.clone(),
         }
     }
 
@@ -213,10 +216,19 @@ impl Face {
         let call = self.call(sender, message, connection.peer());
         match (message.message_type(1), message.message_type(2)) {
             (Some("ADT"), Some("A01" | "A04" | "A05" | "A08")) => {
-                feed::receive(self, message, header, sender, &call, false, stamped).await
+                feed::receive(
+                    self,
+                    inbound.parsed(),
+                    header,
+                    sender,
+                    &call,
+                    false,
+                    stamped,
+                )
+                .await
             }
             (Some("ADT"), Some("A40")) => {
-                feed::receive(self, message, header, sender, &call, true, stamped).await
+                feed::receive(self, inbound.parsed(), header, sender, &call, true, stamped).await
             }
             (Some("QBP"), Some("Q23")) => {
                 pix::query(self, message, header, &call, &self.text(raw), stamped).await
@@ -392,7 +404,7 @@ pub enum Conformance {
     /// `AE`.
     Structure,
     /// Written unchecked.
-    // TODO(#538): check the RSP^K22 once the crate composes under the ITI-21 constraint on QRI.
+    // TODO(#538): check the RSP^K22 once the crate's IHE_ITI_21 lets QPD-3 repeat (FerroBRIDGE#1805).
     Unchecked,
 }
 
@@ -733,7 +745,6 @@ mod tests {
                     &authorities,
                     1,
                     &identifiers,
-                    None,
                     Shown::Pseudonymous,
                 )],
             },
@@ -784,8 +795,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_pdq_response_writes_each_patient_and_the_continuation_pointer() {
+    /// The RSP^K22 of one found `patient`, written with the PDQ query's
+    /// header.
+    async fn pdq_answer(patient: &fhir_types::codec::Object) -> super::Answer {
         let query = "MSH|^~\\&|PORTAL|NORTH|PIX|NORTH|20261025100000||QBP^Q22^QBP_Q21|Q-2|P|2.5\rQPD|IHE PDQ Query|T-2|@PID.8^F\rRCP|I|1^RD\r";
         let message = lex(query, Charset::Ascii).expect("the query lexes").message;
         let header = Header::from_text(query).expect("the header reads");
@@ -794,16 +806,8 @@ mod tests {
             String::from("EAST"),
         )]));
         let identifiers = [(String::from("urn:oid:2.999.1.1"), String::from("E-1"))];
-        let mut patient = fhir_types::codec::Object::new();
-        patient.insert(
-            String::from("gender"),
-            Value::String(String::from("female")),
-        );
-        patient.insert(
-            String::from("birthDate"),
-            Value::String(String::from("1980-02-29")),
-        );
-        let answer = respond(
+        let (_server, _stub, terminology) = pid::stub_terminology().await;
+        respond(
             &header,
             &message,
             Response {
@@ -813,23 +817,37 @@ mod tests {
                 status: "OK",
                 check: Conformance::Unchecked,
                 body: vec![
-                    pid::segment(
-                        &authorities,
-                        1,
-                        &identifiers,
-                        Some(&patient),
-                        Shown::Demographics,
-                    ),
+                    pid::demographics(&authorities, 1, &identifiers, patient, &terminology)
+                        .await
+                        .expect("the Patient writes back"),
                     write::value::Segment::new("DSC", ["P-1", "I"]),
                 ],
             },
             &stamp(),
-        );
+        )
+    }
+
+    /// A found `Patient`, with a name when `named`.
+    fn found(named: bool) -> fhir_types::codec::Object {
+        let mut text = String::from(r#"{"gender": "female", "birthDate": "1980-02-29""#);
+        if named {
+            text.push_str(r#", "name": [{"family": "Family", "given": ["Given"]}]"#);
+        }
+        text.push('}');
+        match Value::from_serde_json(serde_json::from_str(&text).expect("a JSON literal")) {
+            Value::Object(object) => object,
+            other => panic!("not an object: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_pdq_response_writes_each_patient_and_the_continuation_pointer() {
+        let answer = pdq_answer(&found(true)).await;
         assert_eq!(answer.code, Code::Accept, "{}", answer.text);
         assert!(
-            answer
-                .text
-                .ends_with("QPD|IHE PDQ Query|T-2|@PID.8^F\rPID|1||E-1^^^EAST&2.999.1.1&ISO||||19800229|F\rDSC|P-1|I\r"),
+            answer.text.ends_with(
+                "QPD|IHE PDQ Query|T-2|@PID.8^F\rPID|1||E-1^^^EAST&2.999.1.1&ISO||Family^Given||19800229|F\rDSC|P-1|I\r"
+            ),
             "{}",
             answer.text
         );

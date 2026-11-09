@@ -90,6 +90,9 @@ pub struct Config {
     pub hl7v2: section::hl7v2::Hl7v2,
     /// The XCPD Responding Gateway (`[xcpd]`).
     pub xcpd: section::xcpd::Xcpd,
+    /// The terminology server the HL7 v2 face translates through
+    /// (`[terminology]`).
+    pub terminology: section::terminology::Terminology,
     /// The outbox's retention (`[outbox]`).
     pub outbox: section::outbox::Outbox,
     /// The BALP audit trail (`[audit]`).

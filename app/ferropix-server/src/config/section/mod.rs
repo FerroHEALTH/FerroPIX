@@ -16,6 +16,7 @@ pub mod outbox;
 pub mod profiles;
 pub mod pseudonym;
 pub mod public;
+pub mod terminology;
 pub mod xcpd;
 
 use std::net::{IpAddr, SocketAddr};

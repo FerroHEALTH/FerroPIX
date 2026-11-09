@@ -56,7 +56,10 @@ value: {{ include "ferropix.fhirBaseUrl" (dict "Values" .Values.ferropix "Releas
 ```
 
 With `config.hl7v2.enabled`, the MLLP listener has its own Service,
-`<service>-mllp`, on `service.mllpPort` (default `2575`). With
+`<service>-mllp`, on `service.mllpPort` (default `2575`), and
+`config.terminology.base_url` names the FHIR R4 terminology server the face
+translates every v2 table value on; the server refuses to start without it
+(https://ferropix.eu/docs/integrate/hl7v2-face.html#the-terminology-server). With
 `console.enabled`, the console's Service is `<service>-console` on
 `console.service.port` (default `3000`).
 

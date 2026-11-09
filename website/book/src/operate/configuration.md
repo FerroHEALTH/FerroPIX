@@ -477,7 +477,38 @@ for two domains are refused at load. A consumer without its name, address,
 application or facility, two consumers of one name, and an address without
 a port are refused too. The consumers are notified while `hl7v2.enabled`
 is `true`. The listener finishes the messages in flight within
-`server.shutdown_timeout_ms`, the HTTP server's bound.
+`server.shutdown_timeout_ms`, the HTTP server's bound. The face needs a
+terminology server, `[terminology]` below: with `hl7v2.enabled` and no
+`terminology.base_url` the server refuses to start.
+
+### `[terminology]`
+
+The FHIR R4 terminology server the HL7 v2 face translates every v2 table
+value on, by `ConceptMap/$translate`: PID-8, the name type of PID-5, the
+address type of PID-11 and the telecommunication use and equipment type of
+PID-13 and PID-14, on the way in and on the way back into an ITI-21
+answer. FerroPIX holds no copy of a table, so load the server with the
+value maps the [HL7 v2 face](../integrate/hl7v2-face.md#the-terminology-server)
+page names.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `terminology.base_url` | `""` | The R4 base of the terminology server: `https`, or plain `http` on a loopback host. Empty for none, which only a server with the HL7 v2 face off may run with. |
+| `terminology.timeout_ms` | `10000` | How long one call may take, connection included. |
+| `terminology.retry.max_attempts` | `3` | How many times a call is sent at most, the first try included. |
+| `terminology.retry.initial_backoff_ms` | `200` | The wait before the second attempt. |
+| `terminology.retry.max_backoff_ms` | `2000` | The longest wait between two attempts. |
+| `terminology.credentials.user` | `""` | The HTTP Basic user, with `terminology.credentials.password_file` (a secret). |
+| `terminology.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic: `issuer` or `token_endpoint`, `client_id`, `client_secret_file`, `scope` and the other keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
+| `terminology.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
+| `terminology.tls.trust_roots_file` | none | PEM certificates trusted for the server's certificate, beside the platform roots. |
+| `terminology.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
+
+A feed whose table values the server cannot translate, because it refuses
+the call or cannot be reached, is answered `AR` with no receipt, so the
+same message is applied when sent again; an ITI-21 query is answered `AR`
+the same way. A code the server's map translates to nothing is left out of
+the `Patient`, as a code with no FHIR equivalent always was.
 
 ### `[xcpd]`
 

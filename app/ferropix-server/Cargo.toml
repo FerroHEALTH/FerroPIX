@@ -75,9 +75,11 @@ ferrohealth-health = { workspace = true, features = ["registry"] }
 # fill its window.
 ferrohealth-usage-report = { workspace = true, features = ["telemetry"] }
 # The HL7 v2 face: the MLLP listener, the decoder, the parser over the
-# generated tables and the acknowledgment of FerroBRIDGE (CLAUDE.md, Scope:
-# never a second parser).
-ferrobridge-hl7v2.workspace = true
+# generated tables, the acknowledgment and the v2-to-FHIR maps of FerroBRIDGE
+# (CLAUDE.md, Scope: never a second parser).
+ferrobridge-hl7v2 = { workspace = true, features = ["map"] }
+# The terminology client the maps translate every table value through.
+ferrobridge-term.workspace = true
 hl7v2-types.workspace = true
 http.workspace = true
 # The date the capability statement carries.

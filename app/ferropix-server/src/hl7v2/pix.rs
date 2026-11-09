@@ -282,9 +282,7 @@ fn answer(
     let body = settled
         .identifiers
         .iter()
-        .map(|identifiers| {
-            pid::segment(&face.authorities, 1, identifiers, None, Shown::Pseudonymous)
-        })
+        .map(|identifiers| pid::segment(&face.authorities, 1, identifiers, Shown::Pseudonymous))
         .collect();
     respond(
         header,

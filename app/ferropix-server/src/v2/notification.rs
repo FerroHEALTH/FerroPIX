@@ -103,7 +103,7 @@ pub fn adt_a31(
     let segments = [
         Segment::from(header),
         Segment::new("EVN", ["A31", stamped.timestamp.as_str()]),
-        pid::segment(authorities, 1, identifiers, None, Shown::Space),
+        pid::segment(authorities, 1, identifiers, Shown::Space),
         Segment::new("PV1", ["", "N"]),
     ];
     let composed =

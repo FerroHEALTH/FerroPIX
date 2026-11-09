@@ -6,23 +6,26 @@
 //! A feed's PID becomes the `Patient` an ITI-104 Source would send for the
 //! same patient, so the v2 feed and the FHIR feed write the same version
 //! (ITI TF-2 §3.8.4.1.3; PIXm 3.1.0 §2:3.104.4.1.2.1 names the PDQm Patient
-//! elements the Manager accepts). The elements follow the HL7 v2-to-FHIR
-//! 1.0.0 maps: `segment-pid-to-patient` for the fields (PID-3 identifier,
-//! PID-5 name, PID-6 the `patient-mothersMaidenName` extension, PID-7
-//! birthDate, PID-8 gender, PID-11 address, PID-13 and PID-14 telecom), and
-//! `datatype-xpn-to-humanname`, `datatype-xad-to-address`,
-//! `datatype-xtn-to-contactpoint` and the tables 0001, 0190, 0200, 0201 and
-//! 0202 for their parts. A code a table maps to no FHIR code is left out.
-//!
-//! A query answer's `Patient` is written back as a PID by the inverse of the
-//! same maps, with the fields ITI TF-2 §3.21.4.2.2.5 names.
+//! elements the Manager accepts). The PID maps through the HL7 v2-to-FHIR
+//! 1.0.0 structure maps `ferrobridge-hl7v2` is built with, FerroBRIDGE's
+//! corrections over them: `segment-pid-to-patient` and its data type maps,
+//! with every table value translated by `ConceptMap/$translate` on the
+//! terminology server `[terminology]` names. A query answer's `Patient` is
+//! written back as a PID by the inverse of the same maps, with the fields
+//! ITI TF-2 §3.21.4.2.2.5 names. PID-1 and PID-3 are FerroPIX's own, from
+//! its identifier domains, and so are the PID-5 forms of ITI-9 and ITI-10.
 
-use ferrobridge_hl7v2::parse;
+use ferrobridge_hl7v2::map::inverse::{self, InverseError};
+use ferrobridge_hl7v2::map::maps::Maps;
+use ferrobridge_hl7v2::map::single::{self, SegmentError};
+use ferrobridge_hl7v2::map::{MapError, Outcome};
+use ferrobridge_hl7v2::parse::structure::segment_of;
+use ferrobridge_hl7v2::parse::{self, Parsed};
 use ferrobridge_hl7v2::write::value::{Component, Field, Repetition, Segment};
+use ferrobridge_term::client::Client;
 use fhir_types::codec::{Object, Value};
 
 use crate::config::section::hl7v2::authority::Authorities;
-use crate::matching::subject::MOTHERS_MAIDEN_NAME;
 
 /// One identifier of PID-3 or MRG-1: its domain, when its assigning
 /// authority names one the face knows, and its value.
@@ -74,27 +77,82 @@ pub fn identifiers(
         .collect()
 }
 
-/// Why a PID cannot be read as a `Patient`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+/// Why a PID cannot be read as a `Patient`, or a `Patient` written as a PID.
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PidError {
     /// PID-7 is no date.
     #[error("PID-7 is no date")]
     BirthDate,
+    /// No placed PID segment is at the index read.
+    #[error("the message places no PID at the index read")]
+    Unplaced,
+    /// The terminology server refused a translation or could not be
+    /// reached, so the PID or the `Patient` was not mapped; a later try may
+    /// pass.
+    #[error("the terminology server did not translate a table value")]
+    Terminology(#[source] Box<dyn std::error::Error + Send + Sync>),
+    /// The segment map refused the PID.
+    #[error("the PID could not be mapped")]
+    Map(#[source] Box<SegmentError>),
+    /// The segment map refused to write the `Patient` back.
+    #[error("the Patient could not be written as a PID")]
+    Inverse(#[source] Box<InverseError>),
 }
 
-/// Returns the `Patient` of `pid` carrying `identifiers`, each with a
-/// system, and `links`, the `Patient.link` entries.
+/// Returns the PID of the HL7 v2.5 tables, the version every answer is
+/// written in.
+fn pid_2_5() -> Result<&'static hl7v2_types::model::Segment, PidError> {
+    hl7v2_types::legacy::find("ADT_A01", "2.5")
+        .and_then(|structure| segment_of(structure, "PID"))
+        .ok_or(PidError::Unplaced)
+}
+
+/// Returns the `Patient` of the PID at `index` of `parsed`, carrying
+/// `identifiers`, each with a system, and `links`, the `Patient.link`
+/// entries.
+///
+/// The PID maps through `segment-pid-to-patient` of the HL7 v2-to-FHIR
+/// 1.0.0 maps, with every table value translated on `terminology`. PID-3 is
+/// FerroPIX's own: the Manager reads each CX-4 against its identifier
+/// domains (ITI TF-2 §3.8.4.1.3), so `identifiers` replace the map's
+/// `identifier`. A table value the server translates to nothing is left
+/// out and counted, as a value the hand-written map knew no code for was.
 ///
 /// # Errors
-/// Returns [`PidError::BirthDate`] when PID-7 is valued and no date.
-pub fn patient(
-    pid: &parse::Segment,
+/// Returns [`PidError::BirthDate`] when PID-7 is valued and no date,
+/// [`PidError::Terminology`] when the terminology server refuses a
+/// translation or cannot be reached, and the other variants when the maps
+/// refuse the PID.
+pub async fn patient(
+    parsed: &Parsed,
+    index: usize,
     identifiers: &[(String, String)],
     links: Vec<Value>,
+    terminology: &Client,
 ) -> Result<Object, PidError> {
-    let mut patient = Object::new();
-    patient.insert(text("resourceType"), Value::String(text("Patient")));
+    let mapped = single::segment(
+        parsed,
+        index,
+        "Patient",
+        Maps::corrected(),
+        Some(terminology),
+    )
+    .await
+    .map_err(|error| match error {
+        SegmentError::Map(MapError::Terminology { source, .. }) => PidError::Terminology(source),
+        other => PidError::Map(Box::new(other)),
+    })?;
+    if mapped.outcomes().iter().any(birth_date_refused) {
+        return Err(PidError::BirthDate);
+    }
+    for outcome in mapped.outcomes() {
+        tracing::debug!(kind = outcome.kind(), "a PID element is not mapped");
+    }
+    let Some(Value::Object(mut patient)) = mapped.resource().map(|built| built.resource.clone())
+    else {
+        return Err(PidError::Unplaced);
+    };
     patient.insert(
         text("identifier"),
         Value::Array(
@@ -106,36 +164,20 @@ pub fn patient(
                 .collect(),
         ),
     );
-    if let Some(name) = pid.field(6).and_then(|field| field.repetitions().first())
-        && let Some(family) = family(name)
-    {
-        patient.insert(
-            text("extension"),
-            Value::Array(vec![object([
-                ("url", string(MOTHERS_MAIDEN_NAME)),
-                ("valueString", string(&family)),
-            ])]),
-        );
-    }
-    insert_list(&mut patient, "name", reps(pid, 5).filter_map(human_name));
-    if let Some(gender) = pid.text(8).and_then(gender) {
-        patient.insert(text("gender"), string(gender));
-    }
-    if let Some(born) = pid.field(7).and_then(parse::Field::text) {
-        patient.insert(
-            text("birthDate"),
-            Value::String(birth_date(born).ok_or(PidError::BirthDate)?),
-        );
-    }
-    insert_list(&mut patient, "address", reps(pid, 11).filter_map(address));
-    let telecom = reps(pid, 13)
-        .filter_map(|repetition| contact_point(repetition, "home"))
-        .chain(reps(pid, 14).filter_map(|repetition| contact_point(repetition, "work")));
-    insert_list(&mut patient, "telecom", telecom);
     if !links.is_empty() {
         patient.insert(text("link"), Value::Array(links));
     }
     Ok(patient)
+}
+
+/// Whether `outcome` is PID-7 left out as no date.
+fn birth_date_refused(outcome: &Outcome) -> bool {
+    match outcome {
+        Outcome::InvalidValue { at, .. } | Outcome::Unconvertible { at, .. } => {
+            at.segment == "PID" && at.field == Some(7)
+        }
+        _ => false,
+    }
 }
 
 /// Returns the `link` of a Resolve Duplicate Patient message: the survivor
@@ -174,159 +216,6 @@ pub fn birth_date(dtm: &str) -> Option<String> {
     })
 }
 
-/// The FHIR `administrative-gender` of a table 0001 code (v2-to-FHIR
-/// `table-hl70001-to-administrative-gender`).
-fn gender(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "F" => "female",
-        "M" => "male",
-        "O" | "A" | "N" => "other",
-        "U" => "unknown",
-        _ => return None,
-    })
-}
-
-/// The family name of an XPN: the surname of its first component.
-fn family(name: &parse::Repetition) -> Option<String> {
-    name.component(1)?.subcomponent(1).map(str::to_owned)
-}
-
-/// The `HumanName` of an XPN (`datatype-xpn-to-humanname`), `None` when no
-/// part is valued.
-fn human_name(name: &parse::Repetition) -> Option<Value> {
-    let part = |position: usize| name.component(position).and_then(|c| c.subcomponent(1));
-    let mut human = Object::new();
-    if let Some(code) = part(7).and_then(name_use) {
-        human.insert(text("use"), string(code));
-    }
-    if let Some(family) = family(name) {
-        human.insert(text("family"), string(&family));
-    }
-    insert_list(
-        &mut human,
-        "given",
-        [part(2), part(3)].into_iter().flatten().map(string),
-    );
-    insert_list(&mut human, "prefix", part(5).into_iter().map(string));
-    insert_list(
-        &mut human,
-        "suffix",
-        [part(4), part(6)].into_iter().flatten().map(string),
-    );
-    (human.keys().any(|key| key != "use")).then_some(Value::Object(human))
-}
-
-/// The `name-use` of a table 0200 code (`table-hl70200-to-name-use`).
-fn name_use(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "BAD" => "old",
-        "D" => "usual",
-        "L" | "R" => "official",
-        "M" => "maiden",
-        "MSK" => "anonymous",
-        "N" => "nickname",
-        "NAV" | "TEMP" => "temp",
-        _ => return None,
-    })
-}
-
-/// The `Address` of an XAD (`datatype-xad-to-address`), `None` when no part
-/// is valued.
-fn address(address: &parse::Repetition) -> Option<Value> {
-    let part = |position: usize| address.component(position).and_then(|c| c.subcomponent(1));
-    let mut fhir = Object::new();
-    match part(7) {
-        Some("M" | "SH") => {
-            fhir.insert(text("type"), string("postal"));
-        }
-        Some(code) => {
-            if let Some(code) = address_use(code) {
-                fhir.insert(text("use"), string(code));
-            }
-        }
-        None => {}
-    }
-    insert_list(
-        &mut fhir,
-        "line",
-        [part(1), part(2)].into_iter().flatten().map(string),
-    );
-    for (position, member) in [(3, "city"), (4, "state"), (5, "postalCode"), (6, "country")] {
-        if let Some(value) = part(position) {
-            fhir.insert(text(member), string(value));
-        }
-    }
-    (fhir.keys().any(|key| key != "use" && key != "type")).then_some(Value::Object(fhir))
-}
-
-/// The `address-use` of a table 0190 code (`table-hl70190-to-address-use`).
-fn address_use(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "BA" => "old",
-        "BI" => "billing",
-        "C" => "temp",
-        "B" | "O" => "work",
-        "H" => "home",
-        _ => return None,
-    })
-}
-
-/// The `ContactPoint` of an XTN (`datatype-xtn-to-contactpoint`), with `use`
-/// when XTN-2 names none (`segment-pid-to-patient`, PID-13 and PID-14).
-fn contact_point(xtn: &parse::Repetition, default_use: &'static str) -> Option<Value> {
-    let part = |position: usize| xtn.component(position).and_then(|c| c.subcomponent(1));
-    let equipment = part(3);
-    let email = matches!(equipment, Some("Internet" | "X.400"));
-    let value = if email {
-        part(4)
-    } else {
-        part(12).or_else(|| part(1))
-    }?;
-    let mut fhir = Object::new();
-    // NOTE: v2-to-FHIR table-hl70202-to-contact-point-system maps CP to `mobile`,
-    // which R4 ContactPoint.system lacks; a cell phone is a `phone` in `mobile` use.
-    let system = match equipment {
-        Some("PH" | "CP") | None => Some("phone"),
-        Some("FX") => Some("fax"),
-        Some("BP") => Some("pager"),
-        Some("Internet" | "X.400") => Some("email"),
-        Some("MD" | "SAT" | "TDD" | "TTY") => Some("other"),
-        Some(_) => None,
-    };
-    if let Some(system) = system {
-        fhir.insert(text("system"), string(system));
-    }
-    fhir.insert(text("value"), string(value));
-    let used = match (equipment, part(2)) {
-        (Some("CP"), _) | (_, Some("PRS")) => Some("mobile"),
-        (_, Some("PRN")) => Some("home"),
-        (_, Some("WPN")) => Some("work"),
-        (_, Some(_)) => None,
-        (_, None) => Some(default_use),
-    };
-    if let Some(used) = used {
-        fhir.insert(text("use"), string(used));
-    }
-    Some(Value::Object(fhir))
-}
-
-/// The repetitions of field `position` of `segment`.
-fn reps(segment: &parse::Segment, position: usize) -> impl Iterator<Item = &parse::Repetition> {
-    segment
-        .field(position)
-        .map(parse::Field::repetitions)
-        .unwrap_or_default()
-        .iter()
-}
-
-/// Inserts `values` under `key` when there is at least one.
-fn insert_list(object: &mut Object, key: &str, values: impl IntoIterator<Item = Value>) {
-    let values: Vec<Value> = values.into_iter().collect();
-    if !values.is_empty() {
-        object.insert(text(key), Value::Array(values));
-    }
-}
-
 /// An owned string.
 fn text(value: &str) -> String {
     value.to_owned()
@@ -350,8 +239,6 @@ fn object<const N: usize>(members: [(&str, Value); N]) -> Value {
 /// What a PID written from a `Patient` carries beside its identifiers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shown {
-    /// The demographics of ITI TF-2 §3.21.4.2.2.5, for ITI-21.
-    Demographics,
     /// No name: an empty first PID-5 and a second whose only component is
     /// the name type `S`, for ITI-9 (ITI TF-2 §3.9.4.2.2.5).
     Pseudonymous,
@@ -359,17 +246,80 @@ pub enum Shown {
     Space,
 }
 
-/// Writes the PID segment `set_id` of `identifiers` and, for
-/// [`Shown::Demographics`], the demographics of `patient`, a `Patient`'s
-/// JSON.
+/// Writes the PID segment `set_id` of `identifiers` with no demographics,
+/// PID-5 as `shown` names it.
 #[must_use]
 pub fn segment(
     authorities: &Authorities,
     set_id: usize,
     identifiers: &[(String, String)],
-    patient: Option<&Object>,
     shown: Shown,
 ) -> Segment {
+    let mut pid = Segment::new("PID", Vec::<Field>::new());
+    identify(&mut pid, authorities, set_id, identifiers);
+    match shown {
+        Shown::Pseudonymous => {
+            let pseudo = Repetition::from_iter(["", "", "", "", "", "", "S"]);
+            pid.set(5, Field::from_iter([Repetition::default(), pseudo]));
+        }
+        Shown::Space => pid.set(5, Field::from(" ")),
+    }
+    pid
+}
+
+/// Writes the PID segment `set_id` of `identifiers` with the demographics
+/// of `patient`, a `Patient`'s JSON, for ITI-21 (ITI TF-2 §3.21.4.2.2.5).
+///
+/// The `Patient` is written back through the inverse of the maps
+/// [`patient`] reads with, into the PID of HL7 v2.5. PID-1 and PID-3 are
+/// FerroPIX's own: the set id, and each identifier with the assigning
+/// authority of its domain.
+///
+/// # Errors
+/// Returns [`PidError::Terminology`] when the terminology server refuses a
+/// translation or cannot be reached, and [`PidError::Inverse`] when the
+/// maps refuse the `Patient`.
+pub async fn demographics(
+    authorities: &Authorities,
+    set_id: usize,
+    identifiers: &[(String, String)],
+    patient: &Object,
+    terminology: &Client,
+) -> Result<Segment, PidError> {
+    let mut demographics = patient.clone();
+    demographics.insert(text("resourceType"), string("Patient"));
+    demographics.remove("identifier");
+    demographics.remove("link");
+    let inverted = inverse::segment(
+        &Value::Object(demographics),
+        pid_2_5()?,
+        Maps::corrected(),
+        Some(terminology),
+    )
+    .await
+    .map_err(|error| match error {
+        InverseError::Terminology { source, .. } => PidError::Terminology(source),
+        other => PidError::Inverse(Box::new(other)),
+    })?;
+    for outcome in inverted.outcomes() {
+        tracing::debug!(
+            kind = outcome.kind(),
+            "a Patient element is not written back into PID"
+        );
+    }
+    let mut pid = inverted.into_segment();
+    identify(&mut pid, authorities, set_id, identifiers);
+    Ok(pid)
+}
+
+/// Sets PID-1 to `set_id` and PID-3 to `identifiers`, each CX-4 the
+/// assigning authority of its domain.
+fn identify(
+    pid: &mut Segment,
+    authorities: &Authorities,
+    set_id: usize,
+    identifiers: &[(String, String)],
+) {
     let cx: Field = identifiers
         .iter()
         .map(|(system, value)| {
@@ -382,203 +332,29 @@ pub fn segment(
             ])
         })
         .collect();
-    let mut fields = vec![Field::default(); 14];
-    put(&mut fields, 1, Field::from(set_id.to_string()));
-    put(&mut fields, 3, cx);
-    match (shown, patient) {
-        (Shown::Pseudonymous, _) => {
-            let pseudo = Repetition::from_iter(["", "", "", "", "", "", "S"]);
-            put(
-                &mut fields,
-                5,
-                Field::from_iter([Repetition::default(), pseudo]),
-            );
-        }
-        (Shown::Space, _) => put(&mut fields, 5, Field::from(" ")),
-        (Shown::Demographics, Some(patient)) => demographics(patient, &mut fields),
-        (Shown::Demographics, None) => {}
+    pid.set(1, Field::from(set_id.to_string()));
+    pid.set(3, cx);
+}
+
+/// A client of a terminology stub holding the PID rows, with the stub and
+/// its server, which the suites keep alive while they translate.
+#[cfg(test)]
+pub(crate) async fn stub_terminology() -> (
+    wiremock::MockServer,
+    ferropix_testkit::terminology::Translations,
+    Client,
+) {
+    let stub = ferropix_testkit::terminology::Translations::v2_pid();
+    let (server, base) = stub.serve().await.expect("the stub serves");
+    let client = crate::config::section::terminology::Terminology {
+        base_url: base.to_string(),
+        ..crate::config::section::terminology::Terminology::default()
     }
-    Segment::new("PID", fields)
-}
-
-/// Puts `value` at field `position` of `fields`, PID-1 at index 0.
-fn put(fields: &mut [Field], position: usize, value: Field) {
-    if let Some(slot) = position
-        .checked_sub(1)
-        .and_then(|index| fields.get_mut(index))
-    {
-        *slot = value;
-    }
-}
-
-/// Writes the demographics of `patient` into `fields`, PID-1 at index 0.
-fn demographics(patient: &Object, fields: &mut [Field]) {
-    let names: Field = list(patient, "name")
-        .filter_map(Value::as_object)
-        .map(|name| {
-            let given: Vec<&str> = strings(name, "given").collect();
-            let more = given
-                .get(1..)
-                .map(|rest| rest.join(" "))
-                .unwrap_or_default();
-            Repetition::from_iter([
-                String::from(member(name, "family").unwrap_or_default()),
-                String::from(given.first().copied().unwrap_or_default()),
-                more,
-                strings(name, "suffix").collect::<Vec<_>>().join(" "),
-                strings(name, "prefix").collect::<Vec<_>>().join(" "),
-                String::new(),
-                String::from(member(name, "use").and_then(name_type).unwrap_or_default()),
-            ])
-        })
-        .collect();
-    put(fields, 5, names);
-    let maiden = list(patient, "extension")
-        .filter_map(Value::as_object)
-        .filter(|extension| member(extension, "url") == Some(MOTHERS_MAIDEN_NAME))
-        .find_map(|extension| member(extension, "valueString"));
-    if let Some(maiden) = maiden {
-        put(fields, 6, Field::from(maiden));
-    }
-    if let Some(born) = member(patient, "birthDate") {
-        put(
-            fields,
-            7,
-            Field::from(
-                born.chars()
-                    .filter(char::is_ascii_digit)
-                    .collect::<String>(),
-            ),
-        );
-    }
-    if let Some(code) = member(patient, "gender").and_then(administrative_sex) {
-        put(fields, 8, Field::from(code));
-    }
-    let addresses: Field = list(patient, "address")
-        .filter_map(Value::as_object)
-        .map(|address| {
-            let lines: Vec<&str> = strings(address, "line").collect();
-            let kind = if member(address, "type") == Some("postal") {
-                Some("M")
-            } else {
-                member(address, "use").and_then(address_type)
-            };
-            Repetition::from_iter([
-                String::from(lines.first().copied().unwrap_or_default()),
-                lines
-                    .get(1..)
-                    .map(|rest| rest.join(" "))
-                    .unwrap_or_default(),
-                String::from(member(address, "city").unwrap_or_default()),
-                String::from(member(address, "state").unwrap_or_default()),
-                String::from(member(address, "postalCode").unwrap_or_default()),
-                String::from(member(address, "country").unwrap_or_default()),
-                String::from(kind.unwrap_or_default()),
-            ])
-        })
-        .collect();
-    put(fields, 11, addresses);
-    let (work, home): (Vec<&Object>, Vec<&Object>) = list(patient, "telecom")
-        .filter_map(Value::as_object)
-        .partition(|point| member(point, "use") == Some("work"));
-    put(fields, 13, telecom(&home));
-    put(fields, 14, telecom(&work));
-}
-
-/// Writes `points` as an XTN list: XTN-2 the use, XTN-3 the equipment, and
-/// the value in XTN-4 for an address and XTN-12 for a number.
-fn telecom(points: &[&Object]) -> Field {
-    points
-        .iter()
-        .filter_map(|point| {
-            let value = member(point, "value")?;
-            let system = member(point, "system");
-            let used = member(point, "use");
-            let equipment = match (system, used) {
-                (Some("email"), _) => "Internet",
-                (Some("fax"), _) => "FX",
-                (Some("pager"), _) => "BP",
-                (Some("phone") | None, Some("mobile")) => "CP",
-                (Some("phone") | None, _) => "PH",
-                (Some(_), _) => return None,
-            };
-            let use_code = match used {
-                Some("work") => "WPN",
-                Some("mobile") => "PRS",
-                _ if equipment == "Internet" => "NET",
-                _ => "PRN",
-            };
-            let mut parts = vec![""; 12];
-            if let Some(slot) = parts.get_mut(1) {
-                *slot = use_code;
-            }
-            if let Some(slot) = parts.get_mut(2) {
-                *slot = equipment;
-            }
-            let index = if equipment == "Internet" { 3 } else { 11 };
-            if let Some(slot) = parts.get_mut(index) {
-                *slot = value;
-            }
-            Some(Repetition::from_iter(parts))
-        })
-        .collect()
-}
-
-/// The table 0200 code of a `name-use`, the inverse of [`name_use`].
-fn name_type(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "official" => "L",
-        "usual" => "D",
-        "maiden" => "M",
-        "nickname" => "N",
-        "anonymous" => "MSK",
-        "old" => "BAD",
-        "temp" => "TEMP",
-        _ => return None,
-    })
-}
-
-/// The table 0001 code of an `administrative-gender`.
-fn administrative_sex(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "female" => "F",
-        "male" => "M",
-        "other" => "O",
-        "unknown" => "U",
-        _ => return None,
-    })
-}
-
-/// The table 0190 code of an `address-use`, the inverse of
-/// [`address_use`].
-fn address_type(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "home" => "H",
-        "work" => "B",
-        "temp" => "C",
-        "old" => "BA",
-        "billing" => "BI",
-        _ => return None,
-    })
-}
-
-/// The array member `key` of `object`, empty when absent.
-fn list<'o>(object: &'o Object, key: &str) -> impl Iterator<Item = &'o Value> {
-    object
-        .get(key)
-        .and_then(Value::as_array)
-        .unwrap_or_default()
-        .iter()
-}
-
-/// The strings of the array member `key` of `object`.
-fn strings<'o>(object: &'o Object, key: &str) -> impl Iterator<Item = &'o str> {
-    list(object, key).filter_map(Value::as_str)
-}
-
-/// The string member `key` of `object`.
-fn member<'o>(object: &'o Object, key: &str) -> Option<&'o str> {
-    object.get(key).and_then(Value::as_str)
+    .resolve(crate::config::Profile::Development)
+    .expect("the section resolves")
+    .expect("a terminology server")
+    .client;
+    (server, stub, client)
 }
 
 #[cfg(test)]
@@ -587,13 +363,18 @@ mod tests {
 
     use ferrobridge_hl7v2::decode::Charset;
     use ferrobridge_hl7v2::parse::lex::lex;
+    use ferrobridge_hl7v2::parse::structure::structure_declared;
+    use ferrobridge_hl7v2::parse::{Parsed, grouping, profile};
+    use ferrobridge_hl7v2::write::Writer;
     use ferropix_testkit::synthetic::{FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN};
-    use fhir_types::codec::{Json as _, Path};
+    use fhir_types::codec::{Json as _, Path, Value};
     use fhir_types::r4::patient::Patient;
 
-    use super::{Shown, birth_date, identifiers, patient, segment};
+    use super::{
+        PidError, Shown, birth_date, demographics, identifiers, patient, segment,
+        stub_terminology as terminology,
+    };
     use crate::config::section::hl7v2::authority::Authorities;
-    use ferrobridge_hl7v2::write::Writer;
 
     fn feed() -> String {
         let family = FAMILY_NAMES[0];
@@ -602,12 +383,26 @@ mod tests {
         let bsn = ferropix_testkit::synthetic::bsn(0)
             .expect("a synthetic BSN")
             .digits();
+        message(&format!(
+            "PID|1||PAT-1^^^EAST~{bsn}^^^&2.16.840.1.113883.2.4.6.3&ISO~X-9^^^NOWHERE||{family}^{given}^B^^Dr^^L~{family}^{given}^^^^^N|{mother}|19800229|F|||Dorpsstraat 1^^Proefdorp^^1234 AB^NL^H||^PRN^PH^^^^^^^^^+31201234567~^NET^Internet^ada@example.org|^WPN^PH^^^^^^^^^+31207654321"
+        ))
+    }
+
+    /// An ADT^A01 of HL7 v2.5 around `pid`, the third segment.
+    fn message(pid: &str) -> String {
         format!(
             "MSH|^~\\&|ADT|EAST|PIX|NORTH|20261025100000||ADT^A01^ADT_A01|M-1|P|2.5\r\
              EVN||20261025100000\r\
-             PID|1||PAT-1^^^EAST~{bsn}^^^&2.16.840.1.113883.2.4.6.3&ISO~X-9^^^NOWHERE||{family}^{given}^B^^Dr^^L~{family}^{given}^^^^^N|{mother}|19800229|F|||Dorpsstraat 1^^Proefdorp^^1234 AB^NL^H||^PRN^PH^^^^^^^^^+31201234567~^NET^Internet^ada@example.org|^WPN^PH^^^^^^^^^+31207654321\r\
+             {pid}\r\
              PV1|1|O\r"
         )
+    }
+
+    /// `text` grouped by the structure its MSH declares.
+    fn parsed(text: &str) -> Parsed {
+        let lexed = lex(text, Charset::Ascii).expect("the feed lexes");
+        let structure = structure_declared(&lexed.message).expect("a structure");
+        grouping::group(lexed, structure, &profile::Profile::BASE)
     }
 
     fn authorities() -> Authorities {
@@ -617,17 +412,36 @@ mod tests {
         )]))
     }
 
-    #[test]
-    fn a_pid_reads_as_the_patient_a_fhir_source_would_send() {
-        let lexed = lex(&feed(), Charset::Ascii).expect("the feed lexes");
-        let pid = lexed
-            .message
-            .segments()
-            .iter()
-            .find(|segment| segment.id() == "PID")
-            .expect("a PID");
-        let read = identifiers(pid.field(3), &authorities(), HOSPITAL_DOMAIN);
-        let systems: Vec<Option<&str>> = read.iter().map(|cx| cx.system.as_deref()).collect();
+    /// The `Patient` of the PID of `text`, carrying the identifiers the
+    /// face reads from PID-3 in the hospital domain.
+    async fn read(text: &str) -> fhir_types::codec::Object {
+        let (_server, stub, client) = terminology().await;
+        let parsed = parsed(text);
+        let pid = parsed.message().segments().get(2).expect("a PID").clone();
+        let known: Vec<(String, String)> =
+            identifiers(pid.field(3), &authorities(), HOSPITAL_DOMAIN)
+                .into_iter()
+                .filter_map(|cx| Some((cx.system?, cx.value)))
+                .collect();
+        let read = patient(&parsed, 2, &known, Vec::new(), &client)
+            .await
+            .expect("the PID reads");
+        assert!(
+            stub.asked().iter().any(|(map, code)| map
+                .ends_with("table-hl70001-to-administrative-gender")
+                && code == "F"),
+            "PID-8 is translated on the terminology server"
+        );
+        read
+    }
+
+    #[tokio::test]
+    async fn a_pid_reads_as_the_patient_a_fhir_source_would_send() {
+        let text = feed();
+        let parsed = parsed(&text);
+        let pid = parsed.message().segments().get(2).expect("a PID");
+        let read_ids = identifiers(pid.field(3), &authorities(), HOSPITAL_DOMAIN);
+        let systems: Vec<Option<&str>> = read_ids.iter().map(|cx| cx.system.as_deref()).collect();
         assert_eq!(
             systems,
             vec![
@@ -636,11 +450,7 @@ mod tests {
                 None
             ]
         );
-        let known: Vec<(String, String)> = read
-            .into_iter()
-            .filter_map(|cx| Some((cx.system?, cx.value)))
-            .collect();
-        let object = patient(pid, &known, Vec::new()).expect("the PID reads");
+        let object = read(&text).await;
         let fhir = Patient::from_json(&object, &mut Path::root("Patient")).expect("a Patient");
         assert_eq!(fhir.identifier.len(), 2);
         assert_eq!(
@@ -663,6 +473,68 @@ mod tests {
         assert_eq!(fhir.extension.len(), 1, "the mother's maiden name");
     }
 
+    #[tokio::test]
+    async fn the_telecom_follows_the_v2_to_fhir_maps_and_holds_r4() {
+        let object = read(&message(
+            "PID|1||PAT-1^^^EAST||Proefsma|||F|||||^PRS^CP^^^^^^^^^+31600000000~^^FX^^^^^^^^^+31200000001~^^^^^^^^^^^+31200000003",
+        ))
+        .await;
+        let telecom: Vec<String> = object
+            .get("telecom")
+            .and_then(Value::as_array)
+            .unwrap_or_default()
+            .iter()
+            .map(|point| serde_json::to_string(point).expect("a ContactPoint serializes"))
+            .collect();
+        assert_eq!(
+            telecom,
+            [
+                r#"{"system":"phone","use":"mobile","value":"+31600000000"}"#,
+                r#"{"system":"fax","use":"home","value":"+31200000001"}"#,
+                r#"{"_system":{"extension":[{"url":"http://hl7.org/fhir/StructureDefinition/data-absent-reason","valueCode":"unknown"}]},"use":"home","value":"+31200000003"}"#,
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_pid_7_that_is_no_date_is_refused() {
+        let (_server, _stub, client) = terminology().await;
+        let parsed = parsed(&message("PID|1||PAT-1^^^EAST||Proefsma||19801329|F"));
+        let refused = patient(&parsed, 2, &[], Vec::new(), &client).await;
+        assert!(matches!(refused, Err(PidError::BirthDate)), "{refused:?}");
+    }
+
+    #[tokio::test]
+    async fn a_terminology_server_that_does_not_answer_is_a_terminology_refusal() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port");
+        let client = crate::config::section::terminology::Terminology {
+            base_url: format!("http://{closed}/r4"),
+            ..crate::config::section::terminology::Terminology::default()
+        }
+        .resolve(crate::config::Profile::Development)
+        .expect("the section resolves")
+        .expect("a terminology server")
+        .client;
+        let parsed = parsed(&message("PID|1||PAT-1^^^EAST||Proefsma||19800229|F"));
+        let refused = patient(&parsed, 2, &[], Vec::new(), &client).await;
+        assert!(
+            matches!(refused, Err(PidError::Terminology(_))),
+            "{refused:?}"
+        );
+        let mut found = fhir_types::codec::Object::new();
+        found.insert(
+            String::from("gender"),
+            Value::String(String::from("female")),
+        );
+        let refused = demographics(&authorities(), 1, &[], &found, &client).await;
+        assert!(
+            matches!(refused, Err(PidError::Terminology(_))),
+            "{refused:?}"
+        );
+    }
+
     #[test]
     fn a_birth_date_keeps_its_precision_and_refuses_what_is_no_date() {
         assert_eq!(birth_date("19800229").as_deref(), Some("1980-02-29"));
@@ -677,41 +549,37 @@ mod tests {
         assert_eq!(birth_date("19800"), None);
     }
 
-    #[test]
-    fn a_patient_writes_back_as_the_pid_it_was_read_from() {
-        let lexed = lex(&feed(), Charset::Ascii).expect("the feed lexes");
-        let pid = lexed
-            .message
-            .segments()
-            .iter()
-            .find(|segment| segment.id() == "PID")
-            .expect("a PID");
+    #[tokio::test]
+    async fn a_patient_writes_back_as_the_pid_it_was_read_from() {
+        let text = feed();
         let known = vec![(HOSPITAL_DOMAIN.to_owned(), String::from("PAT-1"))];
-        let object = patient(pid, &known, Vec::new()).expect("the PID reads");
+        let object = read(&text).await;
+        let (_server, stub, client) = terminology().await;
+        let lexed = lex(&text, Charset::Ascii).expect("the feed lexes");
         let writer = Writer::new(*lexed.message.delimiters());
-        let written = writer.segment(&segment(
-            &authorities(),
-            1,
-            &known,
-            Some(&object),
-            Shown::Demographics,
-        ));
+        let written = writer.segment(
+            &demographics(&authorities(), 1, &known, &object, &client)
+                .await
+                .expect("the Patient writes back"),
+        );
+        assert!(
+            stub.asked().iter().any(|(map, code)| map
+                .ends_with("table-administrative-gender-to-hl70001")
+                && code == "female"),
+            "the gender is translated back on the terminology server"
+        );
         let family = FAMILY_NAMES[0];
         let given = GIVEN_NAMES[0];
         let mother = FAMILY_NAMES[1];
+        // NOTE: v2-to-FHIR table-hl70201-to-contact-point-use maps no NET, so the email has no
+        // `use` and its XTN-2, optional in the HL7 v2.5 XTN data type, stays empty.
         assert_eq!(
             written,
             format!(
-                "PID|1||PAT-1^^^EAST&2.999.1.1&ISO||{family}^{given}^B^^Dr^^L~{family}^{given}^^^^^N|{mother}|19800229|F|||Dorpsstraat 1^^Proefdorp^^1234 AB^NL^H||^PRN^PH^^^^^^^^^+31201234567~^NET^Internet^ada@example.org|^WPN^PH^^^^^^^^^+31207654321"
+                "PID|1||PAT-1^^^EAST&2.999.1.1&ISO||{family}^{given}^B^^Dr^^L~{family}^{given}^^^^^N|{mother}|19800229|F|||Dorpsstraat 1^^Proefdorp^^1234 AB^NL^H||^PRN^PH^^^^^^^^^+31201234567~^^Internet^ada@example.org|^WPN^PH^^^^^^^^^+31207654321"
             )
         );
-        let pseudonymous = writer.segment(&segment(
-            &authorities(),
-            1,
-            &known,
-            None,
-            Shown::Pseudonymous,
-        ));
+        let pseudonymous = writer.segment(&segment(&authorities(), 1, &known, Shown::Pseudonymous));
         assert_eq!(pseudonymous, "PID|1||PAT-1^^^EAST&2.999.1.1&ISO||~^^^^^^S");
     }
 }

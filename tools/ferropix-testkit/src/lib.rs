@@ -30,3 +30,4 @@ pub mod oidc;
 pub mod otlp;
 pub mod pins;
 pub mod synthetic;
+pub mod terminology;

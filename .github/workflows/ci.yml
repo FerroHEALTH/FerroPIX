@@ -782,6 +782,7 @@ jobs:
           done
           docker compose config --quiet
           docker compose --profile console config --quiet
+          docker compose --profile hl7v2 config --quiet
           # The healthchecks sit on the services, since Podman runs the
           # published images without theirs (#292).
           docker compose --profile console config --format json \

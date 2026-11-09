@@ -63,6 +63,14 @@ from the domains asked about, and never the source identifier itself. A
 `404` is "patient unknown" only when its `OperationOutcome` carries a
 `not-found` issue.
 
+`PixmClient::capabilities` reads the Manager's `CapabilityStatement` with
+`GET [base]/metadata` (FHIR R4 `http.html` §capabilities), through the same
+transport and authorizer as ITI-83. A consumer calls it at boot to learn
+that the configured base is a FHIR server that answers. Every other outcome
+is a typed error: `Refused` with the status, `NotAFhirServer` for a `200`
+that is no FHIR R4 `CapabilityStatement`, and `Timeout`, `Transport` or
+`Unauthenticated` when no answer was had.
+
 ## PDQm (`pdqm`)
 
 `ihe_iti::pdqm::PdqmClient` is the Patient Demographics Consumer:

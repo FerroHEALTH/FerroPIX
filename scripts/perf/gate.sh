@@ -6,7 +6,11 @@
 # (FerroHEALTH/FerroSYS#249) in its A/B mode, the head of a change judged
 # against its base measured beside it on the same runner, each the release
 # build of the server over its own database in one PostgreSQL, with the stub
-# OpenID Provider, each image at the testkit's pin in docs/VERSIONS.md.
+# OpenID Provider, each image at the testkit's pin in docs/VERSIONS.md, and
+# the terminology server the HL7 v2 face translates every table value on
+# (#564): FerroTERM at the quickstart's pin, over HL7 Terminology, the
+# v2-to-FHIR guide's package and FerroBRIDGE's value package, each fetched
+# by URL and refused unless its sha256 is the pin below.
 #
 #   scripts/perf/gate.sh build [BASE]
 #       Builds the release server of the checkout, the head, and of its
@@ -53,6 +57,22 @@ readonly BASE_MLLP=127.0.0.1:2576
 readonly ISSUER=http://localhost:8180/ferropix
 readonly PG_NAME=ferropix-perf-postgres
 readonly ISSUER_NAME=ferropix-perf-issuer
+readonly TX_NAME=ferropix-perf-terminology
+readonly TERMINOLOGY=http://127.0.0.1:8280/r4
+# The packages the terminology server loads, as the compose quickstart's
+# `hl7v2` profile fetches them: `NAME URL SHA256`, one per line. A package
+# tarball unpacks under NAME; a single file lands in NAME as itself.
+readonly FERROBRIDGE_VALUES=https://raw.githubusercontent.com/FerroHEALTH/FerroBRIDGE/8de54079117d76491171f93257e0008559a01913/terminology/hl7v2-values
+readonly PACKAGES="hl7.terminology https://packages.fhir.org/hl7.terminology/7.5.0 c54ebe534cd3f2474459eaed68e54c34f09b003766605b19e5552db376f2cc42
+hl7.fhir.uv.v2mappings https://packages.fhir.org/hl7.fhir.uv.v2mappings/1.0.0 49004948e7589ccc663b3df89f831b3cbf4c2dd1ef67c859633dd50cc81581a0
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-address-type-to-hl70190.json d28b3ff53aa63821b301b5683d946480673b1ac1e0421615e7c979c2ad5bda68
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-address-use-to-hl70190.json 46a80f233cccb42f4bf671c612f70049e234ab46414eb31d56d3e32b08cf7aff
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-administrative-gender-to-hl70001.json ba0afd6497dffc23e2a2819654ccb6451efb480e970a2e713f23315f67c78d63
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-contact-point-system-to-hl70202.json 97035f7e5ba61a15ee47e568b4b74b7650d111cf18d8b9d33f1563c77ba4912c
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-hl70202-equipment-to-contact-point-system.json 66f97c511a5006e633a872b75c095ab783405b3990d107d6e1835c27e323abf2
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-hl70202-to-contact-point-use.json 6a033e040b94475c8984109c3e79d030f46e4376e0ef34dd6e868fba9e34db67
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/ConceptMap-table-name-use-to-hl70200.json 85ce27a015366a0c42973c68c0cccf567f1822df54d030ac25fdbb5ab5e92177
+ferrobridge-hl7v2-values ${FERROBRIDGE_VALUES}/package.json 7aa6a9cab30cb23903f1eacd43dc1da8b7df0a50d965c28c6c39cf20f132679a"
 readonly PG_PASSWORD=perf
 # The claim of the outbox sender (app/ferropix-server/src/store/outbox.rs),
 # polled with no wait between two claims.
@@ -234,7 +254,25 @@ cleanup() {
     [[ -n "$pid" ]] && kill "$pid" 2> /dev/null || true
     [[ -n "$pid" ]] && wait "$pid" 2> /dev/null || true
   done
-  docker rm --force "$PG_NAME" "$ISSUER_NAME" > /dev/null 2>&1 || true
+  docker rm --force "$PG_NAME" "$ISSUER_NAME" "$TX_NAME" > /dev/null 2>&1 || true
+}
+
+# packages DIR: fetches every package of PACKAGES under DIR, each checked
+# against its sha256 before it is unpacked or kept.
+packages() {
+  local dir="$1" name url sha file
+  while read -r name url sha; do
+    file="$(mktemp)"
+    curl --fail --silent --show-error --location --output "$file" "$url" \
+      || die "the package $url could not be fetched"
+    [[ "$(sha256sum "$file" | cut -d' ' -f1)" == "$sha" ]] || die "$url is not the pinned bytes"
+    mkdir -p "$dir/$name"
+    case "$url" in
+      *.json) mv "$file" "$dir/$name/${url##*/}" ;;
+      *) tar -xzf "$file" -C "$dir/$name" && rm -- "$file" ;;
+    esac
+  done <<< "$PACKAGES"
+  chmod -R a+rX "$dir"
 }
 
 # serve NAME BINARY CONFIG DB PORT MLLP: starts one server in the
@@ -251,15 +289,17 @@ serve() {
     FERROPIX__AUDIT__SPOOL_DIR="$dir/audit" \
     FERROPIX__SERVER__LISTEN="127.0.0.1:$port" \
     FERROPIX__HL7V2__LISTEN="$mllp" \
+    FERROPIX__TERMINOLOGY__BASE_URL="$TERMINOLOGY" \
     "$binary" serve --config "$config" > "$dir/server.log" 2>&1 &
   echo "$!"
 }
 
 start() {
-  local pg_image issuer_image base_config=$CONFIG db
+  local pg_image issuer_image tx_image base_config=$CONFIG db
   pg_image="$(pin "PostgreSQL test image")"
   issuer_image="$(pin "Stub OpenID Provider image")"
-  [[ -n "$pg_image" && -n "$issuer_image" ]] || die "docs/VERSIONS.md pins no test image"
+  tx_image="$(pin "Quickstart terminology server image")"
+  [[ -n "$pg_image" && -n "$issuer_image" && -n "$tx_image" ]] || die "docs/VERSIONS.md pins no test image"
   [[ -x target/release/ferropix ]] || die "target/release/ferropix is not built"
   [[ -x "$BASE_TREE/ferropix" ]] || die "$BASE_TREE/ferropix is not built: run gate.sh build first"
   [[ -f "$BASE_TREE/src/$CONFIG" ]] && base_config="$BASE_TREE/src/$CONFIG"
@@ -288,6 +328,15 @@ start() {
     --env JSON_CONFIG='{"interactiveLogin":false,"tokenCallbacks":[{"issuerId":"ferropix","requestMappings":[{"requestParam":"grant_type","match":"client_credentials","claims":{"sub":"${clientId}","client_id":"${clientId}","aud":["http://localhost:8080/fhir"],"scope":"${scope}"}}]}]}' \
     "$issuer_image" > /dev/null
   wait_for "the OpenID Provider" 60 curl --fail --silent "$ISSUER/.well-known/openid-configuration"
+
+  packages "$WORK/terminology"
+  docker run --detach --name "$TX_NAME" --publish 127.0.0.1:8280:8280 \
+    --volume "$root/$WORK/terminology:/data/packages:ro" \
+    --env FERROTERM__SERVER__LISTEN=0.0.0.0:8280 \
+    --env FERROTERM__TERMINOLOGY__CODE_SYSTEMS=/data/packages/hl7.terminology/package,/data/packages/hl7.fhir.uv.v2mappings/package,/data/packages/ferrobridge-hl7v2-values \
+    --env FERROTERM__USAGE_REPORT__ENABLED=false \
+    "$tx_image" > /dev/null
+  wait_for "the terminology server" 120 curl --fail --silent "http://127.0.0.1:8280/health/readiness"
 
   head_pid="$(serve head target/release/ferropix "$CONFIG" ferropix 8080 "$HEAD_MLLP")"
   base_pid="$(serve base "$BASE_TREE/ferropix" "$base_config" ferropix_base 8081 "$BASE_MLLP")"

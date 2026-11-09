@@ -39,14 +39,13 @@ use crate::config::section::hl7v2::Sender;
 use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::cursor::Place;
 use crate::hl7v2::feed::{query_part, url_encoded};
-use crate::hl7v2::{Answer, Face, Response, acknowledge, respond, sender_key};
+use crate::hl7v2::{Answer, Conformance, Face, Response, acknowledge, respond, sender_key};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::pdqm::{MAX_PAGE, Searched};
 use crate::store::record;
 use crate::v2::pid::{self, PidError};
 use crate::v2::stamped::Stamped;
 use ferrobridge_hl7v2::parse::ErrorCode;
-use ferrobridge_hl7v2::parse::profile::IHE_ITI_21;
 use fhir_search::escape::escape;
 
 /// One person of an answer: its id and its `Patient`'s JSON.
@@ -686,7 +685,7 @@ fn answer(
             faults: &settled.faults,
             status: settled.status,
             body,
-            profile: &IHE_ITI_21,
+            check: Conformance::Unchecked,
         },
         stamped,
     )

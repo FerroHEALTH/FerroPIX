@@ -253,7 +253,8 @@ services:
     environment:
       FERROTERM__SERVER__LISTEN: 127.0.0.1:8280
       FERROTERM__TERMINOLOGY__CODE_SYSTEMS: /data/packages/hl7.terminology/package,/data/packages/hl7.fhir.uv.v2mappings/package,/data/packages/ferrobridge-hl7v2-values
-      FERROTERM__USAGE_REPORT__ENABLED: ${FERROTERM__USAGE_REPORT__ENABLED:-true}
+      # The installation report follows FerroPIX's own switch.
+      FERROTERM__USAGE_REPORT__ENABLED: ${FERROPIX__USAGE_REPORT__ENABLED:-true}
       FERROTERM__USAGE_REPORT__DEPLOYMENT: compose
       FERROTERM__USAGE_REPORT__STATE_DIR: /data/state
     volumes:

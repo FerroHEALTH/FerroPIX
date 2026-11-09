@@ -521,13 +521,13 @@ fn json<T: DeserializeOwned>(answer: &Answer, step: Step) -> Result<T, NutsAuthE
         return Err(malformed(Malformation::MediaType));
     }
     repeats_no_name(&answer.body).map_err(|error| {
-        malformed(if error.is_data() {
+        malformed(if error.category() == serde_json::error::Category::Data {
             Malformation::RepeatedName {
                 line: error.line(),
                 column: error.column(),
             }
         } else {
-            Malformation::of(&error)
+            Malformation::of_refusal(&error)
         })
     })?;
     serde_json::from_slice(&answer.body).map_err(|error| malformed(Malformation::of(&error)))

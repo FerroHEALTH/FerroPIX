@@ -148,8 +148,23 @@ impl Malformation {
     /// The malformation `error` describes, by position alone: a
     /// `serde_json` message can quote the value it refused.
     pub(super) fn of(error: &serde_json::Error) -> Self {
-        let (line, column) = (error.line(), error.column());
-        if error.is_data() {
+        Self::at(error.is_data(), error.line(), error.column())
+    }
+
+    /// The malformation the shared reader's refusal describes, which keeps
+    /// the position and the kind and no part of the answer.
+    pub(super) fn of_refusal(error: &ferrohealth_smart::json::JsonError) -> Self {
+        Self::at(
+            error.category() == serde_json::error::Category::Data,
+            error.line(),
+            error.column(),
+        )
+    }
+
+    /// The shape fault at `line` and `column` when `data`, else the syntax
+    /// fault there.
+    fn at(data: bool, line: usize, column: usize) -> Self {
+        if data {
             Self::Shape { line, column }
         } else {
             Self::NotJson { line, column }

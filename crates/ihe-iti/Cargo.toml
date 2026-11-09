@@ -186,7 +186,7 @@ ferrohealth-smart = { version = "0.12.0", default-features = false, optional = t
 fhir-search = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
-ihe-atna = { version = "0.7.0", default-features = false, optional = true }
+ihe-atna = { version = "0.7.1", default-features = false, optional = true }
 jiff = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }

@@ -88,7 +88,8 @@ impl Criteria {
             "_id" => Ok(Self::Id(value)),
             "organization" => Ok(Self::Organization(value)),
             "identifier" => {
-                let token = token::token(&value);
+                let token =
+                    token::token(&value).map_err(|_unreadable| SubscriptionError::Criteria)?;
                 Ok(Self::Identifier {
                     system: token.system,
                     value: (!token.code.expose_secret().is_empty()).then_some(token.code),

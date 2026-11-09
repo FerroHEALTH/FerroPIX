@@ -37,7 +37,8 @@
 //! use std::time::Duration;
 //!
 //! use ihe_iti::pdqm::PdqmClient;
-//! use ihe_iti::pdqm::query::{DatePrefix, PatientQuery, StringMatch};
+//! use fhir_search::prefix::Prefix;
+//! use ihe_iti::pdqm::query::{PatientQuery, StringMatch};
 //! use ihe_atna::user::OnBehalfOf;
 //! use secrecy::{ExposeSecret, SecretString};
 //! use url::Url;
@@ -49,7 +50,7 @@
 //! let client = PdqmClient::new(Url::parse("https://pdq.example.org/fhir/")?, http)?;
 //! let query = PatientQuery::default()
 //!     .family(&SecretString::from("Schmidt"), StringMatch::Exact)?
-//!     .birthdate(DatePrefix::Eq, &SecretString::from("1923-07-25"))?;
+//!     .birthdate(Prefix::Eq, &SecretString::from("1923-07-25"))?;
 //! let on_behalf = OnBehalfOf::System;
 //! let mut page = client.search(&query, &on_behalf, Duration::from_secs(2)).await?;
 //! loop {

@@ -45,6 +45,10 @@ base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 # The generated FHIR model of FerroBRIDGE, at the version FerroFED and
 # ihe-atna pin.
 fhir-types = { version = "0.1.128", default-features = false }
+# The FHIR R4 search value grammar of FerroBRIDGE, which every search value
+# and token is read and written with. Its crate line moves one patch per
+# change, breaking ones included, so the requirement is exact.
+fhir-search = { version = "=0.1.129", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroAUTH: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers. The server pins it exactly, as a product pins every family crate;
@@ -96,9 +100,8 @@ http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
-# Verified against crates.io on 2026-11-08 (0.5.2, `ferrohealth-smart` 0.10,
-# #521).
-ihe-atna = { version = "=0.5.2", default-features = false }
+# Verified against crates.io on 2026-11-08 (0.6.0, #528).
+ihe-atna = { version = "=0.6.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60.2", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

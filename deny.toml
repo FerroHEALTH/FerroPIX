@@ -74,6 +74,9 @@ exceptions = [
   { allow = ["BUSL-1.1"], crate = "ferrohealth-usage-report" },
   # FerroBRIDGE's HL7 v2 face, taken without its v2-to-FHIR mapper.
   { allow = ["BUSL-1.1"], crate = "ferrobridge-hl7v2" },
+  # FerroBRIDGE's FHIR search value grammar, which ihe-iti reads and writes
+  # every search value with.
+  { allow = ["BUSL-1.1"], crate = "fhir-search" },
   # The FerroUI components the operator console draws with, and the console
   # itself, which is never published.
   { allow = ["BUSL-1.1"], crate = "ferrohealth-ui" },

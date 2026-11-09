@@ -33,6 +33,9 @@ base64.workspace = true
 clap.workspace = true
 # The R4 OperationOutcome and CapabilityStatement the FHIR face answers, and
 # the AuditEvent the audit tests read back, from the generated model.
+# The FHIR search value grammar the HL7 v2 face writes its tokens with and
+# the PDQm search reads its birth dates with.
+fhir-search = { workspace = true, features = ["jiff"] }
 fhir-types = { workspace = true, features = ["r4", "terminology", "resources"] }
 # The ITI-104 messages the feed transaction applies, read by the PIX
 # Manager side of the identity profiles crate (PIXm 3.1.0 §2:3.104), and

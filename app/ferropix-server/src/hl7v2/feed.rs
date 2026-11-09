@@ -18,6 +18,7 @@
 
 use ferrobridge_hl7v2::ack::Code;
 use ferrobridge_hl7v2::parse::{Message, Segment};
+use fhir_search::escape::escape;
 use fhir_types::codec::Value;
 use ihe_atna::balp::{Exchange, Outcome};
 use ihe_iti::pixm::audit::FeedAction;
@@ -386,22 +387,8 @@ fn identifier(domain: &str, cx: &Cx) -> Identifier {
 /// "Escaping Search Parameters") and percent-encoded for a URL query.
 #[must_use]
 pub(super) fn query_part(system: &str, value: &str) -> String {
-    let token = format!("{}|{}", fhir_escape(system), fhir_escape(value));
+    let token = format!("{}|{}", escape(system), escape(value));
     url_encoded(&token)
-}
-
-/// `text` with the characters a FHIR search value escapes, `\`, `|`, `,`
-/// and `$`, escaped with a backslash.
-#[must_use]
-pub(super) fn fhir_escape(text: &str) -> String {
-    let mut escaped = String::with_capacity(text.len());
-    for character in text.chars() {
-        if matches!(character, '\\' | '|' | ',' | '$') {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
 }
 
 /// `text` percent-encoded for a URL query, a space as `%20`.
@@ -414,11 +401,13 @@ pub(super) fn url_encoded(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{fhir_escape, query_part};
+    use fhir_search::escape::escape;
+
+    use super::query_part;
 
     #[test]
     fn a_condition_token_escapes_its_separators() {
-        assert_eq!(fhir_escape("a|b,c$d\\e"), "a\\|b\\,c\\$d\\\\e");
+        assert_eq!(escape("a|b,c$d\\e"), "a\\|b\\,c\\$d\\\\e");
         assert_eq!(
             query_part("urn:oid:2.999.1.1", "A 1"),
             "urn%3Aoid%3A2.999.1.1%7CA%201"

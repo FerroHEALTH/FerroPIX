@@ -7,9 +7,10 @@
 
 use std::collections::BTreeSet;
 
+use fhir_search::prefix::Prefix;
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::error::{Malformation, PdqmError};
-use ihe_iti::pdqm::query::{DatePrefix, Gender, PatientQuery, StringMatch};
+use ihe_iti::pdqm::query::{Gender, PatientQuery, StringMatch};
 use secrecy::SecretString;
 use serde::Deserialize;
 
@@ -87,7 +88,7 @@ fn every_parameter() -> PatientQuery {
         .id(&SecretString::from("ex-patient"))
         .and_then(|query| query.identifier(Some(DOMAIN), &text))
         .and_then(|query| query.telecom(&text))
-        .and_then(|query| query.birthdate(DatePrefix::Eq, &SecretString::from("1923")))
+        .and_then(|query| query.birthdate(Prefix::Eq, &SecretString::from("1923")))
         .map(|query| query.active(true).gender(Gender::Other))
         .expect("a query");
     for matching in both {

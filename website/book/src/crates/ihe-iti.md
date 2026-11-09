@@ -20,7 +20,7 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `soap` | The SOAP 1.2 envelope of ITI TF-2 Appendix V, with no profile: its reader, which hands every element to a visitor the transaction supplies, its writer, its fault codes, and the HTTP post it travels on with the answer read to a bound | Appendix V | what `xcpd` and the Mitz question of `nl-generic-functions` send, read and write through |
 | `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side, and of the PIXm Manager and the PDQm Supplier |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
-| `rest` | The FHIR R4 search value escaping and the JSON media types of an answer, with no FHIR model | FHIR R4 search, HTTP | what the FHIR clients and the NVI client of `nl-generic-functions` escape their search values and read their answers' media types with |
+| `rest` | The JSON media types of an answer, with no FHIR model, and the family's FHIR R4 search value grammar, `fhir-search` | FHIR R4 search, HTTP | what the FHIR clients and the NVI client of `nl-generic-functions` read their answers' media types with; every search value and token is escaped and read through `fhir-search`, the one grammar the FerroHEALTH FHIR servers share |
 | `authorizer` | The authorizer that makes each request's headers, and the send that resends once when it asks, with no FHIR model | ITI-72 | what the FHIR clients and the NVI client of `nl-generic-functions` authenticate through |
 | `smart` | The authorizer over the client-credentials token of `ferrohealth-smart` | ITI-72 | the client's access token |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
@@ -192,6 +192,9 @@ Each client can ask an authorizer you supply for the headers of every
 request (IUA ITI-72), and with `balp` or `atna` records the audit record its
 profile defines. With `smart`, `authorizer::smart::TokenAuthorizer` is that
 authorizer over `ferrohealth-smart`'s client-credentials `TokenSource`: a
-bearer token on each request, and after a `401` the refused token dropped
+bearer token on each request, or a `DPoP` token with a proof of the request
+for a grant bound to a `DPoP` key (RFC 9449 §7.1); after a `401` that demands
+a `DPoP` nonce the token kept and the request sent once more with a proof
+carrying the nonce (§9), and after any other `401` the refused token dropped
 and the request sent once more with a new one. [Security and audit](../operate/security-and-audit.md)
 describes both.

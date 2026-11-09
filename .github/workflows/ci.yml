@@ -758,8 +758,9 @@ jobs:
   # The performance gate (#506): ferrohealth-perf's A/B mode, the release
   # build judged against the build of its base on the same runner, in
   # perf.yml, which the release lane calls on the release commit too. The
-  # base is the pull request's base, the merge group's, or the commit before
-  # a push; a dispatch takes the previous release.
+  # base is the pull request's base or the commit before a push; a dispatch
+  # takes the previous release. A merge group builds nothing for it and its
+  # verdict passes with a summary saying why (#551).
   perf:
     name: perf
     needs: detect
@@ -769,6 +770,7 @@ jobs:
     uses: ./.github/workflows/perf.yml
     with:
       base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+      skip: ${{ github.event_name == 'merge_group' }}
 
   # The quickstart, run as an operator runs it: the server built for the
   # static musl target, the image built from that binary through the staged

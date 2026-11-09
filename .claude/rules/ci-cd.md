@@ -108,6 +108,21 @@ placeholder tree). The
   run unless `publish` is set, sharing `scripts/release/publish-crates.sh`
   with the release lane.
 
+## The merge queue proves the merged tree
+
+Every pull-request run and every merge-group run of `ci.yml` finishes in
+under 20 minutes of wall time, runner queue included (owner, 2026-11-09).
+The functional gates (build, clippy, the tests, e2e, the journeys, the
+quickstart, the guards) run in the merge group. The performance gate runs
+on the pull request that reaches the server and on every push to `main`; in
+a merge group `perf.yml` builds nothing and its `perf verdict` job passes
+with a step summary that says why (#551). No gate is weakened: the
+thresholds, the phases and the retry rule are the same, and only the event
+the gate runs on changes. A regression two pull requests cause only
+together surfaces on the push to `main`, and its fix is a follow-up pull
+request. A new long non-functional job takes the same merge-group skip in
+the change that adds it.
+
 ## Workflow security (every workflow, no exceptions)
 
 - **Every `uses:` is pinned to a full commit SHA** with a trailing `# vX.Y.Z`

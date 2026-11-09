@@ -3,6 +3,10 @@
 
 # Memory index
 
+- [CI under 20 minutes](ci-under-20-minutes.md): every pull-request and
+  merge-group run of `ci.yml` under 20 minutes, queue included; the
+  performance gate runs on the pull request and on `main`, never in the
+  merge queue; owner 2026-11-09
 - [Family architecture](family-architecture.md): the FerroHEALTH family
   is five separate servers that reach each other only over published
   protocols, plus shared crates for cross-cutting work; nothing is

@@ -35,7 +35,7 @@ pub enum ServeError {
     Audit(#[source] audit::OpenError),
     /// The XCPD Responding Gateway's HTTP client could not be built.
     #[error("the XCPD Responding Gateway could not start")]
-    Xcpd(#[source] reqwest::Error),
+    Xcpd(#[source] xcpd::GatewayError),
     /// The client that delivers ITI-93 to subscribers could not be built.
     #[error("the ITI-93 sender's HTTP client could not be built")]
     Pmir(#[source] reqwest::Error),

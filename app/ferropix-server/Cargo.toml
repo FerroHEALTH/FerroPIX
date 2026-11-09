@@ -64,7 +64,7 @@ ferrohealth-config.workspace = true
 ferrohealth-secret.workspace = true
 # The HTTP stack, the bounded drain, the probe and the subcommands the
 # family shares, and `[server]` with `[server.tls]`.
-ferrohealth-server.workspace = true
+ferrohealth-server = { workspace = true, features = ["reqwest"] }
 # The `[telemetry]` section, the console, the request log, the OTLP export,
 # the Prometheus exposition of `/metrics` and the panic hook the family shares.
 ferrohealth-telemetry = { workspace = true, features = ["axum", "otlp", "prometheus"] }

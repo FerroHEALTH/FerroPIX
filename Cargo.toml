@@ -73,7 +73,7 @@ ferrohealth-session = { version = "=0.4.0", default-features = false }
 # requires. Verified against crates.io on 2026-11-04.
 ferrohealth-config = "=0.2.10"
 ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.5.1", default-features = false }
+ferrohealth-server = { version = "=0.6.3", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition

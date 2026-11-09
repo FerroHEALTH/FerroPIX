@@ -14,7 +14,7 @@
 #   scripts/checks/pin-freshness.sh
 #
 # The lint and install pins of .github/workflows/ci.yml (zizmor, shellcheck,
-# the actionlint and hadolint images, yq), the documentation toolchain, the
+# the actionlint and hadolint images), the documentation toolchain, the
 # fuzz lane's cargo-fuzz and the
 # release lanes' Trivy, cargo-auditable, cargo-cyclonedx and syft of
 # docs/VERSIONS.md are read against the upstream project's newest GitHub
@@ -67,8 +67,7 @@ readonly CI_TOOLS="\
 zizmor	zizmorcore/zizmor
 shellcheck	koalaman/shellcheck
 actionlint	rhysd/actionlint
-hadolint	hadolint/hadolint
-yq	mikefarah/yq"
+hadolint	hadolint/hadolint"
 # The most pages of one tag list the read follows before it gives up.
 readonly MAX_TAG_PAGES=200
 
@@ -307,8 +306,10 @@ matrix_images() {
 # ci_tools [WORKFLOW]: one "name<TAB>upstream repository<TAB>pinned version"
 # record per CI tool pin of WORKFLOW (ci.yml by default): each `tool:
 # name@version` input of an installer step, the tag of the actionlint image
-# in a `run:` block, and the yq release of its install step. A pin that is
-# not found prints the name with an empty version, which the caller refuses.
+# in a `run:` block, and the tag of the hadolint image. The vex job's yq is
+# the runner image's, held to a floor by scripts/checks/runner-yq.sh, so no
+# release of it is watched here (#545). A pin that is not found prints the
+# name with an empty version, which the caller refuses.
 ci_tools() {
   local workflow="${1:-$CI}" name repo version
   while IFS=$'\t' read -r name repo; do
@@ -318,9 +319,6 @@ ci_tools() {
         ;;
       hadolint)
         version="$(sed -nE 's/.*hadolint\/hadolint:v([0-9][0-9.]*)@sha256:.*/\1/p' "$workflow" | head -n 1)"
-        ;;
-      yq)
-        version="$(sed -nE 's/^[[:space:]]*YQ_VERSION:[[:space:]]*v?([0-9][0-9.]*)[[:space:]]*$/\1/p' "$workflow" | head -n 1)"
         ;;
       *)
         version="$(sed -nE "s/^[[:space:]]*tool:[[:space:]]*$name@([0-9][0-9.]*)[[:space:]]*\$/\\1/p" "$workflow" | head -n 1)"
@@ -558,14 +556,13 @@ self_test() {
 
   printf '%s\n' '      - uses: taiki-e/install-action@0000 # v2' '        with:' '          tool: zizmor@1.2.3' \
     '          tool: shellcheck@0.9.0' '            rhysd/actionlint:1.7.1@sha256:00 -color' \
-    '            hadolint/hadolint:v2.3.4@sha256:00 hadolint' \
-    '          YQ_VERSION: v4.5.6' > "$work/ci.yml"
+    '            hadolint/hadolint:v2.3.4@sha256:00 hadolint' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f1,3 | tr '\t' ' ' | paste -sd ';' -)"
-  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;hadolint 2.3.4;yq 4.5.6" "$got" "the tool pins of a workflow"
+  expect "zizmor 1.2.3;shellcheck 0.9.0;actionlint 1.7.1;hadolint 2.3.4" "$got" "the tool pins of a workflow"
   printf '%s\n' '          tool: cargo-nextest' > "$work/ci.yml"
   got="$(ci_tools "$work/ci.yml" | cut -f3 | paste -sd ';' -)"
   rm "$work/ci.yml"
-  expect ";;;;" "$got" "a workflow with no tool pin"
+  expect ";;;" "$got" "a workflow with no tool pin"
   got="$(ci_tools | awk -F'\t' '$3 == "" { print $1 }' | paste -sd ';' -)"
   expect "" "$got" "the tools of $CI with no pin found"
 

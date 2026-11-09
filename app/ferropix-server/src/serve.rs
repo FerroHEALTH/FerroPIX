@@ -308,8 +308,8 @@ fn mllp_channel(
         authorities: config::section::hl7v2::authority::Authorities::new(&hl7v2.namespaces),
         frame_limit: hl7v2.frame_limit,
         backoff: outbox::Backoff {
-            initial: std::time::Duration::from_millis(hl7v2.notification.initial_backoff_ms),
-            max: std::time::Duration::from_millis(hl7v2.notification.max_backoff_ms),
+            initial: hl7v2.notification.initial_backoff.get(),
+            max: hl7v2.notification.max_backoff.get(),
         },
         audit: audit.clone(),
     })
@@ -354,8 +354,8 @@ fn pmir_channel(
     Ok(Some(outbox::HttpChannel {
         client,
         backoff: outbox::Backoff {
-            initial: std::time::Duration::from_millis(feed.initial_backoff_ms),
-            max: std::time::Duration::from_millis(feed.max_backoff_ms),
+            initial: feed.initial_backoff.get(),
+            max: feed.max_backoff.get(),
         },
     }))
 }

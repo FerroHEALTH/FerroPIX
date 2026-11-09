@@ -88,7 +88,7 @@ pub(super) fn section(reply_endpoints: &[String]) -> Xcpd {
         initiating_communities: vec![format!("urn:oid:{INITIATING}")],
         reply_endpoints: reply_endpoints.to_vec(),
         delivery_attempts: 3,
-        delivery_initial_backoff_ms: 10,
+        delivery_initial_backoff: ferrohealth_config::units::Duration::from_millis(10),
         ..Xcpd::default()
     }
 }

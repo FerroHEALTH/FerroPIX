@@ -113,6 +113,6 @@ namespaces, or the pods do not start.
 
 Both containers set a memory and an ephemeral-storage limit (`resources`,
 `console.resources`). The server's ephemeral storage, 256 MiB by default,
-covers the audit spool on its default `emptyDir` (`[audit] spool_max_bytes`,
+covers the audit spool on its default `emptyDir` (`[audit] spool_max_size`,
 64 MiB), `/tmp` and the container log: raise it with the spool, or keep the
 spool on a PersistentVolumeClaim (`state.existingClaim`).

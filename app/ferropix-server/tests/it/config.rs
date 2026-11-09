@@ -370,6 +370,41 @@ fn chain(error: &Error) -> String {
     text
 }
 
+#[test]
+fn every_key_v0_0_23_renamed_is_refused_naming_its_replacement() {
+    let secrets = Secrets::new();
+    let text = FULL
+        .replacen("[outbox]\n", "[outbox]\nretention_days = 14\n", 1)
+        .replacen("[audit]\n", "[audit]\ntimeout_ms = 3000\n", 1)
+        .replacen(
+            "[terminology.retry]\n",
+            "[terminology.retry]\nmax_backoff_ms = 1000\n",
+            1,
+        )
+        .replacen(
+            "[hl7v2]\n",
+            "[[hl7v2.consumers]]\nname = \"east\"\naddress = \"consumer.example.org:2575\"\napplication = \"PIX\"\nfacility = \"EAST\"\nreply_timeout_ms = 2000\n\n[hl7v2]\n",
+            1,
+        );
+    let error = resolve(&text, &secrets).expect_err("a renamed key is refused");
+    assert!(matches!(error, Error::Removed(_)), "{error:?}");
+    let said = chain(&error);
+    for (old, new) in [
+        ("outbox.retention_days", "outbox.retention"),
+        ("audit.timeout_ms", "audit.timeout"),
+        (
+            "terminology.retry.max_backoff_ms",
+            "terminology.retry.max_backoff",
+        ),
+        ("hl7v2.consumers[0].reply_timeout_ms", "reply_timeout"),
+    ] {
+        assert!(
+            said.contains(&format!("{old} was replaced by {new}")),
+            "{old}: {said}"
+        );
+    }
+}
+
 // NOTE: `ferrohealth-smart` 0.15 dropped the named refusal of each removed key one release
 // after it removed them (FerroHEALTH/FerroAUTH#388), so each fails as an unknown key.
 #[test]

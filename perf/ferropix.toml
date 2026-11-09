@@ -84,7 +84,7 @@ enabled = true
 # No audit repository runs beside the gate, so every record stays in the
 # spool; it is sized for the records of the runs one job makes.
 [audit]
-spool_max_bytes = 1073741824
+spool_max_size = "1GiB"
 spool_max_events = 1000000
 
 [usage_report]

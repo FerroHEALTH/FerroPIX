@@ -75,9 +75,9 @@ the request's `MessageID` and `To` naming the endpoint.
   `ReplyTo` is refused with a `Sender` fault and nothing is posted, so a
   request cannot make FerroPIX post to an address you did not name.
 - **Delivery:** a `2xx` answer from the endpoint ends the delivery. Any other
-  status, a timeout (`delivery_timeout_ms`) or a refused connection is tried
-  again after `delivery_initial_backoff_ms`, doubling up to
-  `delivery_max_backoff_ms`, at most `delivery_attempts` times in all; an
+  status, a timeout (`delivery_timeout`) or a refused connection is tried
+  again after `delivery_initial_backoff`, doubling up to
+  `delivery_max_backoff`, at most `delivery_attempts` times in all; an
   answer whose attempts are spent is abandoned and the log says so.
 - **Durability:** the answer is written to the outbox in PostgreSQL, its
   payload sealed under the store's key, before the request is accepted with

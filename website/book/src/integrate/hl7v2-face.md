@@ -36,9 +36,9 @@ facility = "NORTH"
 
 - **Framing:** MLLP Release 1, one message per frame. A frame that does not
   open with the start block, holds a start block inside it, runs past
-  `frame_limit_bytes` or does not complete within `frame_timeout_ms` is
+  `frame_limit` or does not complete within `frame_timeout` is
   answered `AR` when its header can be read, and the connection closes. A
-  connection idle past `idle_timeout_ms` closes.
+  connection idle past `idle_timeout` closes.
 - **Character sets:** MSH-18 names the set a message is read in; a message
   with an empty MSH-18 is read in `default_charset`. The answer is written
   in the set the message came in, by `ferrobridge-hl7v2`'s writer: the

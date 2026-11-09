@@ -359,7 +359,7 @@ pub(crate) async fn steward(
         .join(", ");
     let text = configuration(&provider, server, &format!("scopes = [{scopes}]"), "").replacen(
         "[pix]\n",
-        "[pix]\ntimeout_ms = 2000\n",
+        "[pix]\ntimeout = \"2s\"\n",
         1,
     );
     let (state, service) = console(&text).await?;

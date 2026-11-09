@@ -149,16 +149,16 @@ enabled = true
 
 [pmir.feed]
 max_attempts = 5
-initial_backoff_ms = 500
-max_backoff_ms = 60000
+initial_backoff = "500ms"
+max_backoff = "1min"
 
 [hl7v2]
 enabled = true
 listen = "0.0.0.0:2575"
 default_charset = "UNICODE UTF-8"
-frame_limit_bytes = 65536
-idle_timeout_ms = 60000
-frame_timeout_ms = 10000
+frame_limit = "64KiB"
+idle_timeout = "1min"
+frame_timeout = "10s"
 
 [[hl7v2.senders]]
 application = "LAB"
@@ -167,12 +167,12 @@ domain = "urn:oid:2.999.1.1"
 
 [terminology]
 base_url = "https://tx.example.org/fhir/r4"
-timeout_ms = 5000
+timeout = "5s"
 
 [terminology.retry]
 max_attempts = 2
-initial_backoff_ms = 100
-max_backoff_ms = 1000
+initial_backoff = "100ms"
+max_backoff = "1s"
 
 [xcpd]
 enabled = true
@@ -184,17 +184,17 @@ reply_endpoints = ["https://ig.example.org/xcpd/"]
 delivery_attempts = 3
 
 [outbox]
-retention_days = 14
+retention = "14d"
 prune_batch = 200
 
 [audit]
 url = "https://arr.example.org/fhir"
 spool_dir = "/var/lib/ferropix/audit"
-spool_max_bytes = 1048576
+spool_max_size = "1MiB"
 spool_max_events = 1000
-spool_write_timeout_ms = 1000
-timeout_ms = 3000
-retry_max_ms = 30000
+spool_write_timeout = "1s"
+timeout = "3s"
+retry_max = "30s"
 
 [operator]
 enabled = true

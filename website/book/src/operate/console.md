@@ -239,7 +239,7 @@ locale = "en"
 
 [pix]
 base_url = "https://pix.example.org/"
-timeout_ms = 30000
+timeout = "30s"
 
 [oidc]
 issuer = "https://idp.example.org/realms/ferropix"

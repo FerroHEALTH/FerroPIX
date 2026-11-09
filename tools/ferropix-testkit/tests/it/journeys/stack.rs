@@ -173,7 +173,7 @@ impl Stack {
         let console = format!("http://{address}");
         let text = format!(
             "[server]\nlisten = \"{address}\"\n\n\
-             [pix]\nbase_url = \"{server}/\"\ntimeout_ms = 2000\n\n\
+             [pix]\nbase_url = \"{server}/\"\ntimeout = \"2s\"\n\n\
              [session]\nsecure_cookie = false\n{session}\n\
              [oidc]\nissuer = \"{issuer}\"\nauthorization_endpoint = \"{authorization}\"\n\
              token_endpoint = \"{token}\"\njwks_uri = \"{jwks}\"\nclient_id = \"{CLIENT_ID}\"\n\

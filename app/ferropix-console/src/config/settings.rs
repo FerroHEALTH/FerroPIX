@@ -94,6 +94,9 @@ impl Config {
     /// [`Error::Session`] for every other refusal of `[oidc]` and
     /// `[session]`.
     pub fn resolve(&self) -> Result<Settings, Error> {
+        let mut removals = ferrohealth_config::removed::Removals::new();
+        self.pix.removals(&mut removals);
+        removals.finish().map_err(Error::Removed)?;
         let listen: SocketAddr = self
             .server
             .listen
@@ -107,7 +110,8 @@ impl Config {
             source,
         })?;
         let base = base_url("pix.base_url", &self.pix.base_url)?;
-        let timeout = positive("pix.timeout_ms", self.pix.timeout_ms).map(Duration::from_millis)?;
+        let timeout =
+            positive("pix.timeout", self.pix.timeout.as_millis()).map(Duration::from_millis)?;
         let oidc = self.oidc.as_ref().map(resolve_oidc).transpose()?;
         let session = match &oidc {
             Some(oidc) => self.session.check(&oidc.checked)?,

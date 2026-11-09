@@ -51,16 +51,10 @@ pub enum Error {
         #[source]
         source: url::ParseError,
     },
-    /// A key that is retired is set: its replacement holds the setting now.
-    /// Each retired key is refused by name for the one release that retires
-    /// it, then fails as an unknown key.
-    #[error("{key} is retired; set {replacement}")]
-    Retired {
-        /// The retired key.
-        key: &'static str,
-        /// The key that replaces it.
-        replacement: &'static str,
-    },
+    /// The sources set keys a release renamed, each named with what
+    /// replaced it (`config::retired`).
+    #[error("the configuration sets keys this release renamed")]
+    Removed(#[source] ferrohealth_config::removed::RemovedKeys),
     /// A `[<lane>.credentials]` table breaks a rule of `ferrohealth-smart`.
     #[error("{key} is refused")]
     Credentials {

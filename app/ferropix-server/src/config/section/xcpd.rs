@@ -63,14 +63,14 @@ pub struct Xcpd {
     /// mutual TLS and the roots it trusts beside the platform's, a private
     /// community PKI.
     pub tls: TlsClientSection,
-    /// Retired: the certificate chain and its key are
+    /// Retired in v0.0.22: the certificate chain and its key are
     /// `tls.client_identity_file`, one PEM.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_certificate_file: Option<PathBuf>,
-    /// Retired: see `client_certificate_file`.
+    /// Retired in v0.0.22: see `client_certificate_file`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_key_file: Option<PathBuf>,
-    /// Retired: the trusted roots are `tls.trust_roots_file`.
+    /// Retired in v0.0.22: the trusted roots are `tls.trust_roots_file`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_trust_file: Option<PathBuf>,
 }
@@ -249,6 +249,9 @@ impl Xcpd {
     }
 
     /// Refuses a retired key, naming the key that replaces it.
+    ///
+    /// The keys were retired in v0.0.22; v0.0.23 deletes this refusal and
+    /// the three fields, so each then fails as an unknown key.
     fn retired(&self) -> Result<(), Error> {
         for (set, key, replacement) in [
             (

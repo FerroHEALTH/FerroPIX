@@ -498,8 +498,9 @@ is `true`. The listener finishes the messages in flight within
 | `xcpd.tls.min_version` | `"1.3"` | The oldest TLS version the delivery speaks, `"1.2"` to lower it. |
 
 The keys `xcpd.client_certificate_file`, `xcpd.client_key_file` and
-`xcpd.reply_trust_file` are retired: each refuses to load and names the
-`xcpd.tls` key that replaces it.
+`xcpd.reply_trust_file` were retired in v0.0.22: in that release each
+refuses to load and names the `xcpd.tls` key that replaces it. From v0.0.23
+each fails as an unknown key of `[xcpd]`.
 
 A value that is no OID, a domain that is no `urn:oid:` system, a domain or
 community listed twice, a reply endpoint that is neither `https` nor `http`

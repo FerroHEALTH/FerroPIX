@@ -1,10 +1,10 @@
-- `ihe-iti` 0.0.79 and `nl-generic-functions` 0.0.46 require
-  `ferrohealth-smart` 0.11 (caret `0.11.0`), and `nl-generic-functions`
-  0.0.46 requires `ihe-iti` 0.0.79. Both name `ferrohealth-smart` types in
-  their public API, so a product on `ferrohealth-smart` 0.11 needs this
+- `ihe-iti` 0.0.81 and `nl-generic-functions` 0.0.48 require
+  `ferrohealth-smart` 0.12 (caret `0.12.0`), and `nl-generic-functions`
+  0.0.48 requires `ihe-iti` 0.0.81. Both name `ferrohealth-smart` types in
+  their public API, so a product on `ferrohealth-smart` 0.12 needs this
   release. No signature of either crate moves. Upgrade: move
-  `ferrohealth-smart` to 0.11.0 beside `ihe-iti` 0.0.79 and
-  `nl-generic-functions` 0.0.46 (#530).
+  `ferrohealth-smart` to 0.12.0 beside `ihe-iti` 0.0.81 and
+  `nl-generic-functions` 0.0.48 (#530).
 - `ihe_iti::authorizer::smart::TokenAuthorizer` proves each request when
   its `TokenSource` binds tokens to a `DPoP` key
   (`ClientCredentials::with_dpop`): the token goes as `Authorization: DPoP`

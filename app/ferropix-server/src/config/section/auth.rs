@@ -10,9 +10,7 @@
 //! introspection endpoint, the trust roots and the Basic users of the
 //! development profile; `ferrohealth-smart` resolves it, with the issuer URL
 //! rule of RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric
-//! algorithms of RFC 8725 §3.1, and refuses the removed shapes (the flat
-//! `issuer`, a section-level issuer key, `token_profile`) naming what
-//! replaces them. A Basic user is a person: an entry granting a `system/`
+//! algorithms of RFC 8725 §3.1. A Basic user is a person: an entry granting a `system/`
 //! scope is refused, since a machine uses the client credentials grant
 //! (RFC 6749 §4.4). Its `product_scope` is the scope of a data steward,
 //! `__ferropix.steward` unless set; the administrator's is `[operator]
@@ -95,10 +93,10 @@ impl Auth {
     /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
     /// users under production; [`Error::BasicSystemScope`] for a Basic user
     /// granted a `system/` scope; and [`Error::Auth`] for every rule
-    /// `ferrohealth-smart` checks: a removed key, no issuer and no Basic
+    /// `ferrohealth-smart` checks: no issuer and no Basic
     /// user, an issuer without `kind`, no audience, an issuer outside the URL
     /// rule, a symmetric algorithm, a skew over the bound, a profile refused,
-    /// an `[auth.issuer.introspection]` that breaks a rule, a `ca_file` that
+    /// an `[auth.issuer.introspection]` that breaks a rule, an `[auth.tls]` that
     /// is no PEM of certificates, and a Basic user it refuses.
     pub fn resolve(
         &self,
@@ -144,7 +142,9 @@ impl Auth {
                 "it must differ from the steward scope, auth.product_scope",
             ));
         }
-        let resolved = section.resolve().map_err(|source| Error::Auth { source })?;
+        let resolved = section
+            .resolve_with_tls(&ferrohealth_smart::config::ServerTls)
+            .map_err(|source| Error::Auth { source })?;
         let clients = clients(section, trust)?;
         Ok(AuthSettings {
             resolved,
@@ -233,7 +233,7 @@ fn is_client_id(client: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use ferrohealth_smart::config::{
-        AuthSection, BasicSection, BasicUser, ConfigError, IssuerEntry, IssuerKey,
+        AuthSection, BasicSection, BasicUser, ConfigError, IssuerEntry,
     };
     use ferrohealth_smart::kind::IssuerKind;
     use secrecy::SecretString;
@@ -246,17 +246,15 @@ mod tests {
 
     fn auth(issuers: &[&str]) -> Auth {
         Auth(AuthSection {
-            issuer: IssuerKey::List(
-                issuers
-                    .iter()
-                    .map(|issuer| IssuerEntry {
-                        issuer: (*issuer).to_owned(),
-                        kind: Some(IssuerKind::Machines),
-                        audience: vec![String::from("https://pix.example.org/fhir")],
-                        ..IssuerEntry::default()
-                    })
-                    .collect(),
-            ),
+            issuer: issuers
+                .iter()
+                .map(|issuer| IssuerEntry {
+                    issuer: (*issuer).to_owned(),
+                    kind: Some(IssuerKind::Machines),
+                    audience: vec![String::from("https://pix.example.org/fhir")],
+                    ..IssuerEntry::default()
+                })
+                .collect(),
             ..AuthSection::default()
         })
     }
@@ -425,34 +423,12 @@ mod tests {
     #[test]
     fn an_issuer_without_its_kind_is_refused() {
         let mut kindless = auth(&["https://idp.example.org"]);
-        if let IssuerKey::List(entries) = &mut kindless.0.issuer {
-            for entry in entries {
-                entry.kind = None;
-            }
+        for entry in &mut kindless.0.issuer {
+            entry.kind = None;
         }
         let error = kindless
             .resolve(Profile::Production, &Trust::default(), ADMIN)
             .expect_err("kind has no default");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
-    }
-
-    #[test]
-    fn the_flat_issuer_form_is_refused_naming_the_issuer_table() {
-        let flat = Auth(AuthSection {
-            issuer: IssuerKey::Flat(String::from("https://idp.example.org")),
-            ..AuthSection::default()
-        });
-        let error = flat
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
-            .expect_err("the flat form is removed");
-        assert!(
-            matches!(
-                &error,
-                Error::Auth {
-                    source: ConfigError::Removed { .. }
-                }
-            ),
-            "{error:?}"
-        );
     }
 }

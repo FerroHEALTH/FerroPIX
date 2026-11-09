@@ -33,9 +33,12 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use ferrobridge_hl7v2::decode::Charset;
+use ferrohealth_config::removed::{Removals, Removed};
+use ferrohealth_config::units::{ByteSize, Duration as Span};
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
+use crate::config::retired;
 use crate::config::section::socket_address;
 use crate::config::section::terminology::TerminologySettings;
 
@@ -78,9 +81,15 @@ pub struct Consumer {
     /// every domain.
     pub domains: Vec<String>,
     /// How long opening the connection may take.
-    pub connect_timeout_ms: u64,
+    pub connect_timeout: Span,
     /// How long the acknowledgment may take once connected.
-    pub reply_timeout_ms: u64,
+    pub reply_timeout: Span,
+    /// Retired in v0.0.24 for `connect_timeout`.
+    #[serde(skip_serializing)]
+    pub connect_timeout_ms: Removed,
+    /// Retired in v0.0.24 for `reply_timeout`.
+    #[serde(skip_serializing)]
+    pub reply_timeout_ms: Removed,
 }
 
 impl Default for Consumer {
@@ -91,8 +100,10 @@ impl Default for Consumer {
             application: String::new(),
             facility: String::new(),
             domains: Vec::new(),
-            connect_timeout_ms: 5_000,
-            reply_timeout_ms: 30_000,
+            connect_timeout: Span::from_secs(5),
+            reply_timeout: Span::from_secs(30),
+            connect_timeout_ms: Removed::default(),
+            reply_timeout_ms: Removed::default(),
         }
     }
 }
@@ -113,17 +124,25 @@ pub struct Notification {
     /// The most attempts one notification is given.
     pub max_attempts: u32,
     /// The wait before the first retry.
-    pub initial_backoff_ms: u64,
+    pub initial_backoff: Span,
     /// The longest wait between two attempts.
-    pub max_backoff_ms: u64,
+    pub max_backoff: Span,
+    /// Retired in v0.0.24 for `initial_backoff`.
+    #[serde(skip_serializing)]
+    pub initial_backoff_ms: Removed,
+    /// Retired in v0.0.24 for `max_backoff`.
+    #[serde(skip_serializing)]
+    pub max_backoff_ms: Removed,
 }
 
 impl Default for Notification {
     fn default() -> Self {
         Self {
             max_attempts: 10,
-            initial_backoff_ms: 1_000,
-            max_backoff_ms: 300_000,
+            initial_backoff: Span::from_secs(1),
+            max_backoff: Span::from_mins(5),
+            initial_backoff_ms: Removed::default(),
+            max_backoff_ms: Removed::default(),
         }
     }
 }
@@ -139,11 +158,11 @@ pub struct Hl7v2 {
     /// The HL7 table 0211 code a message with an empty MSH-18 is read in.
     pub default_charset: String,
     /// The largest message one frame may carry.
-    pub frame_limit_bytes: usize,
+    pub frame_limit: ByteSize,
     /// How long a connection may sit idle between frames.
-    pub idle_timeout_ms: u64,
+    pub idle_timeout: Span,
     /// How long one frame may take to arrive once it started.
-    pub frame_timeout_ms: u64,
+    pub frame_timeout: Span,
     /// The senders accepted; a message from another is acknowledged `AR`.
     pub senders: Vec<Sender>,
     /// The HL7 namespace id of each domain, by the domain's system.
@@ -156,6 +175,15 @@ pub struct Hl7v2 {
     pub consumers: Vec<Consumer>,
     /// The retry bounds of the notifications.
     pub notification: Notification,
+    /// Retired in v0.0.24 for `frame_limit`.
+    #[serde(skip_serializing)]
+    pub frame_limit_bytes: Removed,
+    /// Retired in v0.0.24 for `idle_timeout`.
+    #[serde(skip_serializing)]
+    pub idle_timeout_ms: Removed,
+    /// Retired in v0.0.24 for `frame_timeout`.
+    #[serde(skip_serializing)]
+    pub frame_timeout_ms: Removed,
 }
 
 impl Default for Hl7v2 {
@@ -164,15 +192,18 @@ impl Default for Hl7v2 {
             enabled: false,
             listen: String::from("0.0.0.0:2575"),
             default_charset: String::from("ASCII"),
-            frame_limit_bytes: 1024 * 1024,
-            idle_timeout_ms: 300_000,
-            frame_timeout_ms: 30_000,
+            frame_limit: ByteSize::from_mib(1),
+            idle_timeout: Span::from_mins(5),
+            frame_timeout: Span::from_secs(30),
             senders: Vec::new(),
             namespaces: BTreeMap::new(),
             application: String::from("FERROPIX"),
             facility: String::from("FERROPIX"),
             consumers: Vec::new(),
             notification: Notification::default(),
+            frame_limit_bytes: Removed::default(),
+            idle_timeout_ms: Removed::default(),
+            frame_timeout_ms: Removed::default(),
         }
     }
 }
@@ -206,6 +237,34 @@ pub struct Hl7v2Settings {
 }
 
 impl Hl7v2 {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(self.frame_limit_bytes, &retired::hl7v2::FRAME_LIMIT_BYTES);
+        found.check(self.idle_timeout_ms, &retired::hl7v2::IDLE_TIMEOUT_MS);
+        found.check(self.frame_timeout_ms, &retired::hl7v2::FRAME_TIMEOUT_MS);
+        for (index, consumer) in self.consumers.iter().enumerate() {
+            let table = format!("hl7v2.consumers[{index}]");
+            found.check_under(
+                consumer.connect_timeout_ms,
+                &retired::hl7v2::CONNECT_TIMEOUT_MS,
+                &table,
+            );
+            found.check_under(
+                consumer.reply_timeout_ms,
+                &retired::hl7v2::REPLY_TIMEOUT_MS,
+                &table,
+            );
+        }
+        found.check(
+            self.notification.initial_backoff_ms,
+            &retired::hl7v2::INITIAL_BACKOFF_MS,
+        );
+        found.check(
+            self.notification.max_backoff_ms,
+            &retired::hl7v2::MAX_BACKOFF_MS,
+        );
+    }
+
     /// Resolves the section, `None` when the listener is off.
     ///
     /// # Errors
@@ -241,9 +300,9 @@ impl Hl7v2 {
             ));
         };
         for (key, bound) in [
-            ("hl7v2.frame_limit_bytes", self.frame_limit_bytes == 0),
-            ("hl7v2.idle_timeout_ms", self.idle_timeout_ms == 0),
-            ("hl7v2.frame_timeout_ms", self.frame_timeout_ms == 0),
+            ("hl7v2.frame_limit", self.frame_limit.is_zero()),
+            ("hl7v2.idle_timeout", self.idle_timeout.is_zero()),
+            ("hl7v2.frame_timeout", self.frame_timeout.is_zero()),
         ] {
             if bound {
                 return Err(value(key, "it must be above 0"));
@@ -289,9 +348,10 @@ impl Hl7v2 {
         Ok(Some(Hl7v2Settings {
             listen,
             default_charset,
-            frame_limit: self.frame_limit_bytes,
-            idle_timeout: Duration::from_millis(self.idle_timeout_ms),
-            frame_timeout: Duration::from_millis(self.frame_timeout_ms),
+            frame_limit: usize::try_from(self.frame_limit)
+                .map_err(|_overflow| value("hl7v2.frame_limit", "a size this platform can hold"))?,
+            idle_timeout: self.idle_timeout.get(),
+            frame_timeout: self.frame_timeout.get(),
             senders: self.senders.clone(),
             namespaces: self.namespaces.clone(),
             manager: (self.application.clone(), self.facility.clone()),
@@ -341,11 +401,11 @@ impl Hl7v2 {
             {
                 return Err(refuse("domains", "each domain is a system, not empty"));
             }
-            if consumer.connect_timeout_ms == 0 {
-                return Err(refuse("connect_timeout_ms", "it must be above 0"));
+            if consumer.connect_timeout.is_zero() {
+                return Err(refuse("connect_timeout", "it must be above 0"));
             }
-            if consumer.reply_timeout_ms == 0 {
-                return Err(refuse("reply_timeout_ms", "it must be above 0"));
+            if consumer.reply_timeout.is_zero() {
+                return Err(refuse("reply_timeout", "it must be above 0"));
             }
         }
         let bounds = &self.notification;
@@ -355,16 +415,16 @@ impl Hl7v2 {
                 "it must be above 0",
             ));
         }
-        if bounds.initial_backoff_ms == 0 {
+        if bounds.initial_backoff.is_zero() {
             return Err(value(
-                "hl7v2.notification.initial_backoff_ms",
+                "hl7v2.notification.initial_backoff",
                 "it must be above 0",
             ));
         }
-        if bounds.initial_backoff_ms > bounds.max_backoff_ms {
+        if bounds.initial_backoff > bounds.max_backoff {
             return Err(value(
-                "hl7v2.notification.max_backoff_ms",
-                "it must be at least hl7v2.notification.initial_backoff_ms",
+                "hl7v2.notification.max_backoff",
+                "it must be at least hl7v2.notification.initial_backoff",
             ));
         }
         Ok(())
@@ -453,7 +513,7 @@ mod tests {
         ));
         let zero = Hl7v2 {
             enabled: true,
-            frame_limit_bytes: 0,
+            frame_limit: super::ByteSize::from_bytes(0),
             ..Hl7v2::default()
         };
         assert!(matches!(
@@ -539,12 +599,12 @@ mod tests {
                 Box::new(|h| h.consumers[0].domains.push(String::from(" "))),
             ),
             (
-                "hl7v2.consumers[0].reply_timeout_ms",
-                Box::new(|h| h.consumers[0].reply_timeout_ms = 0),
+                "hl7v2.consumers[0].reply_timeout",
+                Box::new(|h| h.consumers[0].reply_timeout = super::Span::from_secs(0)),
             ),
             (
-                "hl7v2.notification.max_backoff_ms",
-                Box::new(|h| h.notification.max_backoff_ms = 1),
+                "hl7v2.notification.max_backoff",
+                Box::new(|h| h.notification.max_backoff = super::Span::from_millis(1)),
             ),
             (
                 "hl7v2.notification.max_attempts",

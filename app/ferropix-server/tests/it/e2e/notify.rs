@@ -49,8 +49,9 @@ fn consumer(name: &str, address: &str, domains: &[&str]) -> Consumer {
         application: String::from("PIXCONSUMER"),
         facility: name.to_uppercase(),
         domains: domains.iter().map(|domain| (*domain).to_owned()).collect(),
-        connect_timeout_ms: 1_000,
-        reply_timeout_ms: 2_000,
+        connect_timeout: ferrohealth_config::units::Duration::from_secs(1),
+        reply_timeout: ferrohealth_config::units::Duration::from_secs(2),
+        ..Consumer::default()
     }
 }
 
@@ -58,8 +59,9 @@ fn consumer(name: &str, address: &str, domains: &[&str]) -> Consumer {
 fn bounds(attempts: u32) -> Notification {
     Notification {
         max_attempts: attempts,
-        initial_backoff_ms: 20,
-        max_backoff_ms: 40,
+        initial_backoff: ferrohealth_config::units::Duration::from_millis(20),
+        max_backoff: ferrohealth_config::units::Duration::from_millis(40),
+        ..Notification::default()
     }
 }
 

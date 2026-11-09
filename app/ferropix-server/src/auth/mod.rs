@@ -6,7 +6,7 @@
 //!
 //! The crate reads each `[auth]` issuer's RFC 8414 metadata and key set, or
 //! under `mode = "introspection"` asks the issuer's RFC 7662 introspection
-//! endpoint, trusting the `ca_file` roots beside the platform's, validates
+//! endpoint, trusting the `[auth.tls]` roots beside the platform's, validates
 //! every access token, checks the Basic users of the development
 //! profile and builds the SMART discovery document. This module holds what
 //! is FerroPIX's own: the permission table of every route ([`table`]), the

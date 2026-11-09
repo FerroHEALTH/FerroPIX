@@ -239,7 +239,7 @@ locale = "en"
 
 [pix]
 base_url = "https://pix.example.org/"
-timeout_ms = 30000
+timeout = "30s"
 
 [oidc]
 issuer = "https://idp.example.org/realms/ferropix"
@@ -262,23 +262,26 @@ the provider's endpoints when it starts (RFC 8414, OpenID Connect Discovery
 `end_session_endpoint` and `revocation_endpoint` each take the place of the
 discovered one. `config check` calls no provider: a section that names the
 authorization, token and key-set endpoints is checked whole, and one that
-leaves them to discovery is read when the console starts. `ca_file` adds PEM
-trust roots for a provider behind a private certificate authority,
-`resolve` reaches a provider host at a fixed address (each entry
-`host=ip:port`) for a provider whose name resolves only inside a private
-network, `[oidc.tls]` sets the client certificate the console presents to
-the provider (`client_certificate` with `client_key` or `client_key_file`,
-RFC 8705 §2) and `min_version`, the lowest TLS version of that connection
-(`"1.2"`, the default, or `"1.3"`), and `timeout_s` (default 10) bounds one
-call to it.
+leaves them to discovery is read when the console starts. `resolve`
+reaches a provider host at a fixed address (each entry `host=ip:port`) for
+a provider whose name resolves only inside a private network. `[oidc.tls]`
+holds the provider connection's TLS, read by `ferrohealth-server` as every
+other outbound table is: `trust_roots_file` adds PEM trust roots for a
+provider behind a private certificate authority, `client_identity_file`
+(or `client_identity`) the client certificate chain and key the console
+presents (RFC 8705 §2), and `min_version` the lowest TLS version (`"1.3"`,
+the default, or `"1.2"`). `timeout` (default `"10s"`) bounds one call to
+the provider.
 
 `[session] store` is `memory` (the default), which keeps the sessions in the
 console's process with an opaque id in the cookie, or `sealed`, which keeps
 the whole session in one AES-256-GCM sealed cookie for a console that runs
 as several instances. A sealed store needs `key` or `key_file` (base64 of at
 least 64 bytes, the same on every instance), keeps no refresh token, and
-refuses `oidc.offline_access`. `absolute_timeout_s` may not be shorter than
-`idle_timeout_s`.
+refuses `oidc.offline_access`. Its spans of time are strings of a whole
+number and a unit: `sign_in_timeout` (default `"5min"`), `idle_timeout`
+(default `"30min"`) and `absolute_timeout` (default `"12h"`), which may not
+be shorter than `idle_timeout`.
 | `[telemetry]` | The console log: `format` and `filter`, the section the server reads ([`[telemetry]`](configuration.md#telemetry)). `RUST_LOG` sets `telemetry.filter`. |
 
 ## Sign-in and the session
@@ -303,8 +306,8 @@ in time, the session lives on and the next page you open goes to the
 sign-in page that says your access could not be renewed; signing in again,
 or opening the page again a moment later, brings you back to it.
 
-A session ends after `[session] idle_timeout_s` without a request from you,
-and after `absolute_timeout_s` whatever you do. Two minutes before the idle
+A session ends after `[session] idle_timeout` without a request from you,
+and after `absolute_timeout` whatever you do. Two minutes before the idle
 timeout, every signed-in page shows a warning with the time left,
 **Stay signed in** and **Sign out**. Your own typing and clicks keep the session
 alive, at most once a minute; the page's own checks never do. When the

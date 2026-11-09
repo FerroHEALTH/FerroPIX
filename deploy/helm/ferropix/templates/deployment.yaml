@@ -27,7 +27,7 @@ spec:
       {{- include "ferropix.podIsolation" . | nindent 6 }}
       securityContext:
         {{- include "ferropix.podSecurity" . | nindent 8 }}
-      # Longer than the server's drain, [server] drain_delay_ms and shutdown_timeout_ms.
+      # Longer than the server's drain, [server] drain_delay and shutdown_timeout.
       terminationGracePeriodSeconds: 30
       containers:
         - name: ferropix

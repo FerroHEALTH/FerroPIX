@@ -63,7 +63,7 @@ state:
   existingClaim: ""
 
 # The server's resources. The ephemeral storage covers the audit spool on its
-# default emptyDir (`[audit] spool_max_bytes`, 64 MiB by default), /tmp and the
+# default emptyDir (`[audit] spool_max_size`, 64 MiB by default), /tmp and the
 # container log; raise it with the spool.
 resources:
   requests:

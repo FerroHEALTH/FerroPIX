@@ -347,8 +347,8 @@ async fn notify(channel: &MllpChannel, row: &Claimed) -> Result<(), String> {
         .reserve()
         .map_err(|_full| String::from("the audit spool has no room for the record"))?;
     let timeouts = ferrobridge_hl7v2::mllp::sender::SendTimeouts {
-        connect: Duration::from_millis(consumer.connect_timeout_ms),
-        reply: Duration::from_millis(consumer.reply_timeout_ms),
+        connect: consumer.connect_timeout.get(),
+        reply: consumer.reply_timeout.get(),
     };
     let reply = ferrobridge_hl7v2::mllp::sender::send(
         consumer.address.as_str(),

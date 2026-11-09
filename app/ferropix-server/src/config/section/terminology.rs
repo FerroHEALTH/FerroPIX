@@ -18,18 +18,21 @@
 //! the section: our own design.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use ferrobridge_term::client::Client;
 use ferrobridge_term::config::{Config, Credentials, RetryPolicy, WireVersion};
 use ferrobridge_term::smart::SmartToken;
-use ferrohealth_server::tls_client::{TlsClient, TlsClientSection};
+use ferrohealth_config::removed::{Removals, Removed};
+use ferrohealth_config::tls::TlsClientSection;
+use ferrohealth_config::units::Duration as Span;
+use ferrohealth_server::tls_client::TlsClient;
 use ferrohealth_smart::client::cache::TokenSource;
 use ferrohealth_smart::config::credentials::{CredentialsSection, Outbound};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
+use crate::config::retired;
 use crate::config::section::{is_loopback_url, url};
 
 /// The `[terminology]` section as written.
@@ -39,7 +42,7 @@ pub struct Terminology {
     /// The FHIR R4 service base URL; empty for no terminology server.
     pub base_url: String,
     /// How long one call may take, connection included.
-    pub timeout_ms: u64,
+    pub timeout: Span,
     /// The retry budget.
     pub retry: Retry,
     /// The credentials the server expects.
@@ -47,13 +50,17 @@ pub struct Terminology {
     /// The outbound TLS: the client identity presented for mutual TLS and
     /// the roots trusted beside the platform's.
     pub tls: TlsClientSection,
+    /// Retired in v0.0.24 for `timeout`.
+    #[serde(skip_serializing)]
+    pub timeout_ms: Removed,
 }
 
 impl Default for Terminology {
     fn default() -> Self {
         Self {
             base_url: String::new(),
-            timeout_ms: 10_000,
+            timeout: Span::from_secs(10),
+            timeout_ms: Removed::default(),
             retry: Retry::default(),
             credentials: CredentialsSection::default(),
             tls: TlsClientSection::default(),
@@ -68,17 +75,25 @@ pub struct Retry {
     /// How many times a call is sent at most, the first try included.
     pub max_attempts: u32,
     /// The wait before the second attempt.
-    pub initial_backoff_ms: u64,
+    pub initial_backoff: Span,
     /// The longest wait between two attempts.
-    pub max_backoff_ms: u64,
+    pub max_backoff: Span,
+    /// Retired in v0.0.24 for `initial_backoff`.
+    #[serde(skip_serializing)]
+    pub initial_backoff_ms: Removed,
+    /// Retired in v0.0.24 for `max_backoff`.
+    #[serde(skip_serializing)]
+    pub max_backoff_ms: Removed,
 }
 
 impl Default for Retry {
     fn default() -> Self {
         Self {
             max_attempts: 3,
-            initial_backoff_ms: 200,
-            max_backoff_ms: 2_000,
+            initial_backoff: Span::from_millis(200),
+            max_backoff: Span::from_secs(2),
+            initial_backoff_ms: Removed::default(),
+            max_backoff_ms: Removed::default(),
         }
     }
 }
@@ -91,6 +106,19 @@ pub struct TerminologySettings {
 }
 
 impl Terminology {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(self.timeout_ms, &retired::terminology::TIMEOUT_MS);
+        found.check(
+            self.retry.initial_backoff_ms,
+            &retired::terminology::INITIAL_BACKOFF_MS,
+        );
+        found.check(
+            self.retry.max_backoff_ms,
+            &retired::terminology::MAX_BACKOFF_MS,
+        );
+    }
+
     /// Resolves the section: `None` while `base_url` is empty.
     ///
     /// # Errors
@@ -124,10 +152,10 @@ impl Terminology {
                 rule: "no userinfo: credentials go in [terminology.credentials]",
             });
         }
-        if self.timeout_ms == 0 || self.retry.max_attempts == 0 {
+        if self.timeout.is_zero() || self.retry.max_attempts == 0 {
             return Err(Error::Value {
-                key: String::from(if self.timeout_ms == 0 {
-                    "terminology.timeout_ms"
+                key: String::from(if self.timeout.is_zero() {
+                    "terminology.timeout"
                 } else {
                     "terminology.retry.max_attempts"
                 }),
@@ -136,15 +164,15 @@ impl Terminology {
         }
         self.inline_secrets(profile)?;
         let mut config = Config::new(base, WireVersion::R4)
-            .with_timeout(Duration::from_millis(self.timeout_ms))
+            .with_timeout(self.timeout.get())
             .with_retry(RetryPolicy {
                 max_attempts: self.retry.max_attempts,
-                initial_backoff: Duration::from_millis(self.retry.initial_backoff_ms),
-                max_backoff: Duration::from_millis(self.retry.max_backoff_ms),
+                initial_backoff: self.retry.initial_backoff.get(),
+                max_backoff: self.retry.max_backoff.get(),
             });
         match self
             .credentials
-            .resolve()
+            .resolve_with_tls(&ferrohealth_smart::config::ServerTls)
             .map_err(|source| Error::Credentials {
                 key: "terminology.credentials",
                 source: Box::new(source),
@@ -168,7 +196,7 @@ impl Terminology {
         let tls = TlsClient::read("terminology.tls", &self.tls).map_err(Error::TlsClient)?;
         let builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_millis(self.timeout_ms));
+            .timeout(self.timeout.get());
         let http = tls
             .apply(builder)
             .map_err(Error::TlsClient)?
@@ -257,10 +285,10 @@ mod tests {
             ),
             (
                 Terminology {
-                    timeout_ms: 0,
+                    timeout: super::Span::from_secs(0),
                     ..at("https://tx.example.org/r4")
                 },
-                "terminology.timeout_ms",
+                "terminology.timeout",
             ),
         ] {
             assert!(

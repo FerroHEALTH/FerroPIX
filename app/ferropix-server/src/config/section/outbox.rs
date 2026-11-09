@@ -9,25 +9,32 @@
 
 use std::time::Duration;
 
+use ferrohealth_config::removed::{Removals, Removed};
+use ferrohealth_config::units::Duration as Span;
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
+use crate::config::retired;
 
 /// The `[outbox]` section as written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Outbox {
-    /// The days a delivered or abandoned message is kept.
-    pub retention_days: u32,
+    /// How long a delivered or abandoned message is kept.
+    pub retention: Span,
     /// The most messages one prune deletes in one statement.
     pub prune_batch: u32,
+    /// Retired in v0.0.24 for `retention`.
+    #[serde(skip_serializing)]
+    pub retention_days: Removed,
 }
 
 impl Default for Outbox {
     fn default() -> Self {
         Self {
-            retention_days: 30,
+            retention: Span::from_days(30),
             prune_batch: 500,
+            retention_days: Removed::default(),
         }
     }
 }
@@ -42,13 +49,18 @@ pub struct Retention {
 }
 
 impl Outbox {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(self.retention_days, &retired::outbox::RETENTION_DAYS);
+    }
+
     /// Resolves the section.
     ///
     /// # Errors
     /// Returns [`Error::Value`] for a zero retention or batch.
     pub fn resolve(&self) -> Result<Retention, Error> {
         for (key, zero) in [
-            ("outbox.retention_days", self.retention_days == 0),
+            ("outbox.retention", self.retention.is_zero()),
             ("outbox.prune_batch", self.prune_batch == 0),
         ] {
             if zero {
@@ -59,7 +71,7 @@ impl Outbox {
             }
         }
         Ok(Retention {
-            keep: Duration::from_hours(u64::from(self.retention_days).saturating_mul(24)),
+            keep: self.retention.get(),
             batch: self.prune_batch,
         })
     }
@@ -78,11 +90,11 @@ mod tests {
         assert_eq!(Duration::from_hours(30 * 24), resolved.keep);
         assert_eq!(500, resolved.batch);
         let zero = Outbox {
-            retention_days: 0,
+            retention: super::Span::from_secs(0),
             ..Outbox::default()
         };
         assert!(
-            matches!(zero.resolve(), Err(Error::Value { key, .. }) if key == "outbox.retention_days")
+            matches!(zero.resolve(), Err(Error::Value { key, .. }) if key == "outbox.retention")
         );
     }
 }

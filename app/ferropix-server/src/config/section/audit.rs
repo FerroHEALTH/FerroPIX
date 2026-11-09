@@ -13,10 +13,13 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ferrohealth_config::removed::{Removals, Removed};
+use ferrohealth_config::units::{ByteSize, Duration as Span};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
+use crate::config::retired;
 use crate::config::section::url;
 
 /// The `[audit]` section as written.
@@ -27,16 +30,28 @@ pub struct Audit {
     pub url: String,
     /// The directory the records wait in until they are delivered.
     pub spool_dir: PathBuf,
-    /// The most bytes the spool holds.
-    pub spool_max_bytes: u64,
+    /// The most the spool holds.
+    pub spool_max_size: ByteSize,
     /// The most records the spool holds.
     pub spool_max_events: usize,
     /// The longest storing one record may take.
-    pub spool_write_timeout_ms: u64,
+    pub spool_write_timeout: Span,
     /// How long one delivery may take.
-    pub timeout_ms: u64,
+    pub timeout: Span,
     /// The longest wait between two delivery attempts.
-    pub retry_max_ms: u64,
+    pub retry_max: Span,
+    /// Retired in v0.0.24 for `spool_max_size`.
+    #[serde(skip_serializing)]
+    pub spool_max_bytes: Removed,
+    /// Retired in v0.0.24 for `spool_write_timeout`.
+    #[serde(skip_serializing)]
+    pub spool_write_timeout_ms: Removed,
+    /// Retired in v0.0.24 for `timeout`.
+    #[serde(skip_serializing)]
+    pub timeout_ms: Removed,
+    /// Retired in v0.0.24 for `retry_max`.
+    #[serde(skip_serializing)]
+    pub retry_max_ms: Removed,
 }
 
 impl Default for Audit {
@@ -44,11 +59,15 @@ impl Default for Audit {
         Self {
             url: String::new(),
             spool_dir: PathBuf::from("/var/lib/ferropix/audit"),
-            spool_max_bytes: 64 * 1024 * 1024,
+            spool_max_size: ByteSize::from_mib(64),
             spool_max_events: 100_000,
-            spool_write_timeout_ms: 2_000,
-            timeout_ms: 5_000,
-            retry_max_ms: 60_000,
+            spool_write_timeout: Span::from_secs(2),
+            timeout: Span::from_secs(5),
+            retry_max: Span::from_mins(1),
+            spool_max_bytes: Removed::default(),
+            spool_write_timeout_ms: Removed::default(),
+            timeout_ms: Removed::default(),
+            retry_max_ms: Removed::default(),
         }
     }
 }
@@ -73,6 +92,17 @@ pub struct AuditSettings {
 }
 
 impl Audit {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(self.spool_max_bytes, &retired::audit::SPOOL_MAX_BYTES);
+        found.check(
+            self.spool_write_timeout_ms,
+            &retired::audit::SPOOL_WRITE_TIMEOUT_MS,
+        );
+        found.check(self.timeout_ms, &retired::audit::TIMEOUT_MS);
+        found.check(self.retry_max_ms, &retired::audit::RETRY_MAX_MS);
+    }
+
     /// Resolves the section under `profile`.
     ///
     /// # Errors
@@ -101,14 +131,14 @@ impl Audit {
             return Err(value("audit.spool_dir", "a directory"));
         }
         for (key, zero) in [
-            ("audit.spool_max_bytes", self.spool_max_bytes == 0),
+            ("audit.spool_max_size", self.spool_max_size.is_zero()),
             ("audit.spool_max_events", self.spool_max_events == 0),
             (
-                "audit.spool_write_timeout_ms",
-                self.spool_write_timeout_ms == 0,
+                "audit.spool_write_timeout",
+                self.spool_write_timeout.is_zero(),
             ),
-            ("audit.timeout_ms", self.timeout_ms == 0),
-            ("audit.retry_max_ms", self.retry_max_ms == 0),
+            ("audit.timeout", self.timeout.is_zero()),
+            ("audit.retry_max", self.retry_max.is_zero()),
         ] {
             if zero {
                 return Err(value(key, "it must be above 0"));
@@ -117,11 +147,11 @@ impl Audit {
         Ok(AuditSettings {
             url: base,
             spool_dir: self.spool_dir.clone(),
-            spool_max_bytes: self.spool_max_bytes,
+            spool_max_bytes: self.spool_max_size.bytes(),
             spool_max_events: self.spool_max_events,
-            spool_write_timeout: Duration::from_millis(self.spool_write_timeout_ms),
-            timeout: Duration::from_millis(self.timeout_ms),
-            retry_max: Duration::from_millis(self.retry_max_ms),
+            spool_write_timeout: self.spool_write_timeout.get(),
+            timeout: self.timeout.get(),
+            retry_max: self.retry_max.get(),
         })
     }
 }

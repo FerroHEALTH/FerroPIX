@@ -15,6 +15,7 @@
 //! configuration: our own design, in the family's shape.
 
 pub mod error;
+pub mod retired;
 pub mod section;
 pub mod settings;
 

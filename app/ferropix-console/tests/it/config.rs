@@ -35,7 +35,7 @@ fn no_file_and_no_environment_resolve_to_the_defaults() {
 
 #[test]
 fn an_override_wins_over_the_file_and_reads_as_toml_or_text() {
-    let text = "[pix]\nbase_url = \"http://file.example/\"\ntimeout_ms = 10\n";
+    let text = "[pix]\nbase_url = \"http://file.example/\"\ntimeout = \"10ms\"\n";
     let settings = Config::from_sources(
         Some(text),
         &environment(&[
@@ -43,7 +43,7 @@ fn an_override_wins_over_the_file_and_reads_as_toml_or_text() {
                 "FERROPIX_CONSOLE__PIX__BASE_URL",
                 "https://env.example/root",
             ),
-            ("FERROPIX_CONSOLE__PIX__TIMEOUT_MS", "2500"),
+            ("FERROPIX_CONSOLE__PIX__TIMEOUT", "2500ms"),
             ("FERROPIX_CONSOLE__SERVER__LISTEN", "0.0.0.0:8443"),
         ]),
     )
@@ -53,6 +53,21 @@ fn an_override_wins_over_the_file_and_reads_as_toml_or_text() {
     assert_eq!("https://env.example/root/", settings.pix.base.as_str());
     assert_eq!(Duration::from_millis(2500), settings.pix.timeout);
     assert_eq!("0.0.0.0:8443", settings.listen.to_string());
+}
+
+#[test]
+fn the_timeout_v0_0_24_renamed_is_refused_naming_its_replacement() {
+    let error = Config::from_sources(Some("[pix]\ntimeout_ms = 2000\n"), &BTreeMap::new())
+        .expect("the tree reads")
+        .resolve()
+        .expect_err("the renamed key is refused");
+    let said = std::error::Error::source(&error)
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    assert!(
+        said.contains("pix.timeout_ms was replaced by pix.timeout"),
+        "{said}"
+    );
 }
 
 #[test]
@@ -114,7 +129,7 @@ fn each_value_its_key_does_not_admit_is_refused_by_key() {
             "[pix]\nbase_url = \"https://pix.example/?q=1\"\n",
             "pix.base_url",
         ),
-        ("[pix]\ntimeout_ms = 0\n", "pix.timeout_ms"),
+        ("[pix]\ntimeout = \"0s\"\n", "pix.timeout"),
     ] {
         let error = Config::from_sources(Some(text), &BTreeMap::new())
             .expect("the tree reads")
@@ -202,8 +217,8 @@ fn each_oidc_or_session_value_its_key_does_not_admit_is_refused_by_key() {
             "session.max_sessions",
         ),
         (
-            String::from("[session]\nidle_timeout_s = 0\n"),
-            "session.idle_timeout_s",
+            String::from("[session]\nidle_timeout = \"0s\"\n"),
+            "session.idle_timeout",
         ),
     ] {
         let error = Config::from_sources(Some(&text), &BTreeMap::new())

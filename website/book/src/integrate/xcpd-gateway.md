@@ -75,15 +75,15 @@ the request's `MessageID` and `To` naming the endpoint.
   `ReplyTo` is refused with a `Sender` fault and nothing is posted, so a
   request cannot make FerroPIX post to an address you did not name.
 - **Delivery:** a `2xx` answer from the endpoint ends the delivery. Any other
-  status, a timeout (`delivery_timeout_ms`) or a refused connection is tried
-  again after `delivery_initial_backoff_ms`, doubling up to
-  `delivery_max_backoff_ms`, at most `delivery_attempts` times in all; an
+  status, a timeout (`delivery_timeout`) or a refused connection is tried
+  again after `delivery_initial_backoff`, doubling up to
+  `delivery_max_backoff`, at most `delivery_attempts` times in all; an
   answer whose attempts are spent is abandoned and the log says so.
 - **Durability:** the answer is written to the outbox in PostgreSQL, its
   payload sealed under the store's key, before the request is accepted with
   `202`. A restart delivers what the outbox still holds, and on `SIGTERM`
   the sender finishes the answer in flight within `[server]
-  shutdown_timeout_ms`.
+  shutdown_timeout`.
 - **Mutual TLS:** with `[xcpd.tls] client_identity_file` set, one PEM
   holding the certificate chain and its private key, the delivery presents
   that certificate to the reply endpoint, as the mutual TLS of an ATNA

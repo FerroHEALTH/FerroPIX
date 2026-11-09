@@ -133,7 +133,11 @@ impl Stack {
     /// Starts the provider, a refusing stand-in and a console whose
     /// sessions idle out after `seconds`.
     pub(crate) async fn start_idle(seconds: u64) -> Self {
-        Self::start_session(Server::Refusing, &format!("idle_timeout_s = {seconds}\n")).await
+        Self::start_session(
+            Server::Refusing,
+            &format!("idle_timeout = \"{seconds}s\"\n"),
+        )
+        .await
     }
 
     /// Starts the provider, a stand-in answering as `answers` says and the
@@ -169,7 +173,7 @@ impl Stack {
         let console = format!("http://{address}");
         let text = format!(
             "[server]\nlisten = \"{address}\"\n\n\
-             [pix]\nbase_url = \"{server}/\"\ntimeout_ms = 2000\n\n\
+             [pix]\nbase_url = \"{server}/\"\ntimeout = \"2s\"\n\n\
              [session]\nsecure_cookie = false\n{session}\n\
              [oidc]\nissuer = \"{issuer}\"\nauthorization_endpoint = \"{authorization}\"\n\
              token_endpoint = \"{token}\"\njwks_uri = \"{jwks}\"\nclient_id = \"{CLIENT_ID}\"\n\

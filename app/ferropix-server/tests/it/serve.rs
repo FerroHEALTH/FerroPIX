@@ -37,9 +37,9 @@ fn settings(base_path: &str) -> ServerSection {
     ServerSection {
         listen: "127.0.0.1:0".parse().expect("a socket address"),
         base_path: BasePath::new(base_path).expect("a base path"),
-        body_limit_bytes: 1024,
-        request_timeout_ms: 500,
-        shutdown_timeout_ms: 300,
+        body_limit: ferrohealth_config::units::ByteSize::from_bytes(1024),
+        request_timeout: ferrohealth_config::units::Duration::from_millis(500),
+        shutdown_timeout: ferrohealth_config::units::Duration::from_millis(300),
         ..ServerSection::default()
     }
 }
@@ -284,14 +284,14 @@ async fn a_body_over_the_limit_is_answered_413_with_an_operation_outcome_or_a_pr
         let url = format!("http://{}{face}/echo", running.address);
         let small = client()
             .post(&url)
-            .body("a".repeat(server.body_limit_bytes))
+            .body("a".repeat(usize::try_from(server.body_limit).expect("a small limit")))
             .send()
             .await
             .expect("the server answers");
         assert_eq!(StatusCode::OK, small.status(), "{face}");
         let large = client()
             .post(&url)
-            .body("a".repeat(server.body_limit_bytes + 1))
+            .body("a".repeat(usize::try_from(server.body_limit).expect("a small limit") + 1))
             .send()
             .await
             .expect("the server answers");
@@ -418,7 +418,7 @@ async fn a_panicking_handler_is_a_500_naming_the_server_s_request_id_and_not_the
 #[tokio::test]
 async fn readiness_answers_503_while_the_drain_delay_runs() {
     let mut server = settings("");
-    server.drain_delay_ms = 1_000;
+    server.drain_delay = ferrohealth_config::units::Duration::from_secs(1);
     let lifecycle = Lifecycle::default();
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("a free port");
     let address = listener.local_addr().expect("an address");
@@ -454,7 +454,7 @@ async fn readiness_answers_503_while_the_drain_delay_runs() {
 #[tokio::test]
 async fn the_drain_is_bounded_and_cuts_a_request_that_outlasts_it() {
     let mut server = settings("");
-    server.request_timeout_ms = 30_000;
+    server.request_timeout = ferrohealth_config::units::Duration::from_secs(30);
     let running_phase = Lifecycle::default();
     let app = product(
         &server,
@@ -482,7 +482,7 @@ async fn the_drain_is_bounded_and_cuts_a_request_that_outlasts_it() {
     let took = asked.elapsed();
     assert!(
         took < Duration::from_secs(5),
-        "the drain is bounded by shutdown_timeout_ms: {took:?}"
+        "the drain is bounded by shutdown_timeout: {took:?}"
     );
     in_flight.abort();
 }
@@ -490,7 +490,7 @@ async fn the_drain_is_bounded_and_cuts_a_request_that_outlasts_it() {
 #[tokio::test]
 async fn the_drain_lets_a_short_request_finish() {
     let mut server = settings("");
-    server.shutdown_timeout_ms = 5_000;
+    server.shutdown_timeout = ferrohealth_config::units::Duration::from_secs(5);
     let running_phase = Lifecycle::default();
     let app = product(
         &server,

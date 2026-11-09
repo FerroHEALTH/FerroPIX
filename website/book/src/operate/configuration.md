@@ -30,7 +30,7 @@ keeps working when the service lands.
 
 | Command | What it does |
 |---|---|
-| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT`. On the signal readiness answers `503` at once, the listener keeps accepting for `server.drain_delay_ms`, then closes, and the requests in flight get `server.shutdown_timeout_ms` to finish. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
+| `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[[auth.issuer]]`, then serves until `SIGTERM` or `SIGINT`. On the signal readiness answers `503` at once, the listener keeps accepting for `server.drain_delay`, then closes, and the requests in flight get `server.shutdown_timeout` to finish. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, prints every key as `key = value  # source` (the file, the default, the environment variable or the `--set` argument that set it, with every secret shown as `***`), and exits 0 when the server would start on it. Otherwise it prints the refusals on one line, each naming its key, and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, over TLS when `[server.tls]` is set, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down, or from a server that is draining, exits 1. Use it as the container health check. |
 | `ferropix db migrate` | Applies the pending migrations and the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
@@ -111,24 +111,34 @@ compose quickstart mounts it beside PostgreSQL
 ### `[server]`
 
 `[server]` is the section every FerroHEALTH server shares, read by
-`ferrohealth-server`.
+`ferrohealth-server`. A span of time is a string of a whole number and its
+unit, `"500ms"`, `"30s"`, `"10min"`, `"12h"` or `"7d"`, and a size is one such
+as `"512KiB"` or `"1MiB"`; a bare number is refused, and a key that holds one
+carries no unit in its name. FerroPIX's own sections write them the same
+way. The keys of FerroPIX's own sections that held a number of
+milliseconds, seconds, days or bytes (`timeout_ms`, `retention_days`,
+`spool_max_bytes` and the rest) were renamed in v0.0.24: in that release
+each refuses the start and names the key that replaces it, all of them in
+one refusal, and from the next release each fails as an unknown key. The
+keys of the family sections (`[server]`, `[auth]`, `[telemetry]`) fail as
+unknown keys at once, and the loader suggests the new name where it can.
 
 | Key | Default | What it sets |
 |---|---|---|
 | `server.listen` | `"127.0.0.1:8080"` | The socket address the HTTP listener binds; a host name is refused. |
 | `server.base_path` | `""` | The path every route is mounted under: empty for the root, or `/` and path segments with no trailing `/`. |
-| `server.body_limit_bytes` | `1048576` | The largest request body read; a larger one is answered `413`. |
-| `server.request_timeout_ms` | `30000` | How long one request may take; a slower one is answered `408`. |
-| `server.header_read_timeout_ms` | `30000` | How long a client may take to send a request head, counted from accept or from the first byte of the head; a client that has not sent the whole head by then is disconnected. |
-| `server.idle_timeout_ms` | `120000` | How long a kept-alive HTTP/1.1 connection may wait for its next request after an answer; past it the server closes the connection with a clean end of stream. HTTP/2 connections keep their own protocol's rules. |
-| `server.drain_delay_ms` | `0` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
-| `server.shutdown_timeout_ms` | `10000` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
+| `server.body_limit` | `"1MiB"` | The largest request body read; a larger one is answered `413`. |
+| `server.request_timeout` | `"30s"` | How long one request may take; a slower one is answered `408`. |
+| `server.header_read_timeout` | `"30s"` | How long a client may take to send a request head, counted from accept or from the first byte of the head; a client that has not sent the whole head by then is disconnected. |
+| `server.idle_timeout` | `"2min"` | How long a kept-alive HTTP/1.1 connection may wait for its next request after an answer; past it the server closes the connection with a clean end of stream. HTTP/2 connections keep their own protocol's rules. |
+| `server.drain_delay` | `"0s"` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
+| `server.shutdown_timeout` | `"10s"` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
 | `server.max_concurrent_requests` | unset | How many requests the server serves at once; past it a request is answered `503` with `Retry-After`. The health routes are never refused. Unset, there is no bound. |
-| `server.retry_after_s` | `1` | The seconds a request refused for load is told to wait. |
+| `server.retry_after` | `"1s"` | How long a request refused for load is told to wait, a whole number of seconds. |
 | `server.trusted_proxies` | `[]` | The reverse proxies whose forwarded client address is believed, each an address or a CIDR block such as `10.0.0.0/8`; empty, every request is named by its peer. |
 | `server.forwarded_header` | `"forwarded"` | The header a trusted proxy names the client in: `"forwarded"` (RFC 7239) or `"x-forwarded-for"`. |
 | `server.compression` | `true` | Whether a response is compressed with gzip or Brotli when the client accepts one. |
-| `server.compression_min_bytes` | `1024` | The smallest response body that is compressed. |
+| `server.compression_min_size` | `"1KiB"` | The smallest response body that is compressed. |
 
 `[server.caller_rate]` is refused: FerroPIX mounts no per-caller rate limit.
 
@@ -142,7 +152,7 @@ again.
 | `server.tls.key_file` | none, required | The private key of the leaf, in PEM. |
 | `server.tls.client_auth` | `"none"` | Whether the listener asks a client certificate: `"none"`, `"optional"` or `"required"`. |
 | `server.tls.client_ca_file` | unset | The CA bundle a client certificate must chain to; required when `client_auth` is `"optional"` or `"required"`, and refused at load beside `"none"`, the default included. |
-| `server.tls.reload_interval_s` | unset | How often the files are read again; unset, only `SIGHUP` reads them. |
+| `server.tls.reload_interval` | unset | How often the files are read again; unset, only `SIGHUP` reads them. |
 | `server.tls.healthcheck_identity_file` | unset | The client certificate chain and key, in one PEM, that `ferropix healthcheck` presents to a listener that asks one. |
 | `server.tls.min_version` | `"1.3"` | The oldest TLS version the listener speaks, `"1.3"` or `"1.2"`. |
 
@@ -184,8 +194,9 @@ reads.
 | `telemetry.otlp.traces` | `true` | Whether the spans are exported: one server span per request, named `{method} {route}` such as `GET /fhir/Patient/$ihe-pix`, with the method, the matched route template, the status and the server's request id, and an error status on a 5xx. No raw path, query string, body, header value, identifier or token, and no log event. |
 | `telemetry.otlp.metrics` | `true` | Whether the metrics are pushed. |
 | `telemetry.otlp.sample_ratio` | `1.0` | The share of the traces that are sampled, from `0.0` to `1.0`. |
-| `telemetry.otlp.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. The server refuses to start when the endpoint is not `https://` or the file holds no PEM certificate. |
-| `telemetry.otlp.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. The server refuses to start when the endpoint is not `https://` or the file lacks a PEM certificate or a PEM private key. |
+| `telemetry.otlp.tls.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. The server refuses to start when the endpoint is not `https://` or the file holds no PEM certificate. |
+| `telemetry.otlp.tls.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. The server refuses to start when the endpoint is not `https://` or the file lacks a PEM certificate or a PEM private key. |
+| `telemetry.otlp.tls.min_version` | `"1.3"` | The oldest TLS version spoken to the collector, `"1.2"` to lower it. |
 
 Without a `[telemetry.otlp]` table nothing is exported.
 
@@ -267,7 +278,9 @@ section with no issuer and no Basic user is refused, and so is
 |---|---|---|
 | `auth.enabled` | `true` | Must stay `true`. |
 | `auth.realm` | `""` | The protection space the `WWW-Authenticate` challenges name (RFC 9110 §11.5); empty for none. |
-| `auth.ca_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and for an introspected issuer the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
+| `auth.tls.trust_roots_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and for an introspected issuer the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
+| `auth.tls.client_identity_file` | unset | A PEM file holding the client certificate chain and its key that those calls present for mutual TLS. |
+| `auth.tls.min_version` | `"1.3"` | The oldest TLS version those calls speak, `"1.2"` to lower it. |
 | `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
 | `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
@@ -318,11 +331,11 @@ audience = ["https://pix.example.org/fhir"]
 | `auth.issuer[].profile` | `"rfc9068"` | The preset the issuer's profile starts from. |
 | `auth.issuer[].audience` | `[]` | The audiences, of which a token's `aud` must contain one; at least one. |
 | `auth.issuer[].algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
-| `auth.issuer[].clock_skew_seconds` | `60` | The clock skew a token's times are checked with, at most 300. |
-| `auth.issuer[].jwks_max_age_seconds` | `600` | How long a fetched key set is used. |
-| `auth.issuer[].jwks_refresh_interval_seconds` | `60` | The shortest time between two fetches of the key set. |
+| `auth.issuer[].clock_skew` | `"1min"` | The clock skew a token's times are checked with, at most `"5min"`. |
+| `auth.issuer[].jwks_max_age` | `"10min"` | How long a fetched key set is used. |
+| `auth.issuer[].jwks_refresh_interval` | `"1min"` | The shortest time between two fetches of the key set. |
 | `auth.issuer[].jwks_file` | `""` | A key set file to read in place of the issuer's `jwks_uri`. |
-| `auth.issuer[].timeout_ms` | `10000` | How long one call to the authorization server may take. |
+| `auth.issuer[].timeout` | `"10s"` | How long one call to the authorization server may take. |
 | `auth.issuer[].mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. |
 | `auth.issuer[].sender_constraint` | `"none"` | `"required"` admits only a token bound to a `DPoP` key or a client certificate. |
 | `auth.issuer[].role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. |
@@ -345,22 +358,19 @@ grant). Each takes the keys of an OAuth 2.0 client: `issuer` or
 default, `"client_secret_post"`, `"private_key_jwt"`, `"tls_client_auth"`,
 `"self_signed_tls_client_auth"`), `client_secret` or `client_secret_file`,
 `private_key_file`, `kid`, `assertion_alg`, `scope`, `resource`,
-`audience`, `refresh_margin_ms`, `timeout_ms`, `assertion_audience`,
-`ca_file`, `client_certificate_file` and `client_key_file`. `client` stands
+`audience`, `refresh_margin`, `timeout`, `assertion_audience` and the
+`tls` table (`trust_roots_file`, `client_identity_file`, `min_version`). `client` stands
 in the issuer when it names neither `issuer` nor `token_endpoint`.
 
 | Key | Default | What it sets |
 |---|---|---|
 | `auth.issuer[].introspection.endpoint` | `""` | The introspection endpoint; empty for the one the issuer's metadata names. |
-| `auth.issuer[].introspection.cache_max_age_seconds` | `60` | How long an active answer is used before the endpoint is asked again; `0` keeps none. |
+| `auth.issuer[].introspection.cache_max_age` | `"1min"` | How long an active answer is used before the endpoint is asked again; `"0s"` keeps none. |
 | `auth.issuer[].introspection.cache_capacity` | `10000` | The most answers held at once. |
 
-The shapes of earlier releases refuse the start, each naming what replaces
-it: the flat `auth.issuer = "…"`, a section-level `audience`, `algorithms`,
-`clock_skew_seconds`, `jwks_max_age_seconds`,
-`jwks_refresh_interval_seconds`, `jwks_file`, `timeout_ms`, `mode`,
-`introspection` or `role_claims`, `token_profile` anywhere, and a
-`scopeless_subjects` entry written as a string.
+A key of an earlier shape refuses the start as an unknown key, named with
+its section: the flat `auth.issuer = "…"`, a section-level issuer key,
+`token_profile`, and a `scopeless_subjects` entry written as a string.
 
 ### `[trust]`
 
@@ -383,7 +393,7 @@ among them, signs in with a client credentials token of an
 
 | Key | Default | What it sets |
 |---|---|---|
-| `auth.basic.cache_ttl_seconds` | `300` | How long a verified credential is remembered; `0` remembers none. |
+| `auth.basic.cache_ttl` | `"5min"` | How long a verified credential is remembered; `"0s"` remembers none. |
 | `auth.basic.users[].user` | none | The user-id. |
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |
@@ -441,8 +451,8 @@ namespace named twice, or one an identifier domain holds, is refused.
 | `pdqm.deprecated` | `"inactive"` | How a merged patient is answered by ITI-78: `"inactive"` (with `active = false` and its replaced-by link, the survivor included in a search) or `"omit"` (left out of a search, and `404` on a read). |
 | `pmir.enabled` | `false` | Whether the PMIR Registry serves ITI-93 and ITI-94. |
 | `pmir.feed.max_attempts` | `10` | The most delivery attempts of one outbound ITI-93 message. |
-| `pmir.feed.initial_backoff_ms` | `1000` | The wait before the first retry. |
-| `pmir.feed.max_backoff_ms` | `300000` | The longest wait between two retries. |
+| `pmir.feed.initial_backoff` | `"1s"` | The wait before the first retry. |
+| `pmir.feed.max_backoff` | `"5min"` | The longest wait between two retries. |
 
 ### `[hl7v2]`
 
@@ -451,9 +461,9 @@ namespace named twice, or one an identifier domain holds, is refused.
 | `hl7v2.enabled` | `false` | Whether the MLLP listener runs. |
 | `hl7v2.listen` | `"0.0.0.0:2575"` | The socket address the listener binds. |
 | `hl7v2.default_charset` | `"ASCII"` | The HL7 table 0211 character set of a message with an empty MSH-18: `ASCII`, `UNICODE UTF-8` or an `8859/n` part. |
-| `hl7v2.frame_limit_bytes` | `1048576` | The largest message one frame may carry. |
-| `hl7v2.idle_timeout_ms` | `300000` | How long a connection may sit idle between frames. |
-| `hl7v2.frame_timeout_ms` | `30000` | How long one frame may take to arrive. |
+| `hl7v2.frame_limit` | `"1MiB"` | The largest message one frame may carry. |
+| `hl7v2.idle_timeout` | `"5min"` | How long a connection may sit idle between frames. |
+| `hl7v2.frame_timeout` | `"30s"` | How long one frame may take to arrive. |
 | `hl7v2.senders[].application` | none | The sending application, MSH-3. |
 | `hl7v2.senders[].facility` | none | The sending facility, MSH-4. |
 | `hl7v2.senders[].domain` | none | The system of the identifier domain the sender feeds; leave it out for a sender that only queries. |
@@ -465,11 +475,11 @@ namespace named twice, or one an identifier domain holds, is refused.
 | `hl7v2.consumers[].application` | none | The receiving application, MSH-5. |
 | `hl7v2.consumers[].facility` | none | The receiving facility, MSH-6. |
 | `hl7v2.consumers[].domains` | `[]` | The systems of the identifier domains of interest to the consumer; empty for every domain. |
-| `hl7v2.consumers[].connect_timeout_ms` | `5000` | How long opening the connection may take. |
-| `hl7v2.consumers[].reply_timeout_ms` | `30000` | How long the acknowledgment may take once connected. |
+| `hl7v2.consumers[].connect_timeout` | `"5s"` | How long opening the connection may take. |
+| `hl7v2.consumers[].reply_timeout` | `"30s"` | How long the acknowledgment may take once connected. |
 | `hl7v2.notification.max_attempts` | `10` | The most attempts one ITI-10 notification is given. |
-| `hl7v2.notification.initial_backoff_ms` | `1000` | The wait before the first retry. |
-| `hl7v2.notification.max_backoff_ms` | `300000` | The longest wait between two attempts. |
+| `hl7v2.notification.initial_backoff` | `"1s"` | The wait before the first retry. |
+| `hl7v2.notification.max_backoff` | `"5min"` | The longest wait between two attempts. |
 
 A message from a sender not listed is answered `AR`. A sending application
 and facility listed twice, two senders of one domain, and one namespace id
@@ -477,7 +487,7 @@ for two domains are refused at load. A consumer without its name, address,
 application or facility, two consumers of one name, and an address without
 a port are refused too. The consumers are notified while `hl7v2.enabled`
 is `true`. The listener finishes the messages in flight within
-`server.shutdown_timeout_ms`, the HTTP server's bound. The face needs a
+`server.shutdown_timeout`, the HTTP server's bound. The face needs a
 terminology server, `[terminology]` below: with `hl7v2.enabled` and no
 `terminology.base_url` the server refuses to start.
 
@@ -494,10 +504,10 @@ page names.
 | Key | Default | What it sets |
 |---|---|---|
 | `terminology.base_url` | `""` | The R4 base of the terminology server: `https`, or plain `http` on a loopback host. Empty for none, which only a server with the HL7 v2 face off may run with. |
-| `terminology.timeout_ms` | `10000` | How long one call may take, connection included. |
+| `terminology.timeout` | `"10s"` | How long one call may take, connection included. |
 | `terminology.retry.max_attempts` | `3` | How many times a call is sent at most, the first try included. |
-| `terminology.retry.initial_backoff_ms` | `200` | The wait before the second attempt. |
-| `terminology.retry.max_backoff_ms` | `2000` | The longest wait between two attempts. |
+| `terminology.retry.initial_backoff` | `"200ms"` | The wait before the second attempt. |
+| `terminology.retry.max_backoff` | `"2s"` | The longest wait between two attempts. |
 | `terminology.credentials.user` | `""` | The HTTP Basic user, with `terminology.credentials.password_file` (a secret). |
 | `terminology.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic: `issuer` or `token_endpoint`, `client_id`, `client_secret_file`, `scope` and the other keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
 | `terminology.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
@@ -521,17 +531,12 @@ the `Patient`, as a code with no FHIR equivalent always was.
 | `xcpd.initiating_communities` | `[]` | The `homeCommunityId`s of the initiating communities answered; a query from another is answered with Case 5. |
 | `xcpd.reply_endpoints` | `[]` | The URL prefixes an asynchronous request's `ReplyTo` may start with, each `https`, or `http` on a loopback host. |
 | `xcpd.delivery_attempts` | `5` | The most attempts to post one asynchronous answer. |
-| `xcpd.delivery_initial_backoff_ms` | `1000` | The wait before the first retry. |
-| `xcpd.delivery_max_backoff_ms` | `60000` | The longest wait between two attempts. |
-| `xcpd.delivery_timeout_ms` | `10000` | How long one attempt may take. |
+| `xcpd.delivery_initial_backoff` | `"1s"` | The wait before the first retry. |
+| `xcpd.delivery_max_backoff` | `"1min"` | The longest wait between two attempts. |
+| `xcpd.delivery_timeout` | `"10s"` | How long one attempt may take. |
 | `xcpd.tls.client_identity_file` | none | The certificate chain and private key the delivery presents for mutual TLS, in one PEM; or `xcpd.tls.client_identity`, inline. |
 | `xcpd.tls.trust_roots_file` | none | PEM certificates trusted for a reply endpoint's server certificate, beside the platform roots. |
 | `xcpd.tls.min_version` | `"1.3"` | The oldest TLS version the delivery speaks, `"1.2"` to lower it. |
-
-The keys `xcpd.client_certificate_file`, `xcpd.client_key_file` and
-`xcpd.reply_trust_file` were retired in v0.0.22: in that release each
-refuses to load and names the `xcpd.tls` key that replaces it. From v0.0.23
-each fails as an unknown key of `[xcpd]`.
 
 A value that is no OID, a domain that is no `urn:oid:` system, a domain or
 community listed twice, a reply endpoint that is neither `https` nor `http`
@@ -545,7 +550,7 @@ trust file that holds no PEM the delivery reads refuses the start. See
 
 | Key | Default | What it sets |
 |---|---|---|
-| `outbox.retention_days` | `30` | The days a delivered or abandoned outbound message is kept before it is pruned; a pending one is never pruned. |
+| `outbox.retention` | `"30d"` | How long a delivered or abandoned outbound message is kept before it is pruned; a pending one is never pruned. |
 | `outbox.prune_batch` | `500` | The most messages one prune deletes in one statement. |
 
 The sender prunes once an hour. The server's database role has no `DELETE`
@@ -558,11 +563,11 @@ allows. A zero value is refused at load.
 |---|---|---|
 | `audit.url` | `""` | The FHIR base of the audit repository the BALP records are sent to; `https`, or plain `http` under development. |
 | `audit.spool_dir` | `"/var/lib/ferropix/audit"` | The directory the records wait in until they are delivered. |
-| `audit.spool_max_bytes` | `67108864` | The most bytes the spool holds. |
+| `audit.spool_max_size` | `"64MiB"` | The most the spool holds. |
 | `audit.spool_max_events` | `100000` | The most records the spool holds. |
-| `audit.spool_write_timeout_ms` | `2000` | The longest storing one record may take. |
-| `audit.timeout_ms` | `5000` | How long one delivery may take. |
-| `audit.retry_max_ms` | `60000` | The longest wait between two delivery attempts. |
+| `audit.spool_write_timeout` | `"2s"` | The longest storing one record may take. |
+| `audit.timeout` | `"5s"` | How long one delivery may take. |
+| `audit.retry_max` | `"1min"` | The longest wait between two delivery attempts. |
 
 `serve` opens the spool at start and refuses to start when the directory
 is open to its group or to other users, cannot be written, or holds a file

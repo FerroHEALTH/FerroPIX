@@ -68,7 +68,7 @@ pub enum Case {
     /// Any route with a body: the body is neither FHIR JSON nor FHIR XML
     /// (FHIR R4 http.html §3.1.0.1.9, `415`).
     UnsupportedMediaType,
-    /// Any route with a body: the body exceeds `[server] body_limit_bytes`.
+    /// Any route with a body: the body exceeds `[server] body_limit`.
     /// Our own design.
     PayloadTooLarge,
     /// Any route: the cross-reference store could not be read or written.

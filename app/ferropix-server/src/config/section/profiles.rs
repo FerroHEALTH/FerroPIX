@@ -4,9 +4,12 @@
 //! The `[pixm]`, `[pdqm]` and `[pmir]` sections: each profile's switch and
 //! the options its text leaves to the actor.
 
+use ferrohealth_config::removed::{Removals, Removed};
+use ferrohealth_config::units::Duration as Span;
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
+use crate::config::retired;
 
 /// The `[pixm]` section: the PIXm Patient Identifier Cross-reference Manager.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -69,17 +72,25 @@ pub struct Feed {
     /// The most attempts one message is given.
     pub max_attempts: u32,
     /// The wait before the first retry.
-    pub initial_backoff_ms: u64,
+    pub initial_backoff: Span,
     /// The longest wait between two retries.
-    pub max_backoff_ms: u64,
+    pub max_backoff: Span,
+    /// Retired in v0.0.24 for `initial_backoff`.
+    #[serde(skip_serializing)]
+    pub initial_backoff_ms: Removed,
+    /// Retired in v0.0.24 for `max_backoff`.
+    #[serde(skip_serializing)]
+    pub max_backoff_ms: Removed,
 }
 
 impl Default for Feed {
     fn default() -> Self {
         Self {
             max_attempts: 10,
-            initial_backoff_ms: 1_000,
-            max_backoff_ms: 300_000,
+            initial_backoff: Span::from_secs(1),
+            max_backoff: Span::from_mins(5),
+            initial_backoff_ms: Removed::default(),
+            max_backoff_ms: Removed::default(),
         }
     }
 }
@@ -95,6 +106,15 @@ pub struct Pmir {
 }
 
 impl Pmir {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(
+            self.feed.initial_backoff_ms,
+            &retired::pmir::INITIAL_BACKOFF_MS,
+        );
+        found.check(self.feed.max_backoff_ms, &retired::pmir::MAX_BACKOFF_MS);
+    }
+
     /// Checks the section and returns it as resolved.
     ///
     /// # Errors
@@ -105,12 +125,12 @@ impl Pmir {
         // §2:3.94.4.1.3 leaves the retry policy to the Registry.
         let rule = if self.feed.max_attempts == 0 {
             Some(("pmir.feed.max_attempts", "it must be above 0"))
-        } else if self.feed.initial_backoff_ms == 0 {
-            Some(("pmir.feed.initial_backoff_ms", "it must be above 0"))
-        } else if self.feed.initial_backoff_ms > self.feed.max_backoff_ms {
+        } else if self.feed.initial_backoff.is_zero() {
+            Some(("pmir.feed.initial_backoff", "it must be above 0"))
+        } else if self.feed.initial_backoff > self.feed.max_backoff {
             Some((
-                "pmir.feed.max_backoff_ms",
-                "it must be at least pmir.feed.initial_backoff_ms",
+                "pmir.feed.max_backoff",
+                "it must be at least pmir.feed.initial_backoff",
             ))
         } else {
             None
@@ -138,12 +158,12 @@ mod tests {
                 ..Feed::default()
             },
             Feed {
-                initial_backoff_ms: 0,
+                initial_backoff: super::Span::from_millis(0),
                 ..Feed::default()
             },
             Feed {
-                initial_backoff_ms: 10,
-                max_backoff_ms: 5,
+                initial_backoff: super::Span::from_millis(10),
+                max_backoff: super::Span::from_millis(5),
                 ..Feed::default()
             },
         ] {

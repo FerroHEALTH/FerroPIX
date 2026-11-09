@@ -21,7 +21,6 @@
 //! and the trust roots, is `[xcpd.tls]`, the family's `TlsClientSection`.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,8 +28,12 @@ use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid};
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
+use crate::config::retired;
 use crate::config::section::is_loopback_url;
-use ferrohealth_server::tls_client::{TlsClient, TlsClientSection};
+use ferrohealth_config::removed::{Removals, Removed};
+use ferrohealth_config::tls::TlsClientSection;
+use ferrohealth_config::units::Duration as Span;
+use ferrohealth_server::tls_client::TlsClient;
 
 /// The `[xcpd]` section as written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -54,25 +57,24 @@ pub struct Xcpd {
     /// The most delivery attempts of one asynchronous answer.
     pub delivery_attempts: u32,
     /// The wait before the first retry of a delivery.
-    pub delivery_initial_backoff_ms: u64,
+    pub delivery_initial_backoff: Span,
     /// The longest wait between two delivery attempts.
-    pub delivery_max_backoff_ms: u64,
+    pub delivery_max_backoff: Span,
     /// How long one delivery attempt may take.
-    pub delivery_timeout_ms: u64,
+    pub delivery_timeout: Span,
     /// The delivery's outbound TLS: the client identity it presents for
     /// mutual TLS and the roots it trusts beside the platform's, a private
     /// community PKI.
     pub tls: TlsClientSection,
-    /// Retired in v0.0.22: the certificate chain and its key are
-    /// `tls.client_identity_file`, one PEM.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub client_certificate_file: Option<PathBuf>,
-    /// Retired in v0.0.22: see `client_certificate_file`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub client_key_file: Option<PathBuf>,
-    /// Retired in v0.0.22: the trusted roots are `tls.trust_roots_file`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reply_trust_file: Option<PathBuf>,
+    /// Retired in v0.0.24 for `delivery_initial_backoff`.
+    #[serde(skip_serializing)]
+    pub delivery_initial_backoff_ms: Removed,
+    /// Retired in v0.0.24 for `delivery_max_backoff`.
+    #[serde(skip_serializing)]
+    pub delivery_max_backoff_ms: Removed,
+    /// Retired in v0.0.24 for `delivery_timeout`.
+    #[serde(skip_serializing)]
+    pub delivery_timeout_ms: Removed,
 }
 
 impl Default for Xcpd {
@@ -85,13 +87,13 @@ impl Default for Xcpd {
             initiating_communities: Vec::new(),
             reply_endpoints: Vec::new(),
             delivery_attempts: 5,
-            delivery_initial_backoff_ms: 1000,
-            delivery_max_backoff_ms: 60_000,
-            delivery_timeout_ms: 10_000,
+            delivery_initial_backoff: Span::from_secs(1),
+            delivery_max_backoff: Span::from_mins(1),
+            delivery_timeout: Span::from_secs(10),
             tls: TlsClientSection::default(),
-            client_certificate_file: None,
-            client_key_file: None,
-            reply_trust_file: None,
+            delivery_initial_backoff_ms: Removed::default(),
+            delivery_max_backoff_ms: Removed::default(),
+            delivery_timeout_ms: Removed::default(),
         }
     }
 }
@@ -138,17 +140,31 @@ pub struct XcpdSettings {
 }
 
 impl Xcpd {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(
+            self.delivery_initial_backoff_ms,
+            &retired::xcpd::DELIVERY_INITIAL_BACKOFF_MS,
+        );
+        found.check(
+            self.delivery_max_backoff_ms,
+            &retired::xcpd::DELIVERY_MAX_BACKOFF_MS,
+        );
+        found.check(
+            self.delivery_timeout_ms,
+            &retired::xcpd::DELIVERY_TIMEOUT_MS,
+        );
+    }
+
     /// Resolves the section: `None` while it is off.
     ///
     /// # Errors
-    /// Returns [`Error::Retired`] for a retired key, set or not the section
-    /// is on, [`Error::Missing`] for a community, device or domain list left
+    /// Returns [`Error::Missing`] for a community, device or domain list left
     /// out, [`Error::Value`] for a value that is no OID, a domain that is no
     /// `urn:oid:` system, and a domain or community named twice, and
     /// [`Error::TlsClient`] when `[xcpd.tls]` names material that cannot be
     /// read.
     pub fn resolve(&self) -> Result<Option<XcpdSettings>, Error> {
-        self.retired()?;
         if !self.enabled {
             return Ok(None);
         }
@@ -222,14 +238,14 @@ impl Xcpd {
         for (key, zero) in [
             ("xcpd.delivery_attempts", self.delivery_attempts == 0),
             (
-                "xcpd.delivery_initial_backoff_ms",
-                self.delivery_initial_backoff_ms == 0,
+                "xcpd.delivery_initial_backoff",
+                self.delivery_initial_backoff.is_zero(),
             ),
             (
-                "xcpd.delivery_max_backoff_ms",
-                self.delivery_max_backoff_ms == 0,
+                "xcpd.delivery_max_backoff",
+                self.delivery_max_backoff.is_zero(),
             ),
-            ("xcpd.delivery_timeout_ms", self.delivery_timeout_ms == 0),
+            ("xcpd.delivery_timeout", self.delivery_timeout.is_zero()),
         ] {
             if zero {
                 return Err(Error::Value {
@@ -241,40 +257,11 @@ impl Xcpd {
         Ok(Delivery {
             endpoints,
             attempts: self.delivery_attempts,
-            initial_backoff: Duration::from_millis(self.delivery_initial_backoff_ms),
-            max_backoff: Duration::from_millis(self.delivery_max_backoff_ms),
-            timeout: Duration::from_millis(self.delivery_timeout_ms),
+            initial_backoff: self.delivery_initial_backoff.get(),
+            max_backoff: self.delivery_max_backoff.get(),
+            timeout: self.delivery_timeout.get(),
             tls: Arc::new(TlsClient::read("xcpd.tls", &self.tls).map_err(Error::TlsClient)?),
         })
-    }
-
-    /// Refuses a retired key, naming the key that replaces it.
-    ///
-    /// The keys were retired in v0.0.22; v0.0.23 deletes this refusal and
-    /// the three fields, so each then fails as an unknown key.
-    fn retired(&self) -> Result<(), Error> {
-        for (set, key, replacement) in [
-            (
-                self.client_certificate_file.is_some(),
-                "xcpd.client_certificate_file",
-                "xcpd.tls.client_identity_file",
-            ),
-            (
-                self.client_key_file.is_some(),
-                "xcpd.client_key_file",
-                "xcpd.tls.client_identity_file",
-            ),
-            (
-                self.reply_trust_file.is_some(),
-                "xcpd.reply_trust_file",
-                "xcpd.tls.trust_roots_file",
-            ),
-        ] {
-            if set {
-                return Err(Error::Retired { key, replacement });
-            }
-        }
-        Ok(())
     }
 }
 
@@ -298,7 +285,6 @@ fn urn_oid(key: &str, text: &str) -> Result<Oid, Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
 
     use super::Xcpd;
     use crate::config::error::Error;
@@ -424,42 +410,5 @@ mod tests {
             edited(|s| s.tls.client_identity_file = Some(dir.path().join("absent.pem"))),
             Err(Error::TlsClient(_))
         ));
-    }
-
-    /// One edit of the section.
-    type Edit = fn(&mut Xcpd);
-
-    #[test]
-    fn a_retired_key_names_the_key_that_replaces_it() {
-        let retirements: [(Edit, &str, &str); 3] = [
-            (
-                |s| s.client_certificate_file = Some(PathBuf::from("client.pem")),
-                "xcpd.client_certificate_file",
-                "xcpd.tls.client_identity_file",
-            ),
-            (
-                |s| s.client_key_file = Some(PathBuf::from("client.pem")),
-                "xcpd.client_key_file",
-                "xcpd.tls.client_identity_file",
-            ),
-            (
-                |s| s.reply_trust_file = Some(PathBuf::from("authority.pem")),
-                "xcpd.reply_trust_file",
-                "xcpd.tls.trust_roots_file",
-            ),
-        ];
-        for (edit, retired, replacement) in retirements {
-            assert!(matches!(
-                edited(edit),
-                Err(Error::Retired { key, replacement: named })
-                    if key == retired && named == replacement
-            ));
-            let mut off = Xcpd::default();
-            edit(&mut off);
-            assert!(
-                matches!(off.resolve(), Err(Error::Retired { key, .. }) if key == retired),
-                "refused with the section off too"
-            );
-        }
     }
 }

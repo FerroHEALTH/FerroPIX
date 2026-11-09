@@ -22,7 +22,7 @@
 //!
 //! [pix]
 //! base_url = "https://pix.example.org/"
-//! timeout_ms = 30000
+//! timeout = "30s"
 //!
 //! [oidc]
 //! issuer = "https://idp.example.org/realms/ferropix"
@@ -43,6 +43,8 @@ pub mod settings;
 use std::collections::BTreeMap;
 
 use ferrohealth_config::loader::{Loaded, Loader};
+use ferrohealth_config::removed::{Removals, Removed, Retired};
+use ferrohealth_config::units::Duration as Span;
 use ferrohealth_server::cli::ConfigArgs;
 use ferrohealth_session::config::{OidcSection, SessionSection};
 use ferrohealth_telemetry::section::TelemetrySection;
@@ -137,19 +139,67 @@ pub struct Pix {
     /// The root of the FerroPIX server's HTTP surface, under which it serves
     /// `/health`, `/fhir` and `/operator`.
     pub base_url: String,
-    /// How long one call to the server may take, in milliseconds.
-    pub timeout_ms: u64,
+    /// How long one call to the server may take.
+    pub timeout: Span,
     /// The scope the server's `[operator] admin_scope` names: the console draws
     /// an administrator's forms only when the provider granted it.
     pub admin_scope: String,
+    /// Retired in v0.0.24 for `timeout`.
+    #[serde(skip_serializing)]
+    pub timeout_ms: Removed,
 }
 
 impl Default for Pix {
     fn default() -> Self {
         Self {
             base_url: String::from("http://127.0.0.1:8080/"),
-            timeout_ms: 30_000,
+            timeout: Span::from_secs(30),
             admin_scope: String::from("__ferropix.admin"),
+            timeout_ms: Removed::default(),
         }
+    }
+}
+
+/// `pix.timeout_ms`, renamed in v0.0.24 when the console wrote every span of
+/// time as `ferrohealth-config`'s units, and refused by name for that one
+/// release (the owner's rule of 2026-11-09).
+pub const PIX_TIMEOUT_MS: Retired = Retired::replaced(
+    "pix.timeout_ms",
+    "pix.timeout, a duration such as `30s`",
+    "0.0.24",
+);
+
+impl Pix {
+    /// Gathers the retired keys the sources set.
+    pub fn removals(&self, found: &mut Removals) {
+        found.check(self.timeout_ms, &PIX_TIMEOUT_MS);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ferrohealth_config::removed::stale;
+
+    use super::PIX_TIMEOUT_MS;
+
+    #[test]
+    fn the_refusal_lives_for_the_one_release_that_renamed_its_key() {
+        let since = PIX_TIMEOUT_MS.since();
+        let version = env!("CARGO_PKG_VERSION");
+        let next = version.rsplit_once('.').and_then(|(head, patch)| {
+            Some(format!(
+                "{head}.{}",
+                patch.parse::<u32>().ok()?.checked_add(1)?
+            ))
+        });
+        assert!(
+            version == since || next.as_deref() == Some(since),
+            "v{since} renamed pix.timeout_ms, and v{version} is neither that release nor the one before it: past it, delete PIX_TIMEOUT_MS"
+        );
+        assert_eq!(
+            0,
+            stale(&[PIX_TIMEOUT_MS], since).len(),
+            "it records v{since}"
+        );
     }
 }

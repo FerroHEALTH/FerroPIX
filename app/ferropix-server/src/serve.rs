@@ -148,7 +148,7 @@ pub async fn serve_settings(
                     settings,
                 )
                 .with_usage(Arc::clone(&window)),
-                server.shutdown_timeout(),
+                server.shutdown_timeout.get(),
                 listening,
                 stopped_by(stopped.clone()),
             )
@@ -164,7 +164,7 @@ pub async fn serve_settings(
     wound_down(
         mllp,
         sender,
-        server.shutdown_timeout(),
+        server.shutdown_timeout.get(),
         [draining, reporting],
     )
     .await;
@@ -174,7 +174,7 @@ pub async fn serve_settings(
 
 /// Serves `app` on `listener` as `server` configures it, over TLS when
 /// `[server.tls]` is set, until `stopped` is raised, then drains within
-/// `server.drain_delay_ms` and `server.shutdown_timeout_ms`.
+/// `server.drain_delay` and `server.shutdown_timeout`.
 ///
 /// # Errors
 /// Returns [`ServeError::Serve`] when the TLS files cannot be read or the
@@ -308,8 +308,8 @@ fn mllp_channel(
         authorities: config::section::hl7v2::authority::Authorities::new(&hl7v2.namespaces),
         frame_limit: hl7v2.frame_limit,
         backoff: outbox::Backoff {
-            initial: std::time::Duration::from_millis(hl7v2.notification.initial_backoff_ms),
-            max: std::time::Duration::from_millis(hl7v2.notification.max_backoff_ms),
+            initial: hl7v2.notification.initial_backoff.get(),
+            max: hl7v2.notification.max_backoff.get(),
         },
         audit: audit.clone(),
     })
@@ -354,8 +354,8 @@ fn pmir_channel(
     Ok(Some(outbox::HttpChannel {
         client,
         backoff: outbox::Backoff {
-            initial: std::time::Duration::from_millis(feed.initial_backoff_ms),
-            max: std::time::Duration::from_millis(feed.max_backoff_ms),
+            initial: feed.initial_backoff.get(),
+            max: feed.max_backoff.get(),
         },
     }))
 }

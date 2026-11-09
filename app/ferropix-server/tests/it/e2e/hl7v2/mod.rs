@@ -51,7 +51,8 @@ const NAMESPACES: [(&str, &str); 3] = [
 
 /// The frame ceiling and the frame timeout the listener runs with.
 const FRAME_LIMIT: usize = 8 * 1024;
-const FRAME_TIMEOUT_MS: u64 = 400;
+const FRAME_TIMEOUT: ferrohealth_config::units::Duration =
+    ferrohealth_config::units::Duration::from_millis(400);
 
 /// A running face beside the FHIR router, on one store.
 struct V2 {
@@ -79,8 +80,8 @@ impl V2 {
         let section = Hl7v2 {
             enabled: true,
             listen: String::from("127.0.0.1:0"),
-            frame_limit_bytes: FRAME_LIMIT,
-            frame_timeout_ms: FRAME_TIMEOUT_MS,
+            frame_limit: ferrohealth_config::units::ByteSize::from_kib(8),
+            frame_timeout: FRAME_TIMEOUT,
             senders: vec![
                 sender("ADT", "EAST", HOSPITAL_DOMAIN),
                 sender("LIS", "WEST", LABORATORY_DOMAIN),

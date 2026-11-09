@@ -23,7 +23,7 @@ use secrecy::SecretString;
 
 use crate::audit::records::{self, Call, Identifier, V2Query};
 use crate::config::section::hl7v2::authority::Hd;
-use crate::hl7v2::{Answer, Conformance, Face, Response, respond};
+use crate::hl7v2::{Answer, Face, Response, respond};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::store::identifier::Rule;
 use crate::store::record;
@@ -31,6 +31,7 @@ use crate::store::xref::{self, Lookup};
 use crate::v2::pid::{self, Shown};
 use crate::v2::stamped::Stamped;
 use ferrobridge_hl7v2::parse::ErrorCode;
+use ferrobridge_hl7v2::parse::profile::Profile;
 
 /// What a query settled.
 struct Settled {
@@ -293,7 +294,7 @@ fn answer(
             faults: &settled.faults,
             status: settled.status,
             body,
-            check: Conformance::Structure,
+            profile: &Profile::BASE,
         },
         stamped,
     )

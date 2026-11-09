@@ -170,7 +170,10 @@ parameter, so the persons found are the ones a PDQm search finds:
 | `@PID.18.1` with `@PID.18.4` | `identifier` |
 
 The answer, RSP^K22, holds one PID per person with its identifiers and
-demographics, written back through the same maps. A QPD-8 domain FerroPIX does not know answers `AE` with an ERR at
+demographics, written back through the same maps and checked against
+RSP_K21 as IHE ITI TF-2 Table 3.21-6 constrains it (QRI optional): an
+answer that does not conform, such as a PID with no name, is answered `AE`.
+A QPD-8 domain FerroPIX does not know answers `AE` with an ERR at
 `QPD^1^8^n`, and a field FerroPIX does not search on answers `AE`. When
 the terminology server does not translate, the query is answered `AR`.
 

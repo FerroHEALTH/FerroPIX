@@ -1,0 +1,1 @@
+- The ITI-21 RSP^K22 is checked against RSP_K21 as IHE ITI TF-2 constrains it before it leaves: QRI optional (Table 3.21-6) and QPD-3 repeating, one parameter a repetition (§3.21.4.1.2.3), through `ferrobridge-hl7v2` 0.4.0's `IHE_ITI_21`. An answer that does not conform, such as a PID with no name, is answered `AE`, as the RSP^K23 is.

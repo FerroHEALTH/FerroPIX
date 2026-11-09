@@ -493,9 +493,13 @@ is `true`. The listener finishes the messages in flight within
 | `xcpd.delivery_initial_backoff_ms` | `1000` | The wait before the first retry. |
 | `xcpd.delivery_max_backoff_ms` | `60000` | The longest wait between two attempts. |
 | `xcpd.delivery_timeout_ms` | `10000` | How long one attempt may take. |
-| `xcpd.client_certificate_file` | none | The PEM certificate chain the delivery presents for mutual TLS; set with `client_key_file`. |
-| `xcpd.client_key_file` | none | The PEM private key of that certificate. |
-| `xcpd.reply_trust_file` | none | PEM certificates trusted for a reply endpoint's server certificate, beside the system roots. |
+| `xcpd.tls.client_identity_file` | none | The certificate chain and private key the delivery presents for mutual TLS, in one PEM; or `xcpd.tls.client_identity`, inline. |
+| `xcpd.tls.trust_roots_file` | none | PEM certificates trusted for a reply endpoint's server certificate, beside the platform roots. |
+| `xcpd.tls.min_version` | `"1.3"` | The oldest TLS version the delivery speaks, `"1.2"` to lower it. |
+
+The keys `xcpd.client_certificate_file`, `xcpd.client_key_file` and
+`xcpd.reply_trust_file` are retired: each refuses to load and names the
+`xcpd.tls` key that replaces it.
 
 A value that is no OID, a domain that is no `urn:oid:` system, a domain or
 community listed twice, a reply endpoint that is neither `https` nor `http`

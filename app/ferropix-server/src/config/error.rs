@@ -51,6 +51,17 @@ pub enum Error {
         #[source]
         source: url::ParseError,
     },
+    /// A key that is retired is set: its replacement holds the setting now.
+    #[error("{key} is retired; set {replacement}")]
+    Retired {
+        /// The retired key.
+        key: &'static str,
+        /// The key that replaces it.
+        replacement: &'static str,
+    },
+    /// The outbound TLS material of a table could not be read.
+    #[error("the outbound TLS material could not be read")]
+    TlsClient(#[source] ferrohealth_server::tls_client::TlsClientError),
     /// A value is outside the rule its key has.
     #[error("{key} is refused: {rule}")]
     Value {

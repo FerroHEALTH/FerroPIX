@@ -150,9 +150,12 @@ async fn the_delivery_presents_its_client_identity_to_a_reply_endpoint_that_requ
     let dir = tempfile::tempdir().expect("a temporary directory");
     let mut xcpd = section(std::slice::from_ref(&base));
     xcpd.delivery_attempts = 1;
-    xcpd.reply_trust_file = Some(written(&dir, "authority.pem", &pki.authority));
-    xcpd.client_certificate_file = Some(written(&dir, "client.crt", &pki.client.0));
-    xcpd.client_key_file = Some(written(&dir, "client.key", &pki.client.1));
+    xcpd.tls.trust_roots_file = Some(written(&dir, "authority.pem", &pki.authority));
+    xcpd.tls.client_identity_file = Some(written(
+        &dir,
+        "client.pem",
+        &format!("{}\n{}\n", pki.client.0, pki.client.1),
+    ));
     let app = gateway_with(
         &harness,
         &harness.matching,
@@ -179,7 +182,7 @@ async fn without_a_client_identity_the_endpoint_refuses_the_handshake() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let mut xcpd = section(std::slice::from_ref(&base));
     xcpd.delivery_attempts = 1;
-    xcpd.reply_trust_file = Some(written(&dir, "authority.pem", &pki.authority));
+    xcpd.tls.trust_roots_file = Some(written(&dir, "authority.pem", &pki.authority));
     let app = gateway_with(
         &harness,
         &harness.matching,

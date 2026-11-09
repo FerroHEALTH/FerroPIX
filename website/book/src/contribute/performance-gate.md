@@ -118,6 +118,16 @@ in `STALL_PRONE`. At most two retries run, and the gate passes when the last
 attempt passed. A breach on any other model fails at once. The job summary
 names each attempt's CPU model, its verdict and why a retry ran.
 
+While the tool runs, the script samples the runner four times a second
+into `target/perf/runner.tsv`, part of the attempt's artifact: how long a
+16 KiB record takes to reach the disk the way the audit spool stores one,
+the disks' flushes and their mean time, the CPU time stolen by the
+hypervisor and spent waiting on I/O, and the CPU clock. The job summary
+gives its percentiles. Every audited request waits for its record's flush
+([Deployment](../operate/deployment.md#disk-latency)), so a stall the
+sampler sees in the disk's flush time is the runner's disk, and one it
+does not see is worth a look at the server.
+
 ## Changing the plan or the tolerances
 
 The plan is the head's: a change to `perf/plan.toml` is measured on both

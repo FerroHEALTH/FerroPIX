@@ -60,6 +60,27 @@ for a release that is not a pre-release. A tag is applied only after the
 image passed the release's vulnerability gate, and tags move, so pin the
 digest the release names.
 
+## Disk latency
+
+Every audited request, a read included, answers only once its BALP record
+is on disk. The spool writes each record to a file, flushes it with
+`fsync`, renames it and flushes the directory, and it writes one record at
+a time. A request that changes the cross-reference also waits for
+PostgreSQL's commit to reach its disk. So the server's request latency
+follows the flush latency of two disks: the volume that holds the spool
+(`/var/lib/ferropix/audit`, `[audit] spool_dir`) and PostgreSQL's. A flush
+that takes 100 ms holds every request whose record is queued behind it,
+on every route at once, while the median stays where it was. A record not
+stored within `[audit] spool_write_timeout_ms` (2 seconds) refuses its
+request with `503`.
+
+Put the spool on a disk whose flushes are short and steady, such as a local
+SSD. A network disk whose flush latency spikes shows up as a long tail on
+every route at the same moment
+([FerroPIX #511](https://github.com/FerroHEALTH/FerroPIX/issues/511)).
+Do not put the spool on `tmpfs`: a record must survive a restart until the
+repository has it (ITI TF-2 §3.20.4.1.1).
+
 ## Verifying an image
 
 Each image index and both platform manifests carry SLSA provenance, and

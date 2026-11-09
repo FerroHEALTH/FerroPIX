@@ -13,6 +13,17 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-11-09
+
+The re-cut of v0.0.22, whose release run published nothing. Read the
+v0.0.22 section below for what this release changes: the HL7 v2 face needs
+the new `[terminology]` section before you upgrade. Nothing else in the
+server, the console or the crates differs from v0.0.22.
+
+### Fixed
+
+- v0.0.22 was tagged, and its release run published nothing: the performance gate handed the v0.0.21 server it measures against a `[terminology]` setting that release does not know, so the run could not judge it. The gate now hands each server only the settings its own source defines. v0.0.23 is the first published release with the changes of v0.0.22, and changes nothing else in the server, the console or the crates (#568).
+
 ## [0.0.22] - 2026-11-09
 
 A release that breaks the HL7 v2 face's configuration. The face maps PID

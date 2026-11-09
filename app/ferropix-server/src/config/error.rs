@@ -52,6 +52,8 @@ pub enum Error {
         source: url::ParseError,
     },
     /// A key that is retired is set: its replacement holds the setting now.
+    /// Each retired key is refused by name for the one release that retires
+    /// it, then fails as an unknown key.
     #[error("{key} is retired; set {replacement}")]
     Retired {
         /// The retired key.

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The `CapabilityStatement` of `GET /fhir/metadata` against the vendored
-//! PIXm Manager and PDQm Supplier actor statements and against the router
-//! (#69, #70).
+//! PIXm Manager, PDQm Supplier and PMIR Patient Identity Registry actor
+//! statements and against the router (#69, #70, #597).
 //!
 //! Every interaction and operation the statement declares is a mounted row
 //! of the permission table, and every row the statement can declare is
@@ -24,7 +24,7 @@ use axum::body::Body;
 use ferropix_server::auth::table::{self, Mount};
 use ferropix_server::fhir::Mounts;
 use ferropix_server::fhir::capability::{
-    self, IHE_PIX, PDQM_MATCH, PDQM_SUPPLIER, PDQM_SUPPLIER_MATCH, PIXM_MANAGER, PMIR_FEED_MESSAGE,
+    self, IHE_PIX, PDQM_MATCH, PDQM_SUPPLIER, PDQM_SUPPLIER_MATCH, PIXM_MANAGER, PMIR_REGISTRY,
 };
 use http::{Method, Request, StatusCode, header};
 use serde_json::Value;
@@ -49,6 +49,16 @@ fn vendored_supplier() -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/specs/ihe-pdqm/package/CapabilityStatement-IHE.PDQm.PatientDemographicsSupplierMatch.json"
+    );
+    serde_json::from_str(&std::fs::read_to_string(path).expect("the vendored statement reads"))
+        .expect("the vendored statement is JSON")
+}
+
+/// The vendored PMIR Patient Identity Registry actor statement (PMIR 1.6.0).
+fn vendored_registry() -> Value {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/specs/ihe-pmir/package/CapabilityStatement-IHE.PMIR.PatientIdentityRegistry.json"
     );
     serde_json::from_str(&std::fs::read_to_string(path).expect("the vendored statement reads"))
         .expect("the vendored statement is JSON")
@@ -174,7 +184,12 @@ async fn the_statement_meets_the_pixm_and_pdqm_actor_statements_and_names_only_m
     assert_eq!("CapabilityStatement", statement["resourceType"]);
     assert_eq!("4.0.1", statement["fhirVersion"]);
     assert_eq!(
-        serde_json::json!([PIXM_MANAGER, PDQM_SUPPLIER, PDQM_SUPPLIER_MATCH]),
+        serde_json::json!([
+            PIXM_MANAGER,
+            PDQM_SUPPLIER,
+            PDQM_SUPPLIER_MATCH,
+            PMIR_REGISTRY
+        ]),
         statement["instantiates"]
     );
     let formats: BTreeSet<&str> = statement["format"]
@@ -261,7 +276,7 @@ async fn the_statement_meets_the_pixm_and_pdqm_actor_statements_and_names_only_m
 }
 
 #[tokio::test]
-async fn the_statement_declares_the_iti_93_feed_the_registry_receives() {
+async fn the_statement_declares_the_iti_93_feed_the_registry_sends_and_receives() {
     let issuer = Issuer::start().await;
     let secrets = Secrets::new();
     let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
@@ -269,12 +284,29 @@ async fn the_statement_declares_the_iti_93_feed_the_registry_receives() {
     assert_eq!(StatusCode::OK, status);
     let statement: Value = serde_json::from_str(&text).expect("JSON");
     assert_eq!(
-        serde_json::json!([{
-            "documentation": "For Mobile Patient Identity Feed [ITI-93]",
-            "supportedMessage": [{"mode": "receiver", "definition": PMIR_FEED_MESSAGE}]
-        }]),
+        vendored_registry()["messaging"],
         statement["messaging"],
-        "the ITI-93 feed received, as the PMIR Registry statement declares it"
+        "the ITI-93 feed sent and received, as the PMIR Registry statement declares it (PMIR 1.6.0 §2:3.93)"
+    );
+    let registry = vendored_registry();
+    let patient = &registry["rest"][0]["resource"][1];
+    assert_eq!("Patient", patient["type"]);
+    let served = &statement["rest"][0]["resource"][0];
+    let codes = |resource: &Value| -> BTreeSet<String> {
+        resource["interaction"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|i| i["code"].as_str().map(str::to_owned))
+            .collect()
+    };
+    assert!(
+        codes(patient).is_subset(&codes(served)),
+        "the Registry's Patient interactions are served"
+    );
+    assert!(
+        definitions(patient).is_subset(&definitions(served)),
+        "the Registry's $ihe-pix is served"
     );
 }
 
@@ -372,7 +404,11 @@ async fn the_statement_follows_the_switches() {
             ..Mounts::all()
         },
     );
-    assert_eq!(1, without_pdqm.instantiates.len(), "the PIXm Manager alone");
+    assert_eq!(
+        1,
+        without_pdqm.instantiates.len(),
+        "the PIXm Manager alone: the PMIR Registry statement asks for the PDQm search"
+    );
     let without_pmir = capability::statement(
         &base,
         &smart,
@@ -385,6 +421,13 @@ async fn the_statement_follows_the_switches() {
         without_pmir.messaging.is_empty(),
         "no ITI-93 feed without [pmir]"
     );
+    assert!(
+        without_pmir
+            .instantiates
+            .iter()
+            .all(|canonical| canonical.value.as_deref() != Some(PMIR_REGISTRY)),
+        "no PMIR Registry without [pmir]"
+    );
     let patient = &without_pdqm.rest[0].resource[0];
     assert!(
         patient.search_param.is_empty(),
@@ -396,6 +439,48 @@ async fn the_statement_follows_the_switches() {
             .iter()
             .all(|o| o.definition.value.as_deref() != Some(PDQM_MATCH)),
         "no $match without the Supplier"
+    );
+}
+
+#[tokio::test]
+async fn the_description_names_the_actors_switched_on() {
+    let issuer = Issuer::start().await;
+    let secrets = Secrets::new();
+    let (_, smart, _spool) = application(settings(&issuer, &secrets)).await;
+    let base = url::Url::parse("https://pix.example.org").expect("a URL");
+    let description = |mounts: Mounts| {
+        capability::statement(&base, &smart, mounts)
+            .implementation
+            .and_then(|implementation| implementation.description.value)
+            .expect("a description")
+    };
+    assert_eq!(
+        "FerroPIX, a Master Patient Index serving the PIXm Patient Identifier Cross-reference Manager, the PDQm Patient Demographics Supplier and the PMIR Patient Identity Registry",
+        description(Mounts::all())
+    );
+    assert_eq!(
+        "FerroPIX, a Master Patient Index serving the PIXm Patient Identifier Cross-reference Manager and the PDQm Patient Demographics Supplier",
+        description(Mounts {
+            pmir: false,
+            ..Mounts::all()
+        })
+    );
+    assert_eq!(
+        "FerroPIX, a Master Patient Index serving the PDQm Patient Demographics Supplier",
+        description(Mounts {
+            pixm: false,
+            pmir: false,
+            ..Mounts::all()
+        })
+    );
+    assert_eq!(
+        "FerroPIX, a Master Patient Index",
+        description(Mounts {
+            pixm: false,
+            pdqm: false,
+            pmir: false,
+            ..Mounts::all()
+        })
     );
 }
 

@@ -79,8 +79,9 @@ statements of the services you switch on:
 |---|---|
 | `[pixm]` | `https://profiles.ihe.net/ITI/PIXm/CapabilityStatement/IHE.PIXm.Manager` |
 | `[pdqm]` | `https://profiles.ihe.net/ITI/PDQm/CapabilityStatement/IHE.PDQm.PatientDemographicsSupplier` and `…/IHE.PDQm.PatientDemographicsSupplierMatch` |
-| `[pmir]` | no actor statement; the statement declares the ITI-93 message the Registry receives and the `Subscription` resource of ITI-94 |
+| `[pmir]` | `https://profiles.ihe.net/ITI/PMIR/CapabilityStatement/IHE.PMIR.PatientIdentityRegistry`, when `[pixm]` and `[pdqm]` are on too, since that statement asks for `$ihe-pix` and the `Patient` read and search. With `[pmir]` on, the statement declares the ITI-93 message as `sender` (to each subscriber) and as `receiver` (from the Source), and the `Subscription` resource of ITI-94 |
 
+`implementation.description` names the IHE actors the instance serves.
 Each resource entry names its profile, interactions, search parameters and
 operations, next to the security service and the scopes the permission
 table enforces, and `GET {base}/fhir/.well-known/smart-configuration` lists

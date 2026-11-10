@@ -48,15 +48,18 @@ pub mod audit {
     /// `audit.timeout_ms`.
     pub const TIMEOUT_MS: Retired = Retired::replaced(
         "audit.timeout_ms",
-        "audit.timeout, a duration such as `5s`",
+        "audit.endpoint.timeout, a duration such as `5s`",
         SINCE,
     );
     /// `audit.retry_max_ms`.
     pub const RETRY_MAX_MS: Retired = Retired::replaced(
         "audit.retry_max_ms",
-        "audit.retry_max, a duration such as `1min`",
+        "audit.endpoint.retry.max_backoff, a duration such as `1min`",
         SINCE,
     );
+    /// `audit.url`.
+    pub const URL: Retired =
+        Retired::replaced("audit.url", "audit.endpoint.url, the same FHIR base", SINCE);
 }
 
 /// `[outbox]`.
@@ -161,36 +164,49 @@ pub mod xcpd {
     );
 }
 
-/// `[terminology]`.
+/// `[terminology]`, whose keys moved under `[terminology.endpoint]`.
 pub mod terminology {
     use super::{Retired, SINCE};
 
+    /// `terminology.base_url`.
+    pub const BASE_URL: Retired = Retired::replaced(
+        "terminology.base_url",
+        "terminology.endpoint.url, the same base URL",
+        SINCE,
+    );
     /// `terminology.timeout_ms`.
     pub const TIMEOUT_MS: Retired = Retired::replaced(
         "terminology.timeout_ms",
-        "terminology.timeout, a duration such as `10s`",
+        "terminology.endpoint.timeout, a duration such as `10s`",
         SINCE,
     );
-    /// `terminology.retry.initial_backoff_ms`.
-    pub const INITIAL_BACKOFF_MS: Retired = Retired::replaced(
-        "terminology.retry.initial_backoff_ms",
-        "terminology.retry.initial_backoff, a duration such as `200ms`",
+    /// `[terminology.retry]`.
+    pub const RETRY: Retired = Retired::replaced(
+        "terminology.retry",
+        "terminology.endpoint.retry, with max_attempts, and initial_backoff and max_backoff as durations such as `200ms`",
         SINCE,
     );
-    /// `terminology.retry.max_backoff_ms`.
-    pub const MAX_BACKOFF_MS: Retired = Retired::replaced(
-        "terminology.retry.max_backoff_ms",
-        "terminology.retry.max_backoff, a duration such as `2s`",
+    /// `[terminology.credentials]`.
+    pub const CREDENTIALS: Retired = Retired::replaced(
+        "terminology.credentials",
+        "terminology.endpoint.credentials, the OAuth table's spans as durations and its TLS files under its tls table",
+        SINCE,
+    );
+    /// `[terminology.tls]`.
+    pub const TLS: Retired = Retired::replaced(
+        "terminology.tls",
+        "terminology.endpoint.tls, the same keys",
         SINCE,
     );
 }
 
 /// Every key declared here.
-pub const ALL: [Retired; 20] = [
+pub const ALL: [Retired; 23] = [
     audit::SPOOL_MAX_BYTES,
     audit::SPOOL_WRITE_TIMEOUT_MS,
     audit::TIMEOUT_MS,
     audit::RETRY_MAX_MS,
+    audit::URL,
     outbox::RETENTION_DAYS,
     pmir::INITIAL_BACKOFF_MS,
     pmir::MAX_BACKOFF_MS,
@@ -204,9 +220,11 @@ pub const ALL: [Retired; 20] = [
     xcpd::DELIVERY_INITIAL_BACKOFF_MS,
     xcpd::DELIVERY_MAX_BACKOFF_MS,
     xcpd::DELIVERY_TIMEOUT_MS,
+    terminology::BASE_URL,
     terminology::TIMEOUT_MS,
-    terminology::INITIAL_BACKOFF_MS,
-    terminology::MAX_BACKOFF_MS,
+    terminology::RETRY,
+    terminology::CREDENTIALS,
+    terminology::TLS,
 ];
 
 #[cfg(test)]

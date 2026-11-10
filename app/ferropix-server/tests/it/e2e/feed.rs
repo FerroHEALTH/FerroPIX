@@ -559,13 +559,11 @@ async fn the_feed_writes_its_balp_record_after_the_commit() {
     let base = url::Url::parse("https://pix.example.org/fhir").unwrap();
     let audit = ferropix_server::audit::Audit::open(
         &ferropix_server::config::section::audit::AuditSettings {
-            url: None,
+            repository: None,
             spool_dir: directory.clone(),
             spool_max_bytes: 1 << 20,
             spool_max_events: 10,
             spool_write_timeout: std::time::Duration::from_secs(2),
-            timeout: std::time::Duration::from_secs(2),
-            retry_max: std::time::Duration::from_millis(200),
         },
         &base,
     )

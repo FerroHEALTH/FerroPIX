@@ -48,7 +48,7 @@ ihe-iti = { path = "../../crates/ihe-iti", features = ["balp", "pixm-server", "p
 nl-generic-functions = { path = "../../crates/nl-generic-functions", features = ["nvi"] }
 # The BALP records of the Manager and the Supplier, their ITI-20 spool and
 # the FHIR Feed to the audit repository (FerroAUDIT).
-ihe-atna = { workspace = true, features = ["balp"] }
+ihe-atna = { workspace = true, features = ["balp", "smart"] }
 # The readiness document and the dependency report, shared with the
 # operator console.
 ferropix-operator-api = { path = "../ferropix-operator-api" }
@@ -64,7 +64,7 @@ ferrohealth-config.workspace = true
 ferrohealth-secret.workspace = true
 # The HTTP stack, the bounded drain, the probe and the subcommands the
 # family shares, and `[server]` with `[server.tls]`.
-ferrohealth-server = { workspace = true, features = ["reqwest"] }
+ferrohealth-server = { workspace = true, features = ["otlp", "reqwest"] }
 # The `[telemetry]` section, the console, the request log, the OTLP export,
 # the Prometheus exposition of `/metrics` and the panic hook the family shares.
 ferrohealth-telemetry = { workspace = true, features = ["axum", "otlp", "prometheus"] }

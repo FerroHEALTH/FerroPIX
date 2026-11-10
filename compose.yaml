@@ -57,7 +57,7 @@
 #     | tar -xz -C terminology/ferrobridge-hl7v2-values --strip-components=3 \
 #       FerroBRIDGE-8de54079117d76491171f93257e0008559a01913/terminology/hl7v2-values
 #   FERROPIX__HL7V2__ENABLED=true \
-#     FERROPIX__TERMINOLOGY__BASE_URL=http://localhost:8280/r4 \
+#     FERROPIX__TERMINOLOGY__ENDPOINT__URL=http://localhost:8280/r4 \
 #     docker compose --profile hl7v2 up --wait
 #
 # The face listens on port 2575 for the sender quickstart.toml lists
@@ -163,7 +163,7 @@ services:
       # The HL7 v2 face and the terminology server it translates on, passed
       # through when set (THE HL7 v2 FACE above).
       FERROPIX__HL7V2__ENABLED:
-      FERROPIX__TERMINOLOGY__BASE_URL:
+      FERROPIX__TERMINOLOGY__ENDPOINT__URL:
     secrets:
       - ferropix-db-url
       - ferropix-data-key

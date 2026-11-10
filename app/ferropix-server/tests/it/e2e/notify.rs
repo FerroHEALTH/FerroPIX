@@ -86,13 +86,11 @@ fn audit(directory: &std::path::Path) -> Audit {
     .expect("the spool is private");
     Audit::open(
         &AuditSettings {
-            url: None,
+            repository: None,
             spool_dir: directory.to_owned(),
             spool_max_bytes: 1 << 20,
             spool_max_events: 50,
             spool_write_timeout: Duration::from_secs(2),
-            timeout: Duration::from_secs(2),
-            retry_max: Duration::from_millis(200),
         },
         &url::Url::parse("https://pix.example.org/fhir").expect("a URL"),
     )

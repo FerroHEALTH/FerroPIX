@@ -18,11 +18,11 @@ pub mod reserve;
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
+use ferrohealth_smart::client::outbound::OutboundClient;
 use ferropix_operator_api::health::{self, Upstream, UpstreamKind};
-use ihe_atna::atna::feed::{FeedAddressError, FeedRepository};
+use ihe_atna::atna::feed::{FeedConfigError, FeedRepository};
 use ihe_atna::atna::forwarder::Forwarder;
 use ihe_atna::atna::spool::{Bounds, Content, Spool, SpoolError};
 use ihe_atna::balp::{Exchange, NetworkAddress, Observer, RecordError, SOURCE_APPLICATION_SERVER};
@@ -48,12 +48,9 @@ pub enum OpenError {
     /// holding a file the sender did not write, or no directory.
     #[error("the audit spool cannot be opened")]
     Spool(#[source] SpoolError),
-    /// The repository's FHIR base is refused by the FHIR Feed.
-    #[error("audit.url is no FHIR base the FHIR Feed can post to")]
-    Repository(#[source] FeedAddressError),
-    /// The HTTP client of the FHIR Feed could not be built.
-    #[error("the HTTP client of the FHIR Feed could not be built")]
-    Client(#[source] reqwest::Error),
+    /// The repository's endpoint is refused by the FHIR Feed.
+    #[error("audit.endpoint is no FHIR base the FHIR Feed can post to")]
+    Repository(#[source] FeedConfigError),
 }
 
 /// Why a record could not be stored, which fails its transaction closed.
@@ -74,7 +71,8 @@ pub enum Unrecorded {
 pub struct Audit {
     /// The spool every record waits in.
     spool: Spool,
-    /// The forwarder to the repository, when `[audit] url` names one.
+    /// The forwarder to the repository, when `[audit.endpoint] url` names
+    /// one.
     forwarder: Option<Arc<Forwarder>>,
     /// The repository's `AuditEvent` endpoint, without userinfo or query.
     endpoint: Option<String>,
@@ -98,9 +96,8 @@ impl Audit {
     /// # Errors
     ///
     /// Returns [`OpenError::Spool`] for a spool directory that is open to
-    /// its group or other users, unwritable, or holds a foreign file,
-    /// [`OpenError::Repository`] for a base the FHIR Feed refuses, and
-    /// [`OpenError::Client`] when the HTTP client cannot be built.
+    /// its group or other users, unwritable, or holds a foreign file, and
+    /// [`OpenError::Repository`] for an endpoint the FHIR Feed refuses.
     pub fn open(settings: &AuditSettings, public_base_url: &url::Url) -> Result<Self, OpenError> {
         let bounds = Bounds {
             max_messages: settings.spool_max_events,
@@ -109,20 +106,16 @@ impl Audit {
         };
         let spool = Spool::open_for(&settings.spool_dir, bounds, Content::AuditEvents)
             .map_err(OpenError::Spool)?;
-        let (forwarder, endpoint) = if let Some(base) = &settings.url {
-            let feed = feed(base, settings.timeout)?;
+        let (forwarder, endpoint) = if let Some(client) = &settings.repository {
+            let feed = feed(client.clone())?;
             let endpoint = feed.endpoint().to_string();
             (
-                Some(Forwarder::fhir_feed(
-                    spool.clone(),
-                    feed,
-                    settings.retry_max,
-                )),
+                Some(Forwarder::fhir_feed(spool.clone(), feed)),
                 Some(endpoint),
             )
         } else {
             tracing::warn!(
-                "audit.url is not set: the audit records are kept in the spool until a repository is configured"
+                "audit.endpoint.url is not set: the audit records are kept in the spool until a repository is configured"
             );
             (None, None)
         };
@@ -240,17 +233,13 @@ impl HealthIndicator for Headroom {
     }
 }
 
-/// Returns the FHIR Feed to `base`, plain `http` only where the
+/// Returns the FHIR Feed through `client`, plain `http` only where the
 /// configuration admitted it (the development profile).
-fn feed(base: &url::Url, timeout: Duration) -> Result<FeedRepository, OpenError> {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(OpenError::Client)?;
-    if base.scheme() == "http" {
-        FeedRepository::cleartext(base.clone(), http, timeout)
+fn feed(client: OutboundClient) -> Result<FeedRepository, OpenError> {
+    if client.url().scheme() == "http" {
+        FeedRepository::cleartext(client)
     } else {
-        FeedRepository::new(base.clone(), http, timeout)
+        FeedRepository::new(client)
     }
     .map_err(OpenError::Repository)
 }

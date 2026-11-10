@@ -346,9 +346,10 @@ pub(crate) async fn stub_terminology() -> (
 ) {
     let stub = ferropix_testkit::terminology::Translations::v2_pid();
     let (server, base) = stub.serve().await.expect("the stub serves");
-    let client = crate::config::section::terminology::Terminology {
-        base_url: base.to_string(),
-        ..crate::config::section::terminology::Terminology::default()
+    let client = {
+        let mut section = crate::config::section::terminology::Terminology::default();
+        section.endpoint.url = ferrohealth_secret::secret_url::SecretUrl::new(base.to_string());
+        section
     }
     .resolve(crate::config::Profile::Development)
     .expect("the section resolves")
@@ -509,9 +510,11 @@ mod tests {
         let closed = std::net::TcpListener::bind("127.0.0.1:0")
             .and_then(|listener| listener.local_addr())
             .expect("a free port");
-        let client = crate::config::section::terminology::Terminology {
-            base_url: format!("http://{closed}/r4"),
-            ..crate::config::section::terminology::Terminology::default()
+        let client = {
+            let mut section = crate::config::section::terminology::Terminology::default();
+            section.endpoint.url =
+                ferrohealth_secret::secret_url::SecretUrl::new(format!("http://{closed}/r4"));
+            section
         }
         .resolve(crate::config::Profile::Development)
         .expect("the section resolves")

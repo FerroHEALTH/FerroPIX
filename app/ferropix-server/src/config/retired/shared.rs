@@ -4,8 +4,7 @@
 //! The keys of the family's sections that v0.0.24 renamed, each refused by
 //! name for that one release.
 //!
-//! `[server]`, `[telemetry]`, `[auth]` and `[terminology.credentials]` are
-//! the sections of `ferrohealth-server`, `ferrohealth-telemetry` and
+//! `[server]`, `[telemetry]` and `[auth]` are the sections of `ferrohealth-server`, `ferrohealth-telemetry` and
 //! `ferrohealth-smart`, which v0.0.24 takes on the lines that write every
 //! span of time and size as `ferrohealth-config`'s units and gather the
 //! outbound TLS keys under one `tls` table. Those crates name none of their
@@ -154,8 +153,8 @@ pub mod auth {
     );
 }
 
-/// The keys of an OAuth client table: `[terminology.credentials.oauth]` and
-/// an issuer's `introspection.client` and `introspection.bearer`.
+/// The keys of an OAuth client table: an issuer's `introspection.client`
+/// and `introspection.bearer`.
 pub mod oauth {
     use super::{Retired, SINCE};
 
@@ -233,7 +232,6 @@ pub struct Shared {
     server: Server,
     telemetry: Telemetry,
     auth: Auth,
-    terminology: Terminology,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -307,18 +305,6 @@ struct Basic {
 struct Dpop {
     max_age_seconds: Removed,
     clock_skew_seconds: Removed,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct Terminology {
-    credentials: Credentials,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct Credentials {
-    oauth: Oauth,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -408,10 +394,6 @@ impl Shared {
                 .bearer
                 .removals(&mut found, &format!("{table}.introspection.bearer"));
         }
-        self.terminology
-            .credentials
-            .oauth
-            .removals(&mut found, "terminology.credentials.oauth");
         found
     }
 }

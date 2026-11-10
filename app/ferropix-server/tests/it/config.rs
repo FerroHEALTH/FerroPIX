@@ -75,7 +75,7 @@ fn every_section_loads_and_resolves() {
             .as_deref()
     );
     assert_eq!(200, settings.outbox.batch);
-    assert!(settings.audit.url.is_some());
+    assert!(settings.audit.repository.is_some());
     assert!(settings.operator.enabled);
     assert!(settings.usage_report.enabled);
 }
@@ -103,11 +103,15 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[pmir.feed]", "[pmir.feed]\n"),
         ("[hl7v2]", "[hl7v2]\n"),
         ("[[hl7v2.senders]]", "[[hl7v2.senders]]\n"),
-        ("[terminology]", "[terminology]\n"),
-        ("[terminology.retry]", "[terminology.retry]\n"),
+        ("[terminology.endpoint]", "[terminology.endpoint]\n"),
+        (
+            "[terminology.endpoint.retry]",
+            "[terminology.endpoint.retry]\n",
+        ),
         ("[xcpd]", "[xcpd]\n"),
         ("[outbox]", "[outbox]\n"),
         ("[audit]", "[audit]\n"),
+        ("[audit.endpoint]", "[audit.endpoint]\n"),
         ("[operator]", "[operator]\n"),
         ("[usage_report]", "[usage_report]\n"),
     ] {
@@ -378,8 +382,8 @@ fn every_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
         .replacen("[outbox]\n", "[outbox]\nretention_days = 14\n", 1)
         .replacen("[audit]\n", "[audit]\ntimeout_ms = 3000\n", 1)
         .replacen(
-            "[terminology.retry]\n",
-            "[terminology.retry]\nmax_backoff_ms = 1000\n",
+            "[xcpd]\n",
+            "[terminology.retry]\nmax_backoff_ms = 1000\n\n[xcpd]\n",
             1,
         )
         .replacen(
@@ -392,12 +396,42 @@ fn every_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
     let said = chain(&error);
     for (old, new) in [
         ("outbox.retention_days", "outbox.retention"),
-        ("audit.timeout_ms", "audit.timeout"),
-        (
-            "terminology.retry.max_backoff_ms",
-            "terminology.retry.max_backoff",
-        ),
+        ("audit.timeout_ms", "audit.endpoint.timeout"),
+        ("terminology.retry", "terminology.endpoint.retry"),
         ("hl7v2.consumers[0].reply_timeout_ms", "reply_timeout"),
+    ] {
+        assert!(
+            said.contains(&format!("{old} was replaced by {new}")),
+            "{old}: {said}"
+        );
+    }
+}
+
+#[test]
+fn every_key_v0_0_24_moved_under_an_endpoint_table_is_refused_naming_its_place() {
+    let secrets = Secrets::new();
+    let text = FULL
+        .replacen(
+            "[audit]\n",
+            "[audit]\nurl = \"https://arr.example.org/fhir\"\n",
+            1,
+        )
+        .replacen(
+            "[xcpd]\n",
+            "[terminology]\nbase_url = \"https://tx.example.org/fhir/r4\"\n\n[terminology.credentials]\nuser = \"ferropix\"\n\n[terminology.tls]\ntrust_roots_file = \"/run/tx-ca.pem\"\n\n[xcpd]\n",
+            1,
+        );
+    let error = resolve(&text, &secrets).expect_err("a moved key is refused");
+    assert!(matches!(error, Error::Removed(_)), "{error:?}");
+    let said = chain(&error);
+    for (old, new) in [
+        ("audit.url", "audit.endpoint.url"),
+        ("terminology.base_url", "terminology.endpoint.url"),
+        (
+            "terminology.credentials",
+            "terminology.endpoint.credentials",
+        ),
+        ("terminology.tls", "terminology.endpoint.tls"),
     ] {
         assert!(
             said.contains(&format!("{old} was replaced by {new}")),
@@ -450,13 +484,13 @@ fn every_family_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
 
 #[test]
 fn a_renamed_key_of_an_oauth_table_is_named_under_its_table() {
-    let text = "[terminology.credentials.oauth]\ntimeout_ms = 5000\nclient_certificate_file = \"/run/client.pem\"\n";
+    let text = "[[auth.issuer]]\nissuer = \"https://idp.example.org/realms/pix\"\n\n[auth.issuer.introspection.client]\ntimeout_ms = 5000\nclient_certificate_file = \"/run/client.pem\"\n";
     let error = load(text, &[]).expect_err("a renamed key is refused before the typed load");
     let said = chain(&error);
     for (old, new) in [
-        ("terminology.credentials.oauth.timeout_ms", "timeout"),
+        ("auth.issuer[0].introspection.client.timeout_ms", "timeout"),
         (
-            "terminology.credentials.oauth.client_certificate_file",
+            "auth.issuer[0].introspection.client.client_certificate_file",
             "tls.client_identity_file",
         ),
     ] {
@@ -551,11 +585,11 @@ fn the_old_issuer_shapes_fail_at_boot_naming_their_key() {
 #[test]
 fn the_hl7v2_face_needs_a_terminology_server() {
     let secrets = Secrets::new();
-    let text = FULL.replacen("base_url = \"https://tx.example.org/fhir/r4\"\n", "", 1);
+    let text = FULL.replacen("url = \"https://tx.example.org/fhir/r4\"\n", "", 1);
     assert_ne!(FULL, text);
     let error = resolve(&text, &secrets).expect_err("the face translates on the server");
     assert!(
-        matches!(&error, Error::Value { key, .. } if key == "terminology.base_url"),
+        matches!(&error, Error::Value { key, .. } if key == "terminology.endpoint.url"),
         "{error:?}"
     );
 }

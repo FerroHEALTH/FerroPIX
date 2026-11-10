@@ -12,8 +12,9 @@
 # FERROPIX__AUDIT__SPOOL_DIR, and its two ports in FERROPIX__SERVER__LISTEN
 # and FERROPIX__HL7V2__LISTEN, and, to an arm whose source defines
 # [terminology], the terminology server it runs in
-# FERROPIX__TERMINOLOGY__BASE_URL (#564, #568). No specification governs
-# this: our own design.
+# FERROPIX__TERMINOLOGY__ENDPOINT__URL, or FERROPIX__TERMINOLOGY__BASE_URL
+# for a source before [terminology.endpoint] (#564, #568, #571). No
+# specification governs this: our own design.
 
 profile = "production"
 public_base_url = "http://localhost:8080"

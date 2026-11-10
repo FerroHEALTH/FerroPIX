@@ -493,7 +493,7 @@ a port are refused too. The consumers are notified while `hl7v2.enabled`
 is `true`. The listener finishes the messages in flight within
 `server.shutdown_timeout`, the HTTP server's bound. The face needs a
 terminology server, `[terminology]` below: with `hl7v2.enabled` and no
-`terminology.base_url` the server refuses to start.
+`terminology.endpoint.url` the server refuses to start.
 
 ### `[terminology]`
 
@@ -503,20 +503,28 @@ address type of PID-11 and the telecommunication use and equipment type of
 PID-13 and PID-14, on the way in and on the way back into an ITI-21
 answer. FerroPIX holds no copy of a table, so load the server with the
 value maps the [HL7 v2 face](../integrate/hl7v2-face.md#the-terminology-server)
-page names.
+page names. The server is `[terminology.endpoint]`, the endpoint table of
+`ferrohealth-smart` every FerroHEALTH product writes each outbound
+integration with, reached through its outbound client.
 
 | Key | Default | What it sets |
 |---|---|---|
-| `terminology.base_url` | `""` | The R4 base of the terminology server: `https`, or plain `http` on a loopback host. Empty for none, which only a server with the HL7 v2 face off may run with. |
-| `terminology.timeout` | `"10s"` | How long one call may take, connection included. |
-| `terminology.retry.max_attempts` | `3` | How many times a call is sent at most, the first try included. |
-| `terminology.retry.initial_backoff` | `"200ms"` | The wait before the second attempt. |
-| `terminology.retry.max_backoff` | `"2s"` | The longest wait between two attempts. |
-| `terminology.credentials.user` | `""` | The HTTP Basic user, with `terminology.credentials.password_file` (a secret). |
-| `terminology.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic: `issuer` or `token_endpoint`, `client_id`, `client_secret_file`, `scope` and the other keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
-| `terminology.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
-| `terminology.tls.trust_roots_file` | none | PEM certificates trusted for the server's certificate, beside the platform roots. |
-| `terminology.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
+| `terminology.endpoint.url` | `""` | The R4 base of the terminology server: `https`, or plain `http` on a loopback host, with no userinfo. Empty for none, which only a server with the HL7 v2 face off may run with. |
+| `terminology.endpoint.timeout` | `"10s"` | How long one call may take, connection included. |
+| `terminology.endpoint.connect_timeout` | none | How long opening the connection may take; unset, only the timeout bounds it. |
+| `terminology.endpoint.retry.max_attempts` | `3` | How many times a call is sent at most, the first try included. |
+| `terminology.endpoint.retry.initial_backoff` | `"200ms"` | The wait before the second attempt. |
+| `terminology.endpoint.retry.max_backoff` | `"2s"` | The longest wait between two attempts. |
+| `terminology.endpoint.credentials.user` | `""` | The HTTP Basic user, with `terminology.endpoint.credentials.password_file` (a secret). |
+| `terminology.endpoint.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic: `issuer` or `token_endpoint`, `client_id`, `client_secret_file`, `scope` and the other keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
+| `terminology.endpoint.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
+| `terminology.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the server's certificate, beside the platform roots. |
+| `terminology.endpoint.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
+
+In v0.0.24 the keys of the earlier `[terminology]` table, `base_url`,
+`timeout_ms`, `retry`, `credentials` and `tls`, refuse the start, each named
+with its place under `[terminology.endpoint]`; from the next release each
+fails as an unknown key.
 
 A feed whose table values the server cannot translate, because it refuses
 the call or cannot be reached, is answered `AR` with no receipt, so the
@@ -563,19 +571,34 @@ allows. A zero value is refused at load.
 
 ### `[audit]`
 
+The repository is `[audit.endpoint]`, the endpoint table of
+`ferrohealth-smart`, reached through its outbound client.
+
 | Key | Default | What it sets |
 |---|---|---|
-| `audit.url` | `""` | The FHIR base of the audit repository the BALP records are sent to; `https`, or plain `http` under development. |
+| `audit.endpoint.url` | `""` | The FHIR base of the audit repository the BALP records are sent to; `https`, or plain `http` under development. |
+| `audit.endpoint.timeout` | `"5s"` | How long one delivery may take. |
+| `audit.endpoint.connect_timeout` | none | How long opening the connection may take; unset, only the timeout bounds it. |
+| `audit.endpoint.retry.max_attempts` | `3` | How many times one delivery round sends a record. |
+| `audit.endpoint.retry.initial_backoff` | `"1s"` | The wait before the second try of a round. |
+| `audit.endpoint.retry.max_backoff` | `"1min"` | The longest wait between two tries, and the wait between two rounds. |
+| `audit.endpoint.credentials.user` | `""` | The HTTP Basic user, with `audit.endpoint.credentials.password_file` (a secret). |
+| `audit.endpoint.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic, the keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
+| `audit.endpoint.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
+| `audit.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the repository's certificate, beside the platform roots. |
+| `audit.endpoint.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
 | `audit.spool_dir` | `"/var/lib/ferropix/audit"` | The directory the records wait in until they are delivered. |
 | `audit.spool_max_size` | `"64MiB"` | The most the spool holds. |
 | `audit.spool_max_events` | `100000` | The most records the spool holds. |
 | `audit.spool_write_timeout` | `"2s"` | The longest storing one record may take. |
-| `audit.timeout` | `"5s"` | How long one delivery may take. |
-| `audit.retry_max` | `"1min"` | The longest wait between two delivery attempts. |
+
+In v0.0.24 the keys of the earlier table, `audit.url`, `audit.timeout_ms`
+and `audit.retry_max_ms`, refuse the start, each named with its place under
+`[audit.endpoint]`; from the next release each fails as an unknown key.
 
 `serve` opens the spool at start and refuses to start when the directory
 is open to its group or to other users, cannot be written, or holds a file
-the server did not write. Without `audit.url` the records stay in the spool
+the server did not write. Without `audit.endpoint.url` the records stay in the spool
 until you name a repository, and the server warns at start. A request whose
 record has no room in the spool is refused with `503`, as the
 [Security and audit](security-and-audit.md#the-servers-audit-trail) page

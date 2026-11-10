@@ -41,8 +41,9 @@ use ferrohealth_server::cli::{Common, ConfigCommand};
 use ferrohealth_server::healthcheck::Outcome;
 use ferrohealth_server::run::{EXIT_CONFIG, Failure, Run, chain};
 use ferrohealth_server::section::ServerSection;
+use ferrohealth_server::telemetry::{Installed, TelemetryBuildError};
 use ferrohealth_telemetry::section::TelemetrySection;
-use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
+use ferrohealth_telemetry::telemetry::Service;
 
 use crate::cli::{Cli, Command, DbCommand, MatchingCommand};
 use crate::config::Config;
@@ -69,17 +70,10 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
         settings.provenance = loaded.provenance().clone();
         Ok((loaded, settings))
     });
-    let (loaded, settings) = match loaded {
-        Ok(loaded) => loaded,
-        Err(error) if cli.command == Command::Common(Common::Healthcheck) => {
-            return Err(Failure::from(error).with_context("not up"));
-        }
-        Err(error) => {
-            return Err(Failure::from(error)
-                .with_context("the configuration is refused")
-                .with_code(EXIT_CONFIG));
-        }
-    };
+    let (loaded, settings) = loaded.map_err(|error| match &cli.command {
+        Command::Common(common) => common.refused(error),
+        Command::Db { .. } | Command::Matching { .. } => Failure::refused_configuration(error),
+    })?;
     match cli.command {
         Command::Common(Common::Config {
             command: ConfigCommand::Check,
@@ -101,7 +95,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
     reason = "the job prints its tables on standard output"
 )]
 async fn estimate(settings: Settings) -> Result<ExitCode, Failure> {
-    let telemetry = telemetry(&settings.telemetry).map_err(started)?;
+    let installed = telemetry(&settings.telemetry).map_err(Failure::refused_configuration)?;
     let outcome = async {
         let store = store::Store::connect(&settings.db).await?;
         store::key::verify(&store).await?;
@@ -110,42 +104,28 @@ async fn estimate(settings: Settings) -> Result<ExitCode, Failure> {
         estimates
     }
     .await;
-    shut_down(&telemetry);
+    installed.shutdown();
     let estimates =
         outcome.map_err(|error| Failure::from(error).with_context("the estimate failed"))?;
     println!("{}", estimate_tables(&settings.matching, &estimates));
     Ok(ExitCode::SUCCESS)
 }
 
-/// The failure of a subscriber that cannot be installed, a configuration
-/// the binary cannot start on.
-fn started(error: InitError) -> Failure {
-    Failure::from(error)
-        .with_context("cannot start")
-        .with_code(EXIT_CONFIG)
-}
-
-/// Builds the telemetry `section` asks for, described as the `ferropix`
-/// service, and installs its console, its span export and the panic hook.
+/// Installs the telemetry `section` asks for, described as the `ferropix`
+/// service: its console, its span export over `[telemetry.otlp.tls]` and
+/// the panic hook.
 ///
 /// With `[telemetry.otlp]` the exporters speak gRPC, so this runs inside the
 /// Tokio runtime that carries the export.
 ///
 /// # Errors
-/// Returns the [`InitError`] of `ferrohealth-telemetry` when the providers
-/// cannot be built or a subscriber is installed already.
-pub fn telemetry(section: &TelemetrySection) -> Result<Arc<Telemetry>, InitError> {
-    let telemetry = Telemetry::new(section, Service::new("ferropix", env!("CARGO_PKG_VERSION")))?;
-    let _filter = telemetry.install(section, &Console::detect())?;
-    ferrohealth_telemetry::panic::install_hook();
-    Ok(Arc::new(telemetry))
-}
-
-/// Flushes and stops the span and metric export of `telemetry`.
-fn shut_down(telemetry: &Telemetry) {
-    if let Err(error) = telemetry.shutdown() {
-        tracing::warn!(error = %chain(&error), "the telemetry did not flush");
-    }
+/// Returns every [`TelemetryBuildError`] of `ferrohealth-server`'s
+/// installer.
+pub fn telemetry(section: &TelemetrySection) -> Result<Installed, TelemetryBuildError> {
+    ferrohealth_server::telemetry::install(
+        section,
+        Service::new("ferropix", env!("CARGO_PKG_VERSION")),
+    )
 }
 
 /// Writes `estimates` as `[matching.fields]` tables, each with the `m` of
@@ -188,12 +168,7 @@ pub fn estimate_tables(
     reason = "the job's report goes to standard output"
 )]
 fn config_check(loaded: &Loaded<Config>, settings: &Settings) -> Result<ExitCode, Failure> {
-    let report = ferrohealth_config::report::check_report(loaded).map_err(|error| {
-        Failure::from(error)
-            .with_context("the configuration cannot be shown")
-            .with_code(EXIT_CONFIG)
-    })?;
-    println!("{report}");
+    ferrohealth_server::run::config_check(loaded)?;
     println!(
         "ferropix: the configuration is accepted ({} profile, {} seeded domain(s))",
         match settings.profile {
@@ -247,8 +222,13 @@ pub async fn probe(section: &ServerSection) -> Outcome {
 /// Runs `serve`: the subscriber installed, the listener bound, and the
 /// routes served until `SIGTERM` or `SIGINT` and the bounded drain.
 async fn serve(settings: Settings) -> Result<ExitCode, Failure> {
-    let telemetry = telemetry(&settings.telemetry).map_err(started)?;
-    let code = match Box::pin(serve::serve_settings(settings, Arc::clone(&telemetry))).await {
+    let installed = telemetry(&settings.telemetry).map_err(Failure::refused_configuration)?;
+    let code = match Box::pin(serve::serve_settings(
+        settings,
+        Arc::clone(installed.telemetry()),
+    ))
+    .await
+    {
         Ok(()) => {
             tracing::info!("ferropix stopped");
             ExitCode::SUCCESS
@@ -258,7 +238,7 @@ async fn serve(settings: Settings) -> Result<ExitCode, Failure> {
             ExitCode::FAILURE
         }
     };
-    shut_down(&telemetry);
+    installed.shutdown();
     Ok(code)
 }
 
@@ -283,7 +263,7 @@ async fn db(settings: Settings, command: &DbCommand) -> Result<ExitCode, Failure
             })?)
         }
     };
-    let telemetry = telemetry(&settings.telemetry).map_err(started)?;
+    let installed = telemetry(&settings.telemetry).map_err(Failure::refused_configuration)?;
     let outcome = match old_key {
         None => {
             match store::Store::start(&settings.db, &settings.domains, store::Job::Migrate).await {
@@ -309,7 +289,7 @@ async fn db(settings: Settings, command: &DbCommand) -> Result<ExitCode, Failure
         }
         Err(error) => Err(Failure::from(error).with_context("the db job failed")),
     };
-    shut_down(&telemetry);
+    installed.shutdown();
     answer
 }
 

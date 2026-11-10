@@ -288,7 +288,7 @@ impl Hl7v2 {
         // v2 table value on the terminology server and holds no copy of a table.
         let Some(terminology) = terminology else {
             return Err(value(
-                "terminology.base_url",
+                "terminology.endpoint.url",
                 "set while [hl7v2] is on: the HL7 v2 face translates every table value on it",
             ));
         };
@@ -455,9 +455,12 @@ mod tests {
 
     /// A terminology server the face translates on; none is reached.
     fn tx() -> TerminologySettings {
-        Terminology {
-            base_url: String::from("https://tx.example.org/r4"),
-            ..Terminology::default()
+        {
+            let mut section = Terminology::default();
+            section.endpoint.url = ferrohealth_secret::secret_url::SecretUrl::new(String::from(
+                "https://tx.example.org/r4",
+            ));
+            section
         }
         .resolve(Profile::Production)
         .expect("the section resolves")

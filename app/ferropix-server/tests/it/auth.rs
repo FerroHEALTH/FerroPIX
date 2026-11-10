@@ -113,8 +113,21 @@ impl SigningKey {
         subject: &str,
         scope: &str,
     ) -> String {
+        self.token_with(issuer, client, subject, scope, serde_json::Map::new())
+    }
+
+    /// Returns the token of [`SigningKey::token_for`] with the claims of
+    /// `extra` beside its own.
+    pub(crate) fn token_with(
+        &self,
+        issuer: &str,
+        client: &str,
+        subject: &str,
+        scope: &str,
+        extra: serde_json::Map<String, serde_json::Value>,
+    ) -> String {
         let now = jiff::Timestamp::now().as_second();
-        let claims = serde_json::json!({
+        let mut claims = serde_json::json!({
             "iss": issuer,
             "aud": AUDIENCE,
             "sub": subject,
@@ -124,6 +137,9 @@ impl SigningKey {
             "jti": "synthetic-jti-1",
             "scope": scope,
         });
+        if let Some(object) = claims.as_object_mut() {
+            object.extend(extra);
+        }
         let mut header = Header::new(Algorithm::ES256);
         header.kid = Some(String::from("k1"));
         header.typ = Some(String::from("at+jwt"));
@@ -184,10 +200,27 @@ impl Issuer {
     pub(crate) fn token(&self, client: &str, scope: &str) -> String {
         self.key.token(&self.server.uri(), client, scope)
     }
+
+    /// Returns a steward's token through the first console, granting
+    /// `scope`, with the claims of `extra` beside its own.
+    pub(crate) fn person_token_with(
+        &self,
+        scope: &str,
+        extra: serde_json::Map<String, serde_json::Value>,
+    ) -> String {
+        self.key
+            .token_with(&self.server.uri(), CONSOLES[0], PERSON, scope, extra)
+    }
 }
 
 /// Returns the settings of a server trusting `issuer`, every switch on.
 pub(crate) fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
+    settings_with(issuer, secrets, "")
+}
+
+/// Returns the settings of [`settings`] with the tables of `extra` after
+/// its own, each `{issuer}` in them naming `issuer`.
+pub(crate) fn settings_with(issuer: &Issuer, secrets: &Secrets, extra: &str) -> Settings {
     let text = format!(
         r#"
 public_base_url = "http://localhost:8080"
@@ -227,7 +260,10 @@ enabled = true
 
 [operator]
 enabled = true
+
+{extra}
 "#,
+        extra = extra.replace("{issuer}", &issuer.server.uri()),
         issuer = issuer.server.uri(),
         clients = CONSOLES
             .iter()

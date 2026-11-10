@@ -274,6 +274,14 @@ section with no issuer and no Basic user is refused, and so is
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
 | `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
 | `auth.scopeless_subjects` | `[]` | The subjects granted system-wide access without a scope, each a table `{ issuer, sub }` naming an issuer the section trusts, since a `sub` is unique only within its issuer (RFC 7519 §4.1.2). An entry admits only a machine's token of that issuer. |
+| `auth.federation` | `[]` | One `[[auth.federation]]` table for each `"federation"` issuer, which that issuer requires: how the tokens of another party's authorization server are read and classified. A table that names no `"federation"` issuer refuses the start. |
+| `auth.attributes` | `[]` | At most one `[[auth.attributes]]` table for a `"persons"`, `"patients"` or `"machines"` issuer: where its tokens state the professional's attributes and the purpose of use, `mapping = "iua"` for the IHE IUA claims under `extensions.ihe_iua` (ITI TF-2 §3.71.4.2.2.1.1). A token that misstates them is refused, and the audit record writes the user's name, role, purpose of use, provider id and organisation on its user agent, as BALP 1.1.4 §3:5.7.5.4 maps them. |
+| `auth.party` | `[]` | Refused when set: FerroPIX binds no login to a party. |
+
+FerroPIX refuses the start on a table it would read and never apply, naming
+the key: `[[auth.party]]`, `[auth.idp]` (the identity provider adapters only
+a party binding reads), `[auth.dpop]` (FerroPIX checks no `DPoP` proof,
+RFC 9449) and a Basic user's `roles`.
 
 Each `[[auth.issuer]]` table names one trusted issuer with every setting of
 its tokens: no section-level value stands in for one the table leaves out.
@@ -387,6 +395,7 @@ among them, signs in with a client credentials token of an
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |
 | `auth.basic.users[].scopes` | `[]` | The scopes the user is granted, never a `system/` scope: a `system/` scope fails the configuration load, naming the user and the scope. |
+| `auth.basic.users[].roles` | `[]` | Refused when set: the permission table reads scopes. |
 
 ### `[[domain]]`
 

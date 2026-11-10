@@ -471,3 +471,66 @@ fn a_backend_client_acting_for_itself_is_recorded_with_no_user_agent() {
     assert_eq!("192.0.2.7", client["network"]["address"]);
     assert_eq!("4", record["outcome"], "a minor failure");
 }
+
+#[tokio::test]
+async fn a_persons_token_s_iua_attributes_reach_the_user_agent_of_the_record() {
+    let issuer = crate::auth::Issuer::start().await;
+    let secrets = crate::support::Secrets::new();
+    let settings = crate::auth::settings_with(
+        &issuer,
+        &secrets,
+        "[[auth.attributes]]\nissuer = \"{issuer}\"\nmapping = \"iua\"\n",
+    );
+    let smart = Box::pin(ferropix_server::auth::Smart::discover(
+        settings.auth,
+        &settings.domains,
+    ))
+    .await
+    .expect("the authorization server is read");
+    let extra = serde_json::json!({
+        "extensions": {"ihe_iua": {
+            "subject_name": "Synthetic Steward",
+            "subject_role": [{"system": "urn:oid:2.999.4", "code": "steward"}],
+            "purpose_of_use": [{
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+                "code": "TREAT"
+            }],
+            "national_provider_identifier": "synthetic-npi-1",
+            "subject_organization_id": "urn:oid:2.999.7"
+        }}
+    });
+    let token = issuer.person_token_with(
+        "system/Patient.rs",
+        extra.as_object().expect("an object").clone(),
+    );
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::AUTHORIZATION,
+        crate::auth::bearer(&token).parse().expect("a header value"),
+    );
+    let access = smart
+        .gate()
+        .authenticate(&headers)
+        .await
+        .expect("the token is admitted");
+    let call = Call::of(
+        &access,
+        Some("192.0.2.7".parse().expect("an address")),
+        &url::Url::parse(BASE).expect("a URL"),
+        Some("req-18"),
+    );
+    let record = written(&manager_query(
+        &call.received(),
+        SecretString::from("GET"),
+        &SourceIdentifier::new(DOMAIN, SecretString::from("MRN-SYNTHETIC-3"))
+            .expect("an identifier"),
+        Outcome::Success,
+    ));
+    let rendered = record.to_string();
+    for stated in ["Synthetic Steward", "TREAT", "steward", "synthetic-npi-1"] {
+        assert!(
+            rendered.contains(stated),
+            "BALP 1.1.4 §3:5.7.5.4 records {stated}: {rendered}"
+        );
+    }
+}

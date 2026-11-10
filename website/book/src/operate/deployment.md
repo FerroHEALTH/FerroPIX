@@ -198,8 +198,7 @@ config:
         audience: ["https://pix.example.org/fhir"]
 ```
 
-The chart's values schema refuses `config.auth.audience`: the server reads
-the audience of each issuer from its entry. CI renders the chart over every
+The server reads the audience of each issuer from its entry. CI renders the chart over every
 value set under `deploy/helm/ci`, the defaults among them, and runs each
 image's `config check` over the configuration it renders
 (`deploy/helm/config-check.sh`); the release does the same with the images

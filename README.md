@@ -8,7 +8,7 @@
 
 [Documentation](https://ferropix.eu/docs/) ·
 [Quick start](#quick-start) ·
-[What ships today](#what-ships-today) ·
+[What it implements](#what-it-implements) ·
 [Licensing](https://ferropix.eu/docs/evaluate/licensing.html)
 
 <!-- badges:begin -->
@@ -37,7 +37,7 @@
 
 </div>
 
-## What FerroPIX does
+## What FerroPIX is
 
 Every hospital, clinic and laboratory gives the same person its own patient
 number. When records have to come together, for a referral, a shared care
@@ -45,131 +45,249 @@ plan or a regional record, someone has to know that these numbers belong to
 one person. Getting that wrong means a record in the wrong file, or a record
 that is never found.
 
-FerroPIX keeps that knowledge. It holds the cross-reference between the
-identifiers each organisation uses, finds a patient from their name and
-date of birth, and flags likely duplicates for a person to review. Other
-systems ask it over the IHE profiles hospital integrators already use: PIX
-(which identifiers belong together) and PDQ (find a patient by their
-details), in their modern FHIR forms PIXm and PDQm and over HL7 v2 messages.
+FerroPIX is the Master Patient Index of the FerroHEALTH family, in pure
+Rust. It holds the cross-reference between the identifiers each
+organisation issues in PostgreSQL, finds a patient from their name and date
+of birth, sends the pairs its scorer is unsure of to a data steward, and
+answers for all of it over the IHE profiles hospital integrators already
+use. It also mints the pseudonyms a clinical store names a patient by, so
+identifying data stays outside the clinical record, which is where the
+openEHR platform model puts the patient index.
 
-It keeps identifying data in one place, outside the clinical record, which
-is where the openEHR platform model puts the patient index.
-
-### Who it is for
-
-- **Hospitals and care networks** that need one reliable view of who a
-  patient is across their own systems and their partners'.
-- **Integrators and regional exchanges** that link records between
-  organisations and need a patient index that speaks the IHE profiles.
-- **Data stewards** who review and resolve possible duplicate patients in
-  the operator console.
-
-### Why you can trust what it claims
-
-Every release is signed and comes with a software bill of materials (the
-list of every component inside) and SLSA build provenance, so you can check
-that what you install is what was built here. The source is public, and
-every feature is in this repository: there is no paid edition with extra
-functions. Each conformance badge above links to its pass list, every
-example the IHE PIXm, PDQm and PMIR guides publish, with the reason for any
-that fails, so you can check a result against the standard yourself.
-
-## Part of FerroHEALTH
-
-FerroPIX is one of five [FerroHEALTH](https://ferrohealth.eu) servers. Each
-does one job and reaches the others only over published standards:
-FerroEHR stores the record, FerroBRIDGE translates it to FHIR and the OMOP
-research model, FerroFED connects records across organisations and borders,
-FerroPIX matches patient identities, and FerroTERM serves the code systems
-(the shared lists of medical terms). Any system that speaks PIXm, PDQm or
-HL7 v2 can use FerroPIX, not only the FerroHEALTH ones. Sign-in, the audit
-trail and the web consoles come from three shared libraries: FerroAUTH,
-FerroAUDIT and FerroUI.
+It is for hospitals and care networks that need one view of who a patient
+is across their own systems and their partners', for integrators and
+regional exchanges that link records between organisations, and for the
+data stewards who resolve possible duplicates in the operator console.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="website/book/src/operate/img/console/dashboard-dark.png">
   <img src="website/book/src/operate/img/console/dashboard.png" alt="The FerroPIX operator console dashboard">
 </picture>
 
+## What it implements
+
+Each transaction follows the IHE ITI Technical Framework and its
+implementation guide, on HL7 FHIR R4, and the book cites the section behind
+every answer. A feed over FHIR and a feed over HL7 v2 of the same patient
+land in one person, and every query reads the same store.
+
+| Face | Transactions | What it does |
+|---|---|---|
+| [PIXm Manager](https://ferropix.eu/docs/integrate/pixm-manager.html), PIXm 3.1.0 | ITI-83, ITI-104 | Answers which identifiers the other domains hold for a patient, by `GET` or by a posted `Parameters` body that keeps the identifier out of every URL, and takes each domain's feed, revisions, merges and removals |
+| [PDQm Supplier](https://ferropix.eu/docs/integrate/pdqm-supplier.html), PDQm 3.2.0 | ITI-78, ITI-119 | Finds patients by demographics and identifiers, with paging and the domain filter, and `$match` scores a described patient as certain, probable or possible |
+| [PMIR Registry](https://ferropix.eu/docs/integrate/pmir-registry.html), PMIR 1.6.0 | ITI-93, ITI-94 | Receives the master identity feed, takes subscriptions, and sends every committed change to each subscriber in order, from an outbox written in the change's own transaction |
+| [HL7 v2 PIX and PDQ](https://ferropix.eu/docs/integrate/hl7v2-face.html), ITI TF-2 | ITI-8, ITI-9, ITI-21, ITI-10 | An MLLP listener for the identity feed, the PIX query and the demographics query, and update notifications to the consumers you name, on FerroBRIDGE's v2 parser |
+| [XCPD Responding Gateway](https://ferropix.eu/docs/integrate/xcpd-gateway.html) | ITI-55 | Tells another community whether yours knows a patient, by a shared identifier or by demographics, on the same exchange or asynchronously |
+
+Beside the five faces:
+
+- [Matching](https://ferropix.eu/docs/operate/matching.html): an identifier
+  in an authoritative domain links two records on its own, a probabilistic
+  scorer grades the rest, and the pairs it is unsure of wait in a review
+  queue.
+- [Pseudonyms](https://ferropix.eu/docs/integrate/pseudonyms.html): one
+  pseudonym per patient and pseudonymisation domain, read only by that
+  domain's consumer.
+- [The Dutch identifiers](https://ferropix.eu/docs/integrate/dutch-identifiers.html):
+  the BSN checked by the eleven-proof, and every identifier of a sensitive
+  domain sealed at rest and found by a keyed hash.
+- [The operator console](https://ferropix.eu/docs/operate/console.html):
+  search, the patient record, the review queue, link, merge and unmerge
+  with a reason, and every reveal of an identifier recorded as a disclosure.
+
 ## Quick start
 
-The quickstart runs the published image beside PostgreSQL and a development
-sign-in server. You need Docker Compose, `git`, `openssl` and `jq`:
+The quickstart runs the published images beside PostgreSQL 18 and a
+development sign-in server, feeds one synthetic patient and asks for it.
+You need a checkout, Docker Compose (or Podman with a compose provider),
+`curl`, `jq` and `openssl`. Every command below is a step of
+[`scripts/quickstart/tour.sh`](scripts/quickstart/tour.sh), which CI runs
+against the images each change builds; run the script to do every step at
+once. The [Quickstart](https://ferropix.eu/docs/integrate/getting-started.html)
+page explains each answer.
 
 ```sh
 git clone https://github.com/FerroHEALTH/FerroPIX && cd FerroPIX
+```
+
+Write the secrets, start the stack and ask for readiness:
+
+<!-- tour:secrets -->
+```sh
 mkdir -p secrets && umask 077
 openssl rand -base64 32 > secrets/ferropix-data-key
 openssl rand -hex 16 > secrets/postgres-password
 openssl rand -hex 16 > secrets/ferropix-db-password
 printf 'postgresql://ferropix:%s@postgres:5432/ferropix' \
   "$(cat secrets/ferropix-db-password)" > secrets/ferropix-db-url
-docker compose up --wait
-curl http://localhost:8080/health/readiness
+openssl rand -hex 16 > secrets/console-oidc-client-secret
 ```
 
-Then ask for a patient's other identifiers (ITI-83) with a development
-token. The store starts empty, so the answer says the identifier is not
-known yet:
+<!-- tour:start -->
+```sh
+docker compose up --wait
+curl --fail-with-body -s http://localhost:8080/health/readiness
+```
+
+Get a client credentials token that may feed and query:
+
+<!-- tour:token -->
+```sh
+token="$(curl --fail-with-body -s http://localhost:8180/ferropix/token \
+  -d grant_type=client_credentials -d client_id=quickstart-source \
+  -d client_secret=any -d 'scope=system/Patient.cud system/Patient.rs' \
+  | jq -er .access_token)"
+```
+
+Feed a patient as the hospital's Patient Identity Source (ITI-104):
+
+<!-- tour:feed -->
+```sh
+curl --fail-with-body -s -X PUT \
+  'http://localhost:8080/fhir/Patient?identifier=urn:oid:2.999.1.1|H-100001' \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/fhir+json' \
+  --data-binary @- <<'EOF' | jq -e '.issue[0].severity == "information"'
+{
+  "resourceType": "Patient",
+  "identifier": [
+    { "system": "urn:oid:2.999.1.1", "value": "H-100001" },
+    { "system": "http://fhir.nl/fhir/NamingSystem/bsn", "value": "999990007" }
+  ],
+  "name": [{ "family": "Proefsma", "given": ["Ada"] }],
+  "gender": "female",
+  "birthDate": "1961-04-12"
+}
+EOF
+```
+
+Ask for the patient's BSN (ITI-83), with the identifier in a posted body:
+
+<!-- tour:identifiers -->
+```sh
+curl --fail-with-body -s -X POST 'http://localhost:8080/fhir/Patient/$ihe-pix' \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/fhir+json' \
+  --data-binary @- <<'EOF' | jq -e '.parameter[] | select(.name == "targetIdentifier") | .valueIdentifier'
+{
+  "resourceType": "Parameters",
+  "parameter": [
+    { "name": "sourceIdentifier", "valueString": "urn:oid:2.999.1.1|H-100001" },
+    { "name": "targetSystem", "valueString": "http://fhir.nl/fhir/NamingSystem/bsn" }
+  ]
+}
+EOF
+```
+
+Find the patient by demographics (ITI-78):
+
+<!-- tour:demographics -->
+```sh
+curl --fail-with-body -s -X POST 'http://localhost:8080/fhir/Patient/_search' \
+  -H "Authorization: Bearer $token" \
+  -H 'Accept: application/fhir+json' \
+  -d family=proefsma -d birthdate=1961-04-12 \
+  | jq -e '.total == 1 and .entry[0].resource.name[0].family == "Proefsma"'
+```
+
+Open the operator console on `http://localhost:3000/` and sign in with any
+user name:
+
+<!-- tour:console -->
+```sh
+docker compose --profile console up --wait
+```
+
+The development issuer signs a token for any client that asks. It is for
+synthetic data on your own machine; `docker compose --profile console down
+--volumes` removes everything the tour started.
+
+## Deploy it
+
+Every release publishes, from one tag:
+
+- the server image `ghcr.io/ferrohealth/ferropix` and the console image
+  `ghcr.io/ferrohealth/ferropix-console`, for `linux/amd64` and
+  `linux/arm64`, on a distroless base;
+- the Helm chart `oci://ghcr.io/ferrohealth/charts/ferropix`, which runs
+  both under the Restricted Pod Security Standard with the images pinned by
+  the digests the release scanned;
+- static `ferropix` and `ferropix-console` binaries for `x86_64` and
+  `aarch64` Linux on the [GitHub release](https://github.com/FerroHEALTH/FerroPIX/releases).
+
+The server runs beside PostgreSQL 18, the authorization server whose tokens
+it reads, an ATNA audit repository and, for the HL7 v2 face, a FHIR R4
+terminology server such as FerroTERM.
+[Deployment](https://ferropix.eu/docs/operate/deployment.html) covers the
+image, the chart and production settings, and
+[Configuration](https://ferropix.eu/docs/operate/configuration.html) every
+key.
+
+## Security and conformance
+
+- **Who may call it:** SMART access tokens from the issuers you trust, with
+  the scope each transaction needs
+  ([Security and audit](https://ferropix.eu/docs/operate/security-and-audit.html)).
+- **What it records:** an audit record of every IHE transaction in the IHE
+  BALP format, sent to your ATNA repository.
+- **What you install:** every artifact carries SLSA Build Level 3
+  provenance and an SBOM, and every finding of the release's vulnerability
+  scan carries an OpenVEX judgement
+  ([Verifying an image](https://ferropix.eu/docs/operate/deployment.html#verifying-an-image)).
+- **Conformance:** each conformance badge above links to its pass list:
+  every example the IHE PIXm, PDQm and PMIR guides publish, with the reason
+  for any that fails
+  ([Conformance and specification pins](https://ferropix.eu/docs/evaluate/conformance.html)).
+
+The source is public and every feature is in this repository; there is no
+paid edition with extra functions.
+
+## Crates
+
+FerroPIX publishes the identity profiles it implements as Rust crates. Each
+IHE profile is a feature of `ihe-iti` and each Dutch Generic Function a
+feature of `nl-generic-functions`, none on by default:
 
 ```sh
-token="$(curl -s -d grant_type=client_credentials \
-  -d client_id=quickstart-source -d client_secret=any \
-  -d scope=system/Patient.rs http://localhost:8180/ferropix/token | jq -r .access_token)"
-curl -H "Authorization: Bearer $token" \
-  'http://localhost:8080/fhir/Patient/$ihe-pix?sourceIdentifier=urn:oid:2.999.1.1|1'
+cargo add ihe-iti --no-default-features -F pixm
 ```
-
-[The PIXm Manager](https://ferropix.eu/docs/integrate/pixm-manager.html)
-shows how to feed a patient first, and
-[Deployment](https://ferropix.eu/docs/operate/deployment.html) covers the
-image, the Helm chart and production settings.
-
-## What ships today
-
-### Patient identity
-
-- [The PIXm Manager](https://ferropix.eu/docs/integrate/pixm-manager.html): the identifier cross-reference query (ITI-83) and the FHIR identity feed (ITI-104)
-- [The PDQm Supplier](https://ferropix.eu/docs/integrate/pdqm-supplier.html): find a patient by their details (ITI-78) and match (ITI-119)
-- [The HL7 v2 face](https://ferropix.eu/docs/integrate/hl7v2-face.html): the PIX feed and query and the PDQ query over MLLP (ITI-8, ITI-9, ITI-21)
-- [Matching](https://ferropix.eu/docs/operate/matching.html): a probabilistic score for every possible duplicate, with a review queue
-
-### Security and audit
-
-- [Who may call the server](https://ferropix.eu/docs/operate/security-and-audit.html#who-may-call-the-server): SMART access tokens from the issuers you trust
-- [The audit trail](https://ferropix.eu/docs/operate/security-and-audit.html#the-servers-audit-trail) of every IHE transaction, in the IHE BALP format
-
-### Operations
-
-- [The operator console](https://ferropix.eu/docs/operate/console.html): search, the patient record, the review queue, merge and unmerge
-- [The operator API](https://ferropix.eu/docs/operate/operator-api.html) the console reads
-- [Container images and release binaries](https://ferropix.eu/docs/operate/deployment.html) for amd64 and arm64, signed, and a [Helm chart](https://ferropix.eu/docs/operate/deployment.html#the-helm-chart)
-
-### Libraries
-
-- [`ihe-iti`](https://ferropix.eu/docs/crates/ihe-iti.html), the IHE identity profiles, and [`nl-generic-functions`](https://ferropix.eu/docs/crates/nl-generic-functions.html), the Dutch Generic Functions, as Rust crates
-
-<details>
-<summary><b>Published crates</b> (2)</summary>
 
 | Crate | What it does | Version | Docs | Downloads |
 |---|---|---|---|---|
 | [`ihe-iti`](https://crates.io/crates/ihe-iti) | The IHE identity profiles PIXm, PDQm, mCSD, PMIR and XCPD, one feature per profile, with their audit records | [![crates.io](https://img.shields.io/crates/v/ihe-iti?logo=rust&label=crates.io)](https://crates.io/crates/ihe-iti) | [![docs.rs](https://img.shields.io/docsrs/ihe-iti?logo=docsdotrs&label=docs.rs)](https://docs.rs/ihe-iti) | [![downloads](https://img.shields.io/crates/d/ihe-iti?logo=rust&label=downloads)](https://crates.io/crates/ihe-iti) |
 | [`nl-generic-functions`](https://crates.io/crates/nl-generic-functions) | The Dutch Generic Functions: localization (NVI), consent (Mitz), addressing (LRZa) and authentication (Nuts) | [![crates.io](https://img.shields.io/crates/v/nl-generic-functions?logo=rust&label=crates.io)](https://crates.io/crates/nl-generic-functions) | [![docs.rs](https://img.shields.io/docsrs/nl-generic-functions?logo=docsdotrs&label=docs.rs)](https://docs.rs/nl-generic-functions) | [![downloads](https://img.shields.io/crates/d/nl-generic-functions?logo=rust&label=downloads)](https://crates.io/crates/nl-generic-functions) |
 
-</details>
+## Part of FerroHEALTH
 
-## Learn more
+FerroPIX is one of five [FerroHEALTH](https://ferrohealth.eu) servers, and
+the one that owns patient identity. Each server does one job and reaches
+the others only over published standards: FerroEHR stores the record and
+finds a patient's EHR through FerroPIX, FerroBRIDGE translates the record
+to FHIR and the OMOP research model, FerroFED connects records across
+organisations and resolves the patients of a cross-site query here, and
+FerroTERM serves the code systems. Any system that speaks PIXm, PDQm, PMIR,
+XCPD or HL7 v2 can use FerroPIX.
 
-- [Documentation](https://ferropix.eu/docs/) and the [FerroHEALTH book](https://ferrohealth.eu/docs/)
-- [What FerroPIX is](https://ferropix.eu/docs/evaluate/what-ferropix-is.html), with what is built and what is planned, and [conformance and specification pins](https://ferropix.eu/docs/evaluate/conformance.html)
-- [Changelog](CHANGELOG.md) and [milestones](https://github.com/FerroHEALTH/FerroPIX/milestones)
-- [Security policy](SECURITY.md)
-- [Contributing](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md), [support](SUPPORT.md), [governance](GOVERNANCE.md) and [maintainers](MAINTAINERS.md)
+## Documentation
+
+- [The FerroPIX book](https://ferropix.eu/docs/): evaluate, integrate,
+  operate and contribute, and the
+  [FerroHEALTH book](https://ferrohealth.eu/docs/) for what the family
+  shares
+- [What FerroPIX is](https://ferropix.eu/docs/evaluate/what-ferropix-is.html)
+  and [Releases, upgrades and support](https://ferropix.eu/docs/operate/releases.html)
+- [Changelog](CHANGELOG.md) and [releases](https://github.com/FerroHEALTH/FerroPIX/releases)
+
+## Support and contributing
+
+- [Support](SUPPORT.md) and the [security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md),
+  [governance](GOVERNANCE.md) and [maintainers](MAINTAINERS.md)
 
 ## Licence
 
-Business Source License 1.1 ([LICENSE](LICENSE)), with Apache License 2.0 as
-the Change License four years after each version; the
-[licensing page](https://ferropix.eu/docs/evaluate/licensing.html) says when
-you need a commercial licence from Cadasto B.V.
+Business Source License 1.1 ([LICENSE](LICENSE)): free outside production
+and for non-commercial production use, a commercial licence from Cadasto
+B.V. for other production use, and Apache License 2.0 four years after each
+version. The [licensing page](https://ferropix.eu/docs/evaluate/licensing.html)
+says which applies to you.

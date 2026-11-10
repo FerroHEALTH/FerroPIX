@@ -6,12 +6,16 @@
 # specification governs this: our own design).
 #
 #   scripts/quickstart/tour.sh               run the tour against compose.yaml
-#   scripts/quickstart/tour.sh --self-test   check the anchors the book reads
+#   scripts/quickstart/tour.sh --self-test   check the anchors the book and
+#                                            the README read
 #
 # The book's quickstart page shows the commands between each `ANCHOR:` and
 # `ANCHOR_END:` line through mdBook's anchored {{#include}}, and the
 # `quickstart` job of ci.yml runs this script against the images it builds,
-# so a command the book shows is a command CI ran. Every step fails the
+# so a command the book shows is a command CI ran. GitHub renders no include,
+# so README.md carries a copy of every anchor, each fenced block under a
+# `<!-- tour:<anchor> -->` line, and --self-test refuses a copy that differs
+# from the script by a byte. Every step fails the
 # script when its answer is not the one the book describes: curl refuses a
 # status of 400 or above, and each `jq -e` refuses an answer without the
 # value it selects.
@@ -27,8 +31,23 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly SELF=scripts/quickstart/tour.sh
 
-# self_test: every anchor opens and closes once, and every anchor the book
-# includes from this script exists.
+# anchor_body NAME: the lines between `# ANCHOR: NAME` and its end.
+anchor_body() {
+  awk -v name="$1" '$0 == "# ANCHOR_END: " name { p = 0 } p { print } $0 == "# ANCHOR: " name { p = 1 }' "$SELF"
+}
+
+# readme_body NAME: the fenced block under README.md's `<!-- tour:NAME -->`.
+readme_body() {
+  awk -v name="$1" '
+    $0 == "<!-- tour:" name " -->" { want = 1; next }
+    want && $0 == "```sh" { want = 0; p = 1; next }
+    p && $0 == "```" { exit }
+    p { print }' README.md
+}
+
+# self_test: every anchor opens and closes once, every anchor the book
+# includes from this script exists, and README.md shows every anchor as the
+# script holds it.
 self_test() {
   cd "$root"
   bash -n "$SELF" || { echo "tour: self-test failed: $SELF does not parse." >&2; exit 1; }
@@ -56,6 +75,23 @@ self_test() {
       failed=1
     fi
   done <<< "$included"
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    if ! grep -qx "<!-- tour:$name -->" README.md; then
+      echo "tour: self-test failed: README.md shows no copy of the anchor '$name'." >&2
+      failed=1
+    elif [[ "$(readme_body "$name")" != "$(anchor_body "$name")" ]]; then
+      echo "tour: self-test failed: README.md's copy of the anchor '$name' differs from $SELF." >&2
+      failed=1
+    fi
+  done <<< "$opened"
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    if ! grep -qx "$name" <<< "$opened"; then
+      echo "tour: self-test failed: README.md shows the anchor '$name', which $SELF lacks." >&2
+      failed=1
+    fi
+  done < <(sed -n 's/^<!-- tour:\([a-z-]*\) -->$/\1/p' README.md)
   [[ "$failed" == 0 ]] || exit 1
   echo "tour: self-test OK."
 }

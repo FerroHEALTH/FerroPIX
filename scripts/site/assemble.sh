@@ -9,10 +9,11 @@
 #   scripts/site/assemble.sh OUT
 #
 # The landing page lands at the site root and the book under /docs/, which is
-# what book.toml's site-url declares. Three things are rendered on the way:
+# what book.toml's site-url declares. Four things are rendered on the way:
 #
-#   * the book's version markers, from the manifests, so a page never states
-#     a version the tree has moved past: {{version:<crate>}} is the version
+#   * the version markers of the book and the landing page, from the
+#     manifests, so neither states a version the tree has moved past:
+#     {{version:<crate>}} is the version
 #     of crates/<crate>/Cargo.toml, {{version:ferropix}} the product version
 #     of the root Cargo.toml, and {{dep:<name>}} the requirement the root
 #     [workspace.dependencies] gives <name>. A marker that names nothing
@@ -23,6 +24,9 @@
 #     of the artwork.
 #   * each page of the book gets its own hashed Content-Security-Policy
 #     (scripts/site/book-csp.sh).
+#   * the landing page's {{hash:style.css}} marker becomes the first twelve
+#     hex digits of the stylesheet's sha256, so a browser that cached an older
+#     stylesheet fetches the new one with the new page.
 #
 # The assembly reads nothing from the network.
 #
@@ -101,13 +105,14 @@ book="$(mktemp -d)"
 trap 'rm -rf "$stage" "$book"' EXIT
 
 # The staged tree mirrors the repository's layout, so the book's
-# {{#include}} of CHANGELOG.md and docs/VERSIONS.md resolves as it does in
-# the checkout.
-mkdir -p "$stage/website" "$stage/docs"
+# {{#include}} of CHANGELOG.md, docs/VERSIONS.md and the quickstart tour
+# resolves as it does in the checkout.
+mkdir -p "$stage/website" "$stage/docs" "$stage/scripts/quickstart"
 cp -R website/book "$stage/website/book"
 rm -rf "$stage/website/book/book"
 cp CHANGELOG.md "$stage/"
 cp docs/VERSIONS.md "$stage/docs/"
+cp scripts/quickstart/tour.sh "$stage/scripts/quickstart/"
 mkdir -p "$stage/website/book/theme"
 cp assets/brand/favicon.svg "$stage/website/book/theme/favicon.svg"
 cp assets/brand/favicon-32.png "$stage/website/book/theme/favicon.png"
@@ -121,6 +126,13 @@ scripts/site/book-csp.sh "$book"
 rm -rf "${OUT:?}"
 mkdir -p "$OUT/docs"
 cp -R "$LANDING"/. "$OUT/"
+render "$OUT/index.html"
+style_hash="$(shasum -a 256 "$OUT/style.css" | cut -c1-12)"
+STYLE_HASH="$style_hash" perl -pi -e 's/\{\{hash:style\.css\}\}/$ENV{STYLE_HASH}/g' "$OUT/index.html"
+if grep -q '{{' "$OUT/index.html"; then
+  echo "assemble: $LANDING/index.html keeps a marker nothing renders" >&2
+  exit 1
+fi
 cp -R "$book"/. "$OUT/docs/"
 
 # The brand directory holds the favicons and the marks the landing page and

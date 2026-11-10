@@ -1,104 +1,144 @@
 <!-- SPDX-FileCopyrightText: Cadasto B.V. -->
 <!-- SPDX-License-Identifier: BUSL-1.1 -->
 
-# Getting started
+# Quickstart
 
-Today you use FerroPIX through its published crates: you call a PIXm
-Manager, a PDQm Supplier, a PMIR Registry, an mCSD directory or an XCPD
-gateway that someone else runs, from your own Rust code. The FerroPIX server
-is planned in the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3); its
-quickstart joins this page when it lands.
+This page runs FerroPIX on your machine with the compose quickstart, feeds
+one synthetic patient as a hospital's Patient Identity Source would, and
+asks for it through PIXm and PDQm. It takes a few minutes and needs a
+checkout of the repository, Docker Compose (or Podman with a compose
+provider), `curl`, `jq` and `openssl`.
 
-## Add the crate
+> [!NOTE]
+> Every command on this page is a step of
+> [`scripts/quickstart/tour.sh`](https://github.com/FerroHEALTH/FerroPIX/blob/main/scripts/quickstart/tour.sh),
+> which CI runs against the images each change builds, so the commands and
+> the answers below are the ones the current code gives. Run the script to
+> do every step at once.
 
-Each profile is a feature, and no feature is on by default, so you compile
-only the profiles you use. The FerroHEALTH products pin family crates by
-exact version:
+## Start the server
 
-```toml,cargo
-[dependencies]
-ihe-iti = { version = "={{version:ihe-iti}}", default-features = false, features = ["pixm"] }
-ihe-atna = { version = "{{dep:ihe-atna}}", default-features = false }
-```
-
-`ihe-atna` is the family's audit crate. The clients name whom an exchange
-is made for with its `ihe_atna::user::OnBehalfOf`, so you depend on the same
-version `ihe-iti` does. The versions above are the ones on `main` when this
-book was built; [crates.io](https://crates.io/crates/ihe-iti) lists the
-published releases.
-
-The example below also uses `reqwest`, `secrecy`, `url` and `tokio`:
+The quickstart reads every secret from a file under `./secrets`, never from
+the environment. From the root of the checkout, make the five files:
 
 ```sh
-cargo add reqwest secrecy url
-cargo add tokio --features macros,rt-multi-thread
+{{#include ../../../../scripts/quickstart/tour.sh:secrets}}
 ```
 
-## Ask a PIXm Manager for a patient's other identifiers
+Then start the stack and ask for readiness:
 
-This is the example of the `ihe_iti::pixm` module documentation, which CI
-compiles with every change, with one line added: the client posts its
-parameters, as every FerroHEALTH client does, so the identifier is in no URL
-([why](../crates/ihe-iti.md#lookups-by-a-patient-identifier-use-post)). It
-asks a PIX Manager which identifier one other domain holds for the patient a
-source identifier names (ITI-83):
+```sh
+{{#include ../../../../scripts/quickstart/tour.sh:start}}
+```
 
-```rust,ignore
-use std::time::Duration;
+`compose.yaml` runs the published server image beside PostgreSQL 18 and a
+development OpenID Provider, with the configuration
+`app/ferropix-server/quickstart.toml`: three identifier domains (a
+synthetic hospital, `urn:oid:2.999.1.1`, the BSN and the pseudonymised BSN),
+one Source client for all three, `quickstart-source`, and the operator API.
+Readiness answers `{"state":"up",…}` once the store, the audit spool and the
+outbox are up. Every port binds `127.0.0.1`
+([Deployment](../operate/deployment.md#the-compose-quickstart)).
 
-use ihe_iti::pixm::{Invocation, PixmClient};
-use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier, TargetSystem};
-use ihe_atna::user::OnBehalfOf;
-use secrecy::{ExposeSecret, SecretString};
-use url::Url;
+> [!WARNING]
+> The development issuer signs a token for any client that asks and signs
+> in any user name as a data steward. It is for synthetic data on your own
+> machine. A deployment names its own `https` issuer
+> ([Configuration](../operate/configuration.md#auth)).
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
-    let client = PixmClient::new(Url::parse("https://pix.example.org/fhir/")?, http)?
-        .invoked_by(Invocation::Post);
-    let source = SourceIdentifier::new(
-        "urn:oid:1.3.6.1.4.1.21367.13.20.1000",
-        SecretString::from("IHERED-994"),
-    )?;
-    let targets = [TargetSystem::new("urn:oid:1.3.6.1.4.1.21367.13.20.3000")?];
-    let on_behalf = OnBehalfOf::System;
-    match client
-        .cross_reference(&source, &targets, &on_behalf, Duration::from_secs(2))
-        .await?
-    {
-        CrossReference::Matched(found) => {
-            for identifier in found.identifiers() {
-                let _value = identifier.value().expose_secret();
-            }
-        }
-        CrossReference::SourceNotFound => {}
-        _ => {}
-    }
-    Ok(())
+## Get a token
+
+A Source is a machine, so it asks the issuer for a client credentials token
+(RFC 6749 §4.4). This one carries the scope to feed (`system/Patient.cud`)
+and the scope to query (`system/Patient.rs`):
+
+```sh
+{{#include ../../../../scripts/quickstart/tour.sh:token}}
+```
+
+## Feed a patient (ITI-104)
+
+The Source of the hospital domain adds patient `H-100001`, whose `Patient`
+also carries a BSN from the synthetic range no person holds. The
+conditional update names the identifier the record is fed under (PIXm 3.1.0
+§2:3.104.4.1):
+
+```sh
+{{#include ../../../../scripts/quickstart/tour.sh:feed}}
+```
+
+The server answers `201 Created` with a `Location` naming the new person
+and an `OperationOutcome` whose one `information` issue says the identifier
+was added. The BSN is in an `authoritative` domain, so a record of another
+hospital that carries the same BSN links to this person without a steward.
+Both identifiers are sealed at rest
+([The Dutch identifiers](dutch-identifiers.md)).
+
+## Ask for the patient's other identifiers (ITI-83)
+
+A PIXm Consumer that knows the hospital's identifier asks which BSN the
+person holds. It posts the parameters in a `Parameters` body, so the
+identifier is in no URL:
+
+```sh
+{{#include ../../../../scripts/quickstart/tour.sh:identifiers}}
+```
+
+The answer is a `Parameters` with one `targetIdentifier` per identifier in
+the domains asked for and a `targetId` naming `Patient/{id}`
+(PIXm 3.1.0 §2:3.83.4.2.2.1); the command prints the BSN:
+
+```json
+{
+  "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+  "value": "999990007"
 }
 ```
 
-Three things in it hold for every client of the crate:
+## Find the patient by demographics (ITI-78)
 
-- **Build the HTTP client with `redirect::Policy::none()`.** The request
-  carries the patient identifier, and a redirect would send it to a host you
-  did not choose.
-- **Identifiers travel as `secrecy::SecretString`.** The types that carry
-  them redact their value in `Debug` and have no `Display`, and no error
-  carries a value, a URL or the server's free text, so a log line cannot leak
-  one by accident. You read a value with `expose_secret()` where you mean to.
-- **An unknown patient is an answer, an outage is an error.**
-  `CrossReference::SourceNotFound` is the profile's "patient unknown"; a
-  timeout, a refusal or a `404` without a `not-found` issue is a typed
-  `PixmError`.
+A PDQm Consumer that knows the family name and the birth date searches for
+the patient, posting the criteria as a form so they stay out of the URL
+(PDQm 3.2.0 §2:3.78.4.1.2):
+
+```sh
+{{#include ../../../../scripts/quickstart/tour.sh:demographics}}
+```
+
+The answer is a `searchset` Bundle with a `total` of 1. `proefsma` finds
+`Proefsma`, because a string parameter matches the start of a name in any
+case. [The PDQm Supplier](pdqm-supplier.md) lists every parameter, and
+`$match` (ITI-119) scores a patient you describe.
+
+## Open the console
+
+The `console` profile adds the operator console on `http://localhost:3000/`:
+
+```sh
+{{#include ../../../../scripts/quickstart/tour.sh:console}}
+```
+
+Sign in with any user name at the development issuer's form. The
+dashboard counts what you fed, and Search finds the patient by its
+identifier or demographics
+([The operator console](../operate/console.md)).
+
+## Stop it
+
+```sh
+docker compose --profile console down --volumes
+```
+
+`--volumes` removes the database and the server's state with the
+containers.
 
 ## Next
 
-- [The published crates](../crates/index.md): every feature of `ihe-iti` and
-  `nl-generic-functions`, what each client checks, and the API reference on
-  docs.rs.
-- [Security and audit](../operate/security-and-audit.md): access tokens on
-  each request, and the audit record of each exchange.
+- [The PIXm Manager](pixm-manager.md), [the PDQm Supplier](pdqm-supplier.md)
+  and the other pages under Integrate: every transaction, case by case.
+- [Configuration](../operate/configuration.md): your own domains, issuers
+  and Sources.
+- [Deployment](../operate/deployment.md): the images, compose and the Helm
+  chart for a real installation.
+- [The published crates](../crates/index.md): calling a PIX Manager, a PDQm
+  Supplier or another IHE actor from your own Rust code.

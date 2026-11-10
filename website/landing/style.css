@@ -66,15 +66,24 @@ body {
 
 a { color: var(--fp-accent); text-decoration: none; }
 a:hover { color: var(--fp-accent-600); text-decoration: underline; }
+/* Every link and button shows where the keyboard is. */
+a:focus-visible {
+  outline: 2px solid var(--fp-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
 
 img, svg { max-width: 100%; height: auto; }
 
+/* Inline code breaks anywhere, so a long URL or image name wraps inside its
+   box at any width; a shell transcript (.cmd) scrolls instead. */
 code {
   font-family: var(--fp-mono);
   font-size: 0.88em;
   background: var(--fp-accent-050);
   padding: 0.1em 0.35em;
   border-radius: 5px;
+  overflow-wrap: anywhere;
 }
 
 .wrap {
@@ -172,6 +181,20 @@ code {
   max-width: 62ch;
   margin: 0 auto 2rem;
 }
+/* The release badge at the top of the hero. */
+.status {
+  display: inline-block;
+  margin: 0 auto 1.25rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: var(--fp-accent-050);
+  border: 1px solid var(--fp-border);
+  color: var(--fp-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.status:hover { text-decoration: none; border-color: var(--fp-accent); }
 .hero-cta { display: flex; gap: 0.85rem; justify-content: center; flex-wrap: wrap; }
 .hero .note {
   margin: 1.5rem auto 0;
@@ -216,6 +239,9 @@ section { padding: clamp(3rem, 7vw, 4.5rem) 0; }
   grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 1.1rem;
 }
+/* A grid item may shrink below its content's width, so nothing inside it
+   pushes it past its column. */
+.grid > * { min-width: 0; }
 .card {
   background: var(--fp-bg);
   border: 1px solid var(--fp-border);
@@ -229,7 +255,7 @@ section { padding: clamp(3rem, 7vw, 4.5rem) 0; }
 }
 .card h3 { margin: 0 0 0.4rem; font-size: 1.08rem; }
 .card p { margin: 0; color: var(--fp-muted); font-size: 0.94rem; }
-.card code { font-size: 0.85em; overflow-wrap: anywhere; }
+.card code { font-size: 0.85em; }
 
 .audiences { grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
 .audience ul {
@@ -255,15 +281,26 @@ section { padding: clamp(3rem, 7vw, 4.5rem) 0; }
   font-size: 0.86rem;
   line-height: 1.55;
 }
-.cmd code { background: none; padding: 0; font-size: inherit; }
+.cmd code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; white-space: pre; }
 
 .prose { max-width: 68ch; margin: 1.75rem auto 0; color: var(--fp-muted); }
 .prose p { margin: 0 0 0.9rem; }
 
-/* A card that is a link reads as a card, not as link text. */
-a.card { display: block; color: inherit; }
-a.card:hover { color: inherit; text-decoration: none; }
+/* A card that is one link reads as a card, not as link text: hovering lifts
+   the card (the .card:hover above) and underlines its title alone, never its
+   body, and the keyboard focus rings the whole card. */
+a.card,
+a.card:hover,
+a.card:focus-visible { display: block; color: inherit; text-decoration: none; }
+a.card * { text-decoration: none; }
 a.card h3 { color: var(--fp-accent); }
+a.card:hover h3,
+a.card:focus-visible h3 { text-decoration: underline; text-underline-offset: 3px; }
+a.card:focus-visible {
+  outline: 2px solid var(--fp-accent);
+  outline-offset: 3px;
+  border-radius: var(--fp-radius);
+}
 
 /* A screenshot of the console, light or dark with the reader's scheme. It
    scales inside its box, so it never widens the page. */

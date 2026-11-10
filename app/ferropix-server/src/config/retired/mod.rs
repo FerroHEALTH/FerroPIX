@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The keys of FerroPIX's own sections that v0.0.24 renamed, each refused by
-//! name for that one release.
+//! The keys that v0.0.24 renamed, each refused by name for that one release:
+//! those of FerroPIX's own sections here, and those of the family's sections
+//! in [`shared`].
 //!
 //! v0.0.24 writes every span of time and size as `ferrohealth-config`'s
 //! units, a string of a whole number and its unit under a key that names
@@ -10,14 +11,23 @@
 //! each old key as a `Removed` field and declares it here with the release
 //! that retired it, and [`crate::config::Config::resolve`] refuses every one
 //! the sources set, naming its replacement. The next release deletes them
-//! (the owner's one-release rule of 2026-11-09), which the test below holds:
-//! it fails once the product version is past the release after `since`. No
-//! specification governs this: our own design.
+//! (the owner's one-release rule of 2026-11-09), which the test below holds
+//! through [`PREPARING`]. No specification governs this: our own design.
+
+pub mod shared;
 
 use ferrohealth_config::removed::Retired;
 
 /// The release that renamed the keys below.
 pub const SINCE: &str = "0.0.24";
+
+/// The release this tree prepares.
+///
+/// The release pull request moves the workspace version to it, and the
+/// first pull request after the cut moves it to the next release, which
+/// fails the test below until every refusal of the release just cut is
+/// deleted.
+pub const PREPARING: &str = "0.0.24";
 
 /// `[audit]`.
 pub mod audit {
@@ -203,30 +213,18 @@ pub const ALL: [Retired; 20] = [
 mod tests {
     use ferrohealth_config::removed::stale;
 
-    use super::{ALL, SINCE};
-
-    /// The release a refusal declared in `since` is still alive in: `since`
-    /// itself, and the version before it, which the release cut moves to it.
-    fn alive(version: &str) -> bool {
-        let next = version.rsplit_once('.').and_then(|(head, patch)| {
-            Some(format!(
-                "{head}.{}",
-                patch.parse::<u32>().ok()?.checked_add(1)?
-            ))
-        });
-        version == SINCE || next.as_deref() == Some(SINCE)
-    }
+    use super::{ALL, PREPARING, Retired, shared};
 
     #[test]
     fn every_refusal_lives_for_the_one_release_that_renamed_its_key() {
-        let version = env!("CARGO_PKG_VERSION");
+        let past: Vec<&str> = stale(&ALL, PREPARING)
+            .into_iter()
+            .chain(stale(&shared::ALL, PREPARING))
+            .map(Retired::key)
+            .collect();
         assert!(
-            alive(version),
-            "v{SINCE} renamed these keys, and v{version} is neither that release nor the one before it: past it, delete the refusals of src/config/retired.rs"
-        );
-        assert!(
-            stale(&ALL, SINCE).is_empty(),
-            "every refusal records v{SINCE}"
+            past.is_empty(),
+            "v{PREPARING} is prepared, and these refusals belong to an earlier release: delete them from src/config/retired/: {past:?}"
         );
     }
 }

@@ -13,6 +13,7 @@
     reason = "test assertions"
 )]
 
+mod book;
 mod boundary;
 mod captures;
 mod config;

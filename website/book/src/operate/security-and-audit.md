@@ -4,8 +4,9 @@
 # Security and audit
 
 A patient index handles the most identifying data in a health system, so
-both crates are built to keep it out of anywhere it was not sent. This page
-says what the server and the crates guarantee today.
+the server and both crates are built to keep it out of anywhere it was not
+sent. This page says who may call the server, how identifying data is kept
+out of logs, errors and URLs, and what the audit trail records.
 
 ## Who may call the server
 
@@ -66,6 +67,14 @@ The PIXm, PDQm and PMIR routes and the operator API are served
 [The operator API](operator-api.md)), and the server refuses to start when a
 row of the guard's table has no handler.
 
+Two faces carry no bearer token, because their transactions define none.
+The HL7 v2 face admits a message by its sending application and facility
+(MSH-3, MSH-4), each listed in `[[hl7v2.senders]]`, and the XCPD gateway
+answers only the initiating communities `[xcpd]` lists. The mutual TLS an
+ATNA Secure Node asks of both is the deployment's, at a sidecar or ingress
+in front of FerroPIX ([The HL7 v2 face](../integrate/hl7v2-face.md),
+[The XCPD Responding Gateway](../integrate/xcpd-gateway.md)).
+
 Basic users are for a run on your own machine: they need
 `profile = "development"` and the `[dev]` table. A Basic user is a person,
 a steward or an administrator, and never a Source or another machine: an
@@ -117,15 +126,21 @@ token can be had for is not sent.
 
 ## The server's audit trail
 
-The server writes a BALP `AuditEvent` for every transaction it answers as
-the PIXm Manager or the PDQm Supplier, and for every steward action:
+The server writes an `AuditEvent` for every transaction it answers or
+sends, on every face, and for every steward action:
 
-| Transaction | Audit profile |
+| Transaction | Audit record |
 |---|---|
 | ITI-83 `$ihe-pix` | PIXm Query Manager (PIXm 3.1.0 §2:3.83.5.1.2) |
 | ITI-104 add, revise, remove | PIXm Feed Create, Update and Delete Manager (§2:3.104.5.1.2) |
-| ITI-78 search | PDQm Query Supplier (PDQm 3.2.0 §2:3.78.5.1.2) |
+| ITI-78 search and read | PDQm Query Supplier (PDQm 3.2.0 §2:3.78.5.1.2) |
 | ITI-119 `$match` | PDQm Match Supplier (§2:3.119.5.1.2) |
+| ITI-93 received | PMIR Feed audit, one patient entity per change |
+| ITI-94 create, read, delete | PMIR Subscription Create, Read and Delete audit; an enable or disable is a BALP Update |
+| ITI-8 | the Patient Record event: `C` for an add, `U` for a revision, and for an A40 `U` for the survivor and `D` for the subsumed identifier (ITI TF-2 §3.8.5) |
+| ITI-9 and ITI-21 | the Query event with the whole query message (ITI TF-2 §3.9.5.1.2) |
+| ITI-10 delivered | the Manager's Patient Record read, the consumer as its destination (ITI TF-2 §3.10.5.1.1) |
+| ITI-55 | the Responding Gateway's Query event (ITI TF-2 §3.55.5.1.2) |
 | A steward's view or decision | BALP Patient Read or Patient Update |
 | A steward's search | BALP Patient Query per person found, or Query when none was |
 | A steward's reveal of an identifier or a pseudonym | BALP Privacy Disclosure at the source, with the reason |
@@ -139,9 +154,9 @@ raw request base64-encoded in `entity.query` (BALP 1.1.4 §1:52.4.1.4,
 a `POST`. A search or a match that answers several people writes one record
 per person in the answer, and one that answers none writes one record naming
 no patient; an ITI-78 read writes the PDQm Query Supplier record of the one
-person it answers. The PDQm Supplier stores its records before it sends the
-answer, and answers `503` with a `transient` issue when they cannot be
-stored. The audit record is the only place outside the store where the
+person it answers. Every face stores its records before it sends the answer:
+the FHIR face answers `503` with a `transient` issue when they cannot be
+stored, the HL7 v2 face `AR`, and the XCPD gateway Case 5. The audit record is the only place outside the store where the
 server writes a patient identifier.
 
 The records wait in a spool under `audit.spool_dir`, one file readable by

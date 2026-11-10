@@ -36,6 +36,7 @@
 - [Problem types](operate/problems.md)
 - [Security and audit](operate/security-and-audit.md)
 - [Operations](operate/operations.md)
+- [Releases, upgrades and support](operate/releases.md)
 
 # Contribute
 

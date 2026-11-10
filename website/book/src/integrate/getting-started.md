@@ -16,7 +16,7 @@ Each profile is a feature, and no feature is on by default, so you compile
 only the profiles you use. The FerroHEALTH products pin family crates by
 exact version:
 
-```toml
+```toml,cargo
 [dependencies]
 ihe-iti = { version = "={{version:ihe-iti}}", default-features = false, features = ["pixm"] }
 ihe-atna = { version = "{{dep:ihe-atna}}", default-features = false }

@@ -5,15 +5,12 @@
 
 The server ships as a container image, `ghcr.io/ferrohealth/ferropix`, for
 `linux/amd64` and `linux/arm64`, and as a static Linux binary per
-architecture attached to each GitHub release. The release lane that
-publishes them exists; the first tagged release of the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3)
-publishes the first image, so until then you build the image from source
-(see [Building the image locally](#building-the-image-locally)). The
-operator console has an image of its own, `ghcr.io/ferrohealth/ferropix-console`,
-published by the same release ([The operator console](console.md#the-image)).
-The Helm chart under `deploy/helm/ferropix` runs both on Kubernetes
-([The Helm chart](#the-helm-chart)).
+architecture attached to each GitHub release. The operator console has an
+image of its own, `ghcr.io/ferrohealth/ferropix-console`, published by the
+same release ([The operator console](console.md#the-image)), and the Helm
+chart, `oci://ghcr.io/ferrohealth/charts/ferropix`, runs both on Kubernetes
+([The Helm chart](#the-helm-chart)). Every release publishes all of them,
+built at SLSA Build Level 3 ([Verifying an image](#verifying-an-image)).
 
 The two crates deploy inside your own application: they build with the
 Rust toolchain your application uses, at or above the minimum supported
@@ -23,9 +20,8 @@ and need nothing at run time beyond the servers they call.
 
 ## What the server runs beside
 
-- **the clinical systems that ask it,** FerroEHR among them, which is
-  planned to resolve its `ehr_id` through PIXm and PDQm
-  ([FerroHEALTH/FerroEHR#3380](https://github.com/FerroHEALTH/FerroEHR/issues/3380));
+- **the clinical systems that feed and ask it,** FerroEHR and FerroFED
+  among them ([What FerroPIX is](../evaluate/what-ferropix-is.md));
 - **a PostgreSQL 18 database** that holds the cross-reference, reached as a
   role that is no superuser (the server refuses one at boot, because a
   superuser reads every schema);
@@ -33,6 +29,9 @@ and need nothing at run time beyond the servers they call.
   metadata it reads once at start;
 - **an ATNA audit repository** that receives its BALP records; until one is
   configured the records wait in the spool;
+- **a FHIR R4 terminology server**, such as FerroTERM, when the HL7 v2
+  face is on: it translates every v2 table value
+  ([The HL7 v2 face](../integrate/hl7v2-face.md#the-terminology-server));
 - **the operator console**, its own image, which reads the server's
   operator API with a signed-in steward's token.
 
@@ -71,7 +70,7 @@ follows the flush latency of two disks: the volume that holds the spool
 (`/var/lib/ferropix/audit`, `[audit] spool_dir`) and PostgreSQL's. A flush
 that takes 100 ms holds every request whose record is queued behind it,
 on every route at once, while the median stays where it was. A record not
-stored within `[audit] spool_write_timeout_ms` (2 seconds) refuses its
+stored within `[audit] spool_write_timeout` (2 seconds) refuses its
 request with `503`.
 
 Put the spool on a disk whose flushes are short and steady, such as a local
@@ -102,18 +101,17 @@ the binaries, at every severity, with the OpenVEX statement that judges it.
 
 `compose.yaml` at the root of the repository runs the published image
 beside PostgreSQL and a development OpenID Provider. It mounts
-`app/ferropix-server/quickstart.toml`, so run it from a checkout:
+`app/ferropix-server/quickstart.toml`, so run it from a checkout. The
+[quickstart](../integrate/getting-started.md) walks through it, from the
+secret files to a first feed and query; CI runs those steps on every
+change. `FERROPIX_VERSION` picks the image tag, the release the checkout
+names by default.
 
-```sh
-mkdir -p secrets && umask 077
-openssl rand -base64 32 > secrets/ferropix-data-key
-openssl rand -hex 16 > secrets/postgres-password
-openssl rand -hex 16 > secrets/ferropix-db-password
-printf 'postgresql://ferropix:%s@postgres:5432/ferropix' \
-  "$(cat secrets/ferropix-db-password)" > secrets/ferropix-db-url
-docker compose up --wait
-curl http://localhost:8080/health/readiness
-```
+| Profile | What it adds |
+|---|---|
+| none | the server, PostgreSQL 18 and the development issuer |
+| `console` | the operator console on `http://localhost:3000/` |
+| `hl7v2` | FerroTERM, the terminology server the HL7 v2 face needs, reading the three packages under `./terminology` (`FERROPIX_TERMINOLOGY_DIR`), which the header of `compose.yaml` fetches; set `FERROPIX__HL7V2__ENABLED=true` and `FERROPIX__TERMINOLOGY__ENDPOINT__URL=http://localhost:8280/r4` to switch the face on |
 
 - **Hardening.** The server runs with a read-only root filesystem, every
   capability dropped, `no-new-privileges`, a `tmpfs` for `/tmp`, and its
@@ -144,16 +142,6 @@ curl http://localhost:8080/health/readiness
   `FERROPIX__USAGE_REPORT__ENABLED=false` in your shell or a `.env` file to
   switch it off ([Configuration](configuration.md#usage_report)).
 
-A token of the development issuer, and an ITI-83 query with it:
-
-```sh
-token="$(curl -s -d grant_type=client_credentials \
-  -d client_id=quickstart-source -d client_secret=any \
-  -d scope=system/Patient.rs http://localhost:8180/ferropix/token | jq -r .access_token)"
-curl -H "Authorization: Bearer $token" \
-  'http://localhost:8080/fhir/Patient/$ihe-pix?sourceIdentifier=urn:oid:2.999.1.1|1'
-```
-
 ## The Helm chart
 
 `deploy/helm/ferropix` installs the server and, with `console.enabled`, the
@@ -173,16 +161,14 @@ helm install ferropix deploy/helm/ferropix \
 
 Both containers carry a memory and an ephemeral-storage limit. The server's
 ephemeral storage, 256 MiB by default (`resources`), holds the audit spool on
-its default `emptyDir` (`[audit] spool_max_bytes`, 64 MiB), `/tmp` and the
+its default `emptyDir` (`[audit] spool_max_size`, 64 MiB), `/tmp` and the
 container log: raise it with the spool, or keep the spool on a
 PersistentVolumeClaim (`state.existingClaim`).
 
 The release lane publishes the chart as an OCI artifact,
 `oci://ghcr.io/ferrohealth/charts/ferropix`, with the release as its app
 version and both images pinned by the digests it scanned, and attests its
-build provenance. The first release that carries the lane publishes the
-first package ([#269](https://github.com/FerroHEALTH/FerroPIX/issues/269)).
-Install a published chart by its version and verify it first:
+build provenance. Install a published chart by its version and verify it first:
 
 ```sh
 gh attestation verify oci://ghcr.io/ferrohealth/charts/ferropix:<chart version> \
@@ -258,8 +244,8 @@ the published images and waits until its health routes answer.
 
 `scripts/release/stage-dist.sh <version>` downloads the musl binaries of a
 published release, checks each against its published checksum and stages
-them with the state tree under `dist/`. Before the first release, stage a
-binary of your own build instead:
+them with the state tree under `dist/`. To package a build of your own,
+stage its binary instead:
 
 ```sh
 cargo build --release --locked -p ferropix-server --target x86_64-unknown-linux-musl

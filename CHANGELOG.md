@@ -13,6 +13,27 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-11-10
+
+### Changed
+
+- Breaking for a crate user: every client of `ihe-iti` 0.2.0 (`PixmClient`, `PdqmClient`, `McsdClient`, `PmirSubscriber`, `XcpdClient`) and the `NviClient` and `MitzClient` of `nl-generic-functions` 0.2.0 is built from `ferrohealth-smart` 0.16's `OutboundClient`, as `ihe-atna`'s `FeedRepository::new` is, so a product configures each service with its shared endpoint table: the base URL, the TLS, the timeouts, no redirect, the `retry` table and the credential, HTTP Basic or a client credentials token with its `DPoP` proof and its one renewal on a `401` (IUA ITI-72 §3.72.4.3). Upgrade: build `OutboundClient::build(&endpoint, key, tls)` and pass it, `PixmClient::new(client)` for `PixmClient::new(base, http)`, and the same for the others; `MitzClient::new` and `unencrypted_for_development` return `InvalidInput`. The call's `timeout` bounds every try the `retry` table allows. A credential that cannot be had is each client's `Unauthenticated` error over the outbound client's `SendError`, which `XcpdError` and `MitzError` gain, and `XcpdClient::discover` refuses a gateway off the origin of the table's `url` with `XcpdError::ForeignGateway` before anything is sent (#580).
+
+### Removed
+
+- Breaking for a crate user: `ihe-iti` 0.2.0 drops the `authorizer` and `smart` features with the `ihe_iti::authorizer` module (`Authorizer`, `Authorizable` and `with_authorizer`, `AuthorizerError`, `Retry`, `send`, and `smart::TokenAuthorizer`), and `nl-generic-functions` 0.2.0 drops `NviClient::with_authorizer` and `mitz::error::ClientError`. The credential an authorizer made comes from the endpoint table of the client's `OutboundClient`; the send every client goes through is the new `outbound` feature's `ihe_iti::outbound::send` (#580).
+- The server and the console no longer refuse by name the configuration keys
+  v0.0.24 renamed or moved, under the one-release rule for removal aids: the
+  millisecond, second, day and byte keys of FerroPIX's own sections
+  (`timeout_ms`, `retention_days`, `spool_max_bytes` and the rest), the
+  earlier `[terminology]` keys (`base_url`, `timeout_ms`, `retry`,
+  `credentials`, `tls`) and `audit.url`, `audit.timeout_ms` and
+  `audit.retry_max_ms` that moved under `endpoint`, the renamed keys of the
+  shared `[server]`, `[auth]`, `[telemetry]`, `[session]` and `[oidc]`
+  sections, and the console's `pix.timeout_ms`. Each now fails at start as
+  an unknown key, named in the refusal; write the key that replaced it, as
+  the v0.0.24 entries say (#582).
+
 ## [0.0.24] - 2026-11-10
 
 ### Changed

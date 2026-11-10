@@ -141,12 +141,32 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Writes the inlined server configuration onto the ferropix-config volume
+  # and exits. Compose refuses an inlined config in a read-only service ("only
+  # `file` is supported"), so this one-shot copy is what lets the server keep
+  # its read-only root filesystem while compose.yaml stays one file. It runs
+  # the pinned PostgreSQL image below for its `cp`, with no network.
+  config:
+    image: postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+    entrypoint: ["cp", "/ferropix.toml", "/etc/ferropix/ferropix.toml"]
+    network_mode: none
+    configs:
+      - source: ferropix-toml
+        target: /ferropix.toml
+    volumes:
+      - ferropix-config:/etc/ferropix
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
   ferropix:
     image: ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION:-0.0.26}
     container_name: ferropix
     restart: unless-stopped
     network_mode: service:issuer
     depends_on:
+      config:
+        condition: service_completed_successfully
       issuer:
         condition: service_started
       postgres:
@@ -171,10 +191,9 @@ services:
     secrets:
       - ferropix-db-url
       - ferropix-data-key
-    configs:
-      - source: ferropix-toml
-        target: /etc/ferropix/ferropix.toml
     volumes:
+      # The configuration the config service writes (below), read-only here.
+      - ferropix-config:/etc/ferropix:ro
       # The audit spool and the usage report's instance id, owned by the
       # image's runtime user (uid 65532), so a fresh named volume is writable.
       - ferropix-state:/var/lib/ferropix
@@ -466,6 +485,7 @@ configs:
       SQL
 
 volumes:
+  ferropix-config:
   ferropix-state:
   postgres-data:
   ferroterm-state:

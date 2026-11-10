@@ -5,8 +5,7 @@
 # resolves (no specification governs this: our own design). It lints the
 # book's sources with mdbook-lint (.mdbook-lint.toml), assembles the site the
 # way the Docs workflow does (scripts/site/assemble.sh, the landing page at
-# the root and the book under /docs/) into a temporary directory, with the
-# roadmap block left empty so nothing is read from the network, and runs
+# the root and the book under /docs/) into a temporary directory, and runs
 # lychee offline over every page with --include-fragments, so a link to a
 # page that does not exist and a link to an anchor a page does not carry both
 # fail. It then checks README.md the same way, against the repository tree
@@ -147,7 +146,7 @@ mdbook-lint lint website/book/src
 site="$(mktemp -d)"
 trap 'rm -rf "$site"' EXIT
 
-SITE_ROADMAP=off scripts/site/assemble.sh "$site/out"
+scripts/site/assemble.sh "$site/out"
 echo "== site links (the assembled site, offline, with anchors)"
 check_html "$site/out"
 echo "== README links (the repository tree, offline, with anchors)"

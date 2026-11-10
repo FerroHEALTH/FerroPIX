@@ -70,6 +70,10 @@ fi
 
 cd "$root"
 
+# A tour is a throwaway run on synthetic data, never an installation, so it
+# sends no usage report; `docker compose up` by hand leaves it on.
+export FERROPIX__USAGE_REPORT__ENABLED=false
+
 # ANCHOR: secrets
 mkdir -p secrets && umask 077
 openssl rand -base64 32 > secrets/ferropix-data-key

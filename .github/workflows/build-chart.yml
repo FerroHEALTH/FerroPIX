@@ -157,6 +157,21 @@ jobs:
             "$CHART_DIR/values.yaml"
           git -C "$CHART_TREE" diff -- deploy/helm/ferropix
 
+      # The images the package deploys, by the digests a release pins or by
+      # the appVersion tag of a chart-only publish, run their `config check`
+      # over the configuration the chart renders for every value set under
+      # deploy/helm/ci, so a chart whose defaults an image refuses is never
+      # published (#585). The script is this revision's, over the chart the
+      # run packages.
+      - name: The images accept the configuration the chart renders
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          bash deploy/helm/config-check.sh --chart "$CHART_DIR"
+
       - name: Lint and package
         id: package
         run: |

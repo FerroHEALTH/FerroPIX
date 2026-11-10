@@ -21,11 +21,15 @@ config:
   server:
     listen: "0.0.0.0:8080"
   auth:
-    audience:
-      - "http://localhost:8080/fhir"
     issuer:
       - issuer: "http://localhost:8180/ferropix"
-        token_profile: jwt
+        kind: persons
+        profile: rfc9068
+        audience: ["http://localhost:8080/fhir", "ferropix-console"]
+        token_types: ["JWT"]
+        required_claims: ["iss", "exp", "aud", "sub"]
+        client_claims: ["client_id", "azp"]
+        first_party_clients: ["ferropix-console"]
   trust:
     issuer:
       - issuer: "http://localhost:8180/ferropix"

@@ -11,6 +11,24 @@ usageReport:
 state:
   existingClaim: ferropix-state
 config:
+  auth:
+    issuer:
+      - issuer: "https://idp.example.org"
+        kind: persons
+        audience: ["https://pix.example.org/fhir", "ferropix-console"]
+        first_party_clients: ["ferropix-console"]
+      - issuer: "https://machines.example.org"
+        kind: machines
+        audience: ["https://pix.example.org/fhir"]
+  trust:
+    issuer:
+      - issuer: "https://machines.example.org"
+        clients: ["east-adt"]
+  domain:
+    - system: "urn:oid:2.999.1.1"
+      name: "Chart check hospital"
+      kind: local
+      source_client_id: east-adt
   hl7v2:
     enabled: true
     listen: "0.0.0.0:2575"

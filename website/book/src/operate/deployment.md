@@ -198,6 +198,27 @@ reads that base from the named template `ferropix.fhirBaseUrl`. The chart's
 README lists the addresses and shows how a domain and its Source client are
 declared.
 
+The server needs at least one issuer, so the chart refuses to render
+without a `config.auth.issuer` entry. Each entry is one `[[auth.issuer]]`
+table ([`[auth]`](configuration.md#auth)) with its `kind` and its own
+`audience`:
+
+```yaml
+config:
+  auth:
+    issuer:
+      - issuer: "https://idp.example.org/realms/care"
+        kind: machines
+        audience: ["https://pix.example.org/fhir"]
+```
+
+The chart's values schema refuses `config.auth.audience`: the server reads
+the audience of each issuer from its entry. CI renders the chart over every
+value set under `deploy/helm/ci`, the defaults among them, and runs each
+image's `config check` over the configuration it renders
+(`deploy/helm/config-check.sh`); the release does the same with the images
+it pins before it publishes the chart.
+
 No credential is a value of the chart. The PostgreSQL URL, the sealing key
 and the console's OIDC client secret are Secrets you create; the chart
 mounts each as a file and the configuration names it by its `_file` key, so

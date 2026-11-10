@@ -66,7 +66,11 @@ translates every v2 table value on; the server refuses to start without it
 ## Declaring a domain and its Source
 
 An identifier domain and the one client that feeds it are values under
-`config`. The issuer that signs the client's tokens lists the client in the
+`config`. Each `config.auth.issuer` entry is one `[[auth.issuer]]` table of
+the server: its `issuer`, its `kind` (`persons` for people signing in,
+`machines` for clients with the client credentials grant) and its own
+`audience`, the values a token's `aud` must contain one of
+(https://ferropix.eu/docs/operate/configuration.html#auth). The issuer that signs the client's tokens lists the client in the
 `clients` of its `trust.issuer` entry, and the domain names it as its
 `source_client_id`:
 
@@ -74,10 +78,10 @@ An identifier domain and the one client that feeds it are values under
 config:
   public_base_url: "https://pix.example.org"
   auth:
-    audience:
-      - "https://pix.example.org/fhir"
     issuer:
       - issuer: "https://idp.example.org/realms/care"
+        kind: machines
+        audience: ["https://pix.example.org/fhir"]
   trust:
     issuer:
       - issuer: "https://idp.example.org/realms/care"
@@ -101,8 +105,11 @@ that.
 ## Values
 
 `values.yaml` documents every value. The ones you set for every install are
-`config.public_base_url`, `config.auth`, `config.domain`,
-`database.existingSecret` and `dataKey.existingSecret`. The installation
+`config.public_base_url`, `config.auth.issuer`, `config.domain`,
+`database.existingSecret` and `dataKey.existingSecret`. The chart refuses to
+render without an issuer, and its values schema refuses
+`config.auth.audience`, which the server stopped reading: each issuer
+carries its own `audience`. The installation
 report to FerroPULSE is on by default; set `usageReport.enabled=false` to
 stop it.
 

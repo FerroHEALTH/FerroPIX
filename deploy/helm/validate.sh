@@ -22,8 +22,7 @@
 #   6. the chart refuses to render without the Secrets it needs;
 #   7. every FerroPIX container sets a memory and an ephemeral-storage limit,
 #      so one pod cannot take its node's memory or disk.
-#   8. the chart refuses to render without an issuer, and its values schema
-#      refuses the removed config.auth.audience naming [[auth.issuer]].
+#   8. the chart refuses to render without an issuer.
 # deploy/helm/kind-check.sh installs the chart on a cluster for real, and
 # deploy/helm/config-check.sh runs the images' config check over the renders.
 # No specification governs this: our own design, after FerroEHR's.
@@ -127,14 +126,7 @@ check() {
     echo "validate: the chart renders without the Secrets it needs"
     faults=1
   fi
-  local defaults="$here/ci/default-values.yaml" refusal
-  # The charts of v0.0.26 refuse the removed config.auth.audience by name,
-  # for that one release (#585).
-  refusal="$(helm template ferropix "$target" -f "$defaults" --set 'config.auth.audience[0]=https://pix.example.org/fhir' 2>&1 || true)"
-  if ! grep -qF '[[auth.issuer]]' <<< "$refusal"; then
-    echo "validate: config.auth.audience renders, or its refusal does not name [[auth.issuer]]"
-    faults=1
-  fi
+  local defaults="$here/ci/default-values.yaml"
   if helm template ferropix "$target" -f "$defaults" --set-json 'config.auth.issuer=[]' > /dev/null 2>&1; then
     echo "validate: the chart renders without an issuer"
     faults=1

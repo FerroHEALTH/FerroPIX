@@ -107,11 +107,9 @@ that.
 `values.yaml` documents every value. The ones you set for every install are
 `config.public_base_url`, `config.auth.issuer`, `config.domain`,
 `database.existingSecret` and `dataKey.existingSecret`. The chart refuses to
-render without an issuer, and its values schema refuses
-`config.auth.audience`, which the server stopped reading: each issuer
-carries its own `audience`. The installation
-report to FerroPULSE is on by default; set `usageReport.enabled=false` to
-stop it.
+render without an issuer, and each issuer carries its own `audience`. The
+installation report to FerroPULSE is on by default; set
+`usageReport.enabled=false` to stop it.
 
 Both pods set `enableServiceLinks: false` and, by default, run in their own
 user namespace (`hostUsers: false`) with the `Strict` supplemental groups

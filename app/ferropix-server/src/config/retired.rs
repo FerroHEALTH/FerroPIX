@@ -20,7 +20,7 @@ use ferrohealth_config::removed::Retired;
 /// first pull request after the cut moves it to the next release, which
 /// fails the test below until every refusal of the release just cut is
 /// deleted.
-pub const PREPARING: &str = "0.0.26";
+pub const PREPARING: &str = "0.0.27";
 
 /// Every key refused by name.
 pub const ALL: [Retired; 0] = [];

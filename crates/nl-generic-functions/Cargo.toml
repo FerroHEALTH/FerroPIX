@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -108,12 +108,12 @@ jsonwebtoken = { workspace = true, optional = true }
 # held to, and the send the NVI client and the Mitz client go through;
 # the international crate sits below the national one, and a caret
 # requirement, as a shared crate takes on another family shared crate.
-ihe-iti = { version = "0.2.0", path = "../ihe-iti", default-features = false, optional = true }
+ihe-iti = { version = "0.3.0", path = "../ihe-iti", default-features = false, optional = true }
 # The outbound client the NVI and Mitz clients are built from, and the RFC
 # 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.
-ferrohealth-smart = { version = "0.16.0", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.17.0", default-features = false, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }

@@ -16,6 +16,7 @@ use std::path::Path;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferrohealth_smart::client::dpop::ath;
 use ferrohealth_smart::client::outbound::SendError;
 use ferrohealth_smart::config::credentials::{CredentialsSection, OauthSection};
@@ -96,7 +97,7 @@ fn client(manager: &MockServer, tokens: &MockServer, dpop_key: Option<&Path>) ->
     let mut table = endpoint(&format!("{}{BASE}", manager.uri()));
     table.credentials = CredentialsSection {
         oauth: Some(OauthSection {
-            token_endpoint: format!("{}{TOKEN}", tokens.uri()),
+            token_endpoint: SecretUrl::new(format!("{}{TOKEN}", tokens.uri())),
             client_id: String::from("synthetic-client"),
             client_secret: Some(SecretString::from("synthetic-secret")),
             dpop_key_file: dpop_key.map(Path::to_path_buf),

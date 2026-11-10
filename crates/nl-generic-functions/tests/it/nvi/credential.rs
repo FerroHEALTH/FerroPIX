@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferrohealth_smart::client::dpop::ath;
 use ferrohealth_smart::config::credentials::{CredentialsSection, OauthSection};
 use http::StatusCode;
@@ -61,7 +62,7 @@ fn client(service: &MockServer, tokens: &MockServer, key: &Path) -> NviClient {
     let mut table = endpoint(&format!("{}/fhir", service.uri()));
     table.credentials = CredentialsSection {
         oauth: Some(OauthSection {
-            token_endpoint: format!("{}{TOKEN}", tokens.uri()),
+            token_endpoint: SecretUrl::new(format!("{}{TOKEN}", tokens.uri())),
             client_id: String::from("synthetic-client"),
             client_secret: Some(SecretString::from("synthetic-secret")),
             dpop_key_file: Some(key.to_path_buf()),

@@ -92,8 +92,8 @@ incompatible", so while a crate is 0.x a breaking change moves the minor
   (<https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#caret-requirements>).
 - **A shared crate takes a caret requirement on another family shared
   crate** (owner decision 2026-10-26): `ihe-iti` requires
-  `ihe-atna = "0.10.0"` and `ferrohealth-smart = "0.16.0"`, and
-  `nl-generic-functions` requires `ferrohealth-smart = "0.16.0"`, never an
+  `ihe-atna = "0.11.0"` and `ferrohealth-smart = "0.17.0"`, and
+  `nl-generic-functions` requires `ferrohealth-smart = "0.17.0"`, never an
   `=` pin, because the FerroAUTH, FerroAUDIT and FerroSYS lines never break
   on a patch. A patch of theirs then reaches a product through its lockfile
   without a release of these crates first. A product, the FerroPIX server

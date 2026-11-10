@@ -11,12 +11,13 @@ governs how a Manager cross-references: PIXm leaves it to the Manager, and
 PDQm asks only that a match carry a score and a grade. The rules below are
 FerroPIX's own.
 
-The scorer and the feed transaction that runs both tiers are built, and the
-PDQm Supplier answers ITI-119 `$match` with the scorer's score and grade
-([The PDQm Supplier](../integrate/pdqm-supplier.md)). The PIXm Manager hands
-each ITI-104 message to the feed transaction
-([The PIXm Manager](../integrate/pixm-manager.md)), and the review queue is
-planned in [#107](https://github.com/FerroHEALTH/FerroPIX/issues/107).
+A Source's feed runs the first two tiers in its own transaction, whether it
+arrives as ITI-104 ([The PIXm Manager](../integrate/pixm-manager.md)) or as
+ITI-8 ([The HL7 v2 face](../integrate/hl7v2-face.md)). The PDQm Supplier answers
+ITI-119 `$match` with the scorer's score and grade
+([The PDQm Supplier](../integrate/pdqm-supplier.md)), and the pairs that
+wait for a steward are the review queue of the
+[steward's guide](steward-guide.md).
 
 ## When a feed arrives
 

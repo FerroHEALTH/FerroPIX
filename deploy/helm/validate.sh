@@ -15,7 +15,10 @@
 #      groups policy; hostUsers true renders no field, and a value outside
 #      each field's set refuses to render;
 #   5. no Secret is rendered and no credential is a plain value: the
-#      configuration names every secret by a `_file` path;
+#      configuration names every secret by a `_file` path, judged leaf by
+#      leaf, so `[db] url` is a credential, an endpoint table's `url` is one
+#      only when it carries userinfo, and a password, client secret, client
+#      identity or data key is one under any table;
 #   6. the chart refuses to render without the Secrets it needs;
 #   7. every FerroPIX container sets a memory and an ephemeral-storage limit,
 #      so one pod cannot take its node's memory or disk.
@@ -37,6 +40,24 @@ done
 render() {
   local chart="$1" values="$2"
   helm template ferropix "$chart" --namespace ferropix -f "$values"
+}
+
+# Prints each credential the rendered configuration on standard input sets
+# as a plain value, as its dotted key: judged by the leaf and its table.
+plain_credentials() {
+  awk '
+    match($0, /^[[:space:]]*\[+[^]]+\]+[[:space:]]*$/) {
+      table = $0; gsub(/[][[:space:]]/, "", table); next
+    }
+    match($0, /^[[:space:]]*[a-z_]+ = "/) {
+      key = $1; value = $0; sub(/^[^"]*"/, "", value)
+      if (key ~ /^(password|password_hash|client_secret|client_identity|data_key)$/ ||
+          (key == "url" && table == "db") ||
+          (key == "url" && value ~ /^[a-z][a-z0-9+.-]*:\/\/[^\/@"]+@/)) {
+        print (table == "" ? key : table "." key)
+      }
+    }
+  '
 }
 
 # Checks the chart at `$1`; prints each fault and returns 1 on any.
@@ -92,8 +113,10 @@ check() {
       echo "validate: $(basename "$values") renders a Secret; a credential is the deployer's own Secret"
       faults=1
     fi
-    if grep -qE '^[[:space:]]*(password|client_secret|data_key|url) = "' <<< "$rendered"; then
-      echo "validate: $(basename "$values") renders a credential as a plain value"
+    local plain
+    plain="$(plain_credentials <<< "$rendered")"
+    if [[ -n "$plain" ]]; then
+      echo "validate: $(basename "$values") renders a credential as a plain value: ${plain//$'\n'/, }"
       faults=1
     fi
   done
@@ -145,6 +168,19 @@ if [[ "${1:-}" = "--self-test" ]]; then
     exit 1
   fi
   grep -q "ephemeral-storage limit" "$work/out" || { echo "validate: self-test failed: the refusal did not say why" >&2; cat "$work/out" >&2; exit 1; }
+  for case in '[db]|url = "postgresql://pix@db/pix"|db.url' \
+    '[terminology.endpoint.credentials]|password = "s3cret"|terminology.endpoint.credentials.password' \
+    '[audit.endpoint]|url = "https://user:pw@arr.example.org/fhir"|audit.endpoint.url'; do
+    IFS='|' read -r table line want <<< "$case"
+    got="$(printf '%s\n  %s\n' "$table" "$line" | plain_credentials)"
+    [[ "$got" == "$want" ]] || { echo "validate: self-test failed: $want passed as no credential ($got)" >&2; exit 1; }
+  done
+  for case in '[terminology.endpoint]|url = "https://tx.example.org/fhir/r4"' '[audit.endpoint]|url = ""' \
+    '[db]|url_file = "/run/secrets/ferropix/db-url"'; do
+    IFS='|' read -r table line <<< "$case"
+    got="$(printf '%s\n  %s\n' "$table" "$line" | plain_credentials)"
+    [[ -z "$got" ]] || { echo "validate: self-test failed: $table $line was judged a credential" >&2; exit 1; }
+  done
   echo "validate: self-test passed."
   exit 0
 fi

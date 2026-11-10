@@ -10,7 +10,7 @@
           "type": "object",
           "properties": {
             "audience": {
-              "$comment": "Refused by name from chart 0.3.18 (FerroPIX v0.0.26) only; the next chart version deletes this refusal (one release per removal aid).",
+              "$comment": "Refused by name in the charts of FerroPIX v0.0.26 (0.3.18 and 0.3.19) only; the chart of the next release deletes this refusal (one release per removal aid).",
               "not": true,
               "const": "removed: write each issuer's audience under [[auth.issuer]], as config.auth.issuer[].audience beside its kind"
             }

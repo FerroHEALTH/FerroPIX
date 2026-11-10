@@ -128,8 +128,8 @@ check() {
     faults=1
   fi
   local defaults="$here/ci/default-values.yaml" refusal
-  # Chart 0.3.18 refuses the removed config.auth.audience by name, for that
-  # one chart version (#585).
+  # The charts of v0.0.26 refuse the removed config.auth.audience by name,
+  # for that one release (#585).
   refusal="$(helm template ferropix "$target" -f "$defaults" --set 'config.auth.audience[0]=https://pix.example.org/fhir' 2>&1 || true)"
   if ! grep -qF '[[auth.issuer]]' <<< "$refusal"; then
     echo "validate: config.auth.audience renders, or its refusal does not name [[auth.issuer]]"

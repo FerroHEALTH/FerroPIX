@@ -42,13 +42,15 @@ fluent-templates = { version = "0.15.1", default-features = false, features = ["
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
-# The generated FHIR model of FerroBRIDGE, at the version FerroFED and
-# ihe-atna pin.
-fhir-types = { version = "0.1.128", default-features = false }
+# The FerroBRIDGE crates follow Cargo SemVer, judged by cargo-semver-checks
+# in FerroBRIDGE's release plan (FerroHEALTH/FerroBRIDGE#1745), so each is
+# required by a caret range with its floor at the release this tree needs
+# (#543): two family crates on different patches of one then build together.
+# The generated FHIR model of FerroBRIDGE.
+fhir-types = { version = "0.1.130", default-features = false }
 # The FHIR R4 search value grammar of FerroBRIDGE, which every search value
-# and token is read and written with. Its crate line moves one patch per
-# change, breaking ones included, so the requirement is exact.
-fhir-search = { version = "=0.1.130", default-features = false }
+# and token is read and written with.
+fhir-search = { version = "0.1.130", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroAUTH: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers. The server pins it exactly, as a product pins every family crate;
@@ -97,18 +99,18 @@ ferrohealth-usage-report = { version = "=0.4.0", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser, the original-mode acknowledgment and the message writer, over the
-# generated v2 tables, pinned exactly as a product pins every family crate.
+# generated v2 tables, by a caret range as every FerroBRIDGE crate above.
 # The server adds `map`, the generated v2-to-FHIR structure maps a PID runs
 # through. Verified against crates.io on 2026-11-10 (0.5.0, on
 # ferrobridge-term 0.3, #571).
-ferrobridge-hl7v2 = { version = "=0.5.0", default-features = false }
-hl7v2-types = "=0.1.128"
+ferrobridge-hl7v2 = { version = "0.5.0", default-features = false }
+hl7v2-types = "0.1.128"
 # FerroBRIDGE's FHIR terminology client, the one `ferrobridge-hl7v2` translates
 # every v2 table value through (`ConceptMap/$translate`), with `smart` for
 # the client built from `[terminology.endpoint]` over ferrohealth-smart's
 # outbound client, at the version that crate pins. Verified against
 # crates.io on 2026-11-10.
-ferrobridge-term = { version = "=0.3.0", default-features = false, features = ["client", "r4", "smart"] }
+ferrobridge-term = { version = "0.3.0", default-features = false, features = ["client", "r4", "smart"] }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product

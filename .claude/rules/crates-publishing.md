@@ -54,13 +54,20 @@ FerroHEALTH/FerroFED#367; no specification governs it: our own design):
   moves its pin deliberately.
 - **A shared crate takes a caret requirement on another family shared
   crate** (owner decision 2026-10-26): `ihe-iti` requires
-  `ihe-atna = "0.8.0"` and `ferrohealth-smart = "0.13.0"`, and
-  `nl-generic-functions` requires `ferrohealth-smart = "0.13.0"`, never an
+  `ihe-atna = "0.10.0"` and `ferrohealth-smart = "0.16.0"`, and
+  `nl-generic-functions` requires `ferrohealth-smart = "0.16.0"`, never an
   `=` pin, because the FerroAUTH, FerroAUDIT and FerroSYS lines never break
   on a patch. A patch of theirs then reaches a product through its lockfile
   without a release of these crates first. A product, the FerroPIX server
-  included, still pins every shared crate exactly in
-  `[workspace.dependencies]`.
+  included, still pins every FerroAUTH, FerroAUDIT, FerroSYS and FerroUI
+  crate exactly in `[workspace.dependencies]`.
+- **Every FerroBRIDGE crate is required by a caret range** (`fhir-types`,
+  `fhir-search`, `hl7v2-types`, `ferrobridge-*` and the rest), with its floor
+  at the release this tree needs, in `[workspace.dependencies]` and so in
+  the published crates that take it from there. FerroBRIDGE's crates follow
+  Cargo SemVer, judged by cargo-semver-checks in its release plan
+  (FerroHEALTH/FerroBRIDGE#1745), so a caret range is safe, and two family
+  crates on different patches of one FerroBRIDGE crate build together (#543).
 - **A pull request that breaks a public API says so in its body and its
   CHANGELOG entry**, naming what a product changes.
 

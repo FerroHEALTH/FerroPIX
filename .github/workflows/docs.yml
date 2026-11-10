@@ -47,10 +47,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/docs-toolchain
       - name: Assemble the site (the landing page at /, the book under /docs/)
-        env:
-          # The roadmap block is rendered from the open milestones. The token
-          # reads public repository metadata and nothing else.
-          GH_TOKEN: ${{ github.token }}
         run: scripts/site/assemble.sh _site
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

@@ -10,8 +10,8 @@
        style, font, or image, and connects to nothing at load time. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>FerroPIX: a Master Patient Index</title>
-  <meta name="description" content="FerroPIX is the FerroHEALTH Master Patient Index in pure Rust: the patient identity cross-reference over IHE PIXm, PDQm and PMIR, with pseudonyms for the clinical domain. Its identity crates ihe-iti and nl-generic-functions are published; the server is being built.">
+  <title>FerroPIX: a Master Patient Index over IHE PIXm, PDQm, PMIR and HL7 v2</title>
+  <meta name="description" content="FerroPIX is the Master Patient Index of the FerroHEALTH family, in pure Rust: the patient identity cross-reference behind the IHE PIXm Manager, the PDQm Supplier, the PMIR Registry, the HL7 v2 PIX and PDQ transactions and the XCPD Responding Gateway, with pseudonyms for the clinical domain and an operator console for the data steward.">
   <link rel="canonical" href="https://ferropix.eu/">
   <link rel="stylesheet" href="./style.css">
   <link rel="icon" href="./assets/brand/favicon.svg" type="image/svg+xml">
@@ -20,8 +20,8 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ferropix.eu/">
   <meta property="og:site_name" content="FerroPIX">
-  <meta property="og:title" content="FerroPIX: a Master Patient Index">
-  <meta property="og:description" content="A pure-Rust Master Patient Index over IHE PIXm, PDQm and PMIR, with pseudonyms for the clinical domain. The identity crates are published; the server is being built.">
+  <meta property="og:title" content="FerroPIX: a Master Patient Index over IHE PIXm, PDQm, PMIR and HL7 v2">
+  <meta property="og:description" content="The patient identity cross-reference of the FerroHEALTH family, in pure Rust: PIXm, PDQm, PMIR, HL7 v2 PIX and PDQ and XCPD on one store, pseudonyms for the clinical domain, and a console for the data steward.">
   <meta name="twitter:card" content="summary">
 
   <!-- Structured data. Browsers never execute an application/ld+json data block
@@ -32,11 +32,12 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "FerroPIX",
-    "description": "A pure-Rust Master Patient Index over IHE PIXm, PDQm and PMIR, and the identity crates ihe-iti and nl-generic-functions.",
+    "description": "A pure-Rust Master Patient Index over IHE PIXm, PDQm, PMIR, the HL7 v2 PIX and PDQ transactions and XCPD, with pseudonyms for the clinical domain, and the identity crates ihe-iti and nl-generic-functions.",
     "codeRepository": "https://github.com/FerroHEALTH/FerroPIX",
     "programmingLanguage": "Rust",
     "license": "https://github.com/FerroHEALTH/FerroPIX/blob/main/LICENSE",
-    "applicationCategory": "HealthApplication"
+    "applicationCategory": "HealthApplication",
+    "runtimePlatform": "Linux"
   }
   </script>
 </head>
@@ -53,9 +54,9 @@
       </a>
       <nav class="nav-links" aria-label="Primary">
         <a href="./docs/">Docs</a>
-        <a href="./docs/evaluate/what-ferropix-is.html" class="hide-sm">What it is</a>
+        <a href="./docs/integrate/getting-started.html" class="hide-sm">Quickstart</a>
+        <a href="./docs/operate/deployment.html" class="hide-sm">Deploy</a>
         <a href="./docs/crates/index.html" class="hide-sm">Crates</a>
-        <a href="./docs/integrate/getting-started.html" class="hide-sm">Get started</a>
         <a href="https://github.com/FerroHEALTH/FerroPIX" rel="noopener">GitHub</a>
       </nav>
     </div>
@@ -69,151 +70,259 @@
           <source srcset="./assets/brand/ferropix-icon-dark.svg" media="(prefers-color-scheme: dark)">
           <img class="hero-logo" src="./assets/brand/ferropix-icon.svg" alt="FerroPIX" width="88" height="88">
         </picture>
-        <p class="status" role="note">The identity crates are published. The server is being built.</p>
-        <h1>Who the patient is.</h1>
+        <h1>Who the patient is, across every system that knows them.</h1>
         <p class="sub">
-          FerroPIX is the Master Patient Index of the FerroHEALTH family.
-          Every organisation issues its own identifiers for the same person;
-          FerroPIX holds the cross-reference between them, over the IHE
-          profiles integrators already expect, and mints the pseudonyms the
-          clinical domain uses, so identifying data stays outside the
-          clinical record.
+          FerroPIX is the Master Patient Index of the FerroHEALTH family, in
+          pure Rust. Each hospital, practice and national register issues its
+          own identifier for the same person. FerroPIX holds the
+          cross-reference between them in PostgreSQL, answers for it over the
+          IHE profiles your systems already speak, and mints the pseudonyms a
+          clinical store names a patient by, so identifying data stays outside
+          the clinical record.
         </p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href="./docs/integrate/getting-started.html">Get started</a>
-          <a class="btn btn-ghost" href="./docs/evaluate/what-ferropix-is.html">What is built, what is planned</a>
+          <a class="btn btn-primary" href="./docs/integrate/getting-started.html">Run the quickstart</a>
+          <a class="btn btn-ghost" href="./docs/evaluate/what-ferropix-is.html">What FerroPIX is</a>
         </div>
         <p class="note">
-          Today FerroPIX publishes two crates on crates.io:
-          <code>ihe-iti</code>, the IHE identity profiles, and
-          <code>nl-generic-functions</code>, the Dutch Generic Functions. The
-          server, with its container image, is the next milestone.
+          A server image, an operator console image and a Helm chart on GHCR,
+          built at SLSA Build Level 3, and the two identity crates on
+          crates.io.
         </p>
       </div>
     </section>
 
-    <section id="use" class="surface">
+    <section id="profiles" class="surface">
       <div class="wrap">
         <div class="section-head">
-          <span class="eyebrow">Use it today</span>
-          <h2>The client side of each identity profile, as a feature</h2>
+          <span class="eyebrow">What it answers</span>
+          <h2>One cross-reference behind every face</h2>
           <p>
-            Each profile is a feature, and none is on by default, so you
-            compile only what you call. Identifiers travel as secrets: no
-            <code>Debug</code> rendering, error or log line carries one.
+            A feed over FHIR and a feed over HL7 v2 of the same patient land
+            in one person, and every query reads the same store. Each
+            transaction follows the IHE ITI Technical Framework and its
+            implementation guide, on HL7 FHIR R4, and the book cites the
+            section behind every answer.
           </p>
         </div>
-        <pre class="cmd"><code>cargo add ihe-iti --no-default-features -F pixm
-cargo add ihe-atna --no-default-features</code></pre>
-        <div class="prose">
-          <p>
-            <code>PixmClient</code> asks a PIX Manager for the identifiers
-            other domains hold for a patient (ITI-83). It reads a
-            <code>404</code> as "patient unknown" only when the profile says
-            so, and never reads an outage as an empty answer.
-            <a href="./docs/integrate/getting-started.html">Getting
-            started</a> walks through a complete query, and
-            <a href="./docs/crates/index.html">the crates page</a> covers
-            every feature with its API reference on docs.rs.
-          </p>
+        <div class="grid">
+
+          <a class="card" href="./docs/integrate/pixm-manager.html">
+            <span class="tag">PIXm 3.1.0</span>
+            <h3>The PIXm Manager</h3>
+            <p>
+              ITI-83 answers which identifiers the other domains hold for a
+              patient, by <code>GET</code> or by a posted
+              <code>Parameters</code> body that keeps the identifier out of
+              every URL. ITI-104 lets each domain's one Source feed, revise,
+              merge and remove.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/integrate/pdqm-supplier.html">
+            <span class="tag">PDQm 3.2.0</span>
+            <h3>The PDQm Supplier</h3>
+            <p>
+              ITI-78 finds patients by demographics and identifiers, with
+              paging and the domain filter. ITI-119 <code>$match</code>
+              scores the patient you describe and grades each answer
+              certain, probable or possible.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/integrate/pmir-registry.html">
+            <span class="tag">PMIR 1.6.0</span>
+            <h3>The PMIR Registry</h3>
+            <p>
+              Receives the master identity feed (ITI-93), takes subscriptions
+              (ITI-94), and sends every committed change to each subscriber,
+              in order, from an outbox written in the change's own
+              transaction.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/integrate/hl7v2-face.html">
+            <span class="tag">ITI TF-2</span>
+            <h3>HL7 v2 PIX and PDQ</h3>
+            <p>
+              An MLLP listener for the identity feed (ITI-8), the PIX query
+              (ITI-9) and the demographics query (ITI-21), and update
+              notifications (ITI-10) to the consumers you name, on
+              FerroBRIDGE's v2 parser.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/integrate/xcpd-gateway.html">
+            <span class="tag">ITI-55</span>
+            <h3>The XCPD Responding Gateway</h3>
+            <p>
+              Another community asks whether yours knows a patient, by a
+              shared identifier or by demographics, and gets the patient's
+              identifiers in your domains, on the same exchange or
+              asynchronously.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/integrate/pseudonyms.html">
+            <span class="tag">Pseudonyms and the BSN</span>
+            <h3>Identifying data stays out</h3>
+            <p>
+              One pseudonym per patient and pseudonymisation domain, read
+              only by that domain's consumer. The BSN is checked by the
+              eleven-proof, and every identifier of a sensitive domain is
+              sealed at rest and found by a keyed hash.
+            </p>
+          </a>
+
         </div>
       </div>
     </section>
 
-    <section id="properties">
+    <section id="console">
       <div class="wrap">
         <div class="section-head">
-          <span class="eyebrow">What it does</span>
-          <h2>What is published, and what the server adds</h2>
+          <span class="eyebrow">The operator console</span>
+          <h2>A data steward decides what the scorer is unsure of</h2>
           <p>
-            FerroPIX follows the IHE ITI Technical Framework and the PIXm,
-            PDQm and PMIR guides, on HL7 FHIR R4. Each card says whether it is
-            published today or planned for the server; the
-            <a href="./docs/evaluate/what-ferropix-is.html">status table</a>
-            has every capability.
+            An identifier in an authoritative domain links two records on its
+            own, a probabilistic scorer grades the rest, and the pairs it is
+            unsure of wait in a review queue. The console is where a steward
+            compares them, links, merges and unmerges with a reason, and every
+            reveal of an identifier is an audited disclosure.
+          </p>
+        </div>
+        <figure class="shot">
+          <picture>
+            <source srcset="./docs/operate/img/console/dashboard-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="./docs/operate/img/console/dashboard.png" alt="The console's dashboard: the open review queue, the share of records linked automatically, the versions fed today, the subscriptions in error, and the queue depth and feeds per hour as charts." width="1440" height="900" loading="lazy">
+          </picture>
+          <figcaption>
+            The dashboard, drawn with synthetic data.
+            <a href="./docs/operate/console.html">Every page of the console</a>,
+            and <a href="./docs/operate/matching.html">how a pair is scored</a>.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="run" class="surface">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Run it</span>
+          <h2>From a laptop to a Kubernetes cluster</h2>
+          <p>
+            The server is one static binary on a distroless base, beside
+            PostgreSQL and the authorization server you already run. The
+            console is its own image and keeps no patient data.
+          </p>
+        </div>
+        <div class="grid">
+
+          <a class="card" href="./docs/integrate/getting-started.html">
+            <span class="tag">Compose</span>
+            <h3>The quickstart</h3>
+            <p>
+              <code>docker compose up --wait</code> from a checkout starts the
+              server, PostgreSQL and a development issuer; the
+              <code>console</code> profile adds the console. Then feed a
+              patient and ask for it.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/operate/deployment.html#the-image">
+            <span class="tag">OCI images</span>
+            <h3>The container images</h3>
+            <p>
+              <code>ghcr.io/ferrohealth/ferropix</code> and
+              <code>ghcr.io/ferrohealth/ferropix-console</code>, for amd64 and
+              arm64, each with SLSA provenance and an SBOM you verify before
+              you run it.
+            </p>
+          </a>
+
+          <a class="card" href="./docs/operate/deployment.html#the-helm-chart">
+            <span class="tag">Helm</span>
+            <h3>The chart</h3>
+            <p>
+              <code>oci://ghcr.io/ferrohealth/charts/ferropix</code> runs the
+              server and the console under the Restricted Pod Security
+              Standard, with both images pinned by the digests the release
+              scanned.
+            </p>
+          </a>
+
+        </div>
+      </div>
+    </section>
+
+    <section id="family">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">In the family</span>
+          <h2>The one product that owns patient identity</h2>
+          <p>
+            The FerroHEALTH products reach each other only over published
+            protocols. FerroPIX is where they ask who a patient is.
           </p>
         </div>
         <div class="grid">
 
           <article class="card">
-            <span class="tag">Published in ihe-iti</span>
-            <h3>PIXm and PDQm clients</h3>
+            <h3>FerroEHR</h3>
             <p>
-              The identifier cross-reference query (ITI-83, by
-              <code>GET</code> or by <code>POST</code>), the demographics query
-              (ITI-78) and the demographics match (ITI-119), each answer held
-              to its profile.
+              With its PIXm subject index, the openEHR clinical data
+              repository finds a patient's EHR through FerroPIX: the
+              <code>EHR_STATUS</code> names the patient by the pseudonym
+              FerroPIX minted for the clinical domain.
             </p>
           </article>
 
           <article class="card">
-            <span class="tag">Published in ihe-iti</span>
-            <h3>PMIR, mCSD and XCPD</h3>
+            <h3>FerroFED</h3>
             <p>
-              The PMIR subscription and feed (ITI-94, ITI-93), the mCSD
-              directory and its replica (ITI-90, ITI-91), and the XCPD
-              Initiating Gateway (ITI-55) with the SAML assertion you supply.
+              The federation gateway resolves the patients of a cross-site
+              query through a PIXm Manager, and takes both identity crates
+              from crates.io.
             </p>
           </article>
 
           <article class="card">
-            <span class="tag">Published in ihe-iti</span>
-            <h3>Tokens and audit on every exchange</h3>
+            <h3>FerroBRIDGE and FerroTERM</h3>
             <p>
-              The endpoint table you configure carries the token of each
-              request (IUA ITI-72), and each profile's BALP or ATNA record goes to the
-              <code>ihe-atna</code> audit trail before the answer is used.
-            </p>
-          </article>
-
-          <article class="card">
-            <span class="tag">Published in nl-generic-functions</span>
-            <h3>The Dutch Generic Functions</h3>
-            <p>
-              Localization through the NVI on the pseudonymised BSN, the Mitz
-              closed authorization question, the LRZa address book, and the
-              Nuts access token request with a <code>DPoP</code>-bound token.
-            </p>
-          </article>
-
-          <article class="card">
-            <span class="tag">Planned for the server</span>
-            <h3>The Manager, the Supplier and the Registry</h3>
-            <p>
-              The PIXm Manager with the ITI-104 feed, the PDQm Supplier and the
-              PMIR Registry, over a persisted cross-reference with identifier
-              domains, linking and merge.
-            </p>
-          </article>
-
-          <article class="card">
-            <span class="tag">Planned for the server</span>
-            <h3>Pseudonyms and HL7 v2</h3>
-            <p>
-              A pseudonym per patient and pseudonymisation domain for the
-              clinical store, and the HL7 v2 PIX and PDQ transactions on the
-              family's one v2 parser, with a container image pinned by digest.
+              The HL7 v2 face reads messages with FerroBRIDGE's parser and
+              MLLP codec, and translates every v2 table value on a FHIR
+              terminology server such as FerroTERM.
             </p>
           </article>
 
         </div>
+        <div class="prose">
+          <p>
+            Building a client in Rust? Each IHE profile is a feature of
+            <a href="./docs/crates/ihe-iti.html"><code>ihe-iti</code></a>, and
+            each Dutch Generic Function a feature of
+            <a href="./docs/crates/nl-generic-functions.html"><code>nl-generic-functions</code></a>,
+            none on by default:
+          </p>
+        </div>
+        <pre class="cmd"><code>cargo add ihe-iti --no-default-features -F pixm</code></pre>
       </div>
     </section>
 
     <section id="audiences" class="surface">
       <div class="wrap">
         <div class="section-head">
-          <span class="eyebrow">Where to start</span>
-          <h2>Four questions, four answers</h2>
+          <span class="eyebrow">The documentation</span>
+          <h2>Four questions, four parts of the book</h2>
         </div>
         <div class="grid audiences">
 
           <article class="card audience">
             <span class="tag">Evaluate</span>
-            <h3>Does this fit my problem?</h3>
+            <h3>Does it fit my problem?</h3>
             <p>
-              What a patient index does, what FerroPIX has built and what is
-              planned, the specification versions and the licence.
+              What a patient index does and what FerroPIX implements, the
+              specification versions it follows, and the licence.
             </p>
             <ul>
               <li><a href="./docs/evaluate/what-ferropix-is.html">What FerroPIX is</a></li>
@@ -224,15 +333,15 @@ cargo add ihe-atna --no-default-features</code></pre>
 
           <article class="card audience">
             <span class="tag">Integrate</span>
-            <h3>How do I call an identity service?</h3>
+            <h3>How do my systems call it?</h3>
             <p>
-              The published crates, feature by feature, with what each client
-              sends, what it checks and what it refuses.
+              Every transaction with what it reads, what it answers and the
+              section of the profile behind each answer.
             </p>
             <ul>
-              <li><a href="./docs/integrate/getting-started.html">Getting started</a></li>
-              <li><a href="./docs/crates/ihe-iti.html">ihe-iti</a></li>
-              <li><a href="./docs/crates/nl-generic-functions.html">nl-generic-functions</a></li>
+              <li><a href="./docs/integrate/getting-started.html">Quickstart</a></li>
+              <li><a href="./docs/integrate/pixm-manager.html">The PIXm Manager</a></li>
+              <li><a href="./docs/integrate/hl7v2-face.html">The HL7 v2 face</a></li>
             </ul>
           </article>
 
@@ -240,14 +349,13 @@ cargo add ihe-atna --no-default-features</code></pre>
             <span class="tag">Operate</span>
             <h3>What does running it involve?</h3>
             <p>
-              The settings of each client, how identifying data is kept out of
-              logs, the audit trail, and the release and support policy.
+              Every configuration key, the image, compose and the chart,
+              authorization and the audit trail, and the console.
             </p>
             <ul>
               <li><a href="./docs/operate/configuration.html">Configuration</a></li>
               <li><a href="./docs/operate/deployment.html">Deployment</a></li>
               <li><a href="./docs/operate/security-and-audit.html">Security and audit</a></li>
-              <li><a href="./docs/operate/operations.html">Operations</a></li>
             </ul>
           </article>
 
@@ -255,9 +363,9 @@ cargo add ihe-atna --no-default-features</code></pre>
             <span class="tag">Contribute</span>
             <h3>How is the work organised?</h3>
             <p>
-              The tracker is the worklist and the checks are committed scripts
-              you can run yourself. A change cites the specification section
-              it implements.
+              The tracker is the worklist, every check is a committed script
+              you can run, and a change cites the specification section it
+              implements.
             </p>
             <ul>
               <li><a href="./docs/contribute/contributing.html">Contributing</a></li>
@@ -266,32 +374,6 @@ cargo add ihe-atna --no-default-features</code></pre>
             </ul>
           </article>
 
-        </div>
-      </div>
-    </section>
-
-    <!-- The tracker's milestones are the roadmap. The list between the markers
-         is rendered from the GitHub milestones when the site is assembled
-         (scripts/site/assemble.sh); the committed copy carries the link only. -->
-    <section id="status">
-      <div class="wrap">
-        <div class="status-panel">
-          <h2>Where the project is</h2>
-          <p>
-            The identity crates were built in FerroFED, moved here with their
-            history, and are published from here. The next milestone is the
-            server: the PIXm Manager, the PDQm Supplier, the PMIR Registry,
-            the persisted cross-reference, pseudonym minting, the HL7 v2
-            transactions and a container image. The tracker's milestones are
-            the roadmap, and a release is cut when its milestone has no open
-            issue left.
-          </p>
-          <!-- roadmap:begin -->
-          <!-- roadmap:end -->
-          <div class="hero-cta">
-            <a class="btn btn-primary" href="./docs/">Read the documentation</a>
-            <a class="btn btn-ghost" href="https://github.com/FerroHEALTH/FerroPIX/milestones" rel="noopener">See the roadmap</a>
-          </div>
         </div>
       </div>
     </section>
@@ -313,7 +395,11 @@ cargo add ihe-atna --no-default-features</code></pre>
             A pure-Rust Master Patient Index, one of the
             <a href="https://ferrohealth.eu/" rel="noopener">FerroHEALTH</a>
             family. The software is licensed under the
-            <a href="https://github.com/FerroHEALTH/FerroPIX/blob/main/LICENSE" rel="noopener">Business Source License 1.1</a>.
+            <a href="https://github.com/FerroHEALTH/FerroPIX/blob/main/LICENSE" rel="noopener">Business Source License 1.1</a>:
+            free outside production and for non-commercial production use, a
+            commercial licence for other production use, and Apache License
+            2.0 four years after each version.
+            <a href="./docs/evaluate/licensing.html">Which applies to you</a>.
           </p>
           <p>
             Manufactured by Cadasto B.V., Comeniusstraat 2d, 1817 MS Alkmaar,
@@ -326,9 +412,9 @@ cargo add ihe-atna --no-default-features</code></pre>
             <h4>Read</h4>
             <ul>
               <li><a href="./docs/">Documentation</a></li>
-              <li><a href="./docs/integrate/getting-started.html">Getting started</a></li>
+              <li><a href="./docs/integrate/getting-started.html">Quickstart</a></li>
+              <li><a href="./docs/operate/configuration.html">Configuration</a></li>
               <li><a href="./docs/crates/index.html">The published crates</a></li>
-              <li><a href="./docs/evaluate/licensing.html">Licensing</a></li>
               <li><a href="https://ferrohealth.eu/docs/" rel="noopener">The family book</a></li>
               <li><a href="https://profiles.ihe.net/ITI/" rel="noopener">IHE ITI profiles</a></li>
             </ul>
@@ -337,10 +423,10 @@ cargo add ihe-atna --no-default-features</code></pre>
             <h4>Project</h4>
             <ul>
               <li><a href="https://github.com/FerroHEALTH/FerroPIX" rel="noopener">GitHub</a></li>
-              <li><a href="https://crates.io/crates/ihe-iti" rel="noopener">ihe-iti on crates.io</a></li>
-              <li><a href="https://crates.io/crates/nl-generic-functions" rel="noopener">nl-generic-functions on crates.io</a></li>
+              <li><a href="https://github.com/FerroHEALTH/FerroPIX/releases" rel="noopener">Releases</a></li>
+              <li><a href="https://github.com/FerroHEALTH/FerroPIX/milestones" rel="noopener">Roadmap</a></li>
               <li><a href="https://github.com/FerroHEALTH/FerroPIX/issues" rel="noopener">Issues</a></li>
-              <li><a href="https://github.com/FerroHEALTH/FerroPIX/milestones" rel="noopener">Milestones</a></li>
+              <li><a href="https://github.com/FerroHEALTH/FerroPIX/security/policy" rel="noopener">Security policy</a></li>
             </ul>
           </div>
         </div>

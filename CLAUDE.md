@@ -211,8 +211,7 @@ The build order is the milestones:
   "Plum & Iron" recolour of mdBook's `light` and `navy` themes.
   `scripts/site/`: `assemble.sh` builds the site as Pages serves it (the
   book from a staged copy with the favicon, its version markers rendered
-  from the manifests, a hashed CSP per page by `book-csp.sh`, the roadmap
-  from the open milestones), and `toolchain.sh` reads the documentation
+  from the manifests, a hashed CSP per page by `book-csp.sh`), and `toolchain.sh` reads the documentation
   toolchain from `docs/VERSIONS.md`. `.github/workflows/docs.yml` builds it
   on every pull request and deploys it from `main`; the guards that keep
   the book in step with the code run in CI's `conclusion`

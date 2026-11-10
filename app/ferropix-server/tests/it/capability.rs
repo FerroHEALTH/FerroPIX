@@ -157,8 +157,20 @@ fn routes_declared(resource: &Value) -> BTreeSet<(Method, String)> {
 }
 
 /// Asserts `subscription` declares the four ITI-94 interactions (PMIR 1.6.0
-/// §2:3.94.4.1 to §2:3.94.4.5).
+/// §2:3.94.4.1 to §2:3.94.4.5) and the profile the Registry statement
+/// declares (§2:3.94.4.1.2.1).
 fn assert_subscription(subscription: &Value) {
+    let registry = vendored_registry();
+    let wanted = registry["rest"][0]["resource"]
+        .as_array()
+        .expect("resources")
+        .iter()
+        .find(|resource| resource["type"] == "Subscription")
+        .expect("the Registry's Subscription entry");
+    assert_eq!(
+        wanted["supportedProfile"], subscription["supportedProfile"],
+        "the Subscription Profile for PMIR, PMIR 1.6.0 §2:3.94.4.1.2.1"
+    );
     let interactions: BTreeSet<&str> = subscription["interaction"]
         .as_array()
         .expect("interactions")

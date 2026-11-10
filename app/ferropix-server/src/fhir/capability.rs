@@ -230,10 +230,11 @@ fn description(mounts: Mounts) -> String {
     }
 }
 
-/// The PMIR subscription profile ITI-94 creates against (PMIR 1.6.0
-/// §2:3.94.4.1.2.1).
+/// The Subscription Profile for PMIR that an ITI-94 create is constrained by
+/// (PMIR 1.6.0 §2:3.94.4.1.2.1), the `supportedProfile`
+/// `CapabilityStatement-IHE.PMIR.PatientIdentityRegistry` declares.
 pub const PMIR_SUBSCRIPTION: &str =
-    "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Subscription";
+    "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Subscription.Request";
 
 /// The `Subscription` resource of ITI-94: create, read, the update that
 /// enables or disables, and delete (PMIR 1.6.0 §2:3.94.4.1 to §2:3.94.4.5).

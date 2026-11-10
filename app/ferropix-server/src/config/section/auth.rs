@@ -89,7 +89,8 @@ impl Auth {
     ///
     /// # Errors
     /// Returns [`Error::Value`] for `enabled = false`, an `[auth.dpop]`,
-    /// `[[auth.party]]` or `[auth.idp]` table or a Basic user's `roles`,
+    /// `[[auth.party]]` or `[auth.idp]` table, a Basic user's `roles` or an
+    /// issuer's `role_claims`,
     /// which FerroPIX would never apply, a
     /// product scope in no
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
@@ -168,8 +169,8 @@ impl Auth {
 /// services and persons holding bearer tokens, and no IHE profile it serves
 /// asks for `DPoP`. `[[auth.party]]` binds a person's login to a party, and
 /// `[auth.idp]` holds the identity provider adapters only that binding
-/// reads; FerroPIX keeps no party. A Basic user's `roles` are refused too,
-/// since the permission table reads scopes. `[[auth.federation]]` and
+/// reads; FerroPIX keeps no party. A Basic user's `roles` and an issuer's
+/// `role_claims` are refused too, since the permission table reads scopes. `[[auth.federation]]` and
 /// `[[auth.attributes]]` are applied: the first classifies the tokens of a
 /// `federation` issuer, the second states the professional's attributes the
 /// audit record carries ([`crate::audit::records::Call::of`]).
@@ -205,6 +206,16 @@ fn unapplied(section: &AuthSection) -> Result<(), Error> {
         if set {
             return Err(value(key, rule));
         }
+    }
+    if let Some(index) = section
+        .issuers()
+        .iter()
+        .position(|entry| entry.role_claims.is_some())
+    {
+        return Err(value(
+            &format!("auth.issuer[{index}].role_claims"),
+            "FerroPIX's permission table reads scopes, so a role would never apply",
+        ));
     }
     Ok(())
 }
@@ -491,10 +502,13 @@ mod tests {
         let mut users = basic("dev-steward", &[STEWARD_SCOPE]);
         users.users[0].roles = vec![String::from("steward")];
         roles.0.basic = Some(users);
+        let mut role_claims = auth(&[url, "https://idp.example.org/second"]);
+        role_claims.0.issuer[1].role_claims = Some(vec![String::from("groups")]);
         for (section, key) in [
             (dpop, "auth.dpop"),
             (party, "auth.party"),
             (roles, "auth.basic.users[].roles"),
+            (role_claims, "auth.issuer[1].role_claims"),
         ] {
             let error = section
                 .resolve(Profile::Production, &Trust::default(), ADMIN)

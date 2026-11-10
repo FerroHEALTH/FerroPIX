@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.3.0"
+version = "0.3.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -148,6 +148,12 @@ tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
 url = { workspace = true }
 uuid = { workspace = true }
 wiremock = { workspace = true }
+
+# docs.rs builds with the default features unless told otherwise, and this
+# crate turns none on by default, so every profile is documented only with
+# all of them (https://docs.rs/about/metadata).
+[package.metadata.docs.rs]
+all-features = true
 
 [lints]
 workspace = true

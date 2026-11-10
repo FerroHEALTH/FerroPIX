@@ -228,6 +228,32 @@ async fn the_event_shows_no_identifier_and_no_userinfo() {
     assert!(!events[0].destination.as_str().contains("svc@"));
 }
 
+#[tokio::test]
+async fn a_gateway_off_the_tables_origin_is_refused_before_anything_is_sent_or_recorded() {
+    let kept = Arc::new(Kept::default());
+    let configured = answering("no-match.xml").await;
+    let other = answering("match.xml").await;
+    let answer = client(&configured)
+        .audited(kept.clone())
+        .discover(
+            &responding(&other),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
+        .await;
+    assert!(
+        matches!(answer, Err(XcpdError::ForeignGateway)),
+        "{answer:?}"
+    );
+    for server in [&configured, &other] {
+        let requests = server.received_requests().await.expect("recording is on");
+        assert!(requests.is_empty(), "nothing was sent");
+    }
+    assert!(kept.events().is_empty(), "no exchange, no audit message");
+}
+
 #[test]
 fn the_fixed_codes_are_the_table_s() {
     use ihe_iti::xcpd::audit::{EVENT_ACTION, EVENT_ID, EVENT_TYPE, HOME_COMMUNITY_DETAIL};

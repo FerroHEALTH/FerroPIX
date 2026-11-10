@@ -8,11 +8,14 @@
 
 use std::time::Duration;
 
+use ferrohealth_smart::config::credentials::{CredentialsSection, OauthSection};
 use http::StatusCode;
 use ihe_iti::soap::{FaultCode, Malformed};
+use nl_generic_functions::mitz::MitzClient;
 use nl_generic_functions::mitz::error::{Malformation, MitzError};
 use nl_generic_functions::mitz::question::{DataCategory, Decision};
-use wiremock::matchers::method;
+use secrecy::SecretString;
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::{
@@ -360,4 +363,36 @@ async fn a_silent_mitz_times_out() {
         .expect_err("no decision");
     assert!(matches!(error, MitzError::Timeout), "{error:?}");
     assert_eq!(None, error.status());
+}
+
+#[tokio::test]
+async fn a_token_that_cannot_be_obtained_is_unauthenticated_and_nothing_is_sent() {
+    let tokens = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error": "invalid_client",
+        })))
+        .mount(&tokens)
+        .await;
+    let server = mitz(200, SOAP_XML, &answer(&[decided("Permit", CATEGORIES[0])])).await;
+    let mut table = crate::outbound::endpoint(&format!("{}{}", server.uri(), super::ENDPOINT));
+    table.credentials = CredentialsSection {
+        oauth: Some(OauthSection {
+            token_endpoint: format!("{}/token", tokens.uri()),
+            client_id: String::from("synthetic-client"),
+            client_secret: Some(SecretString::from("synthetic-secret")),
+            ..OauthSection::default()
+        }),
+        ..CredentialsSection::default()
+    };
+    let error = MitzClient::unencrypted_for_development(crate::outbound::build(&table))
+        .expect("a client")
+        .ask(&question(), PROMPT)
+        .await
+        .expect_err("no token");
+    assert!(matches!(error, MitzError::Unauthenticated(_)), "{error:?}");
+    assert_eq!(None, error.status(), "nothing was answered");
+    let requests = server.received_requests().await.expect("recording is on");
+    assert!(requests.is_empty(), "nothing was sent");
 }

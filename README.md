@@ -103,11 +103,12 @@ You need a checkout, Docker Compose (or Podman with a compose provider),
 `curl`, `jq` and `openssl`. Every command below is a step of
 [`scripts/quickstart/tour.sh`](scripts/quickstart/tour.sh), which CI runs
 against the images each change builds; run the script to do every step at
-once. The [Quickstart](https://ferropix.eu/docs/integrate/getting-started.html)
+once. Clone the release, so the quickstart's configuration is the one its
+images read. The [Quickstart](https://ferropix.eu/docs/integrate/getting-started.html)
 page explains each answer.
 
 ```sh
-git clone https://github.com/FerroHEALTH/FerroPIX && cd FerroPIX
+git clone --branch v0.0.26 --depth 1 https://github.com/FerroHEALTH/FerroPIX && cd FerroPIX
 ```
 
 Write the secrets, start the stack and ask for readiness:

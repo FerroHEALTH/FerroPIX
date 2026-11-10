@@ -21,7 +21,8 @@ On the branch `release/vX.Y.Z`:
 2. **Bump the product version.** Set the `[workspace.package]` version in
    `Cargo.toml`, run `cargo update -w`, and set the server image tag
    `compose.yaml` defaults to (`${FERROPIX_VERSION:-X.Y.Z}`) to the same
-   version (the console image line takes the same default);
+   version (the console image line takes the same default), and the
+   `git clone --branch vX.Y.Z` of the README's quick start;
   `scripts/checks/versions.sh` refuses them apart.
 3. **Take the console screenshots again.** The book's screenshots name the
    release they show, so the guard in the testkit fails after the bump until

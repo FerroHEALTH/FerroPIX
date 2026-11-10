@@ -15,7 +15,10 @@
 #      documents at is `v` plus the pinned version.
 #   4. The quickstart: the image tags compose.yaml defaults to are the
 #      [workspace.package] version of the root Cargo.toml, and so is the
-#      appVersion of the Helm chart, the default tag of its images.
+#      appVersion of the Helm chart, the default tag of its images, and
+#      every `git clone` of FerroPIX in README.md names `--branch v` plus
+#      that version, so a reader clones the configuration the pinned image
+#      reads (#619).
 #   5. Licence: every tracked first-party file names Cadasto B.V. in an
 #      `SPDX-FileCopyrightText` line within its first 25 lines, and no
 #      header there claims a licence other than BUSL-1.1. LICENSE, NOTICE,
@@ -158,6 +161,13 @@ self_test() {
   expect 0 "a quickstart on the workspace version"
   sed -i.bak 's/:-1.2.3/:-1.2.2/' "$d/compose.yaml" && rm "$d/compose.yaml.bak"
   expect 1 "a quickstart behind the workspace version"
+  printf '# SPDX-FileCopyrightText: Cadasto B.V.\ngit clone --branch v1.2.3 --depth 1 https://github.com/FerroHEALTH/FerroPIX && cd FerroPIX\n' > "$d/README.md"
+  sed -i.bak 's/:-1.2.2/:-1.2.3/' "$d/compose.yaml" && rm "$d/compose.yaml.bak"
+  expect 0 "a quickstart that clones the workspace version"
+  sed -i.bak 's/--branch v1.2.3 //' "$d/README.md" && rm "$d/README.md.bak"
+  expect 1 "a quickstart that clones main"
+  sed -i.bak 's/git clone /git clone --branch v1.2.2 /' "$d/README.md" && rm "$d/README.md.bak"
+  expect 1 "a quickstart that clones an older release"
   case_dir
   printf '[workspace.package]\nversion = "0.0.6"\n' >> "$d/Cargo.toml"
   mkdir -p "$d/deploy/helm/ferropix"
@@ -294,6 +304,18 @@ if [[ -f compose.yaml && -f Cargo.toml ]]; then
   got="$(sed -nE 's|^[[:space:]]*image:[[:space:]]*ghcr\.io/ferrohealth/ferropix(-console)?:\$\{FERROPIX_VERSION:-([^}]+)\}[[:space:]]*$|\2|p' compose.yaml | sort -u)"
   [[ -n "$got" ]] || drift "compose.yaml names no ghcr.io/ferrohealth/ferropix:\${FERROPIX_VERSION:-<version>} image"
   [[ -z "$got" || "$got" == "$want" ]] || drift "compose.yaml defaults its images to $(tr '\n' ' ' <<< "$got")but Cargo.toml says $want"
+fi
+
+# A clone of main pairs main's quickstart.toml with the released image
+# compose.yaml pins, which refuses a key main renamed since, so the README
+# clones the release.
+if [[ -f README.md && -f Cargo.toml ]]; then
+  want="$(toml_value Cargo.toml version)"
+  clones="$(grep -E 'git clone .*github\.com/FerroHEALTH/FerroPIX' README.md || true)"
+  [[ -n "$clones" ]] || drift "README.md clones no FerroPIX release for its quick start"
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == *"--branch v$want "* ]] || drift "README.md clones FerroPIX without --branch v$want: $line"
+  done <<< "$clones"
 fi
 
 # The chart's appVersion is the default tag of both images it deploys, so

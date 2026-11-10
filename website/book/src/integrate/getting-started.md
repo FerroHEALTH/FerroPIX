@@ -19,6 +19,13 @@ provider), `curl`, `jq` and `openssl`.
 
 ## Start the server
 
+Clone the release, so the quickstart's configuration is the one the images
+`compose.yaml` pins read:
+
+```sh
+git clone --branch v{{version:ferropix}} --depth 1 https://github.com/FerroHEALTH/FerroPIX && cd FerroPIX
+```
+
 The quickstart reads every secret from a file under `./secrets`, never from
 the environment. From the root of the checkout, make the five files:
 

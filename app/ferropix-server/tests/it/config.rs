@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use ferrohealth_server::cli::ConfigArgs;
 use ferropix_server::config::Config;
 use ferropix_server::config::error::Error;
 use ferropix_server::config::section::domain::DomainKind;
@@ -403,6 +404,74 @@ fn every_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
             "{old}: {said}"
         );
     }
+}
+
+/// Reads `text` as the file `--config` names, with the `--set` pairs of
+/// `sets`, as the run path does.
+fn load(text: &str, sets: &[(&str, &str)]) -> Result<(), Error> {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("ferropix.toml");
+    std::fs::write(&path, text).expect("the file is written");
+    let args = ConfigArgs {
+        config: Some(path),
+        sets: sets
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect(),
+    };
+    Config::load(&args).map(drop)
+}
+
+#[test]
+fn every_family_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
+    let text = "[server]\nrequest_timeout_ms = 30000\n\n[auth]\nca_file = \"/run/ca.pem\"\n\n[[auth.issuer]]\nissuer = \"https://idp.example.org/realms/pix\"\nclock_skew_seconds = 30\n";
+    let error = load(
+        text,
+        &[("telemetry.otlp.trust_roots_file", "/run/otlp-ca.pem")],
+    )
+    .expect_err("a renamed key is refused before the typed load");
+    assert!(matches!(error, Error::Removed(_)), "{error:?}");
+    let said = chain(&error);
+    for (old, new) in [
+        ("server.request_timeout_ms", "server.request_timeout"),
+        ("auth.ca_file", "auth.tls.trust_roots_file"),
+        ("auth.issuer[0].clock_skew_seconds", "clock_skew"),
+        (
+            "telemetry.otlp.trust_roots_file",
+            "telemetry.otlp.tls.trust_roots_file",
+        ),
+    ] {
+        assert!(
+            said.contains(&format!("{old} was replaced by {new}")),
+            "{old}: {said}"
+        );
+    }
+}
+
+#[test]
+fn a_renamed_key_of_an_oauth_table_is_named_under_its_table() {
+    let text = "[terminology.credentials.oauth]\ntimeout_ms = 5000\nclient_certificate_file = \"/run/client.pem\"\n";
+    let error = load(text, &[]).expect_err("a renamed key is refused before the typed load");
+    let said = chain(&error);
+    for (old, new) in [
+        ("terminology.credentials.oauth.timeout_ms", "timeout"),
+        (
+            "terminology.credentials.oauth.client_certificate_file",
+            "tls.client_identity_file",
+        ),
+    ] {
+        assert!(
+            said.contains(&format!("{old} was replaced by {new}")),
+            "{old}: {said}"
+        );
+    }
+}
+
+#[test]
+fn a_file_without_a_renamed_key_reaches_the_typed_load() {
+    let error = load("[server]\nlisten = \"not an address\"\n", &[])
+        .expect_err("the typed load refuses the address");
+    assert!(matches!(error, Error::Load(_)), "{error:?}");
 }
 
 // NOTE: `ferrohealth-smart` 0.15 dropped the named refusal of each removed key one release

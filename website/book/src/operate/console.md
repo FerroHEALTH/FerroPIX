@@ -229,7 +229,11 @@ environment as `FERROPIX_CONSOLE__<SECTION>__<KEY>`, so
 read from a file with the `_file` form of its key, the shape a container
 runtime mounts a secret in; the file's trailing line ending is removed. An
 unknown key, in the file, a variable or a `--set` argument, is refused, and a
-refusal names the key, never its value. A server variable such as
+refusal names the key, never its value. The keys v0.0.24 renamed
+(`pix.timeout_ms`, the `[session]` and `[oidc]` keys that end in `_s`,
+`oidc.ca_file`, the `[oidc.tls]` client certificate and key, and the OTLP
+collector's files) refuse the start in that release, each named with the key
+that replaces it, and from the next release each fails as an unknown key. A server variable such as
 `FERROPIX__SERVER__LISTEN` is left alone.
 
 ```toml

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use ferrohealth_secret::file::SecretError;
 
+use ferrohealth_server::cli::ConfigArgs;
 use ferropix_console::config::Config;
 use ferropix_console::config::error::Error;
 
@@ -68,6 +69,39 @@ fn the_timeout_v0_0_24_renamed_is_refused_naming_its_replacement() {
         said.contains("pix.timeout_ms was replaced by pix.timeout"),
         "{said}"
     );
+}
+
+#[test]
+fn every_family_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("console.toml");
+    let text = "[session]\nidle_timeout_s = 1800\n\n[oidc]\nca_file = \"/run/ca.pem\"\n\n[oidc.tls]\nclient_key = \"hunter2\"\n\n[telemetry.otlp]\ntrust_roots_file = \"/run/otlp-ca.pem\"\n";
+    std::fs::write(&path, text).expect("the file is written");
+    let args = ConfigArgs {
+        config: Some(path),
+        sets: vec![(String::from("oidc.timeout_s"), String::from("10"))],
+    };
+    let error = Config::load(&args).expect_err("a renamed key is refused");
+    assert!(matches!(error, Error::Removed(_)), "{error:?}");
+    let said = std::error::Error::source(&error)
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    for (old, new) in [
+        ("session.idle_timeout_s", "session.idle_timeout"),
+        ("oidc.timeout_s", "oidc.timeout"),
+        ("oidc.ca_file", "oidc.tls.trust_roots_file"),
+        ("oidc.tls.client_key", "oidc.tls.client_identity"),
+        (
+            "telemetry.otlp.trust_roots_file",
+            "telemetry.otlp.tls.trust_roots_file",
+        ),
+    ] {
+        assert!(
+            said.contains(&format!("{old} was replaced by {new}")),
+            "{old}: {said}"
+        );
+    }
+    assert!(!format!("{error:?} {said}").contains("hunter2"), "{said}");
 }
 
 #[test]

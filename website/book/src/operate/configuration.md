@@ -120,8 +120,12 @@ milliseconds, seconds, days or bytes (`timeout_ms`, `retention_days`,
 `spool_max_bytes` and the rest) were renamed in v0.0.24: in that release
 each refuses the start and names the key that replaces it, all of them in
 one refusal, and from the next release each fails as an unknown key. The
-keys of the family sections (`[server]`, `[auth]`, `[telemetry]`) fail as
-unknown keys at once, and the loader suggests the new name where it can.
+renamed keys of the family sections (`request_timeout_ms` and the others of
+`[server]`, `auth.ca_file`, each issuer's `clock_skew_seconds` and the rest,
+the OTLP collector's files and the OAuth tables' `timeout_ms`, `ca_file` and
+client certificate files) are refused the same way in v0.0.24, read before
+the rest of the file, and from the next release each fails as an unknown
+key.
 
 | Key | Default | What it sets |
 |---|---|---|

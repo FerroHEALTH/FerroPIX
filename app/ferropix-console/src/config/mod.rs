@@ -38,12 +38,13 @@
 //! starts, and each endpoint written takes the place of the discovered one.
 
 pub mod error;
+pub mod retired;
 pub mod settings;
 
 use std::collections::BTreeMap;
 
 use ferrohealth_config::loader::{Loaded, Loader};
-use ferrohealth_config::removed::{Removals, Removed, Retired};
+use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::Duration as Span;
 use ferrohealth_server::cli::ConfigArgs;
 use ferrohealth_session::config::{OidcSection, SessionSection};
@@ -73,9 +74,16 @@ impl Config {
     /// `--set` pairs of `args`, last.
     ///
     /// # Errors
-    /// Returns [`Error::Load`] with every refusal of the loader.
+    /// Returns [`Error::Removed`] naming every key of the family's sections
+    /// this release renamed that the sources set, and [`Error::Load`] with
+    /// every refusal of the loader.
     pub fn load(args: &ConfigArgs) -> Result<Loaded<Self>, Error> {
-        Ok(loader()?.load_with(args.config.as_deref(), &args.sets)?)
+        let reader = loader()?;
+        let renamed = reader.load_with::<retired::Shared>(args.config.as_deref(), &args.sets);
+        renamed
+            .map_or(Ok(()), |read| read.settings().removals().finish())
+            .map_err(Error::Removed)?;
+        Ok(reader.load_with(args.config.as_deref(), &args.sets)?)
     }
 
     /// Reads `text` as the configuration file and applies `environment`
@@ -160,46 +168,9 @@ impl Default for Pix {
     }
 }
 
-/// `pix.timeout_ms`, renamed in v0.0.24 when the console wrote every span of
-/// time as `ferrohealth-config`'s units, and refused by name for that one
-/// release (the owner's rule of 2026-11-09).
-pub const PIX_TIMEOUT_MS: Retired = Retired::replaced(
-    "pix.timeout_ms",
-    "pix.timeout, a duration such as `30s`",
-    "0.0.24",
-);
-
 impl Pix {
     /// Gathers the retired keys the sources set.
     pub fn removals(&self, found: &mut Removals) {
-        found.check(self.timeout_ms, &PIX_TIMEOUT_MS);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ferrohealth_config::removed::stale;
-
-    use super::PIX_TIMEOUT_MS;
-
-    #[test]
-    fn the_refusal_lives_for_the_one_release_that_renamed_its_key() {
-        let since = PIX_TIMEOUT_MS.since();
-        let version = env!("CARGO_PKG_VERSION");
-        let next = version.rsplit_once('.').and_then(|(head, patch)| {
-            Some(format!(
-                "{head}.{}",
-                patch.parse::<u32>().ok()?.checked_add(1)?
-            ))
-        });
-        assert!(
-            version == since || next.as_deref() == Some(since),
-            "v{since} renamed pix.timeout_ms, and v{version} is neither that release nor the one before it: past it, delete PIX_TIMEOUT_MS"
-        );
-        assert_eq!(
-            0,
-            stale(&[PIX_TIMEOUT_MS], since).len(),
-            "it records v{since}"
-        );
+        found.check(self.timeout_ms, &retired::PIX_TIMEOUT_MS);
     }
 }

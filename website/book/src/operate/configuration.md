@@ -281,7 +281,7 @@ section with no issuer and no Basic user is refused, and so is
 FerroPIX refuses the start on a table it would read and never apply, naming
 the key: `[[auth.party]]`, `[auth.idp]` (the identity provider adapters only
 a party binding reads), `[auth.dpop]` (FerroPIX checks no `DPoP` proof,
-RFC 9449) and a Basic user's `roles`.
+RFC 9449), a Basic user's `roles` and an issuer's `role_claims`.
 
 Each `[[auth.issuer]]` table names one trusted issuer with every setting of
 its tokens: no section-level value stands in for one the table leaves out.
@@ -335,7 +335,7 @@ audience = ["https://pix.example.org/fhir"]
 | `auth.issuer[].timeout` | `"10s"` | How long one call to the authorization server may take. |
 | `auth.issuer[].mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. |
 | `auth.issuer[].sender_constraint` | `"none"` | `"required"` admits only a token bound to a `DPoP` key or a client certificate. |
-| `auth.issuer[].role_claims` | `["roles", "groups", "entitlements"]` | The claims a token's roles are read from, each a dotted path. FerroPIX's permission table reads scopes, not roles. |
+| `auth.issuer[].role_claims` | unset | Refused when set: the permission table reads scopes, so a role would never apply. |
 | `auth.issuer[].first_party_clients` | the profile's | The deployment's own clients, through which a person's token is admitted. |
 | `auth.issuer[].token_types` | the profile's | The `typ` header values admitted, `["at+jwt", "application/at+jwt"]` under `"rfc9068"`. |
 | `auth.issuer[].required_claims` | the profile's | The claims every token carries. |

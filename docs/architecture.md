@@ -529,7 +529,10 @@ the `CapabilityStatement` built from the three vendored actor statements,
 with `conditionalUpdate` and, when `[pixm] remove_patient` is on,
 `conditionalDelete` declared on `Patient` (PIXm 3.1.0 §2:3.104.4.1.3,
 §2:3.104.4.3.3), the `$ihe-pix` and `$match` operations, and a
-`supportedProfile` for the PIXm and PDQm Patient profiles. Every refusal is
+`supportedProfile` for the PIXm and PDQm Patient profiles. With `[pmir]` on it
+declares the ITI-93 message as `sender` and `receiver` and, beside `[pixm]`
+and `[pdqm]`, instantiates the PMIR Patient Identity Registry statement
+(PMIR 1.6.0 §2:3.93). Every refusal is
 an `OperationOutcome` with the issue the profile prescribes.
 
 **The Patient resource FerroPIX serves is the person.** `Patient/{id}` is

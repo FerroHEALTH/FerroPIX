@@ -50,6 +50,11 @@ pub const PDQM_SUPPLIER_MATCH: &str = "https://profiles.ihe.net/ITI/PDQm/Capabil
 /// `OperationDefinition-PDQmMatch`).
 pub const PDQM_MATCH: &str = "https://profiles.ihe.net/ITI/PDQm/OperationDefinition/PDQmMatch";
 
+/// The PMIR Patient Identity Registry actor statement (PMIR 1.6.0,
+/// `CapabilityStatement-IHE.PMIR.PatientIdentityRegistry`).
+pub const PMIR_REGISTRY: &str =
+    "https://profiles.ihe.net/ITI/PMIR/CapabilityStatement/IHE.PMIR.PatientIdentityRegistry";
+
 /// The search parameters of the Supplier's statement the search reads, each
 /// with its type and, for `mothersMaidenName`, its definition
 /// (§2:3.78.4.1.2.1, §2:3.78.4.1.2.2).
@@ -117,6 +122,11 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> C
         instantiates.push(PDQM_SUPPLIER.into());
         instantiates.push(PDQM_SUPPLIER_MATCH.into());
     }
+    // NOTE: CapabilityStatement-IHE.PMIR.PatientIdentityRegistry asks for the `Patient` read and
+    // search-type of [pdqm] and the `$ihe-pix` of [pixm] beside ITI-93 and ITI-94.
+    if mounts.pmir && mounts.pixm && mounts.pdqm {
+        instantiates.push(PMIR_REGISTRY.into());
+    }
     let resource: Vec<CapabilityStatementRestResource> = patient(mounts)
         .into_iter()
         .chain(mounts.pmir.then(subscription))
@@ -135,7 +145,7 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> C
             ..CapabilityStatementSoftware::default()
         }),
         implementation: Some(CapabilityStatementImplementation {
-            description: "FerroPIX, a Master Patient Index over IHE PIXm and PDQm".into(),
+            description: description(mounts).into(),
             url: Some(format!("{base}/fhir").into()),
             ..CapabilityStatementImplementation::default()
         }),
@@ -150,7 +160,7 @@ pub fn statement(public_base_url: &url::Url, smart: &Smart, mounts: Mounts) -> C
             resource,
             ..CapabilityStatementRest::default()
         }],
-        messaging: mounts.pmir.then(feed_received).into_iter().collect(),
+        messaging: if mounts.pmir { feed() } else { Vec::new() },
         ..CapabilityStatement::default()
     }
 }
@@ -177,17 +187,46 @@ fn patient(mounts: Mounts) -> Option<CapabilityStatementRestResource> {
 pub const PMIR_FEED_MESSAGE: &str =
     "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition";
 
-/// The ITI-93 feed the Registry receives, as the PMIR Patient Identity
-/// Registry actor statement declares it (`CapabilityStatement-IHE.PMIR.PatientIdentityRegistry`).
-fn feed_received() -> CapabilityStatementMessaging {
-    CapabilityStatementMessaging {
-        documentation: Some("For Mobile Patient Identity Feed [ITI-93]".into()),
-        supported_message: vec![CapabilityStatementMessagingSupportedMessage {
-            mode: "receiver".into(),
-            definition: PMIR_FEED_MESSAGE.into(),
-            ..CapabilityStatementMessagingSupportedMessage::default()
-        }],
-        ..CapabilityStatementMessaging::default()
+/// The ITI-93 feed the Registry sends to each subscriber and receives from
+/// the Source (PMIR 1.6.0 §2:3.93), one `messaging` entry each, as the PMIR
+/// Patient Identity Registry actor statement declares them
+/// (`CapabilityStatement-IHE.PMIR.PatientIdentityRegistry`).
+fn feed() -> Vec<CapabilityStatementMessaging> {
+    ["sender", "receiver"]
+        .into_iter()
+        .map(|mode| CapabilityStatementMessaging {
+            documentation: Some("For Mobile Patient Identity Feed [ITI-93]".into()),
+            supported_message: vec![CapabilityStatementMessagingSupportedMessage {
+                mode: mode.into(),
+                definition: PMIR_FEED_MESSAGE.into(),
+                ..CapabilityStatementMessagingSupportedMessage::default()
+            }],
+            ..CapabilityStatementMessaging::default()
+        })
+        .collect()
+}
+
+/// Returns `implementation.description`: the IHE actors `mounts` switches
+/// on.
+fn description(mounts: Mounts) -> String {
+    let actors: Vec<&str> = [
+        (
+            mounts.pixm,
+            "the PIXm Patient Identifier Cross-reference Manager",
+        ),
+        (mounts.pdqm, "the PDQm Patient Demographics Supplier"),
+        (mounts.pmir, "the PMIR Patient Identity Registry"),
+    ]
+    .into_iter()
+    .filter_map(|(on, actor)| on.then_some(actor))
+    .collect();
+    match actors.as_slice() {
+        [] => String::from("FerroPIX, a Master Patient Index"),
+        [one] => format!("FerroPIX, a Master Patient Index serving {one}"),
+        [rest @ .., last] => format!(
+            "FerroPIX, a Master Patient Index serving {} and {last}",
+            rest.join(", ")
+        ),
     }
 }
 

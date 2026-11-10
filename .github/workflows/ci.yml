@@ -983,6 +983,8 @@ jobs:
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo doc --locked --workspace --all-features --no-deps --document-private-items
+      # The published crates as docs.rs builds them, from their metadata (#598).
+      - run: bash scripts/release/publish-crates.sh docs
 
   cargo-deny:
     name: cargo-deny

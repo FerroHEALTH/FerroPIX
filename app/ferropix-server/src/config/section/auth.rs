@@ -25,6 +25,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ferrohealth_smart::config::{AuthSection, Resolved};
+use ferrohealth_smart::idp::section::IdpSection;
 use ferrohealth_smart::scope::{is_extension_scope, is_scope_token};
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +88,10 @@ impl Auth {
     /// administrator scope `admin_scope`.
     ///
     /// # Errors
-    /// Returns [`Error::Value`] for `enabled = false`, a product scope in no
+    /// Returns [`Error::Value`] for `enabled = false`, an `[auth.dpop]`,
+    /// `[[auth.party]]` or `[auth.idp]` table or a Basic user's `roles`,
+    /// which FerroPIX would never apply, a
+    /// product scope in no
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
     /// names an issuer `[auth]` does not or one named twice, or a client id
     /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
@@ -113,6 +117,7 @@ impl Auth {
                 "FerroPIX always authenticates its callers",
             ));
         }
+        unapplied(section)?;
         if section.basic.is_some() && profile == Profile::Production {
             return Err(Error::DevelopmentOnly {
                 key: String::from("auth.basic"),
@@ -153,6 +158,55 @@ impl Auth {
             clients,
         })
     }
+}
+
+/// Refuses each table of `section` FerroPIX would read and never apply, as
+/// it refuses `server.caller_rate`.
+///
+/// `[auth.dpop]` sets the `DPoP` proof check (RFC 9449) a product builds with
+/// its own replay store, and FerroPIX builds none: its callers are backend
+/// services and persons holding bearer tokens, and no IHE profile it serves
+/// asks for `DPoP`. `[[auth.party]]` binds a person's login to a party, and
+/// `[auth.idp]` holds the identity provider adapters only that binding
+/// reads; FerroPIX keeps no party. A Basic user's `roles` are refused too,
+/// since the permission table reads scopes. `[[auth.federation]]` and
+/// `[[auth.attributes]]` are applied: the first classifies the tokens of a
+/// `federation` issuer, the second states the professional's attributes the
+/// audit record carries ([`crate::audit::records::Call::of`]).
+fn unapplied(section: &AuthSection) -> Result<(), Error> {
+    // NOTE: no specification governs this: our own design; a key that would be read and
+    // never applied is refused, so an operator never believes it is in force.
+    for (set, key, rule) in [
+        (
+            section.dpop.is_some(),
+            "auth.dpop",
+            "FerroPIX checks no DPoP proof (RFC 9449), so the table would never apply",
+        ),
+        (
+            !section.party.is_empty(),
+            "auth.party",
+            "FerroPIX binds no login to a party, so the table would never apply",
+        ),
+        (
+            section
+                .basic
+                .iter()
+                .flat_map(|basic| basic.users.iter())
+                .any(|user| !user.roles.is_empty()),
+            "auth.basic.users[].roles",
+            "FerroPIX's permission table reads scopes, so a role would never apply",
+        ),
+        (
+            section.idp != IdpSection::default(),
+            "auth.idp",
+            "FerroPIX binds no login to a party, the only reader of an identity provider adapter",
+        ),
+    ] {
+        if set {
+            return Err(value(key, rule));
+        }
+    }
+    Ok(())
 }
 
 /// Refuses a Basic user of `section` granted a `system/` scope.
@@ -236,6 +290,8 @@ mod tests {
         AuthSection, BasicSection, BasicUser, ConfigError, IssuerEntry,
     };
     use ferrohealth_smart::kind::IssuerKind;
+    use ferrohealth_smart::party::config::PartySection;
+    use ferrohealth_smart::sender::proof::DpopSection;
     use secrecy::SecretString;
 
     use super::{Auth, STEWARD_SCOPE, Trust, TrustedIssuer, is_client_id};
@@ -417,6 +473,36 @@ mod tests {
             );
             assert!(error.to_string().contains("east-lab"), "{error}");
             assert!(error.to_string().contains("client credentials"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_dpop_or_party_table_or_a_basic_role_the_server_never_applies_is_refused_naming_its_key() {
+        let url = "https://idp.example.org";
+        let mut dpop = auth(&[url]);
+        dpop.0.dpop = Some(DpopSection::default());
+        let mut party = auth(&[url]);
+        party.0.party = vec![PartySection {
+            issuer: url.to_owned(),
+            ..PartySection::default()
+        }];
+        let mut roles = auth(&[url]);
+        let mut users = basic("dev-steward", &[STEWARD_SCOPE]);
+        users.users[0].roles = vec![String::from("steward")];
+        roles.0.basic = Some(users);
+        for (section, key) in [
+            (dpop, "auth.dpop"),
+            (party, "auth.party"),
+            (roles, "auth.basic.users[].roles"),
+        ] {
+            let error = section
+                .resolve(Profile::Production, &Trust::default(), ADMIN)
+                .expect_err("a table read and never applied is refused");
+            assert!(
+                matches!(&error, Error::Value { key: named, .. } if named == key),
+                "{key}: {error:?}"
+            );
+            assert!(error.to_string().contains("never apply"), "{error}");
         }
     }
 

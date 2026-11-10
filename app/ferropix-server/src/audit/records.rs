@@ -40,13 +40,15 @@
 
 use std::net::IpAddr;
 
+use ferrohealth_smart::federation::person::Attributes;
+use ferrohealth_smart::federation::{Attribute, Field};
 use ferrohealth_smart::resource::{Access, Via};
 use ihe_atna::balp::{
     APPLICATION, CREATE, CUSTODIAN, Coded, DCM, DELETE, DESTINATION_ROLE, DOMAIN_RESOURCE,
     Described, Detail, Direction, Entity, EventKind, Exchange, IHE_TRANSACTIONS, NetworkAddress,
     Outcome, Peer, READ, REST, SOURCE_ROLE, SYSTEM_OBJECT, UPDATE, request_text,
 };
-use ihe_atna::user::{OnBehalfOf, User};
+use ihe_atna::user::{Code, OnBehalfOf, PurposeOfUse, User};
 use ihe_iti::pixm::audit::FeedAction;
 use ihe_iti::received::Received;
 use secrecy::{ExposeSecret, SecretString};
@@ -104,13 +106,52 @@ pub struct Call {
     pub request_id: Option<String>,
 }
 
+/// Returns `user` with what its token states under its issuer's
+/// `[[auth.attributes]]` table, as BALP 1.1.4 §3:5.7.5.4 maps the IHE IUA
+/// claims: `subject_name` as the user's display, `subject_role` as its role,
+/// `purpose_of_use` as its purpose of use, `national_provider_identifier` as
+/// its provider id, and `subject_organization_id` as its organisation.
+fn stated(user: User, attributes: Option<&Attributes>) -> User {
+    let Some(attributes) = attributes else {
+        return user;
+    };
+    let text = |field: Field| match attributes.field(field)? {
+        Attribute::Text(text) => Some(text.clone()),
+        Attribute::Codes(codes) => codes.first().map(|code| code.code.clone()),
+    };
+    user.with_name(text(Field::ProfessionalName))
+        .with_provider_identifier(text(Field::ProfessionalHpIdentifier))
+        .with_organisation(text(Field::ProviderHealthcareProviderIdentifier))
+        .with_roles(
+            attributes
+                .roles()
+                .iter()
+                .map(|role| Code {
+                    system: role.system.clone(),
+                    code: role.code.clone(),
+                })
+                .collect(),
+        )
+        .with_purposes(
+            attributes
+                .purposes()
+                .iter()
+                .map(|purpose| PurposeOfUse {
+                    system: purpose.system.clone(),
+                    code: purpose.code.clone(),
+                })
+                .collect(),
+        )
+}
+
 impl Call {
     /// Returns the call of `access` from `remote`, at the FHIR base
     /// `endpoint`, under `request_id`.
     ///
     /// A token whose subject is its own client is a backend service acting
     /// for itself, recorded with no user (BALP's `NoUser` examples); any
-    /// other names its user from the token (BALP 1.1.4 §3:5.7.5.4). The
+    /// other names its user from the token and the attributes its issuer's
+    /// `[[auth.attributes]]` table reads (BALP 1.1.4 §3:5.7.5.4). The
     /// client's address is its IP address, or the FHIR base's host when the
     /// listener did not see one (BALP 1.1.4 §1:52.4.1.5, best effort; our
     /// own design).
@@ -128,11 +169,12 @@ impl Call {
                 let on_behalf = match (caller.via(), caller.client_id()) {
                     (Via::Basic, _) => OnBehalfOf::User(User::local(caller.subject().to_owned())),
                     (Via::Bearer, Some(id)) if id == caller.subject() => OnBehalfOf::System,
-                    (Via::Bearer, _) => OnBehalfOf::User(
+                    (Via::Bearer, _) => OnBehalfOf::User(stated(
                         User::local(caller.subject().to_owned())
                             .with_issuer(caller.issuer().map(str::to_owned))
                             .with_client_id(caller.client_id().map(str::to_owned)),
-                    ),
+                        caller.attributes(),
+                    )),
                 };
                 (client, on_behalf)
             }

@@ -43,7 +43,8 @@ loopback = true
 /// fixtures set.
 const EXCLUSIVE: [&str; 1] = ["auth.basic.users[].password_hash_file"];
 
-/// Adds every dotted key under `table` to `keys`, `prefix` naming the table.
+/// Adds every dotted key under `table` to `keys`, `prefix` naming the table,
+/// an empty array among them.
 fn walk(table: &toml::Table, prefix: &str, keys: &mut BTreeSet<String>) {
     for (name, value) in table {
         let key = if prefix == "matching.fields" {
@@ -55,7 +56,9 @@ fn walk(table: &toml::Table, prefix: &str, keys: &mut BTreeSet<String>) {
         };
         match value {
             toml::Value::Table(inner) => walk(inner, &key, keys),
-            toml::Value::Array(items) if items.is_empty() => {}
+            toml::Value::Array(items) if items.is_empty() => {
+                keys.insert(key);
+            }
             toml::Value::Array(items) if items.iter().all(toml::Value::is_table) => {
                 for item in items {
                     if let toml::Value::Table(inner) = item {
@@ -92,7 +95,7 @@ fn the_configuration_page_lists_every_key_of_the_tree() {
     .expect("the configuration page is read");
     let missing: Vec<&String> = keys
         .iter()
-        .filter(|key| !page.contains(&format!("`{key}`")))
+        .filter(|key| !page.contains(&format!("`{key}`")) && !page.contains(&format!("`{key}[].")))
         .collect();
     assert!(
         missing.is_empty(),

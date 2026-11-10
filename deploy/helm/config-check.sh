@@ -45,6 +45,7 @@ spec() {
   case "$1" in
     ferropix) echo "ferropix.toml /etc/ferropix /run/secrets/ferropix" ;;
     console) echo "console.toml /etc/ferropix-console /run/secrets/ferropix-console" ;;
+    *) echo "config-check: no container named $1" >&2; return 2 ;;
   esac
 }
 
@@ -54,10 +55,11 @@ stand_ins() {
   mkdir -p "$dir"
   case "$container" in
     ferropix)
-      printf 'postgresql://ferropix:chart-check@postgres:5432/ferropix' > "$dir/db-url"
+      printf 'postgresql://ferropix:%s@postgres:5432/ferropix' "$(openssl rand -hex 16)" > "$dir/db-url"
       openssl rand -base64 32 > "$dir/data-key"
       ;;
     console) openssl rand -hex 16 > "$dir/client-secret" ;;
+    *) echo "config-check: no container named $container" >&2; return 2 ;;
   esac
   # The image runs as 65532, which owns none of these files.
   chmod 0755 "$dir"
@@ -92,7 +94,8 @@ run_check() {
 
 # image_of RENDERED CONTAINER: the image the rendered Deployment runs.
 image_of() {
-  yq "select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"$2\") | .image" <<< "$1"
+  local rendered="$1" container="$2"
+  yq "select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"${container}\") | .image" <<< "$rendered"
 }
 
 # check CHART SERVER CONSOLE: every value set, then the unknown-key proof, in

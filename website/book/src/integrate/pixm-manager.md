@@ -26,7 +26,7 @@ The Manager accepts `$ihe-pix` in two forms that answer the same:
   identifier stays out of the URL, so no browser history, proxy log or trace
   holds it. Use this form: it is what `ihe_iti::pixm::Invocation::Post`
   sends, and every FerroHEALTH client calls the Manager this way
-  ([Getting started](getting-started.md)).
+  ([The published crates](../crates/index.md)).
 - `GET {base}/fhir/Patient/$ihe-pix?sourceIdentifier=system|value{&targetSystem=…}`,
   the form PIXm prescribes (§2:3.83.4.1.2), for a Consumer built strictly
   to IHE. The identifier then sits in the query string; FerroPIX's request

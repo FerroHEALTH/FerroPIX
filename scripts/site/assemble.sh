@@ -105,13 +105,14 @@ book="$(mktemp -d)"
 trap 'rm -rf "$stage" "$book"' EXIT
 
 # The staged tree mirrors the repository's layout, so the book's
-# {{#include}} of CHANGELOG.md and docs/VERSIONS.md resolves as it does in
-# the checkout.
-mkdir -p "$stage/website" "$stage/docs"
+# {{#include}} of CHANGELOG.md, docs/VERSIONS.md and the quickstart tour
+# resolves as it does in the checkout.
+mkdir -p "$stage/website" "$stage/docs" "$stage/scripts/quickstart"
 cp -R website/book "$stage/website/book"
 rm -rf "$stage/website/book/book"
 cp CHANGELOG.md "$stage/"
 cp docs/VERSIONS.md "$stage/docs/"
+cp scripts/quickstart/tour.sh "$stage/scripts/quickstart/"
 mkdir -p "$stage/website/book/theme"
 cp assets/brand/favicon.svg "$stage/website/book/theme/favicon.svg"
 cp assets/brand/favicon-32.png "$stage/website/book/theme/favicon.png"

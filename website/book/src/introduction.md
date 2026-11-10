@@ -5,48 +5,45 @@
 
 FerroPIX is the Master Patient Index of the
 [FerroHEALTH](https://ferrohealth.eu/) family, in pure Rust. Every
-organisation issues its own identifiers for the same person. A patient index
-holds the cross-reference between those identifiers and answers the question
-every other component starts with: who is this patient, and which identifier
-does each system know them by. FerroPIX also mints the pseudonymous
-identifiers the clinical domain uses, so a clinical record carries a
-pseudonym and identifying data stays outside it.
+organisation issues its own identifiers for the same person. FerroPIX holds
+the cross-reference between those identifiers in PostgreSQL and answers the
+question every other system starts with: who is this patient, and which
+identifier does each system know them by. It also mints the pseudonyms a
+clinical store names a patient by, so identifying data stays outside the
+clinical record.
 
-FerroPIX speaks the IHE profiles integrators already expect: PIX and PDQ, in
-their FHIR forms PIXm and PDQm, the PMIR identity feed, and the HL7 v2 PIX and
-PDQ transactions beside them.
+It answers over the IHE profiles integrators already use, all on one
+cross-reference:
 
-## Where the project is
+- the [PIXm Manager](integrate/pixm-manager.md) (ITI-83, ITI-104) and the
+  [PDQm Supplier](integrate/pdqm-supplier.md) (ITI-78, ITI-119), on HL7 FHIR
+  R4;
+- the [PMIR Registry](integrate/pmir-registry.md) (ITI-93, ITI-94);
+- the [HL7 v2 PIX and PDQ transactions](integrate/hl7v2-face.md) over MLLP
+  (ITI-8, ITI-9, ITI-10, ITI-21);
+- the [XCPD Responding Gateway](integrate/xcpd-gateway.md) (ITI-55).
 
-FerroPIX is built in the order of its milestones, and this book says which
-parts exist today.
+A data steward resolves the pairs the matcher is unsure of in the
+[operator console](operate/console.md). FerroPIX ships as a server image,
+a console image and a Helm chart, and publishes the libraries of the
+identity specifications it owns, [`ihe-iti`](crates/ihe-iti.md) and
+[`nl-generic-functions`](crates/nl-generic-functions.md), on crates.io.
 
-- **Built and published:** the two libraries of the identity specifications
-  FerroPIX owns, [`ihe-iti`](crates/ihe-iti.md) (the IHE identity profiles,
-  a feature each) and [`nl-generic-functions`](crates/nl-generic-functions.md)
-  (the Dutch Generic Functions). They hold the client side of each profile
-  and are on crates.io for any product to use. FerroFED takes both from
-  there.
-- **Being built:** the server, the
-  [v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3).
-  Its cross-reference in PostgreSQL, the
-  [PIXm Manager](integrate/pixm-manager.md) and the
-  [PDQm Supplier](integrate/pdqm-supplier.md) run today, as does the
-  [HL7 v2 face](integrate/hl7v2-face.md) with ITI-8, ITI-9 and ITI-21; the
-  PMIR Registry receives ITI-93 and answers ITI-94, and
-  [pseudonym minting](integrate/pseudonyms.md) runs; the pages under Operate
-  say what is built and what is planned.
-
-[What FerroPIX is](evaluate/what-ferropix-is.md) lists every capability with
-its status.
+This book documents `main`, which is FerroPIX {{version:ferropix}} when the
+book is built. The [changelog](changelog.md) says what each release
+changed.
 
 ## How this book is organised
 
-- **Evaluate:** what FerroPIX is, which specification versions it follows,
-  and the licence.
-- **Integrate:** how to use the published crates today, feature by feature.
-- **Operate:** configuration, deployment, security and audit, and
-  operations, each with what holds today and what the server adds.
+- **Evaluate:** what FerroPIX is and where it sits in the family, the
+  specification versions it follows, and the licence.
+- **Integrate:** the [quickstart](integrate/getting-started.md), then every
+  transaction a system sends FerroPIX, with what it reads, what it answers
+  and the section of the profile behind each answer, and the published
+  crates.
+- **Operate:** configuration, deployment by image, compose and chart,
+  matching, the console and its API, security and audit, operations, and
+  the release and support policy.
 - **Contribute:** how the work is organised and how this book stays in step
   with the code.
 

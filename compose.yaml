@@ -145,10 +145,12 @@ services:
   # and exits. Compose refuses an inlined config in a read-only service ("only
   # `file` is supported"), so this one-shot copy is what lets the server keep
   # its read-only root filesystem while compose.yaml stays one file. It runs
-  # the pinned PostgreSQL image below for its `cp`, with no network.
+  # the pinned PostgreSQL image below for its `cp`, with no network. A later
+  # `up` runs it again over the read-only copy the first one wrote: `-f`
+  # replaces the file, which needs no capability the service dropped.
   config:
     image: postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
-    entrypoint: ["cp", "/ferropix.toml", "/etc/ferropix/ferropix.toml"]
+    entrypoint: ["cp", "-f", "/ferropix.toml", "/etc/ferropix/ferropix.toml"]
     network_mode: none
     configs:
       - source: ferropix-toml

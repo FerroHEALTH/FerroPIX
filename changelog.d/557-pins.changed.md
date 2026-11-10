@@ -1,0 +1,1 @@
+- The compose quickstart and the Helm chart's CI values run the development OpenID Provider `mock-oauth2-server` 6.1.5, and the release and image scans run Trivy 0.76.2.

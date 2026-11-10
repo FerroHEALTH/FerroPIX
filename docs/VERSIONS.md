@@ -109,7 +109,7 @@ design.
 | Item | Pin | Repeated in |
 |---|---|---|
 | PostgreSQL test image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
-| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.4@sha256:647dd8c78a54f0e6fcd58d79c884e612f8f998a0662276f3e1db22e464a50192` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
+| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
 
 ## The images and the release lanes
 
@@ -135,10 +135,10 @@ choice: our own design, FerroBRIDGE's set.
 |---|---|---|
 | distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329` | `docker/Dockerfile`, `docker/console/Dockerfile` |
 | PostgreSQL quickstart image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | `compose.yaml` |
-| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.4@sha256:647dd8c78a54f0e6fcd58d79c884e612f8f998a0662276f3e1db22e464a50192` | `compose.yaml` |
+| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | `compose.yaml` |
 | Quickstart terminology server image | `ghcr.io/ferrohealth/ferroterm:0.4.2@sha256:1853486ae6f85a66424561cbf90f9905027c38d506bdeb24a9e1a831b4b97424` | `compose.yaml` |
 | hadolint image | `v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d` | `.github/workflows/ci.yml` |
-| Trivy | `0.76.1` | `.github/workflows/release.yml`, `.github/workflows/scan-and-tag.yml`, `.github/workflows/image-scan.yml`, `scripts/release/install-trivy.sh` |
+| Trivy | `0.76.2` | `.github/workflows/release.yml`, `.github/workflows/scan-and-tag.yml`, `.github/workflows/image-scan.yml`, `scripts/release/install-trivy.sh` |
 | cargo-auditable | `0.7.7` | `.github/workflows/release-build.yml`, `.github/workflows/release-console.yml` |
 | cargo-cyclonedx | `0.5.9` | `.github/workflows/release-build.yml` |
 | syft | `1.56.0` | `.github/workflows/release-build.yml`, `.github/workflows/release-image.yml`, `.github/workflows/release-console.yml` |
@@ -173,17 +173,17 @@ fetches into `target/tools/` for a machine with neither the binary on `PATH`
 nor docker or podman. The guard refuses a binary that answers another
 version. Bumping jscpd moves every row together, plus a fresh `--update` of
 the count when the new release counts differently. The rows are FerroEHR's
-and FerroBRIDGE's, checked against the release on 2026-11-01. No
+and FerroBRIDGE's, checked against the release on 2026-11-10. No
 specification governs the choice: our own design.
 
 | Tool | Pin | Read by |
 |---|---|---|
-| `jscpd` | `5.4.2` (release v5.4.2 of github.com/kucherenko/jscpd, 2026-10-20) | `scripts/checks/duplication.sh` |
-| `jscpd image` | `ghcr.io/kucherenko/jscpd:5.4.2@sha256:112bc771493f25ec412ebf61bef738dc1fbe80d3793090e6a5eeac827ef0ee79` | `scripts/checks/duplication.sh` (docker, podman) |
-| `jscpd darwin-arm64` | `b51d22d7c7610d27d8fd022577021ff3266a10f13295a2e545a8b8e126133a88` (`jscpd-darwin-arm64.tar.gz`) | `scripts/checks/duplication.sh --install` |
-| `jscpd darwin-x64` | `ae8d24aba2719df7682b1bb2c5021ab096116b8240c45fdae88654fc1ff36b17` (`jscpd-darwin-x64.tar.gz`) | `scripts/checks/duplication.sh --install` |
-| `jscpd linux-x64` | `5f18a6b70b4210782fc3c401c780ba994a2777249cd44d97d6fa460f6fff4570` (`jscpd-linux-x64-musl.tar.gz`) | `scripts/checks/duplication.sh --install` |
-| `jscpd linux-arm64` | `3635d652ae08ae10bfbc6821bfa8ac14080101f317fb5f45f4b590d5d32b9339` (`jscpd-linux-arm64-musl.tar.gz`) | `scripts/checks/duplication.sh --install` |
+| `jscpd` | `5.4.3` (release v5.4.3 of github.com/kucherenko/jscpd, 2026-11-08) | `scripts/checks/duplication.sh` |
+| `jscpd image` | `ghcr.io/kucherenko/jscpd:5.4.3@sha256:6f3d337cd70dce3561e5569b9c59d29adec815fc7d17ad7590012b6936e7eb7a` | `scripts/checks/duplication.sh` (docker, podman) |
+| `jscpd darwin-arm64` | `e119c4c5388118ad348a799c478589f7ad0fa707c0b7c819d6febc94f6f98522` (`jscpd-darwin-arm64.tar.gz`) | `scripts/checks/duplication.sh --install` |
+| `jscpd darwin-x64` | `7e5b81a0b30f1d261bf9cd8d8e72be43f0ce55a54a9374f1111123bb29362362` (`jscpd-darwin-x64.tar.gz`) | `scripts/checks/duplication.sh --install` |
+| `jscpd linux-x64` | `291452d6005e3fa17b531552bf76f87ff85bc4ae31533e0c17a7997f84079868` (`jscpd-linux-x64-musl.tar.gz`) | `scripts/checks/duplication.sh --install` |
+| `jscpd linux-arm64` | `f363875348817f8e999ca090266b1265ba29322d6b5d1f6280aa0d136ab1ca9e` (`jscpd-linux-arm64-musl.tar.gz`) | `scripts/checks/duplication.sh --install` |
 
 ## Specifications
 

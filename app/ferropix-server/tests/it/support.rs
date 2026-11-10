@@ -105,7 +105,6 @@ jwks_max_age = "1min"
 jwks_refresh_interval = "10s"
 jwks_file = ""
 timeout = "5s"
-role_claims = ["roles"]
 first_party_clients = ["ferropix-console"]
 
 [[trust.issuer]]

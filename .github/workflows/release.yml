@@ -316,7 +316,7 @@ jobs:
     env:
       # The one Trivy version of the release and the weekly scan, pinned in
       # docs/VERSIONS.md and read back by scripts/checks/versions.sh.
-      TRIVY_VERSION: "0.76.1"
+      TRIVY_VERSION: "0.76.2"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

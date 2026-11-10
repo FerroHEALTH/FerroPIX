@@ -113,17 +113,9 @@ impl Config {
     /// pairs of `args`, last.
     ///
     /// # Errors
-    /// Returns [`Error::Removed`] naming every key of the family's sections
-    /// this release renamed that the sources set, and [`Error::Load`] with
-    /// every refusal of the loader.
+    /// Returns [`Error::Load`] with every refusal of the loader.
     pub fn load(args: &ConfigArgs) -> Result<Loaded<Self>, Error> {
-        let reader = loader()?;
-        let renamed =
-            reader.load_with::<retired::shared::Shared>(args.config.as_deref(), &args.sets);
-        renamed
-            .map_or(Ok(()), |read| read.settings().removals().finish())
-            .map_err(Error::Removed)?;
-        Ok(reader.load_with(args.config.as_deref(), &args.sets)?)
+        Ok(loader()?.load_with(args.config.as_deref(), &args.sets)?)
     }
 
     /// Reads `text` as the configuration file and applies `environment`

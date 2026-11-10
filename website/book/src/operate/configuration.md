@@ -115,17 +115,7 @@ compose quickstart mounts it beside PostgreSQL
 unit, `"500ms"`, `"30s"`, `"10min"`, `"12h"` or `"7d"`, and a size is one such
 as `"512KiB"` or `"1MiB"`; a bare number is refused, and a key that holds one
 carries no unit in its name. FerroPIX's own sections write them the same
-way. The keys of FerroPIX's own sections that held a number of
-milliseconds, seconds, days or bytes (`timeout_ms`, `retention_days`,
-`spool_max_bytes` and the rest) were renamed in v0.0.24: in that release
-each refuses the start and names the key that replaces it, all of them in
-one refusal, and from the next release each fails as an unknown key. The
-renamed keys of the family sections (`request_timeout_ms` and the others of
-`[server]`, `auth.ca_file`, each issuer's `clock_skew_seconds` and the rest,
-the OTLP collector's files and the OAuth tables' `timeout_ms`, `ca_file` and
-client certificate files) are refused the same way in v0.0.24, read before
-the rest of the file, and from the next release each fails as an unknown
-key.
+way.
 
 | Key | Default | What it sets |
 |---|---|---|
@@ -521,11 +511,6 @@ integration with, reached through its outbound client.
 | `terminology.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the server's certificate, beside the platform roots. |
 | `terminology.endpoint.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
 
-In v0.0.24 the keys of the earlier `[terminology]` table, `base_url`,
-`timeout_ms`, `retry`, `credentials` and `tls`, refuse the start, each named
-with its place under `[terminology.endpoint]`; from the next release each
-fails as an unknown key.
-
 A feed whose table values the server cannot translate, because it refuses
 the call or cannot be reached, is answered `AR` with no receipt, so the
 same message is applied when sent again; an ITI-21 query is answered `AR`
@@ -591,10 +576,6 @@ The repository is `[audit.endpoint]`, the endpoint table of
 | `audit.spool_max_size` | `"64MiB"` | The most the spool holds. |
 | `audit.spool_max_events` | `100000` | The most records the spool holds. |
 | `audit.spool_write_timeout` | `"2s"` | The longest storing one record may take. |
-
-In v0.0.24 the keys of the earlier table, `audit.url`, `audit.timeout_ms`
-and `audit.retry_max_ms`, refuse the start, each named with its place under
-`[audit.endpoint]`; from the next release each fails as an unknown key.
 
 `serve` opens the spool at start and refuses to start when the directory
 is open to its group or to other users, cannot be written, or holds a file

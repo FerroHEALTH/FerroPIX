@@ -4,12 +4,10 @@
 //! The `[pixm]`, `[pdqm]` and `[pmir]` sections: each profile's switch and
 //! the options its text leaves to the actor.
 
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::Duration as Span;
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
-use crate::config::retired;
 
 /// The `[pixm]` section: the PIXm Patient Identifier Cross-reference Manager.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -75,12 +73,6 @@ pub struct Feed {
     pub initial_backoff: Span,
     /// The longest wait between two retries.
     pub max_backoff: Span,
-    /// Retired in v0.0.24 for `initial_backoff`.
-    #[serde(skip_serializing)]
-    pub initial_backoff_ms: Removed,
-    /// Retired in v0.0.24 for `max_backoff`.
-    #[serde(skip_serializing)]
-    pub max_backoff_ms: Removed,
 }
 
 impl Default for Feed {
@@ -89,8 +81,6 @@ impl Default for Feed {
             max_attempts: 10,
             initial_backoff: Span::from_secs(1),
             max_backoff: Span::from_mins(5),
-            initial_backoff_ms: Removed::default(),
-            max_backoff_ms: Removed::default(),
         }
     }
 }
@@ -106,15 +96,6 @@ pub struct Pmir {
 }
 
 impl Pmir {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(
-            self.feed.initial_backoff_ms,
-            &retired::pmir::INITIAL_BACKOFF_MS,
-        );
-        found.check(self.feed.max_backoff_ms, &retired::pmir::MAX_BACKOFF_MS);
-    }
-
     /// Checks the section and returns it as resolved.
     ///
     /// # Errors

@@ -14,7 +14,6 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::{ByteSize, Duration as Span};
 use ferrohealth_smart::client::outbound::OutboundClient;
 use ferrohealth_smart::config::ServerTls;
@@ -23,7 +22,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
-use crate::config::retired;
 use crate::config::section::{endpoint_secrets, url};
 
 /// The dotted key of the repository's endpoint table.
@@ -46,21 +44,6 @@ pub struct Audit {
     pub spool_max_events: usize,
     /// The longest storing one record may take.
     pub spool_write_timeout: Span,
-    /// Retired in v0.0.24 for `endpoint.url`.
-    #[serde(skip_serializing)]
-    pub url: Removed,
-    /// Retired in v0.0.24 for `spool_max_size`.
-    #[serde(skip_serializing)]
-    pub spool_max_bytes: Removed,
-    /// Retired in v0.0.24 for `spool_write_timeout`.
-    #[serde(skip_serializing)]
-    pub spool_write_timeout_ms: Removed,
-    /// Retired in v0.0.24 for `endpoint.timeout`.
-    #[serde(skip_serializing)]
-    pub timeout_ms: Removed,
-    /// Retired in v0.0.24 for `endpoint.retry.max_backoff`.
-    #[serde(skip_serializing)]
-    pub retry_max_ms: Removed,
 }
 
 impl Default for Audit {
@@ -79,11 +62,6 @@ impl Default for Audit {
             spool_max_size: ByteSize::from_mib(64),
             spool_max_events: 100_000,
             spool_write_timeout: Span::from_secs(2),
-            url: Removed::default(),
-            spool_max_bytes: Removed::default(),
-            spool_write_timeout_ms: Removed::default(),
-            timeout_ms: Removed::default(),
-            retry_max_ms: Removed::default(),
         }
     }
 }
@@ -104,18 +82,6 @@ pub struct AuditSettings {
 }
 
 impl Audit {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(self.url, &retired::audit::URL);
-        found.check(self.spool_max_bytes, &retired::audit::SPOOL_MAX_BYTES);
-        found.check(
-            self.spool_write_timeout_ms,
-            &retired::audit::SPOOL_WRITE_TIMEOUT_MS,
-        );
-        found.check(self.timeout_ms, &retired::audit::TIMEOUT_MS);
-        found.check(self.retry_max_ms, &retired::audit::RETRY_MAX_MS);
-    }
-
     /// Resolves the section under `profile`.
     ///
     /// # Errors

@@ -72,20 +72,11 @@ impl Config {
     /// the first refusal.
     ///
     /// # Errors
-    /// Returns [`Error::Removed`] naming every renamed key the sources set,
-    /// [`Error::DevUnderProduction`] for a `[dev]` table under
+    /// Returns [`Error::DevUnderProduction`] for a `[dev]` table under
     /// production, [`Error::DevTableRequired`] for Basic users without the
     /// `[dev]` table, [`Error::NotLoopback`] for a listener `[dev] loopback`
     /// refuses, and every [`Error`] each section's resolution returns.
     pub fn resolve(&self) -> Result<Settings, Error> {
-        let mut removals = ferrohealth_config::removed::Removals::new();
-        self.audit.removals(&mut removals);
-        self.outbox.removals(&mut removals);
-        self.pmir.removals(&mut removals);
-        self.hl7v2.removals(&mut removals);
-        self.xcpd.removals(&mut removals);
-        self.terminology.removals(&mut removals);
-        removals.finish().map_err(Error::Removed)?;
         if self.dev.is_some() && self.profile == Profile::Production {
             return Err(Error::DevUnderProduction);
         }

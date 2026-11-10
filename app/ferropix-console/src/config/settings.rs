@@ -94,9 +94,6 @@ impl Config {
     /// [`Error::Session`] for every other refusal of `[oidc]` and
     /// `[session]`.
     pub fn resolve(&self) -> Result<Settings, Error> {
-        let mut removals = ferrohealth_config::removed::Removals::new();
-        self.pix.removals(&mut removals);
-        removals.finish().map_err(Error::Removed)?;
         let listen: SocketAddr = self
             .server
             .listen

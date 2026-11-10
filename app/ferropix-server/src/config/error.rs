@@ -51,10 +51,6 @@ pub enum Error {
         #[source]
         source: url::ParseError,
     },
-    /// The sources set keys a release renamed, each named with what
-    /// replaced it (`config::retired`).
-    #[error("the configuration sets keys this release renamed")]
-    Removed(#[source] ferrohealth_config::removed::RemovedKeys),
     /// The client of an outbound endpoint table could not be built: the
     /// table, its TLS or its credential is refused.
     #[error("[{key}] is refused")]

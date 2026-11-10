@@ -51,7 +51,6 @@ fn consumer(name: &str, address: &str, domains: &[&str]) -> Consumer {
         domains: domains.iter().map(|domain| (*domain).to_owned()).collect(),
         connect_timeout: ferrohealth_config::units::Duration::from_secs(1),
         reply_timeout: ferrohealth_config::units::Duration::from_secs(2),
-        ..Consumer::default()
     }
 }
 
@@ -61,7 +60,6 @@ fn bounds(attempts: u32) -> Notification {
         max_attempts: attempts,
         initial_backoff: ferrohealth_config::units::Duration::from_millis(20),
         max_backoff: ferrohealth_config::units::Duration::from_millis(40),
-        ..Notification::default()
     }
 }
 

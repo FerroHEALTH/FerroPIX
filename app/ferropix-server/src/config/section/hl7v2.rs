@@ -33,12 +33,10 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use ferrobridge_hl7v2::decode::Charset;
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::{ByteSize, Duration as Span};
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
-use crate::config::retired;
 use crate::config::section::socket_address;
 use crate::config::section::terminology::TerminologySettings;
 
@@ -84,12 +82,6 @@ pub struct Consumer {
     pub connect_timeout: Span,
     /// How long the acknowledgment may take once connected.
     pub reply_timeout: Span,
-    /// Retired in v0.0.24 for `connect_timeout`.
-    #[serde(skip_serializing)]
-    pub connect_timeout_ms: Removed,
-    /// Retired in v0.0.24 for `reply_timeout`.
-    #[serde(skip_serializing)]
-    pub reply_timeout_ms: Removed,
 }
 
 impl Default for Consumer {
@@ -102,8 +94,6 @@ impl Default for Consumer {
             domains: Vec::new(),
             connect_timeout: Span::from_secs(5),
             reply_timeout: Span::from_secs(30),
-            connect_timeout_ms: Removed::default(),
-            reply_timeout_ms: Removed::default(),
         }
     }
 }
@@ -127,12 +117,6 @@ pub struct Notification {
     pub initial_backoff: Span,
     /// The longest wait between two attempts.
     pub max_backoff: Span,
-    /// Retired in v0.0.24 for `initial_backoff`.
-    #[serde(skip_serializing)]
-    pub initial_backoff_ms: Removed,
-    /// Retired in v0.0.24 for `max_backoff`.
-    #[serde(skip_serializing)]
-    pub max_backoff_ms: Removed,
 }
 
 impl Default for Notification {
@@ -141,8 +125,6 @@ impl Default for Notification {
             max_attempts: 10,
             initial_backoff: Span::from_secs(1),
             max_backoff: Span::from_mins(5),
-            initial_backoff_ms: Removed::default(),
-            max_backoff_ms: Removed::default(),
         }
     }
 }
@@ -175,15 +157,6 @@ pub struct Hl7v2 {
     pub consumers: Vec<Consumer>,
     /// The retry bounds of the notifications.
     pub notification: Notification,
-    /// Retired in v0.0.24 for `frame_limit`.
-    #[serde(skip_serializing)]
-    pub frame_limit_bytes: Removed,
-    /// Retired in v0.0.24 for `idle_timeout`.
-    #[serde(skip_serializing)]
-    pub idle_timeout_ms: Removed,
-    /// Retired in v0.0.24 for `frame_timeout`.
-    #[serde(skip_serializing)]
-    pub frame_timeout_ms: Removed,
 }
 
 impl Default for Hl7v2 {
@@ -201,9 +174,6 @@ impl Default for Hl7v2 {
             facility: String::from("FERROPIX"),
             consumers: Vec::new(),
             notification: Notification::default(),
-            frame_limit_bytes: Removed::default(),
-            idle_timeout_ms: Removed::default(),
-            frame_timeout_ms: Removed::default(),
         }
     }
 }
@@ -237,34 +207,6 @@ pub struct Hl7v2Settings {
 }
 
 impl Hl7v2 {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(self.frame_limit_bytes, &retired::hl7v2::FRAME_LIMIT_BYTES);
-        found.check(self.idle_timeout_ms, &retired::hl7v2::IDLE_TIMEOUT_MS);
-        found.check(self.frame_timeout_ms, &retired::hl7v2::FRAME_TIMEOUT_MS);
-        for (index, consumer) in self.consumers.iter().enumerate() {
-            let table = format!("hl7v2.consumers[{index}]");
-            found.check_under(
-                consumer.connect_timeout_ms,
-                &retired::hl7v2::CONNECT_TIMEOUT_MS,
-                &table,
-            );
-            found.check_under(
-                consumer.reply_timeout_ms,
-                &retired::hl7v2::REPLY_TIMEOUT_MS,
-                &table,
-            );
-        }
-        found.check(
-            self.notification.initial_backoff_ms,
-            &retired::hl7v2::INITIAL_BACKOFF_MS,
-        );
-        found.check(
-            self.notification.max_backoff_ms,
-            &retired::hl7v2::MAX_BACKOFF_MS,
-        );
-    }
-
     /// Resolves the section, `None` when the listener is off.
     ///
     /// # Errors

@@ -13,10 +13,6 @@ pub enum Error {
     /// of the wrong type.
     #[error(transparent)]
     Load(#[from] ferrohealth_config::error::ConfigError),
-    /// The sources set keys a release renamed, each named with what
-    /// replaced it.
-    #[error("the configuration sets keys this release renamed")]
-    Removed(#[source] ferrohealth_config::removed::RemovedKeys),
     /// A secret is set twice, or its `_file` sibling cannot be read or is
     /// empty.
     #[error(transparent)]

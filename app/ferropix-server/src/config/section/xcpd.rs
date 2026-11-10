@@ -28,9 +28,7 @@ use ihe_iti::xcpd::identifier::{HomeCommunityId, Oid};
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
-use crate::config::retired;
 use crate::config::section::is_loopback_url;
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::tls::TlsClientSection;
 use ferrohealth_config::units::Duration as Span;
 use ferrohealth_server::tls_client::TlsClient;
@@ -66,15 +64,6 @@ pub struct Xcpd {
     /// mutual TLS and the roots it trusts beside the platform's, a private
     /// community PKI.
     pub tls: TlsClientSection,
-    /// Retired in v0.0.24 for `delivery_initial_backoff`.
-    #[serde(skip_serializing)]
-    pub delivery_initial_backoff_ms: Removed,
-    /// Retired in v0.0.24 for `delivery_max_backoff`.
-    #[serde(skip_serializing)]
-    pub delivery_max_backoff_ms: Removed,
-    /// Retired in v0.0.24 for `delivery_timeout`.
-    #[serde(skip_serializing)]
-    pub delivery_timeout_ms: Removed,
 }
 
 impl Default for Xcpd {
@@ -91,9 +80,6 @@ impl Default for Xcpd {
             delivery_max_backoff: Span::from_mins(1),
             delivery_timeout: Span::from_secs(10),
             tls: TlsClientSection::default(),
-            delivery_initial_backoff_ms: Removed::default(),
-            delivery_max_backoff_ms: Removed::default(),
-            delivery_timeout_ms: Removed::default(),
         }
     }
 }
@@ -140,22 +126,6 @@ pub struct XcpdSettings {
 }
 
 impl Xcpd {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(
-            self.delivery_initial_backoff_ms,
-            &retired::xcpd::DELIVERY_INITIAL_BACKOFF_MS,
-        );
-        found.check(
-            self.delivery_max_backoff_ms,
-            &retired::xcpd::DELIVERY_MAX_BACKOFF_MS,
-        );
-        found.check(
-            self.delivery_timeout_ms,
-            &retired::xcpd::DELIVERY_TIMEOUT_MS,
-        );
-    }
-
     /// Resolves the section: `None` while it is off.
     ///
     /// # Errors

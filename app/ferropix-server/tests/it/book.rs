@@ -10,7 +10,7 @@
 //! a section and missing from the page fails here.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use ferropix_server::config::Config;
 
@@ -132,67 +132,22 @@ fn every_problem_type_resolves_to_its_section_of_the_book() {
     }
 }
 
-/// Returns every markdown file under `directory`, in path order.
-fn pages(directory: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(directory)
-        .expect("the book's directory is read")
-        .map(|entry| entry.expect("a directory entry is read").path())
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            found.extend(pages(&path));
-        } else if path.extension().is_some_and(|extension| extension == "md") {
-            found.push(path);
-        }
-    }
-    found
-}
-
-/// Returns each fenced block of `page` whose info string is exactly `info`,
-/// with the line its fence opens on.
-fn blocks(page: &str, info: &str) -> Vec<(usize, String)> {
-    let mut found = Vec::new();
-    let mut open: Option<(usize, String)> = None;
-    for (number, line) in page.lines().enumerate() {
-        match open.take() {
-            Some((start, body)) if line.trim_end() == "```" => found.push((start, body)),
-            Some((start, mut body)) => {
-                body.push_str(line);
-                body.push('\n');
-                open = Some((start, body));
-            }
-            None if line
-                .strip_prefix("```")
-                .is_some_and(|rest| rest.trim_end() == info) =>
-            {
-                open = Some((number + 1, String::new()));
-            }
-            None => {}
-        }
-    }
-    found
-}
-
 #[test]
 fn every_toml_block_of_the_book_is_a_configuration_the_server_reads() {
-    let book = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../website/book/src");
-    let mut read = 0;
-    let mut refused = Vec::new();
-    for page in pages(&book) {
-        let text = std::fs::read_to_string(&page).expect("a page of the book is read");
-        for (line, block) in blocks(&text, "toml") {
-            read += 1;
-            if let Err(error) = Config::from_sources(Some(&block), &BTreeMap::new()) {
-                refused.push(format!("{}:{line}: {error}", page.display()));
-            }
-        }
-    }
+    let found = ferropix_testkit::book::blocks("toml").expect("the book is read");
     assert!(
-        read >= 5,
-        "the book holds {read} toml blocks; the walk found too few"
+        found.len() >= 5,
+        "the book holds {} toml blocks; the walk found too few",
+        found.len()
     );
+    let refused: Vec<String> = found
+        .iter()
+        .filter_map(|block| {
+            Config::from_sources(Some(&block.body), &BTreeMap::new())
+                .err()
+                .map(|error| format!("{}:{}: {error}", block.page.display(), block.line))
+        })
+        .collect();
     assert!(
         refused.is_empty(),
         "the server's loader refuses these blocks of the book:\n{}",
@@ -202,10 +157,10 @@ fn every_toml_block_of_the_book_is_a_configuration_the_server_reads() {
 
 #[test]
 fn a_block_with_a_key_the_server_does_not_know_is_refused() {
-    let page = "Text.\n\n```toml\n[server]\nlisten = \"0.0.0.0:8080\"\nlisten_port = 8080\n```\n\n```toml,ferroterm\n[terminology]\n```\n";
-    let found = blocks(page, "toml");
+    let found = ferropix_testkit::book::fenced(
+        "```toml\n[server]\nlisten = \"0.0.0.0:8080\"\nlisten_port = 8080\n```\n",
+        "toml",
+    );
     assert_eq!(1, found.len(), "{found:?}");
-    let (line, block) = &found[0];
-    assert_eq!(3, *line);
-    assert!(Config::from_sources(Some(block), &BTreeMap::new()).is_err());
+    assert!(Config::from_sources(Some(&found[0].1), &BTreeMap::new()).is_err());
 }

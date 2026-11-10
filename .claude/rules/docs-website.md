@@ -30,9 +30,9 @@ its look and its content. The same-PR rule below is also a hard rule in
 - `website/landing/`: the hand-written landing page at the site root.
   Relative URLs only, light and dark through `prefers-color-scheme`, a
   `<meta>` Content-Security-Policy with every source `'self'`, and no request
-  to another origin. The roadmap block between `<!-- roadmap:begin -->` and
-  `<!-- roadmap:end -->` is rendered from the open milestones (name, theme,
-  link; never issue counts, which go stale between deploys).
+  to another origin. It states no version and no project status: what it
+  names is built on `main`, and the milestones, linked from the footer, are
+  the roadmap (owner 2026-11-10, #594).
 - `website/book/`: the mdBook, served at `/docs/` (`site-url`). mdBook's
   `light` and `navy` themes recoloured in `theme/ferropix.css` with the "Plum
   & Iron" palette of `assets/brand/tokens.css`; system fonts

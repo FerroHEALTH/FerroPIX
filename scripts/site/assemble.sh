@@ -9,7 +9,7 @@
 #   scripts/site/assemble.sh OUT
 #
 # The landing page lands at the site root and the book under /docs/, which is
-# what book.toml's site-url declares. Four things are rendered on the way:
+# what book.toml's site-url declares. Three things are rendered on the way:
 #
 #   * the book's version markers, from the manifests, so a page never states
 #     a version the tree has moved past: {{version:<crate>}} is the version
@@ -23,13 +23,8 @@
 #     of the artwork.
 #   * each page of the book gets its own hashed Content-Security-Policy
 #     (scripts/site/book-csp.sh).
-#   * the landing page's roadmap block (between `<!-- roadmap:begin -->` and
-#     `<!-- roadmap:end -->`), from the tracker's open milestones through the
-#     GitHub API when `gh` is authenticated. Without a token the block stays
-#     empty and the page keeps its link to the milestones page, so an
-#     assembly on a laptop never fails on the network. SITE_ROADMAP=off
-#     leaves it empty without asking, which is how the offline link check
-#     (scripts/checks/site-links.sh) assembles the site.
+#
+# The assembly reads nothing from the network.
 #
 # The script leaves the source tree untouched: the book is staged and built
 # in temporary directories.
@@ -41,7 +36,6 @@ cd "$root"
 
 readonly OUT="${1:?usage: $0 OUT}"
 readonly LANDING=website/landing
-readonly REPO=FerroHEALTH/FerroPIX
 
 # shellcheck source=scripts/site/toolchain.sh
 # shellcheck disable=SC1091 # shellcheck is not run with -x; the library is checked on its own
@@ -102,25 +96,9 @@ render() {
   done < <(grep -o -E '\{\{(version|dep):[A-Za-z0-9_-]+\}\}' "$file" | sort -u)
 }
 
-# The open milestones as list items, oldest due date first: the name and a
-# link to the milestone, never its issue counts, which go stale the moment an
-# issue moves and the site is only redeployed from main. Every field that
-# reaches the page is HTML-escaped, because a milestone title is text somebody
-# typed.
-roadmap() {
-  gh api "repos/$REPO/milestones?state=open&sort=due_on&direction=asc" --jq '
-    def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
-    ["<ul class=\"roadmap\">"]
-    + map("  <li><a href=\"" + .html_url + "\" rel=\"noopener\">" + (.title | esc) + "</a>"
-          + (if .description == null or .description == "" then "" else "<span class=\"theme\">" + (.description | split(":")[0] | esc) + "</span>" end)
-          + "</li>")
-    + ["</ul>"] | .[]'
-}
-
 stage="$(mktemp -d)"
 book="$(mktemp -d)"
-block="$(mktemp)"
-trap 'rm -rf "$stage" "$book"; rm -f "$block"' EXIT
+trap 'rm -rf "$stage" "$book"' EXIT
 
 # The staged tree mirrors the repository's layout, so the book's
 # {{#include}} of CHANGELOG.md and docs/VERSIONS.md resolves as it does in
@@ -149,18 +127,5 @@ cp -R "$book"/. "$OUT/docs/"
 # the book's stylesheet address from the site root.
 mkdir -p "$OUT/assets"
 cp -R assets/brand "$OUT/assets/"
-
-if [[ "${SITE_ROADMAP:-on}" == off ]]; then
-  echo "assemble: SITE_ROADMAP=off, so the roadmap block stays empty."
-elif roadmap > "$block" 2> /dev/null && [[ -s "$block" ]]; then
-  awk -v blockfile="$block" '
-    /<!-- roadmap:begin -->/ { print; while ((getline line < blockfile) > 0) print line; skip = 1; next }
-    /<!-- roadmap:end -->/ { skip = 0 }
-    !skip { print }
-  ' "$LANDING/index.html" > "$OUT/index.html"
-  echo "assemble: roadmap rendered from the open milestones."
-else
-  echo "assemble: no GitHub API access, so the roadmap block stays empty." >&2
-fi
 
 echo "assemble: site at $OUT"

@@ -147,6 +147,18 @@ choice: our own design, FerroBRIDGE's set.
 names, and holds the server image tag `compose.yaml` defaults to equal to
 the workspace version.
 
+## The SemVer judge
+
+`scripts/checks/semver.sh` judges each published crate's version against
+its change with `cargo-semver-checks`, the version the family pins
+(FerroBRIDGE, FerroSYS, FerroAUTH and FerroAUDIT). It reads its pin from
+this row and refuses another installed version, and CI and the release
+plan install this version through `taiki-e/install-action` (#586).
+
+| Item | Pin | Repeated in |
+|---|---|---|
+| cargo-semver-checks | `0.51.0` | read by `scripts/checks/semver.sh --pin` for the `crate-version-guard` job of `.github/workflows/ci.yml` and the `plan` job of `.github/workflows/release.yml` |
+
 ## The performance gate
 
 `.github/workflows/perf.yml` installs `ferrohealth-perf`, the family's

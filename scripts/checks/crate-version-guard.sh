@@ -18,6 +18,16 @@
 # moves it, because a published version is immutable. A crate new at the head
 # and a 0.0.0 name reservation are outside the bump rule.
 #
+# A crate version that moves takes one SemVer step: the patch, or a higher
+# minor or major with the components after it reset to 0 (SemVer 2.0.0 §7
+# and §8, <https://semver.org/>). A public dependency
+# (scripts/checks/lib/public-deps.sh) required on another compatibility line
+# breaks the crate, so its version leaves its own line too (The Cargo Book,
+# "SemVer Compatibility"). Whether the step answers the change is
+# cargo-semver-checks' judgement: the guard names each crate it moved from a
+# published line as `judged=` in GITHUB_OUTPUT, and CI runs
+# scripts/checks/semver.sh over them against the same base (#586).
+#
 #   crate-version-guard.sh <base-ref> [head-ref|WORKTREE]
 #   crate-version-guard.sh --self-test
 #
@@ -30,6 +40,8 @@
 # check still runs. Exit 0 when the rules hold, 1 when they do not, 2 on a
 # usage error.
 set -euo pipefail
+# shellcheck disable=SC1091 # shellcheck is not run with -x; the library is checked on its own
+. "$(dirname "${BASH_SOURCE[0]}")/lib/public-deps.sh"
 
 # The `version` key of `[workspace.package]` in a Cargo.toml read on stdin.
 workspace_version() {
@@ -72,6 +84,20 @@ newer() {
   [[ "$newest" == "$b" ]]
 }
 
+# semver_step A B: whether B is one SemVer step above A, its pre-release
+# suffix aside: the patch, or a higher minor or major with the components
+# after it at 0.
+semver_step() {
+  local omaj omin nmaj nmin npat
+  IFS=. read -r omaj omin _ <<< "${1%%-*}"
+  IFS=. read -r nmaj nmin npat <<< "${2%%-*}"
+  if [[ "$omaj" != "$nmaj" ]]; then
+    [[ "$nmin" == 0 && "$npat" == 0 ]]
+  elif [[ "$omin" != "$nmin" ]]; then
+    [[ "$npat" == 0 ]]
+  fi
+}
+
 # The self-test builds a stub repository in a temporary directory, with a copy
 # of this script and a stub publish list, and runs the guard on branches.
 self_test() {
@@ -81,8 +107,9 @@ self_test() {
   work="$(mktemp -d)"
   trap 'chmod -R u+w "$work" && rm -r -- "$work"' EXIT
   script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-  mkdir -p "$work/scripts/checks" "$work/scripts/release"
+  mkdir -p "$work/scripts/checks/lib" "$work/scripts/release"
   cp "$script" "$work/scripts/checks/crate-version-guard.sh"
+  cp "$(dirname "$script")/lib/public-deps.sh" "$work/scripts/checks/lib/public-deps.sh"
   stub_git() {
     git -C "$work" -c user.name=self-test -c user.email=self-test@example.org \
       -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
@@ -100,16 +127,17 @@ self_test() {
     if [[ -n "$name" ]]; then printf '  %s\n' "$name" >> "$work/scripts/release/publish-crates.sh"; fi
     printf ')\n' >> "$work/scripts/release/publish-crates.sh"
   }
-  # crate VERSION [LOCKED]: crates/pix-a at VERSION, consuming the workspace
-  # `serde` and `log` and requiring its own `tokio`, locked at LOCKED (VERSION
+  # crate VERSION [LOCKED] [ATNA]: crates/pix-a at VERSION, consuming the
+  # workspace `serde` and `log` and requiring its own `tokio` and, publicly,
+  # `ihe-atna` at ATNA (0.10.0 when not given), locked at LOCKED (VERSION
   # when not given).
   crate() {
-    local version="$1" locked="${2:-$1}"
+    local version="$1" locked="${2:-$1}" atna="${3:-0.10.0}"
     mkdir -p "$work/crates/pix-a/src"
     if [[ "$version" == workspace ]]; then
-      printf '[package]\nname = "pix-a"\nversion.workspace = true\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' > "$work/crates/pix-a/Cargo.toml"
+      printf '[package]\nname = "pix-a"\nversion.workspace = true\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\nihe-atna = { version = "%s", optional = true }\n' "$atna" > "$work/crates/pix-a/Cargo.toml"
     else
-      printf '[package]\nname = "pix-a"\nversion = "%s"\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\n' "$version" > "$work/crates/pix-a/Cargo.toml"
+      printf '[package]\nname = "pix-a"\nversion = "%s"\n\n[dependencies]\nserde.workspace = true\nlog = { workspace = true, features = ["std"] }\ntokio = { version = "1.0", default-features = false }\nihe-atna = { version = "%s", optional = true }\n' "$version" "$atna" > "$work/crates/pix-a/Cargo.toml"
     fi
     printf '[[package]]\nname = "pix-a"\nversion = "%s"\n' "$locked" > "$work/Cargo.lock"
   }
@@ -134,7 +162,8 @@ self_test() {
     shift 3
     stub_git checkout -q "$branch"
     status=0
-    (cd "$work" && env "$@" bash scripts/checks/crate-version-guard.sh main "$branch") > "$work/.git/guard-out" 2>&1 || status=$?
+    : > "$work/.git/judged"
+    (cd "$work" && env GITHUB_OUTPUT="$work/.git/judged" "$@" bash scripts/checks/crate-version-guard.sh main "$branch") > "$work/.git/guard-out" 2>&1 || status=$?
     if [[ "$status" -ne "$want" ]]; then
       echo "crate-version-guard: self-test failed: $name exited $status, wanted $want." >&2
       cat "$work/.git/guard-out" >&2
@@ -253,6 +282,56 @@ self_test() {
   expect "a crate's own requirement of a moved workspace name" 0 own
   expect "a crate version that moves backwards" 1 lower
   expect "a release beside a crate bump" 0 together
+
+  # The SemVer step and the public dependencies (#586).
+  branch minor
+  echo 'pub fn c() {}' >> "$work/crates/pix-a/src/lib.rs"
+  crate 0.1.0
+  commit "the next minor at patch 0"
+  branch skipped
+  echo 'pub fn c() {}' >> "$work/crates/pix-a/src/lib.rs"
+  crate 0.3.0
+  commit "a higher minor at patch 0"
+  branch kept
+  echo 'pub fn c() {}' >> "$work/crates/pix-a/src/lib.rs"
+  crate 0.1.2
+  commit "a minor step that keeps a patch"
+  branch major
+  echo 'pub fn c() {}' >> "$work/crates/pix-a/src/lib.rs"
+  crate 1.0.0
+  commit "a major step at 0.0"
+  expect "the next minor at patch 0" 0 minor
+  grep -q 'judged=pix-a' "$work/.git/judged" || {
+    echo "crate-version-guard: self-test failed: the moved crate was not named for the judge." >&2
+    exit 1
+  }
+  expect "a higher minor at patch 0" 0 skipped
+  expect "a minor step that keeps a patch" 1 kept
+  grep -q 'neither a patch step' "$work/.git/guard-out" || {
+    echo "crate-version-guard: self-test failed: the step was not named." >&2
+    exit 1
+  }
+  expect "a major step at 0.0" 0 major
+  # A patch of 0.0.z already leaves its line, so the public dependency cases
+  # run on 0.1.0.
+  stub_git checkout -q main
+  stub_git merge -q --ff-only minor
+  branch public
+  crate 0.1.1 0.1.1 0.11.0
+  commit "a public dependency on another line with a patch step"
+  branch publicminor
+  crate 0.2.0 0.2.0 0.11.0
+  commit "a public dependency on another line with a minor step"
+  branch publicpatch
+  crate 0.1.1 0.1.1 0.10.3
+  commit "a public dependency on its own line with a patch step"
+  expect "a public dependency on another line with a patch step" 1 public
+  grep -q 'ihe-atna 0.10->0.11' "$work/.git/guard-out" || {
+    echo "crate-version-guard: self-test failed: the moved public dependency was not named." >&2
+    exit 1
+  }
+  expect "a public dependency on another line with a minor step" 0 publicminor
+  expect "a public dependency on its own line with a patch step" 0 publicpatch
   echo "crate-version-guard: self-test passed."
 }
 
@@ -337,6 +416,7 @@ fi
 crates="$(read_head scripts/release/publish-crates.sh | awk '/^readonly CRATES=\(/ { p = 1; next } p && /^\)/ { exit } p { gsub(/[[:space:]]/, ""); if ($0 != "" && $0 !~ /^#/) print }')"
 lock="$(read_head Cargo.lock)"
 summary=""
+judged=""
 while IFS= read -r crate; do
   [[ -n "$crate" ]] || continue
   manifest="crates/$crate/Cargo.toml"
@@ -376,6 +456,22 @@ while IFS= read -r crate; do
   for dep in $touched; do
     if read_head "$manifest" | grep -qE "^${dep}(\.workspace[[:space:]]*=[[:space:]]*true|[[:space:]]*=[[:space:]]*\{.*workspace[[:space:]]*=[[:space:]]*true)"; then packaged=1; fi
   done
+  if [[ "$old_ver" != "$new_ver" && "$old_ver" != 0.0.0 ]]; then
+    if ! semver_step "$old_ver" "$new_ver"; then
+      echo "crate-version-guard: $crate moves from $old_ver to $new_ver, which is neither a patch step nor a higher minor or major with the components after it at 0 (SemVer 2.0.0 §7, §8)" >&2
+      failed=1
+      continue
+    fi
+    moved="$(moved_lines \
+      "$(manifest_requirements <(git show "$fork:Cargo.toml") <(git show "$fork:$manifest") | public_lines)" \
+      "$(manifest_requirements <(read_head Cargo.toml) <(read_head "$manifest") | public_lines)")"
+    if [[ -n "$moved" && "$(compat_line "$old_ver")" == "$(compat_line "$new_ver")" ]]; then
+      echo "crate-version-guard: $crate moves from $old_ver to $new_ver while a public dependency moves to another compatibility line ($moved); that breaks its consumers, so its version leaves its line (.claude/rules/crates-publishing.md)" >&2
+      failed=1
+      continue
+    fi
+    judged="$judged $crate"
+  fi
   if [[ "$packaged" -eq 1 && "$old_ver" == "$new_ver" && "$new_ver" != 0.0.0 ]]; then
     if [[ "${NO_CRATE_BUMP:-false}" == true ]]; then
       echo "crate-version-guard: $crate changed at $new_ver; the bump rule is waived (no-crate-bump)"
@@ -389,4 +485,8 @@ while IFS= read -r crate; do
 done <<< "$crates"
 
 [[ "$failed" -eq 0 ]] || exit 1
+# CI judges each crate named here with scripts/checks/semver.sh.
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  echo "judged=${judged# }" >> "$GITHUB_OUTPUT"
+fi
 echo "crate-version-guard: product $want agrees with the changelog; crates:${summary:- none listed}"

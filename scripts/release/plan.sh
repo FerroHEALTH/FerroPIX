@@ -188,6 +188,10 @@ check_notes() {
   cat "$NOTES"
 }
 
+# Each crate the release publishes against its newest release on crates.io:
+# a break bumps the minor while 0.x (cargo-semver-checks, #586).
+check_crate_semver() { bash scripts/release/publish-crates.sh semver; }
+
 check_notes_content() {
   if ! grep -q 'commitment runs until the end of [A-Z][a-z]* [0-9]\{4\} ' "$NOTES"; then
     echo "::error::the release notes for $TAG do not state the support period (Regulation (EU) 2024/2847 Art 13(19))." >&2
@@ -205,6 +209,7 @@ check_version The tag matches the workspace version
 check_changelog_structure Changelog structure (no duplicate subsections, Keep a Changelog types only)
 check_changelog_security The Security section of the cut names its advisories and its reason
 check_changelog_fragments No changelog fragment is left unassembled
+check_crate_semver Each published crate's version answers its change against crates.io (cargo-semver-checks)
 check_notes The changelog section for this tag becomes the release notes
 check_notes_content The release notes carry the support period
 EOF

@@ -146,7 +146,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          for guard in comment-style versions file-length todo-issues crate-version-guard changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
+          for guard in comment-style versions file-length todo-issues crate-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: self-tests / The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
@@ -414,12 +414,17 @@ jobs:
 
   # The product version and each published crate's own version agree with the
   # lock and the changelog; the guard says so itself while there is no
-  # workspace.
+  # workspace. A crate version that moves takes one SemVer step, and a public
+  # dependency on another compatibility line moves it off its own line. On a
+  # pull request and in the merge queue, each crate the guard names is then
+  # judged by cargo-semver-checks against the same base
+  # (scripts/checks/semver.sh, #586): a breaking change bumps the minor while
+  # the crate is 0.x. The toolchain is installed only when a crate is judged.
   crate-version-guard:
     name: crate-version-guard
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read # the labels when the step runs
@@ -428,7 +433,9 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: The product line, the crate lines, the lock and the changelog agree
+      - id: guard-pr
+        name: The product line, the crate lines, the lock and the changelog agree
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -441,6 +448,50 @@ jobs:
           NO_CRATE_BUMP=$(gh api "repos/${GH_REPO}/pulls/${PR}" --jq 'any(.labels[].name; . == "no-crate-bump")')
           export NO_CRATE_BUMP
           bash scripts/checks/crate-version-guard.sh "$BASE" "$HEAD"
+      # The queue builds each entry onto the one ahead of it and names that as
+      # the base, so the diff is this entry's change alone. The group ref names
+      # the pull request (`gh-readonly-queue/main/pr-<n>-<sha>`), whose label
+      # is the same escape.
+      - id: guard-queue
+        name: The queued change keeps the version lines against the queue base
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          BASE: ${{ github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          pr="$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$GROUP_REF")"
+          NO_CRATE_BUMP=false
+          if [ -n "$pr" ] && gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx 'no-crate-bump'; then
+            NO_CRATE_BUMP=true
+          fi
+          export NO_CRATE_BUMP
+          bash scripts/checks/crate-version-guard.sh "$BASE" "$HEAD"
+      - uses: ./.github/actions/setup-rust
+        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        with:
+          cache-save-if: "false"
+      - id: semver-pin
+        name: Read the cargo-semver-checks pin
+        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        run: echo "version=$(bash scripts/checks/semver.sh --pin)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
+        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        with:
+          tool: cargo-semver-checks@${{ steps.semver-pin.outputs.version }}
+      # The checkout is the change merged onto its base, so the judge compares
+      # the base's public API with the one the merge would leave.
+      - name: Each moved crate's version answers its change (cargo-semver-checks)
+        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        env:
+          JUDGED: ${{ steps.guard-pr.outputs.judged }}${{ steps.guard-queue.outputs.judged }}
+          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # one crate name per word by construction
+          bash scripts/checks/semver.sh --baseline-rev "$BASE" $JUDGED
 
   # A pull request that changes a user-visible surface (a crate's source or
   # features, the server, a deployment file) updates the book in the same

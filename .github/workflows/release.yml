@@ -72,7 +72,8 @@ jobs:
   plan:
     name: plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # cargo-semver-checks builds both crates and their releases twice.
+    timeout-minutes: 60
     permissions:
       contents: read
       issues: read # the milestone titled as the tag
@@ -167,13 +168,27 @@ jobs:
 
       # Every release fact, as ONE list: the milestone titled as the tag, the
       # workspace version, the changelog's structure and Security rules for
-      # this section, and the release notes with the support period. The list
+      # this section, each published crate judged by cargo-semver-checks
+      # against crates.io, and the release notes with the support period. The list
       # is scripts/release/plan.sh; scripts/release/preflight.sh runs the same
       # list before the tag is pushed, so the two cannot drift (no
       # specification governs the list: our own design). It names every
       # refused check, and writes release-notes.md for github-release. A
       # missing or empty changelog section fails the release rather than
       # falling back to notes generated from the commit range.
+      # The judge of check_crate_semver: the toolchain without a cache (a
+      # publishing lane restores none, .claude/rules/ci-cd.md) and the
+      # cargo-semver-checks version docs/VERSIONS.md pins.
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+      - id: semver-pin
+        name: Read the cargo-semver-checks pin
+        run: echo "version=$(bash scripts/checks/semver.sh --pin)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
+        with:
+          tool: cargo-semver-checks@${{ steps.semver-pin.outputs.version }}
+
       - name: Every release fact holds at the tagged commit
         env:
           GH_TOKEN: ${{ github.token }}

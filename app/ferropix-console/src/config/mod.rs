@@ -44,7 +44,6 @@ pub mod settings;
 use std::collections::BTreeMap;
 
 use ferrohealth_config::loader::{Loaded, Loader};
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::Duration as Span;
 use ferrohealth_server::cli::ConfigArgs;
 use ferrohealth_session::config::{OidcSection, SessionSection};
@@ -74,16 +73,9 @@ impl Config {
     /// `--set` pairs of `args`, last.
     ///
     /// # Errors
-    /// Returns [`Error::Removed`] naming every key of the family's sections
-    /// this release renamed that the sources set, and [`Error::Load`] with
-    /// every refusal of the loader.
+    /// Returns [`Error::Load`] with every refusal of the loader.
     pub fn load(args: &ConfigArgs) -> Result<Loaded<Self>, Error> {
-        let reader = loader()?;
-        let renamed = reader.load_with::<retired::Shared>(args.config.as_deref(), &args.sets);
-        renamed
-            .map_or(Ok(()), |read| read.settings().removals().finish())
-            .map_err(Error::Removed)?;
-        Ok(reader.load_with(args.config.as_deref(), &args.sets)?)
+        Ok(loader()?.load_with(args.config.as_deref(), &args.sets)?)
     }
 
     /// Reads `text` as the configuration file and applies `environment`
@@ -152,9 +144,6 @@ pub struct Pix {
     /// The scope the server's `[operator] admin_scope` names: the console draws
     /// an administrator's forms only when the provider granted it.
     pub admin_scope: String,
-    /// Retired in v0.0.24 for `timeout`.
-    #[serde(skip_serializing)]
-    pub timeout_ms: Removed,
 }
 
 impl Default for Pix {
@@ -163,14 +152,6 @@ impl Default for Pix {
             base_url: String::from("http://127.0.0.1:8080/"),
             timeout: Span::from_secs(30),
             admin_scope: String::from("__ferropix.admin"),
-            timeout_ms: Removed::default(),
         }
-    }
-}
-
-impl Pix {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(self.timeout_ms, &retired::PIX_TIMEOUT_MS);
     }
 }

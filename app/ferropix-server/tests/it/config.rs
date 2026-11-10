@@ -375,71 +375,6 @@ fn chain(error: &Error) -> String {
     text
 }
 
-#[test]
-fn every_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
-    let secrets = Secrets::new();
-    let text = FULL
-        .replacen("[outbox]\n", "[outbox]\nretention_days = 14\n", 1)
-        .replacen("[audit]\n", "[audit]\ntimeout_ms = 3000\n", 1)
-        .replacen(
-            "[xcpd]\n",
-            "[terminology.retry]\nmax_backoff_ms = 1000\n\n[xcpd]\n",
-            1,
-        )
-        .replacen(
-            "[hl7v2]\n",
-            "[[hl7v2.consumers]]\nname = \"east\"\naddress = \"consumer.example.org:2575\"\napplication = \"PIX\"\nfacility = \"EAST\"\nreply_timeout_ms = 2000\n\n[hl7v2]\n",
-            1,
-        );
-    let error = resolve(&text, &secrets).expect_err("a renamed key is refused");
-    assert!(matches!(error, Error::Removed(_)), "{error:?}");
-    let said = chain(&error);
-    for (old, new) in [
-        ("outbox.retention_days", "outbox.retention"),
-        ("audit.timeout_ms", "audit.endpoint.timeout"),
-        ("terminology.retry", "terminology.endpoint.retry"),
-        ("hl7v2.consumers[0].reply_timeout_ms", "reply_timeout"),
-    ] {
-        assert!(
-            said.contains(&format!("{old} was replaced by {new}")),
-            "{old}: {said}"
-        );
-    }
-}
-
-#[test]
-fn every_key_v0_0_24_moved_under_an_endpoint_table_is_refused_naming_its_place() {
-    let secrets = Secrets::new();
-    let text = FULL
-        .replacen(
-            "[audit]\n",
-            "[audit]\nurl = \"https://arr.example.org/fhir\"\n",
-            1,
-        )
-        .replacen(
-            "[xcpd]\n",
-            "[terminology]\nbase_url = \"https://tx.example.org/fhir/r4\"\n\n[terminology.credentials]\nuser = \"ferropix\"\n\n[terminology.tls]\ntrust_roots_file = \"/run/tx-ca.pem\"\n\n[xcpd]\n",
-            1,
-        );
-    let error = resolve(&text, &secrets).expect_err("a moved key is refused");
-    assert!(matches!(error, Error::Removed(_)), "{error:?}");
-    let said = chain(&error);
-    for (old, new) in [
-        ("audit.url", "audit.endpoint.url"),
-        ("terminology.base_url", "terminology.endpoint.url"),
-        (
-            "terminology.credentials",
-            "terminology.endpoint.credentials",
-        ),
-        ("terminology.tls", "terminology.endpoint.tls"),
-    ] {
-        assert!(
-            said.contains(&format!("{old} was replaced by {new}")),
-            "{old}: {said}"
-        );
-    }
-}
-
 /// Reads `text` as the file `--config` names, with the `--set` pairs of
 /// `sets`, as the run path does.
 fn load(text: &str, sets: &[(&str, &str)]) -> Result<(), Error> {
@@ -457,55 +392,84 @@ fn load(text: &str, sets: &[(&str, &str)]) -> Result<(), Error> {
 }
 
 #[test]
-fn every_family_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
-    let text = "[server]\nrequest_timeout_ms = 30000\n\n[auth]\nca_file = \"/run/ca.pem\"\n\n[[auth.issuer]]\nissuer = \"https://idp.example.org/realms/pix\"\nclock_skew_seconds = 30\n";
-    let error = load(
-        text,
-        &[("telemetry.otlp.trust_roots_file", "/run/otlp-ca.pem")],
-    )
-    .expect_err("a renamed key is refused before the typed load");
-    assert!(matches!(error, Error::Removed(_)), "{error:?}");
-    let said = chain(&error);
-    for (old, new) in [
-        ("server.request_timeout_ms", "server.request_timeout"),
-        ("auth.ca_file", "auth.tls.trust_roots_file"),
-        ("auth.issuer[0].clock_skew_seconds", "clock_skew"),
+fn every_key_v0_0_24_renamed_fails_as_an_unknown_key() {
+    let issuer = "[[auth.issuer]]\nissuer = \"https://idp.example.org/realms/pix\"\n";
+    for (key, text, sets) in [
+        (
+            "outbox.retention_days",
+            String::from("[outbox]\nretention_days = 14\n"),
+            &[][..],
+        ),
+        (
+            "audit.timeout_ms",
+            String::from("[audit]\ntimeout_ms = 3000\n"),
+            &[],
+        ),
+        (
+            "audit.url",
+            String::from("[audit]\nurl = \"https://arr.example.org/fhir\"\n"),
+            &[],
+        ),
+        (
+            "terminology.base_url",
+            String::from("[terminology]\nbase_url = \"https://tx.example.org/fhir/r4\"\n"),
+            &[],
+        ),
+        (
+            "terminology.retry",
+            String::from("[terminology.retry]\nmax_backoff_ms = 1000\n"),
+            &[],
+        ),
+        (
+            "terminology.credentials",
+            String::from("[terminology.credentials]\nuser = \"ferropix\"\n"),
+            &[],
+        ),
+        (
+            "terminology.tls",
+            String::from("[terminology.tls]\ntrust_roots_file = \"/run/tx-ca.pem\"\n"),
+            &[],
+        ),
+        (
+            "reply_timeout_ms",
+            String::from(
+                "[[hl7v2.consumers]]\nname = \"east\"\naddress = \"consumer.example.org:2575\"\napplication = \"PIX\"\nfacility = \"EAST\"\nreply_timeout_ms = 2000\n",
+            ),
+            &[],
+        ),
+        (
+            "server.request_timeout_ms",
+            String::from("[server]\nrequest_timeout_ms = 30000\n"),
+            &[],
+        ),
+        (
+            "auth.ca_file",
+            String::from("[auth]\nca_file = \"/run/ca.pem\"\n"),
+            &[],
+        ),
+        (
+            "clock_skew_seconds",
+            format!("{issuer}clock_skew_seconds = 30\n"),
+            &[],
+        ),
+        (
+            "client_certificate_file",
+            format!(
+                "{issuer}\n[auth.issuer.introspection.client]\nclient_certificate_file = \"/run/client.pem\"\n"
+            ),
+            &[],
+        ),
         (
             "telemetry.otlp.trust_roots_file",
-            "telemetry.otlp.tls.trust_roots_file",
+            String::new(),
+            &[("telemetry.otlp.trust_roots_file", "/run/otlp-ca.pem")],
         ),
     ] {
-        assert!(
-            said.contains(&format!("{old} was replaced by {new}")),
-            "{old}: {said}"
-        );
+        let error = load(&text, sets).expect_err("a key v0.0.24 renamed is unknown");
+        assert!(matches!(error, Error::Load(_)), "{key}: {error:?}");
+        let said = chain(&error);
+        assert!(said.contains(key), "{key}: {said}");
     }
-}
-
-#[test]
-fn a_renamed_key_of_an_oauth_table_is_named_under_its_table() {
-    let text = "[[auth.issuer]]\nissuer = \"https://idp.example.org/realms/pix\"\n\n[auth.issuer.introspection.client]\ntimeout_ms = 5000\nclient_certificate_file = \"/run/client.pem\"\n";
-    let error = load(text, &[]).expect_err("a renamed key is refused before the typed load");
-    let said = chain(&error);
-    for (old, new) in [
-        ("auth.issuer[0].introspection.client.timeout_ms", "timeout"),
-        (
-            "auth.issuer[0].introspection.client.client_certificate_file",
-            "tls.client_identity_file",
-        ),
-    ] {
-        assert!(
-            said.contains(&format!("{old} was replaced by {new}")),
-            "{old}: {said}"
-        );
-    }
-}
-
-#[test]
-fn a_file_without_a_renamed_key_reaches_the_typed_load() {
-    let error = load("[server]\nlisten = \"not an address\"\n", &[])
-        .expect_err("the typed load refuses the address");
-    assert!(matches!(error, Error::Load(_)), "{error:?}");
 }
 
 // NOTE: `ferrohealth-smart` 0.15 dropped the named refusal of each removed key one release

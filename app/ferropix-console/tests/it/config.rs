@@ -9,7 +9,6 @@ use std::time::Duration;
 
 use ferrohealth_secret::file::SecretError;
 
-use ferrohealth_server::cli::ConfigArgs;
 use ferropix_console::config::Config;
 use ferropix_console::config::error::Error;
 
@@ -57,51 +56,31 @@ fn an_override_wins_over_the_file_and_reads_as_toml_or_text() {
 }
 
 #[test]
-fn the_timeout_v0_0_24_renamed_is_refused_naming_its_replacement() {
-    let error = Config::from_sources(Some("[pix]\ntimeout_ms = 2000\n"), &BTreeMap::new())
-        .expect("the tree reads")
-        .resolve()
-        .expect_err("the renamed key is refused");
-    let said = std::error::Error::source(&error)
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    assert!(
-        said.contains("pix.timeout_ms was replaced by pix.timeout"),
-        "{said}"
-    );
-}
-
-#[test]
-fn every_family_key_v0_0_24_renamed_is_refused_naming_its_replacement() {
-    let directory = tempfile::tempdir().expect("a temporary directory");
-    let path = directory.path().join("console.toml");
-    let text = "[session]\nidle_timeout_s = 1800\n\n[oidc]\nca_file = \"/run/ca.pem\"\n\n[oidc.tls]\nclient_key = \"hunter2\"\n\n[telemetry.otlp]\ntrust_roots_file = \"/run/otlp-ca.pem\"\n";
-    std::fs::write(&path, text).expect("the file is written");
-    let args = ConfigArgs {
-        config: Some(path),
-        sets: vec![(String::from("oidc.timeout_s"), String::from("10"))],
-    };
-    let error = Config::load(&args).expect_err("a renamed key is refused");
-    assert!(matches!(error, Error::Removed(_)), "{error:?}");
-    let said = std::error::Error::source(&error)
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    for (old, new) in [
-        ("session.idle_timeout_s", "session.idle_timeout"),
-        ("oidc.timeout_s", "oidc.timeout"),
-        ("oidc.ca_file", "oidc.tls.trust_roots_file"),
-        ("oidc.tls.client_key", "oidc.tls.client_identity"),
+fn every_key_v0_0_24_renamed_fails_as_an_unknown_key() {
+    for (key, text) in [
+        ("pix.timeout_ms", "[pix]\ntimeout_ms = 2000\n"),
+        (
+            "session.idle_timeout_s",
+            "[session]\nidle_timeout_s = 1800\n",
+        ),
+        ("oidc.timeout_s", "[oidc]\ntimeout_s = 10\n"),
+        ("oidc.ca_file", "[oidc]\nca_file = \"/run/ca.pem\"\n"),
+        (
+            "oidc.tls.client_key",
+            "[oidc.tls]\nclient_key = \"hunter2\"\n",
+        ),
         (
             "telemetry.otlp.trust_roots_file",
-            "telemetry.otlp.tls.trust_roots_file",
+            "[telemetry.otlp]\ntrust_roots_file = \"/run/otlp-ca.pem\"\n",
         ),
     ] {
-        assert!(
-            said.contains(&format!("{old} was replaced by {new}")),
-            "{old}: {said}"
-        );
+        let error = Config::from_sources(Some(text), &BTreeMap::new())
+            .expect_err("a key v0.0.24 renamed is unknown");
+        assert!(matches!(error, Error::Load(_)), "{key}: {error:?}");
+        let shown = format!("{error} {error:?}");
+        assert!(shown.contains(key), "{key}: {shown}");
+        assert!(!shown.contains("hunter2"), "{key}: {shown}");
     }
-    assert!(!format!("{error:?} {said}").contains("hunter2"), "{said}");
 }
 
 #[test]

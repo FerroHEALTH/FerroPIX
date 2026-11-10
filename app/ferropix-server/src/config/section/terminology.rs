@@ -19,7 +19,6 @@
 
 use ferrobridge_term::client::Client;
 use ferrobridge_term::config::WireVersion;
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::Duration as Span;
 use ferrohealth_smart::config::ServerTls;
 use ferrohealth_smart::config::endpoint::{EndpointSection, RetrySection};
@@ -27,7 +26,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
-use crate::config::retired;
 use crate::config::section::{endpoint_secrets, is_loopback_url, url};
 
 /// The dotted key of the server's endpoint table.
@@ -41,21 +39,6 @@ pub struct Terminology {
     /// service base as `url`, empty for none, the timeouts, the retry
     /// budget, the TLS and the credentials.
     pub endpoint: EndpointSection,
-    /// Retired in v0.0.24 for `endpoint.url`.
-    #[serde(skip_serializing)]
-    pub base_url: Removed,
-    /// Retired in v0.0.24 for `endpoint.timeout`.
-    #[serde(skip_serializing)]
-    pub timeout_ms: Removed,
-    /// Retired in v0.0.24 for `endpoint.retry`.
-    #[serde(skip_serializing)]
-    pub retry: Removed,
-    /// Retired in v0.0.24 for `endpoint.credentials`.
-    #[serde(skip_serializing)]
-    pub credentials: Removed,
-    /// Retired in v0.0.24 for `endpoint.tls`.
-    #[serde(skip_serializing)]
-    pub tls: Removed,
 }
 
 impl Default for Terminology {
@@ -68,11 +51,6 @@ impl Default for Terminology {
                 },
                 ..EndpointSection::default()
             },
-            base_url: Removed::default(),
-            timeout_ms: Removed::default(),
-            retry: Removed::default(),
-            credentials: Removed::default(),
-            tls: Removed::default(),
         }
     }
 }
@@ -85,15 +63,6 @@ pub struct TerminologySettings {
 }
 
 impl Terminology {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(self.base_url, &retired::terminology::BASE_URL);
-        found.check(self.timeout_ms, &retired::terminology::TIMEOUT_MS);
-        found.check(self.retry, &retired::terminology::RETRY);
-        found.check(self.credentials, &retired::terminology::CREDENTIALS);
-        found.check(self.tls, &retired::terminology::TLS);
-    }
-
     /// Resolves the section: `None` while `endpoint.url` is empty.
     ///
     /// # Errors

@@ -9,12 +9,10 @@
 
 use std::time::Duration;
 
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_config::units::Duration as Span;
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
-use crate::config::retired;
 
 /// The `[outbox]` section as written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -24,9 +22,6 @@ pub struct Outbox {
     pub retention: Span,
     /// The most messages one prune deletes in one statement.
     pub prune_batch: u32,
-    /// Retired in v0.0.24 for `retention`.
-    #[serde(skip_serializing)]
-    pub retention_days: Removed,
 }
 
 impl Default for Outbox {
@@ -34,7 +29,6 @@ impl Default for Outbox {
         Self {
             retention: Span::from_days(30),
             prune_batch: 500,
-            retention_days: Removed::default(),
         }
     }
 }
@@ -49,11 +43,6 @@ pub struct Retention {
 }
 
 impl Outbox {
-    /// Gathers the retired keys the sources set.
-    pub fn removals(&self, found: &mut Removals) {
-        found.check(self.retention_days, &retired::outbox::RETENTION_DAYS);
-    }
-
     /// Resolves the section.
     ///
     /// # Errors

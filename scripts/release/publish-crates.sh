@@ -25,6 +25,9 @@
 #   publish-crates.sh semver           # judge each against its newest
 #                                      # release on crates.io
 #                                      # (scripts/checks/semver.sh)
+#   publish-crates.sh docs             # build each crate's docs as docs.rs
+#                                      # will, from its
+#                                      # [package.metadata.docs.rs]
 #
 # Requires cargo, curl, and jq; `publish` also needs CARGO_REGISTRY_TOKEN.
 set -euo pipefail
@@ -156,11 +159,44 @@ do_verify() {
   echo "publish-crates: confirmed on crates.io, all ${#CRATES[@]} crates at their versions"
 }
 
+# docs.rs builds a crate with its default features unless
+# `[package.metadata.docs.rs]` names others (https://docs.rs/about/metadata),
+# and no published member turns a feature on by default, so a member without
+# the table publishes an empty API reference (#598). Each member is built
+# alone, as docs.rs builds it, under the caller's RUSTDOCFLAGS.
+do_docs() {
+  local crate table all features args
+  for crate in ${CRATES[@]+"${CRATES[@]}"}; do
+    table="$(cargo metadata --format-version 1 --no-deps --locked |
+      jq -c --arg name "$crate" '.packages[] | select(.name == $name) | .metadata.docs.rs // empty')"
+    [[ -n "$table" ]] || {
+      echo "::error::$crate carries no [package.metadata.docs.rs], so docs.rs documents its default features alone" >&2
+      return 1
+    }
+    all="$(jq -r '."all-features" // false' <<< "$table")"
+    features="$(jq -r '(.features // []) | join(",")' <<< "$table")"
+    args=(-p "$crate" --no-deps --locked)
+    if [[ "$all" == "true" ]]; then
+      args+=(--all-features)
+    elif [[ -n "$features" ]]; then
+      args+=(--features "$features")
+    else
+      echo "::error::$crate's [package.metadata.docs.rs] turns no feature on" >&2
+      return 1
+    fi
+    echo "::group::$crate docs as docs.rs builds them (${args[*]})"
+    cargo doc "${args[@]}"
+    echo "::endgroup::"
+  done
+  echo "publish-crates: every crate documents the features docs.rs builds"
+}
+
 case "${1:-}" in
   publish) do_publish ;;
   dry-run) do_dry_run ;;
   package) do_package "${2:?usage: publish-crates.sh package DIR}" ;;
   verify) do_verify ;;
+  docs) do_docs ;;
   version) manifest_version "${2:?usage: publish-crates.sh version CRATE}" ;;
   list) for crate in ${CRATES[@]+"${CRATES[@]}"}; do printf '%s\n' "$crate"; done ;;
   semver)
@@ -171,7 +207,7 @@ case "${1:-}" in
     fi
     ;;
   *)
-    echo "publish-crates: expected 'publish', 'dry-run', 'package', 'verify', 'version', 'list' or 'semver', got '${1:-<none>}'" >&2
+    echo "publish-crates: expected 'publish', 'dry-run', 'package', 'verify', 'docs', 'version', 'list' or 'semver', got '${1:-<none>}'" >&2
     exit 2
     ;;
 esac

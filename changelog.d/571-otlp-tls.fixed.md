@@ -1,1 +1,0 @@
-- The server exports its spans and metrics over the TLS `[telemetry.otlp.tls]` names: it installs its telemetry through `ferrohealth-server`'s installer, which reads the collector's trust roots and client identity, where before it built the exporter without them.

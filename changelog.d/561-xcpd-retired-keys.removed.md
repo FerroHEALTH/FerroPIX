@@ -1,1 +1,0 @@
-- The named refusal of `[xcpd] client_certificate_file`, `client_key_file` and `reply_trust_file`, which v0.0.22 retired in favour of `[xcpd.tls]`. Each key now fails the start as an unknown key of `[xcpd]`.

@@ -164,6 +164,9 @@ jobs:
       - name: self-tests / The changelog assembler checks fragments and cuts them into a release
         if: ${{ !cancelled() }}
         run: bash scripts/release/changelog.sh --self-test
+      - name: self-tests / The quickstart bundle carries every file its compose file mounts and pins the images it is given
+        if: ${{ !cancelled() }}
+        run: bash scripts/release/quickstart-bundle.sh --self-test
       - name: self-tests / The release staging checks each tarball and stages the 0700 spool
         if: ${{ !cancelled() }}
         run: bash scripts/release/stage-dist.sh --self-test
@@ -933,12 +936,27 @@ jobs:
           bash deploy/helm/config-check.sh \
             --server "ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION}" \
             --console "ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION}"
+      # The quickstart bundle a release attaches, built the way release.yml
+      # builds it, over the two images above in place of the release's
+      # digests (#619). Every step from here runs in the unpacked bundle, so
+      # the quickstart a reader downloads is the one tested, never the
+      # checkout.
+      - name: Build and unpack the quickstart bundle
+        run: |
+          set -euo pipefail
+          bash scripts/release/quickstart-bundle.sh "$RUNNER_TEMP/bundle" \
+            --image "ferropix=ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION}" \
+            --image "console=ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION}"
+          mkdir -p "$RUNNER_TEMP/quickstart"
+          tar -xzf "$RUNNER_TEMP/bundle/quickstart.tar.gz" -C "$RUNNER_TEMP/quickstart"
       # The book's quickstart page shows the commands of this script by
       # anchor, so a command it shows is a command run here (#594).
-      - name: The book's quickstart tour runs as written
+      - name: The book's quickstart tour runs as written, from the bundle
         timeout-minutes: 10
+        working-directory: ${{ runner.temp }}/quickstart/ferropix-quickstart
         run: bash scripts/quickstart/tour.sh
       - name: The quickstart reaches readiness
+        working-directory: ${{ runner.temp }}/quickstart/ferropix-quickstart
         run: |
           set -euo pipefail
           curl --fail --silent --show-error http://localhost:8080/health/readiness
@@ -960,9 +978,11 @@ jobs:
           [ "$status" = "404" ] || { echo "::error::ITI-83 answered ${status}, not 404" >&2; exit 1; }
       - name: Logs of a failed start
         if: failure()
+        working-directory: ${{ runner.temp }}/quickstart/ferropix-quickstart
         run: docker compose --profile console logs --no-color
       - name: Stop the quickstart
         if: always()
+        working-directory: ${{ runner.temp }}/quickstart/ferropix-quickstart
         run: docker compose --profile console down --volumes
 
   doc:

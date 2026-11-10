@@ -19,8 +19,8 @@
 # (scripts/release/milestone.sh).
 #
 # The release is created as a DRAFT, the server and console binaries with
-# their SBOMs and Sigstore bundles, and the attested .crate files are
-# attached to it, and it is
+# their SBOMs and Sigstore bundles, the attested .crate files and the
+# quickstart bundle with its checksum are attached to it, and it is
 # published only once the asset set is complete. Publishing last means a
 # half-assembled release is never visible, and a published release is
 # immutable, so the draft is the only window the uploads have.
@@ -454,12 +454,49 @@ jobs:
       server-digest: ${{ needs.build-image.outputs.digest }}
       console-digest: ${{ needs.build-console.outputs.digest }}
 
+  # ---- quickstart: the bundle a reader downloads ----------------------------
+  # compose.yaml with both images pinned by the digests this run pushed, every
+  # file it mounts, and the tour, as quickstart.tar.gz beside the pinned
+  # compose.yaml and the archive's checksum (#619). The README's quick start
+  # downloads it from releases/latest, so a reader never clones the
+  # repository. The digests are pullable before scan-and-tag applies the tags.
+  quickstart:
+    name: quickstart bundle
+    needs: [plan, github-release, build-image, build-console]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # attach the bundle to the draft release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.plan.outputs.tag }}
+      - name: Build the bundle over the pushed digests
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          SERVER_DIGEST: ${{ needs.build-image.outputs.digest }}
+          CONSOLE_DIGEST: ${{ needs.build-console.outputs.digest }}
+        run: |
+          set -euo pipefail
+          bash scripts/release/quickstart-bundle.sh bundle \
+            --image "ferropix=ghcr.io/ferrohealth/ferropix:${VERSION}@${SERVER_DIGEST}" \
+            --image "console=ghcr.io/ferrohealth/ferropix-console:${VERSION}@${CONSOLE_DIGEST}"
+          (cd bundle && sha256sum quickstart.tar.gz > quickstart.tar.gz.sha256sum)
+      - name: Attach the bundle to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            bundle/quickstart.tar.gz bundle/quickstart.tar.gz.sha256sum bundle/compose.yaml
+
   # ---- finalize-release: verify the asset set, then PUBLISH -----------------
   finalize-release:
     name: github release (publish)
-    needs: [plan, github-release, build-binaries, build-image, build-console, crate, vulnerability-record]
+    needs: [plan, github-release, build-binaries, build-image, build-console, crate, vulnerability-record, quickstart]
     # The crate leg is skipped when the release publishes no crate.
-    if: always() && needs.vulnerability-record.result == 'success' && (needs.crate.result == 'success' || (needs.crate.result == 'skipped' && needs.plan.outputs.crates == ''))
+    if: always() && needs.vulnerability-record.result == 'success' && needs.quickstart.result == 'success' && (needs.crate.result == 'success' || (needs.crate.result == 'skipped' && needs.plan.outputs.crates == ''))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -514,7 +551,8 @@ jobs:
                 || missing="$missing ${file}${suffix}"
             done
           done
-          for record in "ferropix-${TAG}-vulnerability-record.json" "ferropix-${TAG}-trivy-reports.tar.gz"; do
+          for record in "ferropix-${TAG}-vulnerability-record.json" "ferropix-${TAG}-trivy-reports.tar.gz" \
+            quickstart.tar.gz quickstart.tar.gz.sha256sum compose.yaml; do
             printf '%s\n' "$assets" | grep -Fxq "$record" || missing="$missing $record"
           done
           if [ -n "$missing" ]; then

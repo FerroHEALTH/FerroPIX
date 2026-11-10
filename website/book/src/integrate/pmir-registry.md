@@ -74,7 +74,9 @@ of its latest message ([Operations](../operate/operations.md)).
 A subscriber holds the `system/Subscription.cruds` scope.
 
 - **Create:** `POST {base}/fhir/Subscription` with a `Subscription` in FHIR
-  JSON or XML. It must hold to the PMIR Subscription profile: a `message`
+  JSON or XML. It must hold to the Subscription Profile for PMIR
+  (`IHE.PMIR.Subscription.Request`, PMIR 1.6.0 §2:3.94.4.1.2.1, the profile
+  the `CapabilityStatement` declares): a `message`
   channel, a payload media type, every contact with its system and value,
   and one of the four criteria listed below. FerroPIX activates the
   subscription at once. It answers `201` with the `Location` and the stored

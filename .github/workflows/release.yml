@@ -19,8 +19,8 @@
 # (scripts/release/milestone.sh).
 #
 # The release is created as a DRAFT, the server and console binaries with
-# their SBOMs and Sigstore bundles, and the attested .crate files are
-# attached to it, and it is
+# their SBOMs and Sigstore bundles, the attested .crate files, and the
+# quickstart compose.yaml with its checksum are attached to it, and it is
 # published only once the asset set is complete. Publishing last means a
 # half-assembled release is never visible, and a published release is
 # immutable, so the draft is the only window the uploads have.
@@ -241,6 +241,25 @@ jobs:
               exit 1
               ;;
           esac
+      # The quickstart is one self-contained file: compose.yaml inlines every
+      # file it needs, so a reader downloads it from releases/latest and runs
+      # it with no checkout (#619). It is the file the CI tour runs, attached
+      # with its SHA-256 in sha256sum form.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: tree
+      - name: Attach the quickstart compose file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd tree
+          bash scripts/quickstart/compose-configs.sh --check
+          sha256sum compose.yaml > compose.yaml.sha256sum
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber compose.yaml compose.yaml.sha256sum
 
   # ---- build-binaries: the SLSA Build L3 lane, once per target --------------
   # A call and nothing else: the isolation is what makes the provenance
@@ -514,7 +533,8 @@ jobs:
                 || missing="$missing ${file}${suffix}"
             done
           done
-          for record in "ferropix-${TAG}-vulnerability-record.json" "ferropix-${TAG}-trivy-reports.tar.gz"; do
+          for record in "ferropix-${TAG}-vulnerability-record.json" "ferropix-${TAG}-trivy-reports.tar.gz" \
+            compose.yaml compose.yaml.sha256sum; do
             printf '%s\n' "$assets" | grep -Fxq "$record" || missing="$missing $record"
           done
           if [ -n "$missing" ]; then

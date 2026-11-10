@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 #
 # The FerroPIX quickstart: the published server image beside PostgreSQL and a
-# development OpenID Provider, run from a checkout of this repository.
+# development OpenID Provider. This one file is the whole quickstart: every
+# release attaches it, and it needs Docker Compose 2.23.1 or newer, which
+# reads the inlined configs at the end. Download it and start it:
 #
+#   curl -fsSLO https://github.com/FerroHEALTH/FerroPIX/releases/latest/download/compose.yaml
 #   mkdir -p secrets && umask 077
 #   openssl rand -base64 32 > secrets/ferropix-data-key
 #   openssl rand -hex 16 > secrets/postgres-password
@@ -19,7 +22,8 @@
 # scripts/checks/versions.sh keeps it equal to the workspace version. Pin the
 # digest the release names for anything you keep.
 #
-# THE CONFIGURATION is app/ferropix-server/quickstart.toml, mounted read-only:
+# THE CONFIGURATION is the ferropix-toml config at the end of this file, a
+# copy of app/ferropix-server/quickstart.toml mounted read-only:
 # the production profile on http://localhost:8080, one synthetic identifier
 # domain fed by the client `quickstart-source`, and the usage report stating
 # `compose`. Every key is FERROPIX__<SECTION>__<KEY> in the environment
@@ -167,8 +171,10 @@ services:
     secrets:
       - ferropix-db-url
       - ferropix-data-key
+    configs:
+      - source: ferropix-toml
+        target: /etc/ferropix/ferropix.toml
     volumes:
-      - ./app/ferropix-server/quickstart.toml:/etc/ferropix/ferropix.toml:ro
       # The audit spool and the usage report's instance id, owned by the
       # image's runtime user (uid 65532), so a fresh named volume is writable.
       - ferropix-state:/var/lib/ferropix
@@ -275,7 +281,7 @@ services:
       - no-new-privileges:true
 
   # The cross-reference store. The server connects as the `ferropix` role
-  # docker/postgres/10-ferropix-role.sh creates on the first start; the
+  # the ferropix-role config creates on the first start; the
   # superuser's password is the postgres-password secret.
   postgres:
     image: postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
@@ -288,7 +294,12 @@ services:
       - ferropix-db-password
     volumes:
       - postgres-data:/var/lib/postgresql
-      - ./docker/postgres/10-ferropix-role.sh:/docker-entrypoint-initdb.d/10-ferropix-role.sh:ro
+    configs:
+      - source: ferropix-role
+        target: /docker-entrypoint-initdb.d/10-ferropix-role.sh
+        # Executable, so the entrypoint runs the script rather than sourcing
+        # it into its own shell.
+        mode: 0555
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-d", "ferropix"]
       interval: 5s
@@ -318,6 +329,141 @@ secrets:
   # The console's OIDC client secret at the issuer, read once at boot.
   console-oidc-client-secret:
     file: ${FERROPIX_CONSOLE_OIDC_CLIENT_SECRET_FILE:-./secrets/console-oidc-client-secret}
+
+# Every file the quickstart needs is inlined here, so compose.yaml runs alone
+# with no checkout. Each copy names its source in the repository, which the
+# tests and the chart read, and scripts/quickstart/compose-configs.sh holds
+# the copy to it (`--write` rewrites them).
+configs:
+  # The server's configuration (THE CONFIGURATION above).
+  ferropix-toml:
+    # source: app/ferropix-server/quickstart.toml
+    content: |
+      # SPDX-FileCopyrightText: Cadasto B.V.
+      # SPDX-License-Identifier: BUSL-1.1
+
+      # The quickstart configuration of the FerroPIX server: a production profile
+      # on the loopback base, with both secrets read from the files a container
+      # runtime mounts. `ferropix config check --config quickstart.toml` accepts it
+      # once the two files exist. Every key and its default is listed in the book,
+      # https://ferropix.eu/docs/operate/configuration.html.
+
+      profile = "production"
+      public_base_url = "http://localhost:8080"
+
+      [server]
+      listen = "0.0.0.0:8080"
+
+      [db]
+      url_file = "/run/secrets/ferropix-db-url"
+      # The sealing key: the base64 of 32 random bytes, `openssl rand -base64 32`.
+      data_key_file = "/run/secrets/ferropix-data-key"
+
+      # The development OpenID Provider the compose quickstart runs beside the
+      # server on the same loopback interface (compose.yaml, the `issuer` service).
+      # It signs the client credentials tokens of the Sources and the logins of the
+      # console, so it is a `persons` issuer: a token whose `sub` is its client is
+      # a machine's (RFC 9068 §2.2), and a login is admitted through the console,
+      # the one client `first_party_clients` lists. It signs its access tokens with
+      # `typ` JWT rather than the `at+jwt` of RFC 9068, and names the client in
+      # `client_id` or `azp`, so the issuer takes the claims it carries; an issuer
+      # of RFC 9068 tokens keeps the profile's own `token_types`,
+      # `required_claims` and `client_claims`. It signs a login's access token
+      # with the ID Token's claims, so the console's own client id is the second
+      # audience: a provider that audiences a login's access token to the server
+      # needs only the first.
+      [[auth.issuer]]
+      issuer = "http://localhost:8180/ferropix"
+      kind = "persons"
+      profile = "rfc9068"
+      audience = ["http://localhost:8080/fhir", "ferropix-console"]
+      token_types = ["JWT"]
+      required_claims = ["iss", "exp", "aud", "sub"]
+      client_claims = ["client_id", "azp"]
+      first_party_clients = ["ferropix-console"]
+
+      # The clients the development issuer may vouch for as the Source of a
+      # domain (PIXm 3.1.0 §2:3.104.5).
+      [[trust.issuer]]
+      issuer = "http://localhost:8180/ferropix"
+      clients = ["quickstart-source"]
+
+      # An identifier domain under the OID arc 2.999, which ITU-T X.660 reserves
+      # for examples, so the quickstart names no real assigning authority.
+      [[domain]]
+      system = "urn:oid:2.999.1.1"
+      name = "Quickstart hospital"
+      kind = "local"
+      source_client_id = "quickstart-source"
+
+      # The BSN, the national number of the Netherlands (NL Generic Functions,
+      # the Identification page): authoritative, so a BSN two records carry links
+      # them, and sealed at rest. Its values must pass the eleven-proof.
+      [[domain]]
+      system = "http://fhir.nl/fhir/NamingSystem/bsn"
+      name = "BSN"
+      kind = "authoritative"
+      source_client_id = "quickstart-source"
+      sensitive = true
+
+      # The pseudonymised BSN of the Generic Functions, held as an identifier of
+      # its own, fed by the system that obtained it. FerroPIX calls no BSNk
+      # service.
+      [[domain]]
+      system = "http://fhir.nl/fhir/NamingSystem/pseudo-bsn"
+      name = "Pseudonymised BSN"
+      kind = "authoritative"
+      source_client_id = "quickstart-source"
+      sensitive = true
+
+      # The HL7 v2 face, off until FERROPIX__HL7V2__ENABLED=true with a
+      # terminology server named in FERROPIX__TERMINOLOGY__ENDPOINT__URL (compose.yaml,
+      # the `hl7v2` profile). One sender feeds the quickstart hospital domain,
+      # whose assigning authority namespace id is QUICKHOSP.
+      [hl7v2]
+      enabled = false
+
+      [[hl7v2.senders]]
+      application = "QUICKSTART"
+      facility = "HOSPITAL"
+      domain = "urn:oid:2.999.1.1"
+
+      [hl7v2.namespaces]
+      "urn:oid:2.999.1.1" = "QUICKHOSP"
+
+      # The steward's API, which the console reads and writes (compose.yaml, the
+      # `console` profile).
+      [operator]
+      enabled = true
+
+      [usage_report]
+      deployment = "compose"
+      state_dir = "/var/lib/ferropix"
+  # The database role, run once by the PostgreSQL image's entrypoint when it
+  # initialises an empty data directory.
+  ferropix-role:
+    # source: docker/postgres/10-ferropix-role.sh
+    content: |
+      #!/usr/bin/env bash
+      # SPDX-FileCopyrightText: Cadasto B.V.
+      # SPDX-License-Identifier: BUSL-1.1
+      #
+      # The quickstart's database role, run once by the official PostgreSQL image
+      # when it initialises an empty data directory (compose.yaml mounts this file
+      # under /docker-entrypoint-initdb.d/). The server refuses a superuser at boot,
+      # because a superuser reads every schema, so it connects as `ferropix`, a
+      # login role that may create the `pix` schema in the `ferropix` database and
+      # owns nothing else. The password is the file secret ferropix-db-password,
+      # which psql reads itself, so it reaches neither the environment nor a
+      # command line; the URL in the ferropix-db-url secret carries the same one.
+      # No specification governs this: our own design.
+      set -euo pipefail
+
+      psql -v ON_ERROR_STOP=1 --username "$$POSTGRES_USER" --dbname "$$POSTGRES_DB" <<'SQL'
+      \set password `cat /run/secrets/ferropix-db-password`
+      CREATE ROLE ferropix LOGIN PASSWORD :'password';
+      GRANT CREATE ON DATABASE ferropix TO ferropix;
+      SQL
 
 volumes:
   ferropix-state:

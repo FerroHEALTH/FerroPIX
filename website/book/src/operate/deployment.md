@@ -99,12 +99,15 @@ the binaries, at every severity, with the OpenVEX statement that judges it.
 
 ## The compose quickstart
 
-`compose.yaml` at the root of the repository runs the published image
-beside PostgreSQL and a development OpenID Provider. It mounts
-`app/ferropix-server/quickstart.toml`, so run it from a checkout. The
+`compose.yaml` runs the published image beside PostgreSQL and a
+development OpenID Provider. It is one self-contained file: the server's
+configuration and the database role are inlined as Compose configs, so it
+needs Docker Compose 2.23.1 or newer and no checkout, and every release
+attaches it with its `.sha256sum`. The
 [quickstart](../integrate/getting-started.md) walks through it, from the
-secret files to a first feed and query; CI runs those steps on every
-change. `FERROPIX_VERSION` picks the image tag, the release the checkout
+download and the secret files to a first feed and query; CI runs those
+steps over the repository's `compose.yaml`, the file a release attaches, on
+every change. `FERROPIX_VERSION` picks the image tag, the release the file
 names by default.
 
 | Profile | What it adds |
@@ -123,7 +126,7 @@ names by default.
 - **Secrets.** All four are files under `./secrets`, mounted under
   `/run/secrets/`, never environment variables. PostgreSQL creates the
   `ferropix` role from `ferropix-db-password` on its first start
-  (`docker/postgres/10-ferropix-role.sh`).
+  (the `ferropix-role` config, a copy of `docker/postgres/10-ferropix-role.sh`).
 - **Ports.** Every port binds `127.0.0.1`; set `FERROPIX_BIND_HOST` to
   publish on another interface.
 - **The issuer.** The server accepts a plain `http` issuer only on

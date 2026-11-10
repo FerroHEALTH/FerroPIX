@@ -13,7 +13,7 @@
   <title>FerroPIX: a Master Patient Index over IHE PIXm, PDQm, PMIR and HL7 v2</title>
   <meta name="description" content="FerroPIX is the Master Patient Index of the FerroHEALTH family, in pure Rust: the patient identity cross-reference behind the IHE PIXm Manager, the PDQm Supplier, the PMIR Registry, the HL7 v2 PIX and PDQ transactions and the XCPD Responding Gateway, with pseudonyms for the clinical domain and an operator console for the data steward.">
   <link rel="canonical" href="https://ferropix.eu/">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v={{hash:style.css}}">
   <link rel="icon" href="./assets/brand/favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="./assets/brand/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="alternate icon" href="./assets/brand/favicon.ico" sizes="32x32 16x16">
@@ -70,6 +70,10 @@
           <source srcset="./assets/brand/ferropix-icon-dark.svg" media="(prefers-color-scheme: dark)">
           <img class="hero-logo" src="./assets/brand/ferropix-icon.svg" alt="FerroPIX" width="88" height="88">
         </picture>
+        <!-- The version is rendered from the root Cargo.toml when the site is
+             assembled (scripts/site/assemble.sh), so it is always the release
+             main carries. -->
+        <a class="status" href="https://github.com/FerroHEALTH/FerroPIX/releases/latest" rel="noopener">v{{version:ferropix}} released</a>
         <h1>Who the patient is, across every system that knows them.</h1>
         <p class="sub">
           FerroPIX is the Master Patient Index of the FerroHEALTH family, in

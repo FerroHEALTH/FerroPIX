@@ -152,6 +152,9 @@ jobs:
       - name: self-tests / The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
         if: ${{ !cancelled() }}
         run: bash scripts/perf/gate.sh --self-test
+      - name: self-tests / The quickstart tour holds every anchor the book includes
+        if: ${{ !cancelled() }}
+        run: bash scripts/quickstart/tour.sh --self-test
       - name: self-tests / The release milestone script refuses open items and closes only after every leg
         if: ${{ !cancelled() }}
         run: bash scripts/release/milestone.sh --self-test
@@ -806,8 +809,8 @@ jobs:
   # The quickstart, run as an operator runs it: the server built for the
   # static musl target, the image built from that binary through the staged
   # tree the release lane uses (scripts/release/stage-dist.sh), then
-  # `docker compose up --wait` with compose.yaml as committed. It checks the
-  # image's tree (the binary root-owned 0555, the state directory and its
+  # the book's quickstart tour (scripts/quickstart/tour.sh) over compose.yaml
+  # as committed, the console included. It checks the image's tree (the binary root-owned 0555, the state directory and its
   # 0700 audit spool owned by 65532), readiness, the image's HEALTHCHECK, and
   # a token of the development issuer read by the server, and the Helm
   # chart's rendered configuration through the config check of the server
@@ -930,15 +933,14 @@ jobs:
           bash deploy/helm/config-check.sh \
             --server "ghcr.io/ferrohealth/ferropix:${FERROPIX_VERSION}" \
             --console "ghcr.io/ferrohealth/ferropix-console:${FERROPIX_VERSION}"
+      # The book's quickstart page shows the commands of this script by
+      # anchor, so a command it shows is a command run here (#594).
+      - name: The book's quickstart tour runs as written
+        timeout-minutes: 10
+        run: bash scripts/quickstart/tour.sh
       - name: The quickstart reaches readiness
         run: |
           set -euo pipefail
-          umask 077
-          openssl rand -base64 32 > secrets/ferropix-data-key
-          openssl rand -hex 16 > secrets/postgres-password
-          openssl rand -hex 16 > secrets/ferropix-db-password
-          printf 'postgresql://ferropix:%s@postgres:5432/ferropix' "$(cat secrets/ferropix-db-password)" > secrets/ferropix-db-url
-          docker compose up --detach --wait --wait-timeout 180
           curl --fail --silent --show-error http://localhost:8080/health/readiness
           echo
           docker compose exec -T ferropix /usr/local/bin/ferropix healthcheck
@@ -958,10 +960,10 @@ jobs:
           [ "$status" = "404" ] || { echo "::error::ITI-83 answered ${status}, not 404" >&2; exit 1; }
       - name: Logs of a failed start
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose --profile console logs --no-color
       - name: Stop the quickstart
         if: always()
-        run: docker compose down --volumes
+        run: docker compose --profile console down --volumes
 
   doc:
     name: rustdoc

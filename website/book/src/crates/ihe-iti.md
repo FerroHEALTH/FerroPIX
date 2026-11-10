@@ -47,9 +47,10 @@ ITI-83 prescribes the `GET`, which puts the patient identifier, a BSN for a
 Dutch patient, in the query string. FerroHEALTH therefore settles it this
 way:
 
-- **The FerroPIX PIX Manager, planned,** is to accept `$ihe-pix` by `GET`
-  (ITI-83) and by `POST` with a `Parameters` body (FHIR R4 Operations
-  §3.2.0.1), and to keep no URL query in a request log ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52)).
+- **The FerroPIX PIXm Manager** accepts `$ihe-pix` by `GET` (ITI-83) and
+  by `POST` with a `Parameters` body (FHIR R4 Operations §3.2.0.1), with the
+  same answers, and its request log records no URL query
+  ([The PIXm Manager](../integrate/pixm-manager.md)).
 - **FerroHEALTH clients call it by `POST`**
   (`ihe_iti::pixm::Invocation::Post`), so a BSN never appears in a URL.
   Against another Manager, post only when it accepts the `POST` form.
@@ -85,9 +86,9 @@ that is no FHIR R4 `CapabilityStatement`, and `Timeout`, `Transport` or
 
 The criteria travel in the request body, never the URL, so a PDQm search
 needs no choice of invocation: like a PIXm lookup from a FerroHEALTH client,
-it keeps every identifier and demographic out of the URL. The planned PDQm
-Supplier of FerroPIX answers the same `POST` ([FerroHEALTH/FerroPIX#52](https://github.com/FerroHEALTH/FerroPIX/issues/52) covers its request
-log). An answer that
+it keeps every identifier and demographic out of the URL. The PDQm
+Supplier of FerroPIX answers the same `POST`
+([The PDQm Supplier](../integrate/pdqm-supplier.md)). An answer that
 departs from the profile, such as a match entry without its score or grade,
 is refused.
 
@@ -147,9 +148,11 @@ XML.
   criteria, refusing any other, says whether a Patient falls under the
   criteria, and builds the ITI-93 message a subscriber receives.
 
-The FerroPIX server answers with them as the PIXm Manager and the PDQm
-Supplier ([The PIXm Manager](../integrate/pixm-manager.md),
-[The PDQm Supplier](../integrate/pdqm-supplier.md)).
+The FerroPIX server answers with them as the PIXm Manager, the PDQm
+Supplier and the PMIR Registry
+([The PIXm Manager](../integrate/pixm-manager.md),
+[The PDQm Supplier](../integrate/pdqm-supplier.md),
+[The PMIR Registry](../integrate/pmir-registry.md)).
 
 ## mCSD (`mcsd`)
 

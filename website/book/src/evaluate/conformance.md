@@ -69,9 +69,24 @@ lists, the badge files and the README badge block after a change, and
 mode, and under `--check` so does a new pass, a moved total or a changed
 reason.
 
-There is no conformance statement for the server yet: it is part of the
-[v0.0.3 milestone](https://github.com/FerroHEALTH/FerroPIX/milestone/3),
-which is planned.
+## The server's conformance statement
+
+`GET {base}/fhir/metadata` answers the server's `CapabilityStatement`, in
+FHIR JSON or XML, with no token. Its `instantiates` names the IHE actor
+statements of the services you switch on:
+
+| Service | Instantiates |
+|---|---|
+| `[pixm]` | `https://profiles.ihe.net/ITI/PIXm/CapabilityStatement/IHE.PIXm.Manager` |
+| `[pdqm]` | `https://profiles.ihe.net/ITI/PDQm/CapabilityStatement/IHE.PDQm.PatientDemographicsSupplier` and `…/IHE.PDQm.PatientDemographicsSupplierMatch` |
+| `[pmir]` | no actor statement; the statement declares the ITI-93 message the Registry receives and the `Subscription` resource of ITI-94 |
+
+Each resource entry names its profile, interactions, search parameters and
+operations, next to the security service and the scopes the permission
+table enforces, and `GET {base}/fhir/.well-known/smart-configuration` lists
+the same scopes. The pages under Integrate say what each transaction reads
+and answers, case by case, with the section of the profile behind each
+answer.
 
 ## The published texts
 

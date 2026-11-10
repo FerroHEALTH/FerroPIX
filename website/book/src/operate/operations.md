@@ -3,12 +3,11 @@
 
 # Operations
 
-This page covers the server's health checks and request log, and what
-operating the crates involves. The installation report the server sends
-is set under [`[usage_report]`](configuration.md#usage_report), the span
-and metric export under [`[telemetry]`](configuration.md#telemetry), and an upgrade
-of the server applies its migrations with `db migrate` or at the start of
-`serve` ([Deployment](deployment.md)).
+This page covers the server's health checks and request log. The
+installation report the server sends is set under
+[`[usage_report]`](configuration.md#usage_report), the span and metric
+export under [`[telemetry]`](configuration.md#telemetry), and upgrades and
+the support policy are on [Releases, upgrades and support](releases.md).
 
 ## Health checks
 
@@ -82,29 +81,6 @@ A proxy in front of the server must keep query strings out of its own logs
 for the same reason. The gate of `ferrohealth-smart` writes its own audit
 line per guarded request under the target `ferrohealth_smart::audit`, with
 the same discipline.
-
-## Releases and support
-
-- **Only the newest release is supported.** When a release is published,
-  every earlier one stops receiving fixes: there are no maintenance
-  branches and no backports. Security fixes keep being published for at
-  least five years after each release, in the newest release
-  ([`SECURITY.md`](https://github.com/FerroHEALTH/FerroPIX/blob/main/SECURITY.md)).
-- **A FerroPIX release is cut from its milestone.** The release workflow
-  refuses a tag whose milestone still holds an open issue, and closes the
-  milestone once every leg has published. The
-  [milestones](https://github.com/FerroHEALTH/FerroPIX/milestones) are the
-  roadmap.
-- **The crates are published between releases.** A crate's version moves
-  with any change to what it ships, so a fix reaches crates.io without
-  waiting for a product release.
-
-## Upgrading a crate
-
-Read the crate's entries in the [changelog](../changelog.md) for the versions
-you skip. A change that breaks the API is marked **API break** with what to
-change. The family pins its crates by exact version, so `ihe-iti` moves
-together with the `ihe-atna` version it names.
 
 ## Reporting a defect
 

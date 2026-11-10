@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The book's configuration page lists every key of the tree, and its
+//! The book's configuration page lists every key of the tree, every `toml`
+//! block of the book is a configuration the server's loader reads, and its
 //! problem types page has a section for every problem type.
 //!
 //! The keys are read from the tree itself: a production and a development
 //! configuration with every section set are written back, so a key added to
 //! a section and missing from the page fails here.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use ferropix_server::config::Config;
 
@@ -84,7 +86,7 @@ fn the_configuration_page_lists_every_key_of_the_tree() {
     assert!(keys.contains("domain[].source_client_id"), "{keys:?}");
     assert!(keys.contains("matching.fields.<field>.m"), "{keys:?}");
     let page = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../website/book/src/operate/configuration.md"),
     )
     .expect("the configuration page is read");
@@ -108,8 +110,7 @@ fn every_problem_type_resolves_to_its_section_of_the_book() {
         .and_then(|path| path.strip_suffix(".html"))
         .expect("the base is a page of the book");
     let page = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(format!("../../website/book/src/{relative}.md")),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../website/book/src/{relative}.md")),
     )
     .expect("the problem types page is read");
     let types = ferropix_server::problem::types();
@@ -129,4 +130,37 @@ fn every_problem_type_resolves_to_its_section_of_the_book() {
             kind.uri()
         );
     }
+}
+
+#[test]
+fn every_toml_block_of_the_book_is_a_configuration_the_server_reads() {
+    let found = ferropix_testkit::book::blocks("toml").expect("the book is read");
+    assert!(
+        found.len() >= 5,
+        "the book holds {} toml blocks; the walk found too few",
+        found.len()
+    );
+    let refused: Vec<String> = found
+        .iter()
+        .filter_map(|block| {
+            Config::from_sources(Some(&block.body), &BTreeMap::new())
+                .err()
+                .map(|error| format!("{}:{}: {error}", block.page.display(), block.line))
+        })
+        .collect();
+    assert!(
+        refused.is_empty(),
+        "the server's loader refuses these blocks of the book:\n{}",
+        refused.join("\n")
+    );
+}
+
+#[test]
+fn a_block_with_a_key_the_server_does_not_know_is_refused() {
+    let found = ferropix_testkit::book::fenced(
+        "```toml\n[server]\nlisten = \"0.0.0.0:8080\"\nlisten_port = 8080\n```\n",
+        "toml",
+    );
+    assert_eq!(1, found.len(), "{found:?}");
+    assert!(Config::from_sources(Some(&found[0].1), &BTreeMap::new()).is_err());
 }

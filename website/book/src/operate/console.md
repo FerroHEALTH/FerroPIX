@@ -65,8 +65,7 @@ you do it.
 | Configuration, `/configuration` | The matching thresholds, field weights, blocking keys and the built-in deterministic rules, read-only, each value marked when the environment set it or nothing did. |
 | Audit trail, `/audit` | The steward actions, newest first, under posted filters (actor, kind, person, dates), each row with its reason, its references and its request id, and the export of the filtered rows as CSV, itself an audited action. |
 
-The console ships as its own container image,
-published by the release lane from the first tagged release
+The console ships as its own container image, published by every release
 ([The image](#the-image)).
 
 ## What each page looks like
@@ -232,7 +231,7 @@ unknown key, in the file, a variable or a `--set` argument, is refused, and a
 refusal names the key, never its value. A server variable such as
 `FERROPIX__SERVER__LISTEN` is left alone.
 
-```toml
+```toml,console
 [server]
 listen = "0.0.0.0:3000"
 locale = "en"

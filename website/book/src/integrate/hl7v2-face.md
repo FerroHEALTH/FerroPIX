@@ -118,7 +118,7 @@ FerroBRIDGE's value package, `terminology/hl7v2-values/` of the FerroBRIDGE
 release whose `ferrobridge-hl7v2` FerroPIX runs. For FerroTERM, name the
 three directories in its `terminology.code_systems`:
 
-```toml
+```toml,ferroterm
 [terminology]
 code_systems = [
   "/srv/hl7.terminology/package",

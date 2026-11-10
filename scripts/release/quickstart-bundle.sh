@@ -53,9 +53,17 @@ build() {
   rm -rf "$bundle"
   mkdir -p "$bundle"
   cp "$root/compose.yaml" "$bundle/compose.yaml"
+  # Tracked files only, so a secret the quickstart generated in a checkout
+  # never reaches a bundle.
   for path in "${FILES[@]}"; do
-    mkdir -p "$bundle/$(dirname "$path")"
-    cp -p "$root/$path" "$bundle/$path"
+    git -C "$root" ls-files --error-unmatch -- "$path" > /dev/null 2>&1 || {
+      echo "quickstart-bundle: $path is not a tracked file of the checkout" >&2
+      return 1
+    }
+    while IFS= read -r -d '' file; do
+      mkdir -p "$bundle/$(dirname "$file")"
+      cp -p "$root/$file" "$bundle/$file"
+    done < <(git -C "$root" ls-files -z -- "$path")
   done
   for spec in "$@"; do
     name="${spec%%=*}"
@@ -99,6 +107,8 @@ self_test() {
   fi
   mkdir -p "$work/fixture/app/ferropix-server" "$work/fixture/docker/postgres" "$work/fixture/scripts/quickstart"
   for path in "${FILES[@]}"; do : > "$work/fixture/$path"; done
+  git -C "$work/fixture" init -q
+  git -C "$work/fixture" add -A
   printf 'services:\n  ferropix:\n    image: x\n    volumes:\n      - ./extra.toml:/etc/extra.toml:ro\n' > "$work/fixture/compose.yaml"
   if build "$work/fixture" "$work/b" 2> /dev/null; then
     echo "quickstart-bundle: self-test failed: a mount the bundle lacks passed." >&2

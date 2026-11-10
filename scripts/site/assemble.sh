@@ -24,7 +24,7 @@
 #     of the artwork.
 #   * each page of the book gets its own hashed Content-Security-Policy
 #     (scripts/site/book-csp.sh).
-#   * the landing page's {{hash:style.css}} marker becomes the first twelve
+#   * the landing pages' {{hash:style.css}} marker becomes the first twelve
 #     hex digits of the stylesheet's sha256, so a browser that cached an older
 #     stylesheet fetches the new one with the new page.
 #
@@ -126,13 +126,15 @@ scripts/site/book-csp.sh "$book"
 rm -rf "${OUT:?}"
 mkdir -p "$OUT/docs"
 cp -R "$LANDING"/. "$OUT/"
-render "$OUT/index.html"
 style_hash="$(shasum -a 256 "$OUT/style.css" | cut -c1-12)"
-STYLE_HASH="$style_hash" perl -pi -e 's/\{\{hash:style\.css\}\}/$ENV{STYLE_HASH}/g' "$OUT/index.html"
-if grep -q '{{' "$OUT/index.html"; then
-  echo "assemble: $LANDING/index.html keeps a marker nothing renders" >&2
-  exit 1
-fi
+for page in "$OUT"/*.html; do
+  render "$page"
+  STYLE_HASH="$style_hash" perl -pi -e 's/\{\{hash:style\.css\}\}/$ENV{STYLE_HASH}/g' "$page"
+  if grep -q '{{' "$page"; then
+    echo "assemble: $LANDING/$(basename "$page") keeps a marker nothing renders" >&2
+    exit 1
+  fi
+done
 cp -R "$book"/. "$OUT/docs/"
 
 # The brand directory holds the favicons and the marks the landing page and

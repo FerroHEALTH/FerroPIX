@@ -319,6 +319,12 @@ a.card:focus-visible {
   font-size: 0.9rem;
 }
 
+/* A page of its own (the 404 page): one column of prose under the nav. */
+.page { padding: clamp(3rem, 8vw, 5rem) 0; }
+.page h1 { font-size: clamp(1.5rem, 3.2vw, 2.2rem); line-height: 1.2; margin: 0 0 1rem; }
+.page p { max-width: 68ch; color: var(--fp-muted); }
+.page .hero-cta { justify-content: flex-start; margin-top: 2rem; }
+
 /* Footer */
 .footer {
   border-top: 1px solid var(--fp-border);

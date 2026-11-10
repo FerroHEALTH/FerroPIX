@@ -21,6 +21,9 @@ pub mod xcpd;
 
 use std::net::{IpAddr, SocketAddr};
 
+use ferrohealth_smart::config::credentials::CredentialsSection;
+
+use crate::config::Profile;
 use crate::config::error::Error;
 
 /// Returns `text` as a socket address, refused under `key`.
@@ -56,4 +59,35 @@ pub(crate) fn is_loopback_address(address: SocketAddr) -> bool {
         IpAddr::V4(ip) => ip.is_loopback(),
         IpAddr::V6(ip) => ip.is_loopback(),
     }
+}
+
+/// Refuses a password or a client secret set inline in the `credentials`
+/// of the endpoint table at `table` under production, as
+/// [`crate::config::secret`] does for every other secret.
+///
+/// # Errors
+/// Returns [`Error::InlineSecret`] naming the key.
+pub(crate) fn endpoint_secrets(
+    table: &str,
+    credentials: &CredentialsSection,
+    profile: Profile,
+) -> Result<(), Error> {
+    if profile != Profile::Production {
+        return Ok(());
+    }
+    if credentials.password.is_some() && credentials.password_file.is_none() {
+        return Err(Error::InlineSecret {
+            key: format!("{table}.credentials.password"),
+        });
+    }
+    if credentials
+        .oauth
+        .as_ref()
+        .is_some_and(|oauth| oauth.client_secret.is_some() && oauth.client_secret_file.is_none())
+    {
+        return Err(Error::InlineSecret {
+            key: format!("{table}.credentials.oauth.client_secret"),
+        });
+    }
+    Ok(())
 }

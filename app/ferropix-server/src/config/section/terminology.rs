@@ -10,90 +10,69 @@
 //! table 0190, XTN-2 and XTN-3 by tables 0201 and 0202) is translated by
 //! `ConceptMap/$translate` (FHIR R4 `conceptmap-operation-translate`) on
 //! this server, loaded with the guide's table maps and FerroBRIDGE's value
-//! package. FerroPIX holds no copy of a table. The section has the
-//! family's shape, as FerroBRIDGE's `[terminology]`: the base URL, the
-//! timeout and retry budget, `[terminology.credentials]` of
-//! `ferrohealth-smart` (HTTP Basic or the client credentials grant) and
-//! `[terminology.tls]` of `ferrohealth-server`. No specification governs
-//! the section: our own design.
-
-use std::sync::Arc;
+//! package. FerroPIX holds no copy of a table. The server is the family's
+//! endpoint table, `[terminology.endpoint]` of `ferrohealth-smart`: the
+//! base URL, the timeouts, the retry budget, the TLS and the credentials
+//! (HTTP Basic or the client credentials grant), reached through its
+//! outbound client, as FerroBRIDGE's `[terminology]` is. No specification
+//! governs the section: our own design.
 
 use ferrobridge_term::client::Client;
-use ferrobridge_term::config::{Config, Credentials, RetryPolicy, WireVersion};
-use ferrobridge_term::smart::SmartToken;
+use ferrobridge_term::config::WireVersion;
 use ferrohealth_config::removed::{Removals, Removed};
-use ferrohealth_config::tls::TlsClientSection;
 use ferrohealth_config::units::Duration as Span;
-use ferrohealth_server::tls_client::TlsClient;
-use ferrohealth_smart::client::cache::TokenSource;
-use ferrohealth_smart::config::credentials::{CredentialsSection, Outbound};
+use ferrohealth_smart::config::ServerTls;
+use ferrohealth_smart::config::endpoint::{EndpointSection, RetrySection};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
 use crate::config::retired;
-use crate::config::section::{is_loopback_url, url};
+use crate::config::section::{endpoint_secrets, is_loopback_url, url};
+
+/// The dotted key of the server's endpoint table.
+pub const ENDPOINT: &str = "terminology.endpoint";
 
 /// The `[terminology]` section as written.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Terminology {
-    /// The FHIR R4 service base URL; empty for no terminology server.
-    pub base_url: String,
-    /// How long one call may take, connection included.
-    pub timeout: Span,
-    /// The retry budget.
-    pub retry: Retry,
-    /// The credentials the server expects.
-    pub credentials: CredentialsSection,
-    /// The outbound TLS: the client identity presented for mutual TLS and
-    /// the roots trusted beside the platform's.
-    pub tls: TlsClientSection,
-    /// Retired in v0.0.24 for `timeout`.
+    /// The FHIR R4 terminology server (`[terminology.endpoint]`): its
+    /// service base as `url`, empty for none, the timeouts, the retry
+    /// budget, the TLS and the credentials.
+    pub endpoint: EndpointSection,
+    /// Retired in v0.0.24 for `endpoint.url`.
+    #[serde(skip_serializing)]
+    pub base_url: Removed,
+    /// Retired in v0.0.24 for `endpoint.timeout`.
     #[serde(skip_serializing)]
     pub timeout_ms: Removed,
+    /// Retired in v0.0.24 for `endpoint.retry`.
+    #[serde(skip_serializing)]
+    pub retry: Removed,
+    /// Retired in v0.0.24 for `endpoint.credentials`.
+    #[serde(skip_serializing)]
+    pub credentials: Removed,
+    /// Retired in v0.0.24 for `endpoint.tls`.
+    #[serde(skip_serializing)]
+    pub tls: Removed,
 }
 
 impl Default for Terminology {
     fn default() -> Self {
         Self {
-            base_url: String::new(),
-            timeout: Span::from_secs(10),
+            endpoint: EndpointSection {
+                retry: RetrySection {
+                    max_backoff: Span::from_secs(2),
+                    ..RetrySection::default()
+                },
+                ..EndpointSection::default()
+            },
+            base_url: Removed::default(),
             timeout_ms: Removed::default(),
-            retry: Retry::default(),
-            credentials: CredentialsSection::default(),
-            tls: TlsClientSection::default(),
-        }
-    }
-}
-
-/// How often, and how far apart, a call is sent again.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Retry {
-    /// How many times a call is sent at most, the first try included.
-    pub max_attempts: u32,
-    /// The wait before the second attempt.
-    pub initial_backoff: Span,
-    /// The longest wait between two attempts.
-    pub max_backoff: Span,
-    /// Retired in v0.0.24 for `initial_backoff`.
-    #[serde(skip_serializing)]
-    pub initial_backoff_ms: Removed,
-    /// Retired in v0.0.24 for `max_backoff`.
-    #[serde(skip_serializing)]
-    pub max_backoff_ms: Removed,
-}
-
-impl Default for Retry {
-    fn default() -> Self {
-        Self {
-            max_attempts: 3,
-            initial_backoff: Span::from_millis(200),
-            max_backoff: Span::from_secs(2),
-            initial_backoff_ms: Removed::default(),
-            max_backoff_ms: Removed::default(),
+            retry: Removed::default(),
+            credentials: Removed::default(),
+            tls: Removed::default(),
         }
     }
 }
@@ -108,149 +87,69 @@ pub struct TerminologySettings {
 impl Terminology {
     /// Gathers the retired keys the sources set.
     pub fn removals(&self, found: &mut Removals) {
+        found.check(self.base_url, &retired::terminology::BASE_URL);
         found.check(self.timeout_ms, &retired::terminology::TIMEOUT_MS);
-        found.check(
-            self.retry.initial_backoff_ms,
-            &retired::terminology::INITIAL_BACKOFF_MS,
-        );
-        found.check(
-            self.retry.max_backoff_ms,
-            &retired::terminology::MAX_BACKOFF_MS,
-        );
+        found.check(self.retry, &retired::terminology::RETRY);
+        found.check(self.credentials, &retired::terminology::CREDENTIALS);
+        found.check(self.tls, &retired::terminology::TLS);
     }
 
-    /// Resolves the section: `None` while `base_url` is empty.
+    /// Resolves the section: `None` while `endpoint.url` is empty.
     ///
     /// # Errors
     /// Returns [`Error::Url`] for a base URL that does not parse,
     /// [`Error::Value`] for a base URL that is neither `https` nor `http` on
-    /// a loopback host or that carries userinfo, and for a zero bound,
-    /// [`Error::InlineSecret`] for a password or a client secret set inline
-    /// under production, [`Error::Credentials`] for a credentials table
-    /// `ferrohealth-smart` refuses, [`Error::TlsClient`] when
-    /// `[terminology.tls]` names material that cannot be read,
-    /// [`Error::Token`] when the token source cannot be built, and
-    /// [`Error::HttpClient`] or [`Error::Terminology`] when the client
-    /// cannot be built.
+    /// a loopback host or that carries userinfo, [`Error::InlineSecret`] for
+    /// a password or a client secret set inline under production, and
+    /// [`Error::Terminology`] when the client refuses the table, its TLS or
+    /// its credential.
     pub fn resolve(&self, profile: Profile) -> Result<Option<TerminologySettings>, Error> {
-        let text = self.base_url.trim();
+        let text = self.endpoint.url.expose().trim();
         if text.is_empty() {
             return Ok(None);
         }
-        let base = url("terminology.base_url", text)?;
+        let base = url("terminology.endpoint.url", text)?;
         // NOTE: FHIR R4 security.html leaves transport security to the deployment;
         // our own design: plain http only on loopback, as for every outbound URL.
         if !(base.scheme() == "https" || (base.scheme() == "http" && is_loopback_url(&base))) {
             return Err(Error::Value {
-                key: String::from("terminology.base_url"),
+                key: String::from("terminology.endpoint.url"),
                 rule: "https, or http on a loopback host",
             });
         }
         if !base.username().is_empty() || base.password().is_some() {
             return Err(Error::Value {
-                key: String::from("terminology.base_url"),
-                rule: "no userinfo: credentials go in [terminology.credentials]",
+                key: String::from("terminology.endpoint.url"),
+                rule: "no userinfo: credentials go in [terminology.endpoint.credentials]",
             });
         }
-        if self.timeout.is_zero() || self.retry.max_attempts == 0 {
-            return Err(Error::Value {
-                key: String::from(if self.timeout.is_zero() {
-                    "terminology.timeout"
-                } else {
-                    "terminology.retry.max_attempts"
-                }),
-                rule: "greater than zero",
-            });
-        }
-        self.inline_secrets(profile)?;
-        let mut config = Config::new(base, WireVersion::R4)
-            .with_timeout(self.timeout.get())
-            .with_retry(RetryPolicy {
-                max_attempts: self.retry.max_attempts,
-                initial_backoff: self.retry.initial_backoff.get(),
-                max_backoff: self.retry.max_backoff.get(),
-            });
-        match self
-            .credentials
-            .resolve_with_tls(&ferrohealth_smart::config::ServerTls)
-            .map_err(|source| Error::Credentials {
-                key: "terminology.credentials",
-                source: Box::new(source),
-            })? {
-            Some(Outbound::Basic(credential)) => {
-                config = config.with_credentials(Credentials::Basic {
-                    user: credential.username().to_owned(),
-                    password: credential.password().clone(),
-                });
-            }
-            Some(Outbound::Oauth(grant)) => {
-                let source = TokenSource::new(*grant).map_err(|source| Error::Token {
-                    key: "terminology.credentials.oauth",
-                    source: Box::new(source),
-                })?;
-                config =
-                    config.with_credentials(Credentials::OAuth(Arc::new(SmartToken::from(source))));
-            }
-            None => {}
-        }
-        let tls = TlsClient::read("terminology.tls", &self.tls).map_err(Error::TlsClient)?;
-        let builder = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(self.timeout.get());
-        let http = tls
-            .apply(builder)
-            .map_err(Error::TlsClient)?
-            .build()
-            .map_err(|source| Error::HttpClient {
-                key: "terminology",
-                source: Box::new(source),
-            })?;
-        let client = Client::with_http(config, http).map_err(|source| Error::Terminology {
+        endpoint_secrets(ENDPOINT, &self.endpoint.credentials, profile)?;
+        let client = Client::from_endpoint(&self.endpoint, ENDPOINT, &ServerTls, WireVersion::R4)
+            .map_err(|source| Error::Terminology {
             source: Box::new(source),
         })?;
         Ok(Some(TerminologySettings { client }))
-    }
-
-    /// Refuses a password or a client secret set inline under production,
-    /// as [`crate::config::secret`] does for every other secret.
-    fn inline_secrets(&self, profile: Profile) -> Result<(), Error> {
-        if profile != Profile::Production {
-            return Ok(());
-        }
-        let credentials = &self.credentials;
-        if credentials.password.is_some() && credentials.password_file.is_none() {
-            return Err(Error::InlineSecret {
-                key: String::from("terminology.credentials.password"),
-            });
-        }
-        if credentials.oauth.as_ref().is_some_and(|oauth| {
-            oauth.client_secret.is_some() && oauth.client_secret_file.is_none()
-        }) {
-            return Err(Error::InlineSecret {
-                key: String::from("terminology.credentials.oauth.client_secret"),
-            });
-        }
-        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use ferrohealth_config::units::Duration as Span;
+    use ferrohealth_secret::secret_url::SecretUrl;
     use secrecy::SecretString;
 
     use super::Terminology;
     use crate::config::Profile;
     use crate::config::error::Error;
 
-    fn at(base_url: &str) -> Terminology {
-        Terminology {
-            base_url: base_url.to_owned(),
-            ..Terminology::default()
-        }
+    fn at(url: &str) -> Terminology {
+        let mut section = Terminology::default();
+        section.endpoint.url = SecretUrl::new(url);
+        section
     }
 
     #[test]
-    fn no_base_url_is_no_terminology_server() {
+    fn no_url_is_no_terminology_server() {
         assert!(matches!(
             Terminology::default().resolve(Profile::Production),
             Ok(None)
@@ -258,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn a_base_url_resolves_to_a_client_of_it() {
+    fn a_url_resolves_to_a_client_of_it() {
         let resolved = at("https://tx.example.org/fhir/r4")
             .resolve(Profile::Production)
             .expect("resolves")
@@ -276,24 +175,14 @@ mod tests {
     }
 
     #[test]
-    fn plain_http_off_loopback_userinfo_and_zero_bounds_are_refused() {
-        for (section, key) in [
-            (at("http://tx.example.org/r4"), "terminology.base_url"),
-            (
-                at("https://user:pw@tx.example.org/r4"),
-                "terminology.base_url",
-            ),
-            (
-                Terminology {
-                    timeout: super::Span::from_secs(0),
-                    ..at("https://tx.example.org/r4")
-                },
-                "terminology.timeout",
-            ),
+    fn plain_http_off_loopback_and_userinfo_are_refused() {
+        for section in [
+            at("http://tx.example.org/r4"),
+            at("https://user:pw@tx.example.org/r4"),
         ] {
             assert!(
-                matches!(section.resolve(Profile::Production), Err(Error::Value { key: refused, .. }) if refused == key),
-                "{key}"
+                matches!(section.resolve(Profile::Production), Err(Error::Value { key, .. }) if key == "terminology.endpoint.url"),
+                "{section:?}"
             );
         }
         assert!(matches!(
@@ -303,13 +192,23 @@ mod tests {
     }
 
     #[test]
-    fn an_inline_password_is_refused_under_production_only() {
+    fn a_zero_timeout_is_refused_by_the_endpoint_table() {
         let mut section = at("https://tx.example.org/r4");
-        section.credentials.user = String::from("ferropix");
-        section.credentials.password = Some(SecretString::from("synthetic"));
+        section.endpoint.timeout = Span::from_secs(0);
         assert!(matches!(
             section.resolve(Profile::Production),
-            Err(Error::InlineSecret { key }) if key == "terminology.credentials.password"
+            Err(Error::Terminology { .. })
+        ));
+    }
+
+    #[test]
+    fn an_inline_password_is_refused_under_production_only() {
+        let mut section = at("https://tx.example.org/r4");
+        section.endpoint.credentials.user = String::from("ferropix");
+        section.endpoint.credentials.password = Some(SecretString::from("synthetic"));
+        assert!(matches!(
+            section.resolve(Profile::Production),
+            Err(Error::InlineSecret { key }) if key == "terminology.endpoint.credentials.password"
         ));
         assert!(
             section
@@ -319,12 +218,12 @@ mod tests {
     }
 
     #[test]
-    fn credentials_ferrohealth_smart_refuses_are_named() {
+    fn credentials_ferrohealth_smart_refuses_are_refused() {
         let mut section = at("https://tx.example.org/r4");
-        section.credentials.password = Some(SecretString::from("synthetic"));
+        section.endpoint.credentials.password = Some(SecretString::from("synthetic"));
         assert!(matches!(
             section.resolve(Profile::Development),
-            Err(Error::Credentials { key, .. }) if key == "terminology.credentials"
+            Err(Error::Terminology { .. })
         ));
     }
 }

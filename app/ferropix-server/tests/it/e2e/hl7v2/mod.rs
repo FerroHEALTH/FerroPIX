@@ -95,9 +95,10 @@ impl V2 {
         };
         let stub = Translations::v2_pid();
         let (stub_server, base) = stub.serve().await.expect("the stub serves");
-        let terminology = Terminology {
-            base_url: base.to_string(),
-            ..Terminology::default()
+        let terminology = {
+            let mut section = Terminology::default();
+            section.endpoint.url = ferrohealth_secret::secret_url::SecretUrl::new(base.to_string());
+            section
         }
         .resolve(Profile::Development)
         .expect("the terminology section resolves");

@@ -184,7 +184,8 @@ message and position without quoting the line.
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |
 | `[pixm]`, `[pdqm]`, `[pmir]` | each profile's switch and options: `[pixm] remove_patient` (PIXm 3.1.0 §1:41.2.1), `[pdqm] deprecated` (which of the policy choices of PDQm 3.2.0 §2:3.78.4.1.3 case 6 the supplier takes), `[pmir] feed` (the outbound ITI-93 sender's retry bounds) |
 | `[hl7v2]` | `listen`, `default_charset`, `frame_limit`, the timeouts, `[[hl7v2.senders]]` (section 7) |
-| `[audit]` | the ATNA repository the BALP records go to (`url`, a FHIR base for the FHIR Feed, BALP 1.1.4 §1:52.1.1.1), the spool directory and its bounds |
+| `[audit]` | the ATNA repository the BALP records go to (`[audit.endpoint]`, `ferrohealth-smart`'s endpoint table, whose `url` is a FHIR base for the FHIR Feed, BALP 1.1.4 §1:52.1.1.1, reached through its outbound client), the spool directory and its bounds |
+| `[terminology]` | the FHIR R4 terminology server the HL7 v2 face translates every table value on (`[terminology.endpoint]`, the same endpoint table, section 7) |
 | `[operator]` | the operator API switch (`enabled`, off by default; on requires `[auth]`) |
 | `[usage_report]` | the FerroPULSE report (section 9) |
 
@@ -994,7 +995,7 @@ per person found and one with no patient when none was (BALP 1.1.4
 §1:52.4.1.6 recommends one per patient); a steward's view is BALP Patient
 Read and a decision Patient Update. A token whose subject is its own client
 is recorded as the system acting for itself, any other with its user. With
-no `[audit] url` the records stay in the spool until one is named. The
+no `[audit.endpoint] url` the records stay in the spool until one is named. The
 readiness indicator `audit_spool` is down under a tenth of either bound.
 
 **Health.** The health routes are `ferrohealth-server`'s over the registry

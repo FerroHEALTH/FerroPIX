@@ -147,7 +147,7 @@ server writes a patient identifier.
 
 The records wait in a spool under `audit.spool_dir`, one file readable by
 the server's user alone per record in a directory only that user may enter,
-and are sent to `audit.url` over the FHIR Feed. A delivered record is
+and are sent to `audit.endpoint.url` over the FHIR Feed. A delivered record is
 removed; one the repository refuses is moved to the `quarantine`
 subdirectory for you to inspect. Before a transaction runs, the server
 takes its record's place in the spool: when the spool is full, the request

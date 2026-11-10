@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use ferrohealth_config::loader::Loaded;
 use ferrohealth_server::cli::{Common, ConfigCommand};
-use ferrohealth_server::run::{EXIT_CONFIG, Failure, Run, chain};
+use ferrohealth_server::run::{Failure, Run, chain};
 use ferrohealth_telemetry::section::TelemetrySection;
 use ferrohealth_telemetry::telemetry::{Console, InitError, Service, Telemetry};
 
@@ -31,7 +31,7 @@ pub const RUN: Run = Run::new("ferropix-console");
 /// # Errors
 ///
 /// Returns the [`Failure`] of a configuration that does not resolve (with
-/// [`EXIT_CONFIG`], or exit 1 for `healthcheck`) and of a job that fails.
+/// [`EXIT_CONFIG`](ferrohealth_server::run::EXIT_CONFIG), or exit 1 for `healthcheck`) and of a job that fails.
 pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
     let loaded = Config::load(&cli.config).and_then(|loaded| {
         loaded
@@ -39,17 +39,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
             .resolve()
             .map(|settings| (loaded, settings))
     });
-    let (loaded, settings) = match loaded {
-        Ok(loaded) => loaded,
-        Err(error) if cli.command == Common::Healthcheck => {
-            return Err(Failure::from(error).with_context("not up"));
-        }
-        Err(error) => {
-            return Err(Failure::from(error)
-                .with_context("cannot start")
-                .with_code(EXIT_CONFIG));
-        }
-    };
+    let (loaded, settings) = loaded.map_err(|error| cli.command.refused(error))?;
     match cli.command {
         Common::Healthcheck => healthcheck(&settings).await,
         Common::Config {
@@ -74,12 +64,7 @@ pub async fn dispatch(cli: Cli) -> Result<ExitCode, Failure> {
     reason = "the job's one answer goes to standard output"
 )]
 async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> Result<ExitCode, Failure> {
-    let report = ferrohealth_config::report::check_report(loaded).map_err(|error| {
-        Failure::from(error)
-            .with_context("cannot show the configuration")
-            .with_code(EXIT_CONFIG)
-    })?;
-    println!("{report}");
+    ferrohealth_server::run::config_check(loaded)?;
     let built = if settings
         .oidc
         .as_ref()
@@ -91,11 +76,7 @@ async fn config_check(loaded: &Loaded<Config>, settings: Settings) -> Result<Exi
             .map(drop)
             .map_err(crate::server::StateError::from)
     };
-    built.map_err(|error| {
-        Failure::from(error)
-            .with_context("cannot start")
-            .with_code(EXIT_CONFIG)
-    })?;
+    built.map_err(Failure::refused_configuration)?;
     println!("ferropix-console: the configuration is valid");
     Ok(ExitCode::SUCCESS)
 }
@@ -138,11 +119,9 @@ async fn serve(settings: Settings, section: TelemetrySection) -> Result<ExitCode
 /// `SIGINT`.
 async fn listen_and_serve(settings: Settings) -> Result<ExitCode, Failure> {
     let listen = settings.listen;
-    let state = ConsoleState::new(settings).await.map_err(|error| {
-        Failure::from(error)
-            .with_context("cannot start")
-            .with_code(EXIT_CONFIG)
-    })?;
+    let state = ConsoleState::new(settings)
+        .await
+        .map_err(Failure::refused_configuration)?;
     let listener = tokio::net::TcpListener::bind(listen)
         .await
         .map_err(|error| Failure::from(error).with_context("cannot bind the listen address"))?;

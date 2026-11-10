@@ -16,8 +16,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_config::units::Duration as Span;
 use ferrohealth_health::registry::Registry;
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferrohealth_server::health::Health;
+use ferrohealth_smart::client::outbound::OutboundClient;
+use ferrohealth_smart::config::ServerTls;
+use ferrohealth_smart::config::endpoint::{EndpointSection, RetrySection};
 use ferrohealth_telemetry::request_log::RequestLog;
 use ferropix_server::audit::records::raw_request;
 use ferropix_server::audit::reserve::UNAUDITED;
@@ -45,14 +50,25 @@ use super::{BASE, BSN_SYSTEM, bsn, call};
 /// The `[audit]` settings of a spool under `directory`, delivering to
 /// `url` when given.
 fn audit_settings(directory: &Path, url: Option<&str>, max_events: usize) -> AuditSettings {
+    let repository = url.map(|url| {
+        let endpoint = EndpointSection {
+            url: SecretUrl::new(url),
+            timeout: Span::from_secs(2),
+            retry: RetrySection {
+                max_attempts: 1,
+                initial_backoff: Span::from_millis(200),
+                max_backoff: Span::from_millis(200),
+            },
+            ..EndpointSection::default()
+        };
+        OutboundClient::build(&endpoint, "audit.endpoint", &ServerTls).expect("the client builds")
+    });
     AuditSettings {
-        url: url.map(|url| url::Url::parse(url).expect("a URL")),
+        repository,
         spool_dir: directory.to_path_buf(),
         spool_max_bytes: 1 << 20,
         spool_max_events: max_events,
         spool_write_timeout: Duration::from_secs(2),
-        timeout: Duration::from_secs(2),
-        retry_max: Duration::from_millis(200),
     }
 }
 

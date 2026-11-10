@@ -297,12 +297,23 @@ knows_terminology() {
   [[ -f "$1/app/ferropix-server/src/config/section/terminology.rs" ]]
 }
 
+# terminology_variable TREE: the variable that names the terminology server
+# to the server of TREE: `[terminology.endpoint] url` from v0.0.24 on, and
+# `[terminology] base_url` before it (#571).
+terminology_variable() {
+  if grep -q 'pub endpoint: EndpointSection' "$1/app/ferropix-server/src/config/section/terminology.rs" 2>/dev/null; then
+    echo FERROPIX__TERMINOLOGY__ENDPOINT__URL
+  else
+    echo FERROPIX__TERMINOLOGY__BASE_URL
+  fi
+}
+
 # serve NAME BINARY CONFIG DB PORT MLLP TREE: as above, the terminology
 # server handed over only when TREE, the arm's source, defines the section.
 serve() {
   local binary="$2" config="$3" db="$4" port="$5" mllp="$6" tree="$7" dir="$WORK/$1"
   local terminology=()
-  knows_terminology "$tree" && terminology=("FERROPIX__TERMINOLOGY__BASE_URL=$TERMINOLOGY")
+  knows_terminology "$tree" && terminology=("$(terminology_variable "$tree")=$TERMINOLOGY")
   mkdir -p "$dir/audit"
   chmod 0700 "$dir" "$dir/audit"
   server_url "$db" > "$dir/db-url"
@@ -544,6 +555,10 @@ self_test() {
   check "a tree before [terminology] is not" 1 \
     "$(knows_terminology "$work/old" && echo 0 || echo 1)"
   check "this tree defines [terminology]" 0 "$(knows_terminology "$root" && echo 0 || echo 1)"
+  check "a tree before [terminology.endpoint] takes base_url" FERROPIX__TERMINOLOGY__BASE_URL \
+    "$(terminology_variable "$work/new")"
+  check "this tree takes [terminology.endpoint] url" FERROPIX__TERMINOLOGY__ENDPOINT__URL \
+    "$(terminology_variable "$root")"
   printf 'ferropix: the configuration is refused: a reason\n' > "$work/server.log"
   local refused code
   refused="$( (server_up base http://127.0.0.1:9 1 "$work/server.log") 2>&1)" && code=0 || code=$?

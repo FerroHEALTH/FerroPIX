@@ -36,7 +36,8 @@ config:
   # The FHIR R4 terminology server the HL7 v2 face translates on, which
   # config.hl7v2.enabled needs.
   terminology:
-    base_url: ""
+    endpoint:
+      url: ""
 
 # PostgreSQL 18 is an external dependency: the Secret `existingSecret` holds
 # its connection URL (`postgresql://ferropix:…@host:5432/ferropix`) under

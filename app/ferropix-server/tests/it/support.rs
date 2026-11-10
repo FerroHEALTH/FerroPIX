@@ -165,11 +165,11 @@ application = "LAB"
 facility = "EAST"
 domain = "urn:oid:2.999.1.1"
 
-[terminology]
-base_url = "https://tx.example.org/fhir/r4"
+[terminology.endpoint]
+url = "https://tx.example.org/fhir/r4"
 timeout = "5s"
 
-[terminology.retry]
+[terminology.endpoint.retry]
 max_attempts = 2
 initial_backoff = "100ms"
 max_backoff = "1s"
@@ -188,13 +188,17 @@ retention = "14d"
 prune_batch = 200
 
 [audit]
-url = "https://arr.example.org/fhir"
 spool_dir = "/var/lib/ferropix/audit"
 spool_max_size = "1MiB"
 spool_max_events = 1000
 spool_write_timeout = "1s"
+
+[audit.endpoint]
+url = "https://arr.example.org/fhir"
 timeout = "3s"
-retry_max = "30s"
+
+[audit.endpoint.retry]
+max_backoff = "30s"
 
 [operator]
 enabled = true

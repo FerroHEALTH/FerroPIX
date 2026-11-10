@@ -127,8 +127,8 @@ code_systems = [
 ]
 ```
 
-Then point FerroPIX's [`[terminology]`](../operate/configuration.md#terminology)
-section at the server's R4 base. The server refuses to start with the HL7
+Then point FerroPIX's [`[terminology.endpoint]`](../operate/configuration.md#terminology)
+`url` at the server's R4 base. The server refuses to start with the HL7
 v2 face on and no terminology server. A call the terminology server refuses
 or does not answer is answered `AR`, never mapped without the value, so
 the sender sends the message again; a code its map translates to nothing

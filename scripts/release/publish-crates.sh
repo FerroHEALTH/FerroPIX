@@ -22,6 +22,9 @@
 #   publish-crates.sh verify           # read the registry back, with retries
 #   publish-crates.sh version CRATE    # print one crate's version
 #   publish-crates.sh list             # print the published members, one a line
+#   publish-crates.sh semver           # judge each against its newest
+#                                      # release on crates.io
+#                                      # (scripts/checks/semver.sh)
 #
 # Requires cargo, curl, and jq; `publish` also needs CARGO_REGISTRY_TOKEN.
 set -euo pipefail
@@ -160,8 +163,15 @@ case "${1:-}" in
   verify) do_verify ;;
   version) manifest_version "${2:?usage: publish-crates.sh version CRATE}" ;;
   list) for crate in ${CRATES[@]+"${CRATES[@]}"}; do printf '%s\n' "$crate"; done ;;
+  semver)
+    if [[ "${#CRATES[@]}" -eq 0 ]]; then
+      echo "publish-crates: no crate is listed, nothing to judge"
+    else
+      bash scripts/checks/semver.sh "${CRATES[@]}"
+    fi
+    ;;
   *)
-    echo "publish-crates: expected 'publish', 'dry-run', 'package', 'verify', 'version' or 'list', got '${1:-<none>}'" >&2
+    echo "publish-crates: expected 'publish', 'dry-run', 'package', 'verify', 'version', 'list' or 'semver', got '${1:-<none>}'" >&2
     exit 2
     ;;
 esac

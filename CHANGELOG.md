@@ -13,6 +13,16 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-11-10
+
+### Changed
+
+- Breaking for a crate user: `ihe-iti` 0.3.0 and `nl-generic-functions` 0.3.0 require `ferrohealth-smart` 0.17, whose `OutboundClient` and endpoint tables their clients are built from, and `ihe-iti` requires `ihe-atna` 0.11. In smart 0.17 every token and introspection endpoint a configuration table names is a `SecretUrl`, so a password in its userinfo reaches no rendering of the running configuration. Upgrade: take `ferrohealth-smart` 0.17 and `ihe-atna` 0.11, and build `OauthSection::token_endpoint` with `SecretUrl::new` and read it with `.expose()`. The server and the console move to `ferrohealth-smart` 0.17.0, `ferrohealth-session` 0.11.0, `ferrohealth-config` 0.4.3, `ferrohealth-server` 0.8.2, `ihe-atna` 0.11.0, `ferrobridge-term` 0.4.0 and `ferrobridge-hl7v2` 0.6.0, with no configuration key changed (#591).
+
+### Fixed
+
+- The Helm chart 0.3.18, published ahead of this release, and this release's chart 0.3.19 fix the defaults. Chart 0.3.17 could not start FerroPIX 0.0.25 at its defaults: its values set `config.auth.audience`, which the server stopped reading when the audience moved into each `[[auth.issuer]]` entry, so every install, standalone or as a dependency, stopped at start with "unknown field `audience`". The values carry no audience now, the values schema refuses `config.auth.audience` by name and points at `config.auth.issuer[].audience` (in the charts of this release, 0.3.18 and 0.3.19, only; the chart of the next release refuses it as any other value the server does not read), and the chart refuses to render without a `config.auth.issuer` entry, each with its `issuer`, `kind` and `audience`. Upgrade: move the audience into each issuer entry and give each its `kind`. CI and the release's chart leg now render the chart over every value set under `deploy/helm/ci`, the defaults among them, and run the server's and the console's `config check` over the configuration it renders, so a chart whose values its images refuse is never published (#585).
+
 ## [0.0.25] - 2026-11-10
 
 ### Changed

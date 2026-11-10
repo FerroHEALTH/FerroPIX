@@ -4,7 +4,7 @@
 # nl-generic-functions
 
 The Netherlands Generic Functions for health data exchange (the Nuts
-`nl-generic-functions-ig`, package `fhir.nl.gf` 0.3.0) in Rust: one crate for
+`nl-generic-functions-ig`, package `fhir.nl.gf`) in Rust: one crate for
 the implementation guide, with a feature per function. Identification and
 localization are a patient index's own functions in the Netherlands, which
 is why the crate lives in FerroPIX. The API reference is on

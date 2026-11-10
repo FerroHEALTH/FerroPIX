@@ -8,6 +8,7 @@
 
 use std::time::Duration;
 
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferrohealth_smart::config::credentials::{CredentialsSection, OauthSection};
 use http::StatusCode;
 use ihe_iti::soap::{FaultCode, Malformed};
@@ -379,7 +380,7 @@ async fn a_token_that_cannot_be_obtained_is_unauthenticated_and_nothing_is_sent(
     let mut table = crate::outbound::endpoint(&format!("{}{}", server.uri(), super::ENDPOINT));
     table.credentials = CredentialsSection {
         oauth: Some(OauthSection {
-            token_endpoint: format!("{}/token", tokens.uri()),
+            token_endpoint: SecretUrl::new(format!("{}/token", tokens.uri())),
             client_id: String::from("synthetic-client"),
             client_secret: Some(SecretString::from("synthetic-secret")),
             ..OauthSection::default()

@@ -14,7 +14,8 @@ provider), `curl`, `jq` and `openssl`.
 > [`scripts/quickstart/tour.sh`](https://github.com/FerroHEALTH/FerroPIX/blob/main/scripts/quickstart/tour.sh),
 > which CI runs against the images each change builds, so the commands and
 > the answers below are the ones the current code gives. Run the script to
-> do every step at once.
+> do every step at once; it switches the usage report off, since a tour is
+> no installation.
 
 ## Start the server
 

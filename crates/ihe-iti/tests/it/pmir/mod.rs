@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use ihe_iti::pmir::PmirSubscriber;
-use url::Url;
 use wiremock::MockServer;
 
 /// The FHIR base the stub Registry serves under.
@@ -47,12 +46,11 @@ pub(crate) fn vendored(file: &str) -> String {
 /// A subscriber for `server`, built the way the module documentation asks:
 /// no redirects.
 pub(crate) fn subscriber(server: &MockServer) -> PmirSubscriber {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse(&format!("{}{BASE}", server.uri())).expect("the stub base");
-    PmirSubscriber::new(base, http).expect("a subscriber")
+    PmirSubscriber::new(crate::outbound::outbound(&format!(
+        "{}{BASE}",
+        server.uri()
+    )))
+    .expect("a subscriber")
 }
 
 /// A message Bundle whose history holds `entries`, each a history entry's

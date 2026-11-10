@@ -15,8 +15,8 @@
 //!   Appendix V transaction can, with no profile.
 //! - `rest`: the FHIR R4 search value escaping and the JSON media types every
 //!   FHIR client shares, with no FHIR model.
-//! - `authorizer`: the authorizer that makes each request's headers and the
-//!   send that resends once when it asks (IUA ITI-72), with no FHIR model.
+//! - `outbound`: the send every HTTP client goes through, over
+//!   `ferrohealth-smart`'s outbound client, with no FHIR model.
 //! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
 //!   ITI-91, ITI-93 and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`.
 //! - `atna`: the DICOM audit message of ITI-55 with `xcpd`, with no FHIR
@@ -31,11 +31,11 @@
 //! The audit trail the records go to (ATNA ITI-20 and its FHIR Feed) is the
 //! `ihe-atna` crate.
 //!
-//! The PIXm, PDQm, mCSD and PMIR clients authenticate with a credential the
-//! HTTP client carries, or with an access token incorporated in each request
-//! by an authorizer the caller supplies (module `authorizer`, IUA ITI-72),
-//! such as the one over `ferrohealth-smart`'s client-credentials token
-//! (feature `smart`).
+//! Every client (PIXm, PDQm, mCSD, PMIR and XCPD) is built from
+//! `ferrohealth-smart`'s `OutboundClient`, which the caller's endpoint table
+//! builds: the TLS, the timeouts, no redirect, the retry table and the
+//! credential each request carries, HTTP Basic or a client credentials token
+//! renewed once on a `401` (module `outbound`, IUA ITI-72).
 //!
 //! A PIXm, PDQm or XCPD exchange names whom it is made for, a user or the
 //! client's own system (`ihe_atna::user`), and its audit record names that
@@ -51,14 +51,14 @@
 
 #[cfg(all(feature = "balp", any(feature = "pixm", feature = "pdqm")))]
 mod audited;
-#[cfg(feature = "authorizer")]
-pub mod authorizer;
 #[cfg(any(feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 mod bundle;
-#[cfg(any(feature = "authorizer", feature = "soap"))]
+#[cfg(feature = "outbound")]
 pub mod exchange;
 #[cfg(feature = "mcsd")]
 pub mod mcsd;
+#[cfg(feature = "outbound")]
+pub mod outbound;
 #[cfg(any(feature = "pixm", feature = "pdqm", feature = "mcsd", feature = "pmir"))]
 pub mod outcome;
 #[cfg(feature = "pdqm")]

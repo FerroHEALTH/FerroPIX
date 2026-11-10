@@ -18,9 +18,12 @@ use secrecy::ExposeSecret;
 use url::Url;
 
 use super::{
-    PATIENT_VALUE, PROMPT, RECEIVER, SOAP_XML, Templated, answering, client, fixture, gateway, oid,
-    query, responding,
+    PATIENT_VALUE, PROMPT, RECEIVER, SOAP_XML, Templated, answering, client, client_at, fixture,
+    gateway, oid, query, responding,
 };
+
+/// A gateway nothing listens on: port 0 on the loopback interface.
+const UNREACHABLE: &str = "http://127.0.0.1:0/rg";
 
 /// A recorder that keeps every event.
 #[derive(Default)]
@@ -66,8 +69,8 @@ impl AuditRecorder for Stalled {
 async fn a_match_whose_event_is_not_stored_within_the_exchange_s_time_is_not_used() {
     let budget = std::time::Duration::from_millis(300);
     let slack = std::time::Duration::from_secs(3);
-    let audited = client().audited(Arc::new(Stalled));
     let matched = answering("match.xml").await;
+    let audited = client(&matched).audited(Arc::new(Stalled));
     let asked = std::time::Instant::now();
     let answer = audited
         .discover(
@@ -89,8 +92,8 @@ async fn a_match_whose_event_is_not_stored_within_the_exchange_s_time_is_not_use
 
 #[tokio::test]
 async fn an_event_the_recorder_refuses_fails_the_discovery() {
-    let audited = client().audited(Arc::new(Refusing));
     let matched = answering("match.xml").await;
+    let audited = client(&matched).audited(Arc::new(Refusing));
     let answer = audited
         .discover(
             &responding(&matched),
@@ -111,8 +114,8 @@ async fn an_event_the_recorder_refuses_fails_the_discovery() {
 #[tokio::test]
 async fn the_recorded_query_is_the_query_sent() {
     let kept = Arc::new(Kept::default());
-    let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
+    let audited = client(&server).audited(kept.clone());
     let _answer = audited
         .discover(
             &responding(&server),
@@ -142,17 +145,21 @@ impl Kept {
 #[tokio::test]
 async fn every_exchange_records_one_event_with_its_outcome() {
     let kept = Arc::new(Kept::default());
-    let audited = client().audited(kept.clone());
     let matched = answering("match.xml").await;
     let faulting = gateway(Templated::new(500, SOAP_XML, fixture("fault.xml"))).await;
     let unreachable = RespondingGateway::unencrypted_for_development(
-        Url::parse("http://127.0.0.1:0/rg").expect("a URL"),
+        Url::parse(UNREACHABLE).expect("a URL"),
         oid(RECEIVER),
     )
     .expect("a gateway");
     let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
-    for target in [responding(&matched), responding(&faulting), unreachable] {
+    for (audited, target) in [
+        (client(&matched), responding(&matched)),
+        (client(&faulting), responding(&faulting)),
+        (client_at(UNREACHABLE), unreachable),
+    ] {
         let _answer = audited
+            .audited(kept.clone())
             .discover(&target, &asked, None, &OnBehalfOf::System, PROMPT)
             .await;
     }
@@ -199,8 +206,8 @@ async fn every_exchange_records_one_event_with_its_outcome() {
 #[tokio::test]
 async fn the_event_shows_no_identifier_and_no_userinfo() {
     let kept = Arc::new(Kept::default());
-    let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
+    let audited = client(&server).audited(kept.clone());
     let mut endpoint = Url::parse(&format!("{}{}", server.uri(), super::PATH)).expect("a URL");
     endpoint.set_username("svc").expect("a user");
     endpoint
@@ -219,6 +226,32 @@ async fn the_event_shows_no_identifier_and_no_userinfo() {
     assert!(!rendered.contains("synthetic-secret"), "{rendered}");
     assert!(!events[0].destination.as_str().contains("synthetic-secret"));
     assert!(!events[0].destination.as_str().contains("svc@"));
+}
+
+#[tokio::test]
+async fn a_gateway_off_the_tables_origin_is_refused_before_anything_is_sent_or_recorded() {
+    let kept = Arc::new(Kept::default());
+    let configured = answering("no-match.xml").await;
+    let other = answering("match.xml").await;
+    let answer = client(&configured)
+        .audited(kept.clone())
+        .discover(
+            &responding(&other),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
+        .await;
+    assert!(
+        matches!(answer, Err(XcpdError::ForeignGateway)),
+        "{answer:?}"
+    );
+    for server in [&configured, &other] {
+        let requests = server.received_requests().await.expect("recording is on");
+        assert!(requests.is_empty(), "nothing was sent");
+    }
+    assert!(kept.events().is_empty(), "no exchange, no audit message");
 }
 
 #[test]
@@ -254,8 +287,8 @@ async fn the_dicom_message_fills_the_initiating_gateway_table() {
     use ihe_atna::atna::message::{AccessPoint, AuditSource};
 
     let kept = Arc::new(Kept::default());
-    let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
+    let audited = client(&server).audited(kept.clone());
     let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
     let _answer = audited
         .discover(
@@ -337,8 +370,8 @@ fn user() -> OnBehalfOf {
 #[tokio::test]
 async fn the_event_of_a_discovery_made_for_a_user_names_them_and_shows_none_of_it() {
     let kept = Arc::new(Kept::default());
-    let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
+    let audited = client(&server).audited(kept.clone());
     let _answer = audited
         .discover(&responding(&server), &query(), None, &user(), PROMPT)
         .await;
@@ -356,8 +389,8 @@ async fn the_event_of_a_discovery_made_for_a_user_names_them_and_shows_none_of_i
 async fn message_for(on_behalf: &OnBehalfOf) -> (String, AuditEvent) {
     use ihe_atna::atna::message::{AccessPoint, AuditSource};
     let kept = Arc::new(Kept::default());
-    let audited = client().audited(kept.clone());
     let server = answering("no-match.xml").await;
+    let audited = client(&server).audited(kept.clone());
     let _answer = audited
         .discover(&responding(&server), &query(), None, on_behalf, PROMPT)
         .await;

@@ -25,7 +25,7 @@ const ASSERTION: &str = r#"<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML
 async fn the_envelope_carries_the_ws_addressing_headers_appendix_v_requires() {
     let server = answering("no-match.xml").await;
     let gateway = responding(&server);
-    let _answer = client()
+    let _answer = client(&server)
         .discover(&gateway, &query(), None, &OnBehalfOf::System, PROMPT)
         .await;
     let body = sent(&server).await;
@@ -55,7 +55,7 @@ async fn the_envelope_carries_the_ws_addressing_headers_appendix_v_requires() {
 #[tokio::test]
 async fn the_request_is_posted_as_soap_1_2_with_its_action() {
     let server = answering("no-match.xml").await;
-    let _answer = client()
+    let _answer = client(&server)
         .discover(
             &responding(&server),
             &query(),
@@ -79,7 +79,7 @@ async fn the_request_is_posted_as_soap_1_2_with_its_action() {
 #[tokio::test]
 async fn the_wrappers_hold_to_table_3_55_4_1_2_3_1() {
     let server = answering("no-match.xml").await;
-    let _answer = client()
+    let _answer = client(&server)
         .discover(
             &responding(&server),
             &query(),
@@ -122,7 +122,7 @@ async fn the_wrappers_hold_to_table_3_55_4_1_2_3_1() {
 #[tokio::test]
 async fn the_query_names_the_shared_identifier_and_no_demographics() {
     let server = answering("no-match.xml").await;
-    let _answer = client()
+    let _answer = client(&server)
         .discover(
             &responding(&server),
             &query(),
@@ -156,7 +156,7 @@ async fn the_sender_and_target_communities_are_named_when_given() {
     let server = answering("no-match.xml").await;
     let gateway = responding(&server).targeting(HomeCommunityId::new(oid("2.999.50")));
     let asked = query().sent_for(HomeCommunityId::new(oid("2.999.40")));
-    let _answer = client()
+    let _answer = client(&server)
         .discover(&gateway, &asked, None, &OnBehalfOf::System, PROMPT)
         .await;
     let body = sent(&server).await;
@@ -175,7 +175,7 @@ async fn the_sender_and_target_communities_are_named_when_given() {
 async fn an_assertion_rides_in_a_ws_security_header_as_written() {
     let server = answering("no-match.xml").await;
     let assertion = XuaAssertion::new(ASSERTION).expect("an assertion");
-    let _answer = client()
+    let _answer = client(&server)
         .discover(
             &responding(&server),
             &query(),

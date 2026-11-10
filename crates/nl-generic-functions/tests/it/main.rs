@@ -23,5 +23,8 @@ mod nuts_auth;
 #[cfg(feature = "nvi")]
 mod nvi;
 #[cfg(test)]
+#[cfg(any(feature = "nvi", feature = "mitz"))]
+mod outbound;
+#[cfg(test)]
 #[cfg(feature = "nuts-auth")]
 mod testkit;

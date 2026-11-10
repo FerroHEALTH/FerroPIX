@@ -15,7 +15,6 @@ use nl_generic_functions::nvi::NviClient;
 use nl_generic_functions::nvi::error::NviError;
 use secrecy::SecretString;
 use serde_json::json;
-use url::Url;
 use wiremock::MockServer;
 
 use super::{FHIR_JSON, PROMPT, client, record, searchset, service, unreachable_client};
@@ -102,8 +101,10 @@ async fn no_error_carries_the_pseudonym() {
 
 #[test]
 fn no_rendering_of_the_client_or_the_pseudonym_shows_a_secret() {
-    let base = Url::parse("https://Qz7user:Qz7password@nvi.example.org/fhir/").expect("a URL");
-    let client = NviClient::new(base, reqwest::Client::new()).expect("a client");
+    let client = NviClient::new(crate::outbound::outbound(
+        "https://Qz7user:Qz7password@nvi.example.org/fhir/",
+    ))
+    .expect("a client");
     let text = format!("{client:?} {:?}", sentinel());
     assert!(!text.contains("Qz7password"), "{text}");
     assert!(!text.contains("Qz7user"), "{text}");

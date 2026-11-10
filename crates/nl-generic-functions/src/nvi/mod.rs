@@ -25,26 +25,31 @@
 //! request URL, a pseudonym or the service's free text, and the types that
 //! hold the pseudonym redact it in `Debug`.
 //!
-//! The data user authenticates through the transport, a default header of
-//! the HTTP client, or an [`Authorizer`] that gives each request
-//! its own headers, as the `DPoP`-bound token of GF-Authentication needs
-//! (the IG's GFI-005; RFC 9449 §7.1).
+//! The client is built from `ferrohealth-smart`'s [`OutboundClient`], so the
+//! data user authenticates through the transport its endpoint table names,
+//! HTTP Basic, or a client credentials token in each request's
+//! `Authorization` header, with a proof of each request for a `DPoP`-bound
+//! token as GF-Authentication needs (the IG's GFI-005; RFC 9449 §7.1).
 //!
 //! # Examples
 //!
 //! ```no_run
 //! use std::time::Duration;
 //!
+//! use ferrohealth_smart::client::outbound::OutboundClient;
+//! use ferrohealth_smart::config::TlsBuilder;
+//! use ferrohealth_smart::config::endpoint::EndpointSection;
 //! use nl_generic_functions::identification::PseudoBsn;
 //! use nl_generic_functions::nvi::NviClient;
 //! use secrecy::SecretString;
-//! use url::Url;
 //!
+//! # fn configured() -> (EndpointSection, &'static dyn TlsBuilder) {
+//! #     unimplemented!("the product's configuration and its reader of TLS material")
+//! # }
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-//! let http = reqwest::Client::builder()
-//!     .redirect(reqwest::redirect::Policy::none())
-//!     .build()?;
-//! let client = NviClient::new(Url::parse("https://nvi.example.org/fhir/")?, http)?;
+//! // The `[nvi.endpoint]` table, whose `url` is the service's FHIR base.
+//! let (endpoint, tls) = configured();
+//! let client = NviClient::new(OutboundClient::build(&endpoint, "nvi.endpoint", tls)?)?;
 //! let patient = PseudoBsn::new(SecretString::from("pbsn-example-0001"))?;
 //! let localization = client.localize(&patient, Duration::from_secs(2)).await?;
 //! for custodian in localization.custodians() {
@@ -63,16 +68,17 @@ mod response;
 
 use std::collections::BTreeSet;
 use std::fmt;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ferrohealth_smart::client::outbound::OutboundClient;
+use http::Method;
 use http::header::ACCEPT;
 use url::Url;
 
 use crate::identification::{PseudoBsn, Ura};
 use error::{InvalidInput, Malformation, NviError};
-use ihe_iti::authorizer::{self, Authorizable, Authorizer};
-use ihe_iti::exchange::{self, Unanswered};
+use ihe_iti::exchange;
+use ihe_iti::outbound;
 
 /// The system of the localization record type the IG fixes (LOINC).
 pub const LOINC_SYSTEM: &str = "http://loinc.org";
@@ -114,35 +120,32 @@ impl Localization {
 
 /// A data user of the Localization Service bound to one NVI.
 ///
-/// `Debug` shows the endpoint with its userinfo and query redacted, whether
-/// an authorizer is set, and leaves out the HTTP client, whose default
-/// headers may hold a credential.
+/// `Debug` shows the endpoint with its userinfo and query redacted and
+/// whether the client carries a credential, never the credential itself.
 #[derive(Clone)]
 pub struct NviClient {
     endpoint: Url,
-    http: reqwest::Client,
-    authorizer: Option<Arc<dyn Authorizer>>,
+    client: OutboundClient,
 }
 
 impl NviClient {
     /// Creates a client for the Localization Service whose FHIR base URL is
-    /// `base`.
+    /// `client`'s URL, reached through `client`.
     ///
-    /// `http` carries the transport the caller chose: TLS, client
-    /// certificates, default authorization headers. The request URL holds the
-    /// pseudonym, so build `http` with `redirect::Policy::none()`: a client
-    /// that follows redirects sends the pseudonym wherever the service points
-    /// it, and a `3xx` is then an error like any other unexpected status.
+    /// `client` carries the transport its endpoint table names: TLS, client
+    /// certificates, the credential every request carries and the retry
+    /// table. The request URL holds the pseudonym, and `client` follows no
+    /// redirect, so the pseudonym goes nowhere the base does not name and a
+    /// `3xx` is an error like any other unexpected status.
     ///
     /// # Errors
     ///
-    /// [`InvalidInput::Base`] when `base` is not an `http` or `https` URL
+    /// [`InvalidInput::Base`] when the URL is not an `http` or `https` URL
     /// without a query or a fragment.
-    pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
+    pub fn new(client: OutboundClient) -> Result<Self, InvalidInput> {
         Ok(Self {
-            endpoint: request::endpoint(base)?,
-            http,
-            authorizer: None,
+            endpoint: request::endpoint(client.url().clone())?,
+            client,
         })
     }
 
@@ -157,14 +160,14 @@ impl NviClient {
     /// links under the endpoint.
     ///
     /// `timeout` bounds the whole exchange, every page included, from
-    /// connecting until the last answer is read; the time an authorizer
-    /// takes to make its headers counts toward it.
+    /// connecting until the last answer is read; the time a token takes to
+    /// obtain counts toward it.
     ///
     /// # Errors
     ///
     /// A [`NviError`] for every answer that is not a `searchset` of
-    /// localization records about `patient`, for a request the authorizer
-    /// cannot authenticate, and for a failure to get an answer at all.
+    /// localization records about `patient`, for a request no credential
+    /// could be had for, and for a failure to get an answer at all.
     pub async fn localize(
         &self,
         patient: &PseudoBsn,
@@ -191,8 +194,7 @@ impl NviClient {
         Err(Malformation::TooManyPages { limit: PAGES }.into())
     }
 
-    /// Sends the search `url` before `deadline`, through the authorizer when
-    /// there is one.
+    /// Sends the search `url` before `deadline`, through the outbound client.
     async fn send(
         &self,
         url: &Url,
@@ -202,20 +204,10 @@ impl NviClient {
             .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
             .filter(|remaining| !remaining.is_zero())
             .ok_or(NviError::Timeout)?;
-        let request = self
-            .http
-            .get(url.clone())
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(NviError::failed)?;
-        authorizer::send(&self.http, self.authorizer.as_deref(), request, remaining).await
-    }
-}
-
-impl Authorizable for NviClient {
-    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
+        outbound::send(&self.client, &Method::GET, url, remaining, |request| {
+            request.header(ACCEPT, FHIR_JSON)
+        })
+        .await
     }
 }
 
@@ -223,7 +215,7 @@ impl fmt::Debug for NviClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NviClient")
             .field("endpoint", &request::Redacted(&self.endpoint))
-            .field("authorizer", &self.authorizer.is_some())
+            .field("authorization", &self.client.authorization().is_some())
             .finish_non_exhaustive()
     }
 }

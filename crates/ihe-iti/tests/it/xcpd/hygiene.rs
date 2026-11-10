@@ -42,9 +42,10 @@ fn no_rendering_of_an_assertion_shows_it() {
 
 #[tokio::test]
 async fn no_rendering_of_a_match_shows_the_patient_ids() {
-    let answer = client()
+    let server = answering("match.xml").await;
+    let answer = client(&server)
         .discover(
-            &responding(&answering("match.xml").await),
+            &responding(&server),
             &query(),
             None,
             &OnBehalfOf::System,
@@ -60,7 +61,7 @@ async fn no_rendering_of_a_match_shows_the_patient_ids() {
 #[tokio::test]
 async fn no_error_carries_the_gateway_text_or_the_identifier() {
     let server = gateway(Templated::new(500, SOAP_XML, fixture("fault.xml"))).await;
-    let error = client()
+    let error = client(&server)
         .discover(
             &responding(&server),
             &query(),

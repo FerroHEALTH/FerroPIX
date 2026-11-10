@@ -73,7 +73,7 @@ fn candidate(value: &str) -> Candidate {
 /// Asks a gateway answering `outcome` about the synthetic patient.
 async fn discover(outcome: Outcome) -> Result<Discovery, XcpdError> {
     let server = gateway_answering(outcome).await;
-    client()
+    client(&server)
         .discover(
             &responding(&server),
             &query(),
@@ -151,7 +151,7 @@ async fn a_shared_identifier_query_reads_with_its_headers_and_wrappers() {
     let server = gateway(super::Templated::new(500, "text/plain", "")).await;
     let sent_for = query().sent_for(HomeCommunityId::new(oid(INITIATING)));
     let target = responding(&server).targeting(HomeCommunityId::new(oid(COMMUNITY)));
-    let _refused = client()
+    let _refused = client(&server)
         .discover(&target, &sent_for, None, &OnBehalfOf::System, PROMPT)
         .await;
     let requests = server.received_requests().await.expect("recording is on");
@@ -369,7 +369,7 @@ async fn a_fault_the_gateway_writes_reads_back_as_a_sender_fault() {
         String::from_utf8(answer::fault(Blame::Sender, "not an ITI-55 query").expect("written"))
             .expect("UTF-8");
     let server = gateway(super::Templated::new(400, MEDIA_TYPE, body)).await;
-    match client()
+    match client(&server)
         .discover(
             &responding(&server),
             &query(),

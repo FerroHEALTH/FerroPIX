@@ -21,7 +21,6 @@ use std::time::Duration;
 use ihe_iti::pdqm::PdqmClient;
 use ihe_iti::pdqm::query::{PatientQuery, StringMatch};
 use secrecy::SecretString;
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -60,18 +59,14 @@ pub(crate) fn vendored(file: &str) -> String {
     std::fs::read_to_string(&path).expect("the vendored PDQm package (scripts/vendor/ihe-pdqm.sh)")
 }
 
-fn http() -> reqwest::Client {
-    reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client")
-}
-
-/// A client for `server`, built the way the module documentation asks: no
-/// redirects.
+/// A client for `server`, built from its endpoint table as the module
+/// documentation asks.
 pub(crate) fn client(server: &MockServer) -> PdqmClient {
-    let base = Url::parse(&format!("{}{BASE}", server.uri())).expect("the stub base");
-    PdqmClient::new(base, http()).expect("a client")
+    PdqmClient::new(crate::outbound::outbound(&format!(
+        "{}{BASE}",
+        server.uri()
+    )))
+    .expect("a client")
 }
 
 /// A client for a FHIR base nothing can listen on: port 0 on the loopback
@@ -82,8 +77,10 @@ pub(crate) fn client(server: &MockServer) -> PdqmClient {
 /// can stand for an unreachable Supplier. Binding port 0 picks another port,
 /// so no listener ever holds it, and a connection to it fails at once.
 pub(crate) fn unreachable_client() -> PdqmClient {
-    let base = Url::parse(&format!("http://127.0.0.1:0{BASE}")).expect("a base");
-    PdqmClient::new(base, http()).expect("a client")
+    PdqmClient::new(crate::outbound::outbound(&format!(
+        "http://127.0.0.1:0{BASE}"
+    )))
+    .expect("a client")
 }
 
 /// The IG's example query: the family name `Schmidt`.

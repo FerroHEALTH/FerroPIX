@@ -42,6 +42,9 @@
 //! ```no_run
 //! use std::time::Duration;
 //!
+//! use ferrohealth_smart::client::outbound::OutboundClient;
+//! use ferrohealth_smart::config::TlsBuilder;
+//! use ferrohealth_smart::config::endpoint::EndpointSection;
 //! use nl_generic_functions::identification::Ura;
 //! use nl_generic_functions::mitz::MitzClient;
 //! use nl_generic_functions::mitz::question::{
@@ -49,11 +52,15 @@
 //!     Purpose, RoleCode,
 //! };
 //! use secrecy::SecretString;
-//! use url::Url;
 //!
+//! # fn configured() -> (EndpointSection, &'static dyn TlsBuilder) {
+//! #     unimplemented!("the product's configuration and its reader of TLS material")
+//! # }
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-//! let endpoint = Url::parse("https://mitz.example.org/geslotenautorisatievraag")?;
-//! let client = MitzClient::new(endpoint, reqwest::Client::builder())?;
+//! // The `[mitz.endpoint]` table, whose `tls` names the connector's client
+//! // certificate (§3.3) and whose `url` is the question's endpoint.
+//! let (endpoint, tls) = configured();
+//! let client = MitzClient::new(OutboundClient::build(&endpoint, "mitz.endpoint", tls)?)?;
 //! let kind = CareProviderType::new("V6")?;
 //! let responsible = ProfessionalId::new("2.999.10", "professional0001")?;
 //! let role = RoleCode::new("01.015")?;
@@ -79,11 +86,12 @@ mod response;
 use std::fmt;
 use std::time::Duration;
 
+use ferrohealth_smart::client::outbound::OutboundClient;
 use http::header::HeaderName;
 use url::Url;
 use uuid::Uuid;
 
-use error::{ClientError, InvalidInput, MitzError};
+use error::{InvalidInput, MitzError};
 use ihe_iti::soap;
 use question::{ClosedAnswer, ClosedQuestion};
 
@@ -139,40 +147,38 @@ const SOAP_REQUEST: &str =
 /// The data user side of the closed authorization question, bound to one
 /// Mitz endpoint.
 ///
-/// `Debug` shows the endpoint and leaves out the HTTP client, whose
-/// configuration may hold a credential.
+/// `Debug` shows the endpoint and whether the client carries a credential,
+/// never the credential itself.
 #[derive(Clone)]
 pub struct MitzClient {
     endpoint: Url,
-    http: reqwest::Client,
+    client: OutboundClient,
 }
 
 impl MitzClient {
-    /// Creates a client for the Mitz endpoint `endpoint`, an `https` URL, its
-    /// HTTP client built from `http` with redirects off.
+    /// Creates a client for the Mitz endpoint `client`'s URL names, an
+    /// `https` URL, reached through `client`.
     ///
-    /// `http` carries the transport the caller chose: the mutual TLS §3.3
-    /// requires, the trust roots, and any default authorization header. The
-    /// request body holds the BSN, so the client never follows a redirect,
-    /// whatever `http` says: a `3xx` is an answer like any other unexpected
-    /// status.
+    /// `client` carries the transport its endpoint table names: the mutual
+    /// TLS §3.3 requires, the trust roots, any credential and the retry
+    /// table. The request body holds the BSN, and `client` follows no
+    /// redirect: a `3xx` is an answer like any other unexpected status.
     ///
     /// # Errors
     ///
-    /// [`ClientError::Endpoint`] when `endpoint` is not an `https` URL with no
-    /// userinfo, query or fragment, and [`ClientError::Build`] when the HTTP
-    /// client cannot be built.
-    pub fn new(endpoint: Url, http: reqwest::ClientBuilder) -> Result<Self, ClientError> {
+    /// [`InvalidInput::Endpoint`] when the URL is not an `https` URL with no
+    /// userinfo, query or fragment.
+    pub fn new(client: OutboundClient) -> Result<Self, InvalidInput> {
         // NOTE: Implementatiehandleiding §3.3: both sides communicate over TLS under IHE
         // ATNA, so a plain http endpoint is refused outside the development path.
-        if endpoint.scheme() != "https" {
-            return Err(ClientError::Endpoint(InvalidInput::Endpoint));
+        if client.url().scheme() != "https" {
+            return Err(InvalidInput::Endpoint);
         }
-        Self::unencrypted_for_development(endpoint, http)
+        Self::unencrypted_for_development(client)
     }
 
-    /// Creates a client for `endpoint`, `http` or `https`, for development
-    /// and tests only.
+    /// Creates a client for the endpoint `client`'s URL names, `http` or
+    /// `https`, for development and tests only.
     ///
     /// Over `http` the BSN crosses the network in clear text, which Mitz
     /// never permits (§3.3). A caller offers this only where its own
@@ -180,25 +186,18 @@ impl MitzClient {
     ///
     /// # Errors
     ///
-    /// [`ClientError::Endpoint`] when `endpoint` is not an `http` or `https`
-    /// URL with no userinfo, query or fragment, and [`ClientError::Build`]
-    /// when the HTTP client cannot be built.
-    pub fn unencrypted_for_development(
-        endpoint: Url,
-        http: reqwest::ClientBuilder,
-    ) -> Result<Self, ClientError> {
+    /// [`InvalidInput::Endpoint`] when the URL is not an `http` or `https`
+    /// URL with no userinfo, query or fragment.
+    pub fn unencrypted_for_development(client: OutboundClient) -> Result<Self, InvalidInput> {
+        let endpoint = client.url().clone();
         let bare = endpoint.username().is_empty()
             && endpoint.password().is_none()
             && endpoint.query().is_none()
             && endpoint.fragment().is_none();
         if !matches!(endpoint.scheme(), "http" | "https") || endpoint.cannot_be_a_base() || !bare {
-            return Err(ClientError::Endpoint(InvalidInput::Endpoint));
+            return Err(InvalidInput::Endpoint);
         }
-        let http = http
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(ClientError::Build)?;
-        Ok(Self { endpoint, http })
+        Ok(Self { endpoint, client })
     }
 
     /// Returns the endpoint the client posts to.
@@ -226,14 +225,15 @@ impl MitzClient {
         let message = Uuid::new_v4();
         let body =
             request::envelope(question, &self.endpoint, message).map_err(MitzError::Encode)?;
+        let id = message.to_string();
         let answer = soap::post::<MitzError>(
-            self.http
-                .post(self.endpoint.clone())
-                .header(REQUEST_ID, message.to_string()),
+            &self.client,
+            &self.endpoint,
             SOAP_REQUEST,
-            body,
+            &body,
             timeout,
             response::LIMIT,
+            |request| request.header(REQUEST_ID, id.as_str()),
         )
         .await?;
         response::read(
@@ -249,6 +249,7 @@ impl fmt::Debug for MitzClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MitzClient")
             .field("endpoint", &self.endpoint.as_str())
+            .field("authorization", &self.client.authorization().is_some())
             .finish_non_exhaustive()
     }
 }

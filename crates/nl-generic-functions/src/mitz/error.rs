@@ -8,8 +8,10 @@
 //! text may quote it. A data category is a code the afsprakenstelsel defines,
 //! never a patient value, so an error may name one.
 
+use ferrohealth_smart::client::outbound::SendError;
 use http::StatusCode;
 use ihe_iti::exchange::Unanswered;
+use ihe_iti::outbound::Unauthenticated;
 use ihe_iti::soap::{self, FaultCode, Refusal};
 
 use super::question::DataCategory;
@@ -53,19 +55,6 @@ pub enum InvalidInput {
     },
 }
 
-/// The HTTP client of a [`MitzClient`](super::MitzClient) could not be
-/// built.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum ClientError {
-    /// The endpoint is refused.
-    #[error("the Mitz endpoint is refused")]
-    Endpoint(#[source] InvalidInput),
-    /// The HTTP client could not be built from the builder given.
-    #[error("the HTTP client for Mitz could not be built")]
-    Build(#[source] reqwest::Error),
-}
-
 /// Why a closed authorization question did not end in a decision for every
 /// data category it asked about.
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +80,10 @@ pub enum MitzError {
     /// The request could not be sent or the answer could not be read.
     #[error("Mitz could not be reached")]
     Transport(#[source] reqwest::Error),
+    /// No token could be obtained for the request, or a refused one renewed,
+    /// when the endpoint table names a client credentials grant.
+    #[error("the request to Mitz could not be authenticated")]
+    Unauthenticated(#[source] SendError),
     /// The request could not be written.
     #[error("the closed authorization question could not be written")]
     Encode(#[source] std::io::Error),
@@ -127,7 +120,7 @@ impl MitzError {
             Self::Indeterminate { .. } | Self::NotApplicable { .. } | Self::Malformed(_) => {
                 Some(StatusCode::OK)
             }
-            Self::Timeout | Self::Transport(_) | Self::Encode(_) => None,
+            Self::Timeout | Self::Transport(_) | Self::Unauthenticated(_) | Self::Encode(_) => None,
         }
     }
 }
@@ -206,6 +199,12 @@ impl Unanswered for MitzError {
 
     fn transport(source: reqwest::Error) -> Self {
         Self::Transport(source)
+    }
+}
+
+impl Unauthenticated for MitzError {
+    fn unauthenticated(source: SendError) -> Self {
+        Self::Unauthenticated(source)
     }
 }
 

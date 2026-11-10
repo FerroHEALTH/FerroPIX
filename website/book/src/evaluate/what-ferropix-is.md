@@ -37,7 +37,7 @@ the server side, where FerroPIX answers the transaction itself, is the
 | PMIR, the master identity feed and subscription | ITI-93, ITI-94 | Subscriber and feed Consumer, in `ihe-iti` (`pmir`); the Registry side in `ihe-iti` (`pmir-server`); the server's PMIR Registry receives ITI-93, answers ITI-94 and sends ITI-93 to each subscriber ([The PMIR Registry](../integrate/pmir-registry.md)). |
 | mCSD, the care services directory | ITI-90, ITI-91 | Client and replica, in `ihe-iti` (`mcsd`). |
 | XCPD, cross-community patient discovery | ITI-55 | Initiating Gateway and the Responding Gateway's messages, in `ihe-iti` (`xcpd`), and the server's Responding Gateway behind `[xcpd]`, synchronous and asynchronous ([The XCPD Responding Gateway](../integrate/xcpd-gateway.md)). The Deferred Response Option is not offered. |
-| IUA, access tokens on each request | ITI-72 | The authorizer seam of the `ihe-iti` clients. |
+| IUA, access tokens on each request | ITI-72 | The credential of the endpoint table every `ihe-iti` client is built from. |
 | The persisted cross-reference | identifier domains, one source per domain, linking and merge | Planned. |
 | Pseudonym minting | a UUID per patient and pseudonymisation domain | The server mints on the consumer's first ITI-83 ask, resolves through merges, and audits the steward's reverse resolution ([Pseudonyms](../integrate/pseudonyms.md)). |
 | HL7 v2 PIX and PDQ | ITI-8 (A01, A04, A05, A08, A40), ITI-9, ITI-10 and ITI-21 with the continuation protocol | The server's MLLP listener, on FerroBRIDGE's HL7 v2 parser and MLLP codec ([The HL7 v2 face](../integrate/hl7v2-face.md)). ITI-10 goes to the consumers `[[hl7v2.consumers]]` names after every cross-reference change; ITI-22 is refused, as FerroPIX keeps no visit. |
@@ -81,6 +81,6 @@ plans it.
 - It is no audit repository. The audit trail is the `ihe-atna` crate, and
   the records go to the ATNA repository you run.
 - It is no authorization server. Access tokens come from the issuer you run.
-  The crates take a token through an authorizer you supply, and the server
-  takes its authorization from `ferrohealth-smart`, the family's SMART and
-  OAuth 2.0 crate.
+  The crates take a token through the endpoint table you configure, and the
+  server takes its authorization from `ferrohealth-smart`, the family's SMART
+  and OAuth 2.0 crate.

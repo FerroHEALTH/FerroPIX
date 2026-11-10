@@ -107,13 +107,15 @@ pub(crate) async fn answering(name: &str) -> MockServer {
     gateway(Templated::new(200, SOAP_XML, fixture(name))).await
 }
 
-/// The client, built the way the module documentation asks: no redirects.
-pub(crate) fn client() -> XcpdClient {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    XcpdClient::new(http)
+/// The client of the stub `server`, built from its endpoint table as the
+/// module documentation asks.
+pub(crate) fn client(server: &MockServer) -> XcpdClient {
+    client_at(&format!("{}{PATH}", server.uri()))
+}
+
+/// The client of the gateway at `url`, built from its endpoint table.
+pub(crate) fn client_at(url: &str) -> XcpdClient {
+    XcpdClient::new(crate::outbound::outbound(url))
 }
 
 /// The stub `server` as a responding gateway, over the development path,

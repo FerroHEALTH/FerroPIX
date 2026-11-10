@@ -4,10 +4,11 @@
 //! Why a Bundle does not read as directory content, and why an ITI-90 or
 //! ITI-91 exchange did not end in any.
 
+use ferrohealth_smart::client::outbound::SendError;
 use fhir_types::codec::DecodeError;
 
-use crate::authorizer::{AuthorizerError, Unauthenticated};
 use crate::exchange::Unanswered;
+use crate::outbound::Unauthenticated;
 use crate::outcome::IssueType;
 
 /// A Bundle that does not read as `Organization` and `Endpoint` resources.
@@ -122,10 +123,10 @@ pub enum McsdError {
     /// The request could not be sent or the answer could not be read.
     #[error("the directory could not be reached")]
     Transport(#[source] reqwest::Error),
-    /// The authorizer made no headers for the request, so nothing was sent
-    /// (IUA ITI-72 §3.72.4.2).
+    /// No token could be obtained for the request, or a refused one renewed
+    /// (IUA ITI-72 §3.72.4.3).
     #[error("the request to the directory could not be authenticated")]
-    Unauthenticated(#[source] AuthorizerError),
+    Unauthenticated(#[source] SendError),
     /// The answer does not hold to ITI-90 or ITI-91.
     #[error("the directory's answer does not hold to mCSD")]
     Malformed(#[from] Malformation),
@@ -273,7 +274,7 @@ impl Unanswered for McsdError {
 }
 
 impl Unauthenticated for McsdError {
-    fn unauthenticated(source: AuthorizerError) -> Self {
+    fn unauthenticated(source: SendError) -> Self {
         Self::Unauthenticated(source)
     }
 }

@@ -9,10 +9,12 @@
 //! them as a dependency of its own. `quick-xml` itself is in every FHIR
 //! feature's graph already, through `fhir-types`, which depends on it
 //! unconditionally; what `xcpd` adds is the crate's own use of it, its
-//! message and query ids, and its clock. `balp` stamps each record with its
-//! time, so it shares the clock, and never the message ids; `smart` takes
-//! the clock with `ferrohealth-smart`, never the message ids; `atna` writes
-//! the ITI-55 message with `xcpd` and compiles no FHIR model. No feature
+//! message ids and its own use of the clock. `balp` stamps each record with
+//! its time, so it shares the clock, and never the message ids; every client
+//! feature reaches the clock and a JSON reader through `ferrohealth-smart`'s
+//! outbound client (`outbound`), never the message ids or a FHIR model of
+//! the crate's own; `atna` writes the ITI-55 message with `xcpd` and
+//! compiles no FHIR model. No feature
 //! reaches another member of this workspace or an application of the
 //! family, so any caller can use the crate as it is, and the server sides
 //! compile no HTTP server, store or database.
@@ -33,9 +35,8 @@ const FEATURES: &[&str] = &[
     "pixm-server",
     "pdqm-server",
     "pmir-server",
-    "smart",
     "soap",
-    "authorizer",
+    "outbound",
 ];
 
 /// The server sides are typed readers and writers: no HTTP server, store or
@@ -62,7 +63,7 @@ const NO_SERVER_SIDE: &[&str] = &[
 ];
 
 /// The crates only `xcpd` compiles.
-const XCPD_ONLY: &[&str] = &["jiff", "uuid"];
+const XCPD_ONLY: &[&str] = &["uuid"];
 
 /// The crates `xcpd` names as dependencies of its own for its stack.
 const XCPD_DIRECT: &[&str] = &["jiff", "quick-xml", "uuid"];
@@ -158,24 +159,14 @@ fn only_xcpd_compiles_the_hl7_v3_and_xua_stack_and_soap_only_the_envelope() {
     for name in XCPD_DIRECT {
         assert!(xcpd_direct.contains(*name), "xcpd names {name}");
     }
-    for feature in ["atna", "balp", "smart"] {
-        let closure = tree(feature, None);
-        assert!(
-            !closure.contains("uuid"),
-            "{feature} compiles the message ids: {closure:?}"
-        );
-    }
-    for feature in FEATURES
-        .iter()
-        .filter(|feature| !["xcpd", "atna", "balp", "smart"].contains(*feature))
-    {
+    for feature in FEATURES.iter().filter(|feature| **feature != "xcpd") {
         let closure = tree(feature, None);
         let leaked: Vec<&&str> = XCPD_ONLY
             .iter()
             .filter(|name| closure.contains(**name))
             .collect();
         assert!(leaked.is_empty(), "{feature} compiles {leaked:?}");
-        if *feature == "soap" {
+        if ["soap", "atna", "balp"].contains(feature) {
             continue;
         }
         let direct = tree(feature, Some("1"));
@@ -192,28 +183,31 @@ fn only_xcpd_compiles_the_hl7_v3_and_xua_stack_and_soap_only_the_envelope() {
     );
 }
 
+/// Whether the build of `features` compiles no FHIR model and names no JSON
+/// reader of its own; `ferrohealth-smart` reads its token answers with one.
+fn compiles_no_fhir_model(features: &str) {
+    let closure = tree(features, None);
+    assert!(
+        !closure.contains("fhir-types"),
+        "{features} compiles fhir-types: {closure:?}"
+    );
+    let direct = tree(features, Some("1"));
+    assert!(
+        !direct.contains("serde_json"),
+        "{features} names serde_json itself: {direct:?}"
+    );
+}
+
 #[test]
-fn the_authorizer_and_the_envelope_compile_no_fhir_model() {
-    for feature in ["authorizer", "soap"] {
-        let closure = tree(feature, None);
-        for name in ["fhir-types", "serde_json"] {
-            assert!(
-                !closure.contains(name),
-                "{feature} compiles {name}: {closure:?}"
-            );
-        }
+fn the_outbound_client_and_the_envelope_compile_no_fhir_model() {
+    for feature in ["outbound", "soap"] {
+        compiles_no_fhir_model(feature);
     }
 }
 
 #[test]
 fn the_iti_55_audit_message_compiles_no_fhir_model() {
-    let closure = tree("xcpd,atna", None);
-    for name in ["fhir-types", "serde_json"] {
-        assert!(
-            !closure.contains(name),
-            "xcpd with atna compiles {name}: {closure:?}"
-        );
-    }
+    compiles_no_fhir_model("xcpd,atna");
 }
 
 #[test]

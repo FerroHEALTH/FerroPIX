@@ -20,7 +20,6 @@ use nl_generic_functions::mitz::question::{
     Purpose, RoleCode,
 };
 use secrecy::SecretString;
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -76,8 +75,11 @@ pub(crate) fn question() -> ClosedQuestion {
 
 /// A client of the stub, on its development path over `http`.
 pub(crate) fn client(server: &MockServer) -> MitzClient {
-    let endpoint = Url::parse(&format!("{}{ENDPOINT}", server.uri())).expect("an endpoint");
-    MitzClient::unencrypted_for_development(endpoint, reqwest::Client::builder()).expect("a client")
+    MitzClient::unencrypted_for_development(crate::outbound::outbound(&format!(
+        "{}{ENDPOINT}",
+        server.uri()
+    )))
+    .expect("a client")
 }
 
 /// A stub that answers every question with `status`, media type `media` and

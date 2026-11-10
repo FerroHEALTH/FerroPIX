@@ -36,18 +36,22 @@
 //! ```no_run
 //! use std::time::Duration;
 //!
+//! use ferrohealth_smart::client::outbound::OutboundClient;
+//! use ferrohealth_smart::config::TlsBuilder;
+//! use ferrohealth_smart::config::endpoint::EndpointSection;
 //! use ihe_iti::pdqm::PdqmClient;
 //! use fhir_search::prefix::Prefix;
 //! use ihe_iti::pdqm::query::{PatientQuery, StringMatch};
 //! use ihe_atna::user::OnBehalfOf;
 //! use secrecy::{ExposeSecret, SecretString};
-//! use url::Url;
 //!
+//! # fn configured() -> (EndpointSection, &'static dyn TlsBuilder) {
+//! #     unimplemented!("the product's configuration and its reader of TLS material")
+//! # }
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-//! let http = reqwest::Client::builder()
-//!     .redirect(reqwest::redirect::Policy::none())
-//!     .build()?;
-//! let client = PdqmClient::new(Url::parse("https://pdq.example.org/fhir/")?, http)?;
+//! // The `[pdqm.endpoint]` table, whose `url` is the Supplier's FHIR base.
+//! let (endpoint, tls) = configured();
+//! let client = PdqmClient::new(OutboundClient::build(&endpoint, "pdqm.endpoint", tls)?)?;
 //! let query = PatientQuery::default()
 //!     .family(&SecretString::from("Schmidt"), StringMatch::Exact)?
 //!     .birthdate(Prefix::Eq, &SecretString::from("1923-07-25"))?;
@@ -82,14 +86,17 @@ mod response;
 pub mod server;
 
 use std::fmt;
+#[cfg(feature = "balp")]
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_smart::client::outbound::OutboundClient;
+use http::Method;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use url::Url;
 
-use crate::authorizer::{self, Authorizable, Authorizer};
-use crate::exchange::{self, Unanswered};
+use crate::exchange;
+use crate::outbound;
 use error::{InvalidInput, PdqmError};
 use ihe_atna::redact::RedactedUrl;
 use ihe_atna::user::OnBehalfOf;
@@ -103,39 +110,38 @@ const FHIR_JSON: &str = "application/fhir+json";
 /// A Patient Demographics Consumer bound to one Patient Demographics Supplier.
 ///
 /// `Debug` shows the base and the endpoint with their userinfo replaced by
-/// `***`, and leaves out the HTTP client, whose default headers may hold a
-/// credential.
+/// `***` and whether the client carries a credential, never the credential
+/// itself.
 #[derive(Clone)]
 pub struct PdqmClient {
     base: Url,
     endpoint: Url,
     match_endpoint: Url,
-    http: reqwest::Client,
-    authorizer: Option<Arc<dyn Authorizer>>,
+    client: OutboundClient,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
 impl PdqmClient {
-    /// Creates a client for the Supplier whose FHIR base URL is `base`.
+    /// Creates a client for the Supplier whose FHIR base URL is `client`'s
+    /// URL, reached through `client`.
     ///
-    /// `http` carries the transport the caller chose: TLS, client
-    /// certificates, default authorization headers (ITI TF-2 Appendix Z.8).
-    /// Build it with `redirect::Policy::none()`: a client that follows a `307`
-    /// sends the criteria wherever the Supplier points it, and a `3xx` is then
-    /// an error like any other unexpected status.
+    /// `client` carries the transport its endpoint table names: TLS, client
+    /// certificates, the credential every request carries (ITI TF-2 Appendix
+    /// Z.8) and the retry table. It follows no redirect, so the criteria go
+    /// nowhere the base does not name, and a `3xx` is an error like any
+    /// other unexpected status.
     ///
     /// # Errors
-    /// [`InvalidInput::Base`] when `base` is not an `http` or `https` URL
+    /// [`InvalidInput::Base`] when the URL is not an `http` or `https` URL
     /// without a query or a fragment.
-    pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
-        let base = request::base(base)?;
+    pub fn new(client: OutboundClient) -> Result<Self, InvalidInput> {
+        let base = request::base(client.url().clone())?;
         Ok(Self {
             endpoint: request::endpoint(base.clone())?,
             match_endpoint: request::match_endpoint(base.clone())?,
             base,
-            http,
-            authorizer: None,
+            client,
             #[cfg(feature = "balp")]
             audit: None,
         })
@@ -278,16 +284,15 @@ impl PdqmClient {
         timeout: Duration,
     ) -> Result<MatchResult, PdqmError> {
         use secrecy::ExposeSecret as _;
-        let body = body.expose_secret().as_bytes().to_vec();
-        let built = self
-            .http
-            .post(self.match_endpoint.clone())
-            .header(ACCEPT, FHIR_JSON)
-            .header(CONTENT_TYPE, FHIR_JSON)
-            .body(body)
-            .build()
-            .map_err(PdqmError::failed)?;
-        let response = self.send(built, timeout).await?;
+        let body = body.expose_secret().as_bytes();
+        let response = self
+            .send(&Method::POST, &self.match_endpoint, timeout, |request| {
+                request
+                    .header(ACCEPT, FHIR_JSON)
+                    .header(CONTENT_TYPE, FHIR_JSON)
+                    .body(body.to_vec())
+            })
+            .await?;
         let answer = exchange::read(response, response::LIMIT, response::too_large).await?;
         response::read_match(answer.status, answer.media.as_deref(), &answer.body)
     }
@@ -345,15 +350,14 @@ impl PdqmClient {
         query: &PatientQuery,
         timeout: Duration,
     ) -> Result<SearchResult, PdqmError> {
-        let built = self
-            .http
-            .post(self.endpoint.clone())
-            .header(ACCEPT, FHIR_JSON)
-            .header(CONTENT_TYPE, request::FORM)
-            .body(query.form())
-            .build()
-            .map_err(PdqmError::failed)?;
-        let response = self.send(built, timeout).await?;
+        let form = query.form();
+        let response = self
+            .send(&Method::POST, &self.endpoint, timeout, |call| {
+                call.header(ACCEPT, FHIR_JSON)
+                    .header(CONTENT_TYPE, request::FORM)
+                    .body(form.clone())
+            })
+            .await?;
         self.answer(response, query.names_domain()).await
     }
 
@@ -398,24 +402,24 @@ impl PdqmClient {
     }
 
     async fn get(&self, page: &Page, timeout: Duration) -> Result<SearchResult, PdqmError> {
-        let built = self
-            .http
-            .get(page.url().clone())
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(PdqmError::failed)?;
-        let response = self.send(built, timeout).await?;
+        let response = self
+            .send(&Method::GET, page.url(), timeout, |request| {
+                request.header(ACCEPT, FHIR_JSON)
+            })
+            .await?;
         self.answer(response, false).await
     }
 
-    /// Sends `request` within `timeout`, authenticated by the authorizer when
-    /// there is one.
+    /// Sends a `method` request to `url`, shaped by `prepare`, through the
+    /// outbound client within `timeout`.
     async fn send(
         &self,
-        request: reqwest::Request,
+        method: &Method,
+        url: &Url,
         timeout: Duration,
+        prepare: impl Fn(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, PdqmError> {
-        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout).await
+        outbound::send(&self.client, method, url, timeout, prepare).await
     }
 
     async fn answer(
@@ -434,19 +438,12 @@ impl PdqmClient {
     }
 }
 
-impl Authorizable for PdqmClient {
-    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-}
-
 impl fmt::Debug for PdqmClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PdqmClient")
             .field("base", &RedactedUrl(self.base.as_str()))
             .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
-            .field("authorizer", &self.authorizer.is_some())
+            .field("authorization", &self.client.authorization().is_some())
             .finish_non_exhaustive()
     }
 }

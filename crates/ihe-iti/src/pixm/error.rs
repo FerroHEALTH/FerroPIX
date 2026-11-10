@@ -8,10 +8,11 @@
 //! JSON parse snippet, a parameter name): the URL of a `GET` and the body of a
 //! `POST` hold the source identifier, and the Manager's text may quote it.
 
+use ferrohealth_smart::client::outbound::SendError;
 use http::StatusCode;
 
-use crate::authorizer::{AuthorizerError, Unauthenticated};
 use crate::exchange::Unanswered;
+use crate::outbound::Unauthenticated;
 use crate::outcome::{IssueType, Unreadable};
 
 /// An argument the client refuses before anything is sent.
@@ -58,10 +59,10 @@ pub enum PixmError {
     /// The request could not be sent or the answer could not be read.
     #[error("the PIX Manager could not be reached")]
     Transport(#[source] reqwest::Error),
-    /// The authorizer made no headers for the request, so nothing was sent
-    /// (IUA ITI-72 §3.72.4.2).
+    /// No token could be obtained for the request, or a refused one renewed
+    /// (IUA ITI-72 §3.72.4.3).
     #[error("the request to the PIX Manager could not be authenticated")]
-    Unauthenticated(#[source] AuthorizerError),
+    Unauthenticated(#[source] SendError),
     /// The answer does not hold to ITI-83.
     #[error("the PIX Manager's answer does not hold to ITI-83")]
     Malformed(#[from] Malformation),
@@ -157,7 +158,7 @@ impl Unanswered for PixmError {
 }
 
 impl Unauthenticated for PixmError {
-    fn unauthenticated(source: AuthorizerError) -> Self {
+    fn unauthenticated(source: SendError) -> Self {
         Self::Unauthenticated(source)
     }
 }

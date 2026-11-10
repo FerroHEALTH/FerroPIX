@@ -10,10 +10,11 @@
 //! may quote one. An entry of a message is named by its position, never by its
 //! content.
 
+use ferrohealth_smart::client::outbound::SendError;
 use http::StatusCode;
 
-use crate::authorizer::{AuthorizerError, Unauthenticated};
 use crate::exchange::Unanswered;
+use crate::outbound::Unauthenticated;
 use crate::outcome::IssueType;
 
 /// An argument the subscriber refuses before anything is sent.
@@ -60,10 +61,10 @@ pub enum SubscribeError {
     /// The request could not be sent or the answer could not be read.
     #[error("the Patient Identity Registry could not be reached")]
     Transport(#[source] reqwest::Error),
-    /// The authorizer made no headers for the request, so nothing was sent
-    /// (IUA ITI-72 §3.72.4.2).
+    /// No token could be obtained for the request, or a refused one renewed
+    /// (IUA ITI-72 §3.72.4.3).
     #[error("the request to the Patient Identity Registry could not be authenticated")]
-    Unauthenticated(#[source] AuthorizerError),
+    Unauthenticated(#[source] SendError),
     /// The `Subscription` could not be written as FHIR JSON, so nothing was
     /// sent.
     #[error("the Subscription cannot be written as FHIR JSON")]
@@ -305,7 +306,7 @@ impl Unanswered for SubscribeError {
 }
 
 impl Unauthenticated for SubscribeError {
-    fn unauthenticated(source: AuthorizerError) -> Self {
+    fn unauthenticated(source: SendError) -> Self {
         Self::Unauthenticated(source)
     }
 }

@@ -81,10 +81,10 @@ machine signs in with a client credentials token (RFC 6749 §4.4) of an
 - No error carries a value, a request URL or body, or the free text the
   other server wrote, so an error you log cannot leak one.
 - A client's `Debug` shows its URLs with the userinfo replaced by `***` and
-  leaves out the `reqwest::Client`, whose default headers may hold a
-  credential.
-- Build each `reqwest::Client` you pass in with `redirect::Policy::none()`:
-  the request carries the identifier, and a redirect would send it on.
+  whether it carries a credential, never the credential.
+- Every client is built from the `OutboundClient` of `ferrohealth-smart`,
+  which follows no redirect: the request carries the identifier, and a
+  redirect would send it on.
 - **Use `POST` for every lookup by a patient identifier.** A PDQm query
   sends its criteria in the request body. Call a PIXm Manager by `POST`
   with a `Parameters` body (`ihe_iti::pixm::Invocation::Post`, FHIR R4
@@ -105,16 +105,15 @@ machine signs in with a client credentials token (RFC 6749 §4.4) of an
 
 ## Access tokens
 
-The PIXm, PDQm, mCSD and PMIR clients send the credential their
-`reqwest::Client` carries in its default headers or, built
-`.with_authorizer(…)` of the `ihe_iti::authorizer::Authorizable` trait, ask an `ihe_iti::authorizer::Authorizer` for the
-headers of every request: an OAuth 2.0 access token incorporated as IUA
-ITI-72 §3.72.4.2 asks. After a `401` the request is sent once more with new
-headers (§3.72.4.3), never more than twice in all. The authorizer is handed
-the request URL without its query, so no identifier or search criterion
-reaches it, and a request it cannot authenticate is not sent.
-`nl-generic-functions` has the same seam for the Generic Functions, behind
-its `authorizer` feature.
+Every client of `ihe-iti` and the NVI and Mitz clients of
+`nl-generic-functions` send the credential of the endpoint table their
+`OutboundClient` is built from: HTTP Basic, or an OAuth 2.0 client
+credentials token incorporated as IUA ITI-72 §3.72.4.2 asks, with a `DPoP`
+proof of each request for a bound token. After a `401` the refused token is
+dropped and the request sent once more with a new one (§3.72.4.3), never
+more than twice in all. A `DPoP` proof names the request URL without its
+query, so no identifier or search criterion reaches it, and a request no
+token can be had for is not sent.
 
 ## The server's audit trail
 

@@ -21,8 +21,7 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side, and of the PIXm Manager and the PDQm Supplier |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
 | `rest` | The JSON media types of an answer, with no FHIR model, and the family's FHIR R4 search value grammar, `fhir-search` | FHIR R4 search, HTTP | what the FHIR clients and the NVI client of `nl-generic-functions` read their answers' media types with; every search value and token is escaped and read through `fhir-search`, the one grammar the FerroHEALTH FHIR servers share |
-| `authorizer` | The authorizer that makes each request's headers, and the send that resends once when it asks, with no FHIR model | ITI-72 | what the FHIR clients and the NVI client of `nl-generic-functions` authenticate through |
-| `smart` | The authorizer over the client-credentials token of `ferrohealth-smart` | ITI-72 | the client's access token |
+| `outbound` | The send every client goes through, over the `OutboundClient` of `ferrohealth-smart` that an endpoint table builds, with no FHIR model | ITI-72 | what the clients here and the NVI and Mitz clients of `nl-generic-functions` send through, with the table's TLS, retry and credential |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
 | `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
 | `pmir-server` | The server side of PMIR, with no store and no HTTP server | ITI-93, ITI-94 | Patient Identity Registry |
@@ -65,7 +64,7 @@ from the domains asked about, and never the source identifier itself. A
 
 `PixmClient::capabilities` reads the Manager's `CapabilityStatement` with
 `GET [base]/metadata` (FHIR R4 `http.html` §capabilities), through the same
-transport and authorizer as ITI-83. A consumer calls it at boot to learn
+transport and credential as ITI-83. A consumer calls it at boot to learn
 that the configured base is a FHIR server that answers. Every other outcome
 is a typed error: `Refused` with the status, `NotAFhirServer` for a `200`
 that is no FHIR R4 `CapabilityStatement`, and `Timeout`, `Transport` or
@@ -172,8 +171,9 @@ Supplier ([The PIXm Manager](../integrate/pixm-manager.md),
 one Responding Gateway, asking by the shared patient identifier alone. The
 answer reads into a `Discovery` for Cases 1 to 4 of the transaction, each
 match with the community that holds it, or a typed error. A Responding
-Gateway is `https` only; the `reqwest::Client` you pass in carries the mutual
-TLS of the ATNA Secure Node.
+Gateway is `https` only; the endpoint table of the `OutboundClient` you
+build the client from carries the mutual TLS of the ATNA Secure Node, and a
+gateway off the origin of its `url` is refused before anything is sent.
 
 The crate signs nothing. You supply a SAML 2.0 assertion your identity
 provider signed, and the client sends it unchanged in a WS-Security header.
@@ -188,13 +188,13 @@ PMIR exchanges are always the system's own.
 
 ## Access tokens and audit
 
-Each client can ask an authorizer you supply for the headers of every
-request (IUA ITI-72), and with `balp` or `atna` records the audit record its
-profile defines. With `smart`, `authorizer::smart::TokenAuthorizer` is that
-authorizer over `ferrohealth-smart`'s client-credentials `TokenSource`: a
-bearer token on each request, or a `DPoP` token with a proof of the request
-for a grant bound to a `DPoP` key (RFC 9449 §7.1); after a `401` that demands
-a `DPoP` nonce the token kept and the request sent once more with a proof
-carrying the nonce (§9), and after any other `401` the refused token dropped
-and the request sent once more with a new one. [Security and audit](../operate/security-and-audit.md)
+Each client is built from the `OutboundClient` of `ferrohealth-smart` that
+its endpoint table builds, and sends the table's credential on every request
+(IUA ITI-72); with `balp` or `atna` it records the audit record its profile
+defines. A client credentials grant puts a bearer token on each request, or
+a `DPoP` token with a proof of the request for a grant bound to a `DPoP` key
+(RFC 9449 §7.1); after a `401` that demands a `DPoP` nonce the token is kept
+and the request sent once more with a proof carrying the nonce (§9), and
+after any other `401` the refused token is dropped and the request sent once
+more with a new one. [Security and audit](../operate/security-and-audit.md)
 describes both.

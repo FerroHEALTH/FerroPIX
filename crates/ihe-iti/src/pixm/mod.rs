@@ -13,7 +13,7 @@
 //! [`PixmClient::capabilities`] reads the PIX Manager's `CapabilityStatement`
 //! (`GET [base]/metadata`), which a consumer asks at boot to learn that the
 //! configured base is a FHIR server that answers, through the same transport
-//! and authorizer as ITI-83.
+//! and credential as ITI-83.
 //!
 //! [`PixmClient::cross_reference`] makes the HTTP request and reads the answer
 //! into an [`identifier::CrossReference`] or an [`error::PixmError`]. The
@@ -37,17 +37,21 @@
 //! ```no_run
 //! use std::time::Duration;
 //!
+//! use ferrohealth_smart::client::outbound::OutboundClient;
+//! use ferrohealth_smart::config::TlsBuilder;
+//! use ferrohealth_smart::config::endpoint::EndpointSection;
 //! use ihe_iti::pixm::PixmClient;
 //! use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier, TargetSystem};
 //! use ihe_atna::user::OnBehalfOf;
 //! use secrecy::{ExposeSecret, SecretString};
-//! use url::Url;
 //!
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-//! let http = reqwest::Client::builder()
-//!     .redirect(reqwest::redirect::Policy::none())
-//!     .build()?;
-//! let client = PixmClient::new(Url::parse("https://pix.example.org/fhir/")?, http)?;
+//! # fn configured() -> (EndpointSection, &'static dyn TlsBuilder) {
+//! #     unimplemented!("the product's configuration and its reader of TLS material")
+//! # }
+//! // The `[pixm.endpoint]` table, whose `url` is the Manager's FHIR base.
+//! let (endpoint, tls) = configured();
+//! let client = PixmClient::new(OutboundClient::build(&endpoint, "pixm.endpoint", tls)?)?;
 //! let source = SourceIdentifier::new(
 //!     "urn:oid:1.3.6.1.4.1.21367.13.20.1000",
 //!     SecretString::from("IHERED-994"),
@@ -84,15 +88,18 @@ mod response;
 pub mod server;
 
 use std::fmt;
+#[cfg(feature = "balp")]
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_smart::client::outbound::OutboundClient;
+use http::Method;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use secrecy::ExposeSecret;
 use url::Url;
 
-use crate::authorizer::{self, Authorizable, Authorizer};
-use crate::exchange::{self, Unanswered};
+use crate::exchange;
+use crate::outbound;
 use capabilities::CapabilitiesError;
 use error::{InvalidInput, PixmError};
 use fhir_types::r4::capability_statement::CapabilityStatement;
@@ -130,45 +137,44 @@ pub enum Invocation {
 
 /// A Patient Identifier Cross-reference Consumer bound to one PIX Manager.
 ///
-/// `Debug` shows the endpoint with its userinfo replaced by `***` and the
-/// invocation, and leaves out the HTTP client, whose default headers may hold
-/// a credential.
+/// `Debug` shows the endpoint with its userinfo replaced by `***`, the
+/// invocation and whether the client carries a credential, never the
+/// credential itself.
 #[derive(Clone)]
 pub struct PixmClient {
     endpoint: Url,
     metadata: Url,
     invocation: Invocation,
-    http: reqwest::Client,
-    authorizer: Option<Arc<dyn Authorizer>>,
+    client: OutboundClient,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
 impl PixmClient {
-    /// Creates a client for the PIX Manager whose FHIR base URL is `base`.
+    /// Creates a client for the PIX Manager whose FHIR base URL is
+    /// `client`'s URL, reached through `client`.
     ///
-    /// `http` carries the transport the caller chose: TLS, client
-    /// certificates, default authorization headers (ITI TF-2 Appendix Z.8).
-    /// The request holds the source identifier, so build `http` with
-    /// `redirect::Policy::none()`: a client that follows redirects sends the
-    /// identifier wherever the Manager points it, and a `3xx` is then an
+    /// `client` carries the transport its endpoint table names: TLS, client
+    /// certificates, the credential every request carries (ITI TF-2 Appendix
+    /// Z.8) and the retry table. It follows no redirect, so the source
+    /// identifier goes nowhere the base does not name, and a `3xx` is an
     /// error like any other unexpected status.
     ///
     /// The client asks with [`Invocation::Get`] until
     /// [`invoked_by`](Self::invoked_by) says otherwise.
     ///
     /// # Errors
-    /// [`InvalidInput::Base`] when `base` is not an `http` or `https` URL
+    /// [`InvalidInput::Base`] when the URL is not an `http` or `https` URL
     /// without a query or a fragment.
-    pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
+    pub fn new(client: OutboundClient) -> Result<Self, InvalidInput> {
+        let base = client.url().clone();
         let metadata = ihe_atna::fhir_base::under_base(base.clone(), capabilities::INTERACTION)
             .ok_or(InvalidInput::Base)?;
         Ok(Self {
             endpoint: request::endpoint(base)?,
             metadata,
             invocation: Invocation::default(),
-            http,
-            authorizer: None,
+            client,
             #[cfg(feature = "balp")]
             audit: None,
         })
@@ -205,7 +211,7 @@ impl PixmClient {
 
     /// Reads the PIX Manager's `CapabilityStatement` with `GET [base]/metadata`
     /// (FHIR R4 http.html §capabilities, <http://hl7.org/fhir/R4/http.html#capabilities>),
-    /// through this client's transport and authorizer, within `timeout`.
+    /// through this client's transport and credential, within `timeout`.
     ///
     /// The request names no patient, so it carries no audit record of its own.
     ///
@@ -219,17 +225,12 @@ impl PixmClient {
         &self,
         timeout: Duration,
     ) -> Result<CapabilityStatement, CapabilitiesError> {
-        let request = self
-            .http
-            .get(self.metadata.clone())
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(CapabilitiesError::failed)?;
-        let response = authorizer::send::<CapabilitiesError>(
-            &self.http,
-            self.authorizer.as_deref(),
-            request,
+        let response = outbound::send::<CapabilitiesError, _>(
+            &self.client,
+            &Method::GET,
+            &self.metadata,
             timeout,
+            |request| request.header(ACCEPT, FHIR_JSON),
         )
         .await?;
         let answer = exchange::read(response, capabilities::LIMIT, capabilities::too_large).await?;
@@ -299,21 +300,33 @@ impl PixmClient {
         targets: &[TargetSystem],
         timeout: Duration,
     ) -> Result<CrossReference, PixmError> {
-        let builder = match request {
-            Request::Get(url) => self.http.get(url.clone()),
-            Request::Post(body) => self
-                .http
-                .post(self.endpoint.clone())
-                .header(CONTENT_TYPE, FHIR_JSON)
-                .body(body.expose_secret().as_bytes().to_vec()),
+        let response = match request {
+            Request::Get(url) => {
+                outbound::send::<PixmError, _>(
+                    &self.client,
+                    &Method::GET,
+                    url,
+                    timeout,
+                    |request| request.header(ACCEPT, FHIR_JSON),
+                )
+                .await?
+            }
+            Request::Post(body) => {
+                outbound::send::<PixmError, _>(
+                    &self.client,
+                    &Method::POST,
+                    &self.endpoint,
+                    timeout,
+                    |request| {
+                        request
+                            .header(ACCEPT, FHIR_JSON)
+                            .header(CONTENT_TYPE, FHIR_JSON)
+                            .body(body.expose_secret().as_bytes().to_vec())
+                    },
+                )
+                .await?
+            }
         };
-        let built = builder
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(PixmError::failed)?;
-        let response =
-            authorizer::send::<PixmError>(&self.http, self.authorizer.as_deref(), built, timeout)
-                .await?;
         let answer = exchange::read(response, response::LIMIT, response::too_large).await?;
         response::read(
             answer.status,
@@ -325,19 +338,12 @@ impl PixmClient {
     }
 }
 
-impl Authorizable for PixmClient {
-    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-}
-
 impl fmt::Debug for PixmClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PixmClient")
             .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
             .field("invocation", &self.invocation)
-            .field("authorizer", &self.authorizer.is_some())
+            .field("authorization", &self.client.authorization().is_some())
             .finish_non_exhaustive()
     }
 }

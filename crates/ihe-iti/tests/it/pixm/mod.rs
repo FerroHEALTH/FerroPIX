@@ -12,8 +12,6 @@ mod contract;
 mod hygiene;
 #[cfg(feature = "pixm-server")]
 mod server;
-#[cfg(feature = "smart")]
-mod smart;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -21,9 +19,10 @@ use std::time::Duration;
 use ihe_iti::pixm::identifier::{SourceIdentifier, TargetSystem};
 use ihe_iti::pixm::{Invocation, PixmClient};
 use secrecy::SecretString;
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use crate::outbound::outbound;
 
 /// The FHIR base the stub Manager serves under.
 pub(crate) const BASE: &str = "/fhir/";
@@ -57,15 +56,10 @@ pub(crate) fn vendored(file: &str) -> String {
     std::fs::read_to_string(&path).expect("the vendored PIXm package (scripts/vendor/ihe-pixm.sh)")
 }
 
-/// A client for `server`, built the way the module documentation asks: no
-/// redirects.
+/// A client for `server`, built from its endpoint table as the module
+/// documentation asks.
 pub(crate) fn client(server: &MockServer) -> PixmClient {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse(&format!("{}{BASE}", server.uri())).expect("the stub base");
-    PixmClient::new(base, http).expect("a client")
+    PixmClient::new(outbound(&format!("{}{BASE}", server.uri()))).expect("a client")
 }
 
 /// A client for `server` that posts its query ([`Invocation::Post`]).
@@ -97,12 +91,7 @@ pub(crate) async fn posting_manager(
 /// can stand for an unreachable Manager. Binding port 0 picks another port,
 /// so no listener ever holds it, and a connection to it fails at once.
 pub(crate) fn unreachable_client() -> PixmClient {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse(&format!("http://127.0.0.1:0{BASE}")).expect("a base");
-    PixmClient::new(base, http).expect("a client")
+    PixmClient::new(outbound(&format!("http://127.0.0.1:0{BASE}"))).expect("a client")
 }
 
 /// The IG's example patient in the red domain.

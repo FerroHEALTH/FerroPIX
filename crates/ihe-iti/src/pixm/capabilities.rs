@@ -9,12 +9,13 @@
 //! answers, before it asks ITI-83. The request names no patient, so its URL
 //! and its answer hold no identifier.
 
+use ferrohealth_smart::client::outbound::SendError;
 use fhir_types::codec::{Json, Path};
 use fhir_types::r4::capability_statement::CapabilityStatement;
 use http::StatusCode;
 
-use crate::authorizer::{AuthorizerError, Unauthenticated};
 use crate::exchange::Unanswered;
+use crate::outbound::Unauthenticated;
 use crate::outcome::{self, IssueType, Unreadable};
 
 /// The longest answer the client reads. A `CapabilityStatement` lists every
@@ -48,10 +49,10 @@ pub enum CapabilitiesError {
     /// The request could not be sent or the answer could not be read.
     #[error("the PIX Manager could not be reached")]
     Transport(#[source] reqwest::Error),
-    /// The authorizer made no headers for the request, so nothing was sent
-    /// (IUA ITI-72 §3.72.4.2).
+    /// No token could be obtained for the request, or a refused one renewed
+    /// (IUA ITI-72 §3.72.4.3).
     #[error("the request to the PIX Manager could not be authenticated")]
-    Unauthenticated(#[source] AuthorizerError),
+    Unauthenticated(#[source] SendError),
 }
 
 /// How a `200` answer fails to be a `CapabilityStatement`.
@@ -77,7 +78,7 @@ impl Unanswered for CapabilitiesError {
 }
 
 impl Unauthenticated for CapabilitiesError {
-    fn unauthenticated(source: AuthorizerError) -> Self {
+    fn unauthenticated(source: SendError) -> Self {
         Self::Unauthenticated(source)
     }
 }

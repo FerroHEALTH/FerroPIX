@@ -10,7 +10,6 @@
 use ihe_iti::pmir::PmirSubscriber;
 use ihe_iti::pmir::error::FeedError;
 use ihe_iti::pmir::feed::{Feed, refusal};
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use url::Url;
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -117,16 +116,15 @@ async fn no_subscription_error_carries_the_registrys_text_or_credentials() {
         .expect_err("refused");
     carries_none(&format!("{error} {error:?}"));
 
-    let mut headers = HeaderMap::new();
-    headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer Qz7token"));
-    let http = reqwest::Client::builder()
-        .default_headers(headers)
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse("https://Qz7user:Qz7password@pmir.example.org/fhir/").expect("a URL");
+    let mut table = crate::outbound::endpoint("https://Qz7user:Qz7password@pmir.example.org/fhir/");
+    table.credentials = ferrohealth_smart::config::credentials::CredentialsSection {
+        user: String::from("Qz7user"),
+        password: Some(secrecy::SecretString::from("Qz7token")),
+        ..ferrohealth_smart::config::credentials::CredentialsSection::default()
+    };
     let shown = format!(
         "{:?}",
-        PmirSubscriber::new(base, http).expect("a subscriber")
+        PmirSubscriber::new(crate::outbound::build(&table)).expect("a subscriber")
     );
     for secret in ["Qz7user", "Qz7password", "Qz7token"] {
         assert!(!shown.contains(secret), "{secret} in {shown}");

@@ -8,9 +8,10 @@
 //! request URL holds the pseudonym, and the service's text may quote it. A
 //! record is named by its position in the answer, never by its content.
 
+use ferrohealth_smart::client::outbound::SendError;
 use http::StatusCode;
-use ihe_iti::authorizer::{AuthorizerError, Unauthenticated};
 use ihe_iti::exchange::Unanswered;
+use ihe_iti::outbound::Unauthenticated;
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -40,10 +41,10 @@ pub enum NviError {
     /// The request could not be sent or the answer could not be read.
     #[error("the Localization Service could not be reached")]
     Transport(#[source] reqwest::Error),
-    /// The authorizer could not authenticate the request, so nothing was
-    /// sent.
+    /// No token could be obtained for the request, or a refused one renewed
+    /// (the IG's GFI-005, IUA ITI-72 §3.72.4.3).
     #[error("the request to the Localization Service could not be authenticated")]
-    Unauthenticated(#[source] AuthorizerError),
+    Unauthenticated(#[source] SendError),
     /// The answer does not hold to the Localization Service search.
     #[error("the Localization Service's answer does not hold to the IG")]
     Malformed(#[from] Malformation),
@@ -143,7 +144,7 @@ impl Unanswered for NviError {
 }
 
 impl Unauthenticated for NviError {
-    fn unauthenticated(source: AuthorizerError) -> Self {
+    fn unauthenticated(source: SendError) -> Self {
         Self::Unauthenticated(source)
     }
 }

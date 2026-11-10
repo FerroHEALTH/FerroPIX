@@ -6,11 +6,13 @@
 
 use std::time::Duration;
 
+use ferrohealth_smart::config::credentials::{CredentialsSection, OauthSection};
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::soap::{FaultCode, Malformed};
+use ihe_iti::xcpd::XcpdClient;
 use ihe_iti::xcpd::discovery::{Discovery, RequestedAttribute};
 use ihe_iti::xcpd::error::{DetectedIssue, Malformation, XcpdError};
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use wiremock::ResponseTemplate;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer};
@@ -21,7 +23,7 @@ use super::{
 use crate::timing;
 
 async fn ask(server: &MockServer) -> Result<Discovery, XcpdError> {
-    client()
+    client(server)
         .discover(
             &responding(server),
             &query(),
@@ -149,7 +151,7 @@ async fn every_error_names_the_status_the_gateway_answered_with() {
             "the status the gateway answered with"
         );
     }
-    let unreachable = client()
+    let unreachable = super::client_at("http://127.0.0.1:0/rg")
         .discover(
             &ihe_iti::xcpd::request::RespondingGateway::unencrypted_for_development(
                 url::Url::parse("http://127.0.0.1:0/rg").expect("a URL"),
@@ -283,7 +285,7 @@ async fn a_gateway_silent_past_the_timeout_is_a_timeout() {
         .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let client = client();
+    let client = client(&server);
     let gateway = responding(&server);
     let query = query();
     let limit = Duration::from_millis(200);
@@ -293,4 +295,41 @@ async fn a_gateway_silent_past_the_timeout_is_a_timeout() {
     )
     .await;
     assert!(matches!(answer, Err(XcpdError::Timeout)), "{answer:?}");
+}
+
+#[tokio::test]
+async fn a_token_that_cannot_be_obtained_is_unauthenticated_and_nothing_is_sent() {
+    let tokens = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error": "invalid_client",
+        })))
+        .mount(&tokens)
+        .await;
+    let server = answering("match.xml").await;
+    let mut table = crate::outbound::endpoint(&format!("{}{PATH}", server.uri()));
+    table.credentials = CredentialsSection {
+        oauth: Some(OauthSection {
+            token_endpoint: format!("{}/token", tokens.uri()),
+            client_id: String::from("synthetic-client"),
+            client_secret: Some(SecretString::from("synthetic-secret")),
+            ..OauthSection::default()
+        }),
+        ..CredentialsSection::default()
+    };
+    let error = XcpdClient::new(crate::outbound::build(&table))
+        .discover(
+            &responding(&server),
+            &query(),
+            None,
+            &OnBehalfOf::System,
+            PROMPT,
+        )
+        .await
+        .expect_err("no token");
+    assert!(matches!(error, XcpdError::Unauthenticated(_)), "{error:?}");
+    assert_eq!(None, error.status(), "nothing was answered");
+    let requests = server.received_requests().await.expect("recording is on");
+    assert!(requests.is_empty(), "nothing was sent");
 }

@@ -19,8 +19,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `balp` | The BALP `AuditEvent` each FHIR profile above defines for its transactions, recorded on the audit trail of [`ihe-atna`](https://crates.io/crates/ihe-atna): the client side's, and the PIXm Manager's and the PDQm Supplier's from a `received::Received` request | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 |
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
 | `rest` | The FHIR R4 search value escaping and the JSON media types of an answer every FHIR client here shares, with no FHIR model: what the NVI client of `nl-generic-functions` reads its answers with too | FHIR R4 search, HTTP |
-| `authorizer` | The authorizer a client supplies to make each request's headers, such as an access token and its `DPoP` proof, and the send that resends once when it asks, with no FHIR model: what the FHIR clients here and the NVI client of `nl-generic-functions` authenticate through | ITI-72 |
-| `smart` | The IUA authorizer over the OAuth 2.0 client-credentials token of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) | ITI-72 |
+| `outbound` | The send every client goes through, over the `OutboundClient` of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) that an endpoint table builds, with no FHIR model: what the clients here and the NVI and Mitz clients of `nl-generic-functions` send through | ITI-72 |
 | `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |
 | `pdqm-server` | The Patient Demographics Supplier side of PDQm, typed, with no store and no HTTP server | ITI-78, ITI-119 |
 | `pmir-server` | The Patient Identity Registry side of PMIR, typed, with no store and no HTTP server | ITI-93, ITI-94 |
@@ -31,27 +30,29 @@ features may carry the SOAP 1.2 stack and only `xcpd` the HL7 v3 and SAML XUA
 stack; a build without them compiles none of it.
 The profiles are published at <https://profiles.ihe.net/ITI/>.
 
-## Access tokens (IUA ITI-72)
+## Endpoint tables and access tokens (IUA ITI-72)
 
-The PIXm, PDQm, mCSD and PMIR clients send the credential their
-`reqwest::Client` carries in its default headers, or, built
-`.with_authorizer(…)` of the `ihe_iti::authorizer::Authorizable` trait, ask an `ihe_iti::authorizer::Authorizer` for the
-headers of every request: an OAuth 2.0 access token incorporated as IUA
-ITI-72 §3.72.4.2 asks, which the authorizer refreshes before it expires. The
-authorizer reads every answer, and a request it asks for again after a `401`
-is sent once more with new headers (§3.72.4.3), never more than twice in all.
-The authorizer is handed the request URL without its query, so no patient
-identifier or search criterion reaches it, and a request it cannot
-authenticate is not sent.
+Every client (`PixmClient`, `PdqmClient`, `McsdClient`, `PmirSubscriber`,
+`XcpdClient`) is built from the
+`ferrohealth_smart::client::outbound::OutboundClient` its endpoint table
+builds, the one outbound client of the FerroHEALTH products: the base URL,
+the TLS and client certificate, the timeouts, no redirect, the `retry` table
+and the credential every request carries. `PixmClient::new(client)` reads
+the FHIR base from the table's `url`; `XcpdClient::new(client)` posts only to
+a gateway on that URL's origin.
 
-With `smart`, `ihe_iti::authorizer::smart::TokenAuthorizer` is that
-authorizer over a `ferrohealth_smart::client::cache::TokenSource`: each
-request carries the source's current token, marked sensitive: as a bearer
-token, or for a grant bound to a `DPoP` key as a `DPoP` token with a proof of
-the request (RFC 9449 §7.1). A `401` that demands a `DPoP` nonce keeps the
-token, so the one resend carries a proof with the nonce (§9); any other
-`401` drops the refused token, so the one resend carries a new one. A token the source cannot obtain is an `AuthorizerError` whose
-source is the `TokenError`, and nothing is sent.
+The credential is HTTP Basic, or the OAuth 2.0 client credentials token of
+`[<lane>.credentials.oauth]`, incorporated in the `Authorization` header as
+IUA ITI-72 §3.72.4.2 asks: as a bearer token, or for a grant bound to a
+`DPoP` key as a `DPoP` token with a proof of the request (RFC 9449 §7.1),
+whose `htu` holds no query, so no patient identifier or search criterion
+reaches it. A `401` that demands a `DPoP` nonce keeps the token, so the one
+resend carries a proof with the nonce (§9); any other `401` drops the refused
+token, so the one resend carries a new one (§3.72.4.3). A token that cannot
+be obtained is the client's `Unauthenticated` error, whose source is the
+outbound client's `SendError`, and nothing is sent. The timeout a call takes
+bounds every try the `retry` table allows, the waits between them and the
+reading of the answer.
 
 ## PIXm (`pixm`)
 
@@ -71,10 +72,10 @@ from the domains asked about, and never the source identifier itself.
 
 Identifier values travel in `secrecy::SecretString`, with redacted `Debug` and
 no `Display`, and no error carries a value, the request URL or body, or the
-Manager's free text. Build the `reqwest::Client` you pass in with
-`redirect::Policy::none()`: the request holds the source identifier. The
-client's `Debug` shows its URL with the userinfo replaced by `***` and leaves
-out the `reqwest::Client`, whose default headers may hold a credential.
+Manager's free text. The outbound client follows no redirect, so the source
+identifier goes nowhere the base does not name. The client's `Debug` shows
+its URL with the userinfo replaced by `***` and whether it carries a
+credential, never the credential.
 
 ## PDQm (`pdqm`)
 
@@ -104,8 +105,7 @@ score or its grade, or when a `200` carries an `OperationOutcome` of
 The criteria travel in the request body, so no URL carries them. They, every
 matched Patient and every page link redact their content in `Debug`, with no
 `Display`, and no error carries a value, a URL or the Supplier's free text.
-Build the `reqwest::Client` you pass in with `redirect::Policy::none()`. The
-client's `Debug` shows its URLs as the PIXm client's does.
+The client's `Debug` shows its URLs as the PIXm client's does.
 
 ## mCSD (`mcsd`)
 
@@ -137,8 +137,7 @@ the answer bytes and the entries it reads (by default 200 pages, 64 MiB and
 50,000 entries). Running out of any of them is an error, never a shorter
 answer. A status other than `200`, an answer that is not the interaction's
 Bundle, a match of another type and a page link to another origin are errors
-that carry no URL and no text of the directory's. Build the
-`reqwest::Client` you pass in with `redirect::Policy::none()`.
+that carry no URL and no text of the directory's.
 
 `ihe_iti::mcsd::replica::Replica` holds a directory's `Organization`s and
 `Endpoint`s in a `Scope` (every resource, or those carrying an identifier in
@@ -164,8 +163,7 @@ ids and the identifiers only, each value in a `secrecy::SecretString`, and
 drops every demographic as it reads; no type has `Display`, and no error
 carries a value, a URL or the Registry's text. PMIR leaves the
 authentication of the Registry to your channel to the two parties, so your
-code authenticates each message before it reads it. Build the
-`reqwest::Client` you pass in with `redirect::Policy::none()`.
+code authenticates each message before it reads it.
 
 ## The server sides (`pixm-server`, `pdqm-server`, `pmir-server`)
 
@@ -233,9 +231,10 @@ synchronous exchange with an immediate response is offered.
 
 A `RespondingGateway` is `https` only, since the request carries the
 patient identifier and any XUA assertion; `unencrypted_for_development`
-admits `http` for development and tests. The `reqwest::Client` you pass in
-carries the mutual TLS of the ATNA Secure Node the actor is grouped with;
-build it with `redirect::Policy::none()`.
+admits `http` for development and tests. The endpoint table of the
+`OutboundClient` you build the client from carries the mutual TLS of the
+ATNA Secure Node the actor is grouped with, and a gateway off the origin of
+its `url` is refused before anything is sent.
 
 The crate signs nothing. `XuaAssertion` holds a SAML 2.0 assertion your
 identity provider signed, checked to be exactly one `saml2:Assertion`

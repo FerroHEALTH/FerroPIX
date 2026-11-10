@@ -10,7 +10,7 @@ profile or function, with no feature on by default.
 
 | Crate | What it implements | Version on `main` | API reference |
 |---|---|---|---|
-| [`ihe-iti`](ihe-iti.md) | The IHE ITI identity profiles: PIXm, PDQm, PMIR, mCSD and XCPD, with the IUA authorizer and each profile's audit record | {{version:ihe-iti}} | [docs.rs/ihe-iti](https://docs.rs/ihe-iti) |
+| [`ihe-iti`](ihe-iti.md) | The IHE ITI identity profiles: PIXm, PDQm, PMIR, mCSD and XCPD, each client built from an endpoint table, and each profile's audit record | {{version:ihe-iti}} | [docs.rs/ihe-iti](https://docs.rs/ihe-iti) |
 | [`nl-generic-functions`](nl-generic-functions.md) | The Netherlands Generic Functions: NVI localization, Mitz consent, LRZa addressing and Nuts authentication | {{version:nl-generic-functions}} | [docs.rs/nl-generic-functions](https://docs.rs/nl-generic-functions) |
 
 Both crates depend on no application: they are the specifications'

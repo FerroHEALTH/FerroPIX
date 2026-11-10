@@ -17,7 +17,6 @@ use std::time::{Duration, Instant};
 
 use ihe_iti::mcsd::budget::{Budget, Limits};
 use ihe_iti::mcsd::client::McsdClient;
-use url::Url;
 use wiremock::MockServer;
 
 /// The FHIR base the stub directory serves under.
@@ -51,18 +50,14 @@ pub(crate) fn vendored(file: &str) -> String {
     std::fs::read_to_string(&path).expect("the vendored mCSD package (scripts/vendor/ihe-mcsd.sh)")
 }
 
-fn http() -> reqwest::Client {
-    reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client")
-}
-
-/// A client for `server`, built the way the module documentation asks: no
-/// redirects.
+/// A client for `server`, built from its endpoint table as the module
+/// documentation asks.
 pub(crate) fn client(server: &MockServer) -> McsdClient {
-    let base = Url::parse(&format!("{}{BASE}", server.uri())).expect("the stub base");
-    McsdClient::new(base, http()).expect("a client")
+    McsdClient::new(crate::outbound::outbound(&format!(
+        "{}{BASE}",
+        server.uri()
+    )))
+    .expect("a client")
 }
 
 /// The `fullUrl` of the resource `kind/id` on `server`.

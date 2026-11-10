@@ -21,7 +21,8 @@ On the branch `release/vX.Y.Z`:
 2. **Bump the product version.** Set the `[workspace.package]` version in
    `Cargo.toml`, run `cargo update -w`, and set the server image tag
    `compose.yaml` defaults to (`${FERROPIX_VERSION:-X.Y.Z}`) to the same
-   version (the console image line takes the same default);
+   version (the console image line takes the same default), the file each
+   release attaches as the quickstart;
   `scripts/checks/versions.sh` refuses them apart.
 3. **Take the console screenshots again.** The book's screenshots name the
    release they show, so the guard in the testkit fails after the bump until
@@ -138,6 +139,7 @@ to achieve SLSA v1 Build Level 3").
 
 | Leg | Workflow | What it produces |
 |---|---|---|
+| `github-release` | in `release.yml` | the draft, and the quickstart: the tag's `compose.yaml`, self-contained with every file it needs inlined as a Compose config (`scripts/quickstart/compose-configs.sh --check` refuses a stale copy), and its `.sha256sum` |
 | `build-binaries` | `release-build.yml`, once per target (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`), each on a runner of its own architecture | `ferropix-vX.Y.Z-<target>.tar.gz` built with `cargo auditable` and no cache, its `.sha256sum`, a CycloneDX source SBOM and an SPDX build SBOM, and the provenance and both SBOMs attested, attached as `.sigstore.json` bundles and an `.intoto.jsonl` |
 | `build-image` | `release-image.yml` | verifies both musl tarballs against `release-build.yml` before it unpacks them, stages them with `scripts/release/stage-dist.sh tree`, builds `docker/Dockerfile` for `linux/amd64` and `linux/arm64` with no cache, pushes `ghcr.io/ferrohealth/ferropix` by digest with no tag, attests the index and both manifests (SLSA provenance, an SPDX SBOM per manifest) as OCI referrers, and verifies its own output as a consumer would |
 | `build-console` | `release-console.yml` | the operator console: its `binary` job builds the musl binary per architecture with `cargo auditable`, FerroUI's stylesheet and script modules inside it, and attests the tarball and its SPDX SBOM, attached to the draft; its `image` job verifies each against `release-console.yml`, builds `docker/console/Dockerfile` for both platforms, pushes `ghcr.io/ferrohealth/ferropix-console` by digest and attests the index and both manifests as `release-image.yml` does |

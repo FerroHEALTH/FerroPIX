@@ -5,22 +5,31 @@
 
 This page runs FerroPIX on your machine with the compose quickstart, feeds
 one synthetic patient as a hospital's Patient Identity Source would, and
-asks for it through PIXm and PDQm. It takes a few minutes and needs a
-checkout of the repository, Docker Compose (or Podman with a compose
-provider), `curl`, `jq` and `openssl`.
+asks for it through PIXm and PDQm. It takes a few minutes and needs Docker
+Compose 2.23.1 or newer (or Podman with a compose provider), `curl`, `jq`
+and `openssl`, and no checkout of the repository.
 
 > [!NOTE]
 > Every command on this page is a step of
 > [`scripts/quickstart/tour.sh`](https://github.com/FerroHEALTH/FerroPIX/blob/main/scripts/quickstart/tour.sh),
-> which CI runs against the images each change builds, so the commands and
+> which CI runs over the repository's `compose.yaml`, the file each release
+> attaches, against the images each change builds, so the commands and
 > the answers below are the ones the current code gives. Run the script to
 > do every step at once; it switches the usage report off, since a tour is
 > no installation.
 
 ## Start the server
 
+Every release attaches the quickstart as one file, `compose.yaml`, with the
+server's configuration and the database role inlined in it. Download the
+latest release's into an empty directory:
+
+```sh
+curl -fsSLO https://github.com/FerroHEALTH/FerroPIX/releases/latest/download/compose.yaml
+```
+
 The quickstart reads every secret from a file under `./secrets`, never from
-the environment. From the root of the checkout, make the five files:
+the environment. Beside `compose.yaml`, make the five files:
 
 ```sh
 {{#include ../../../../scripts/quickstart/tour.sh:secrets}}
@@ -33,8 +42,8 @@ Then start the stack and ask for readiness:
 ```
 
 `compose.yaml` runs the published server image beside PostgreSQL 18 and a
-development OpenID Provider, with the configuration
-`app/ferropix-server/quickstart.toml`: three identifier domains (a
+development OpenID Provider, with the configuration it inlines (a copy of
+`app/ferropix-server/quickstart.toml`): three identifier domains (a
 synthetic hospital, `urn:oid:2.999.1.1`, the BSN and the pseudonymised BSN),
 one Source client for all three, `quickstart-source`, and the operator API.
 Readiness answers `{"state":"up",…}` once the store, the audit spool and the

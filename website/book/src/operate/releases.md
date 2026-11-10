@@ -20,6 +20,7 @@ published. Each release publishes, from one tag:
 | The Helm chart | `oci://ghcr.io/ferrohealth/charts/ferropix`, its app version the release, both images pinned by digest |
 | The static binaries | `ferropix` and `ferropix-console` for `x86_64` and `aarch64` Linux (musl), on the [GitHub release](https://github.com/FerroHEALTH/FerroPIX/releases), each with its checksum, SBOMs and Sigstore bundles |
 | The crates whose version moved | `ihe-iti` and `nl-generic-functions` on crates.io, and each `.crate` with its checksum on the GitHub release |
+| The quickstart | `compose.yaml`, with its `.sha256sum`: one self-contained file, every configuration it needs inlined, the [quickstart](../integrate/getting-started.md) downloads from the latest release |
 | The vulnerability record | every finding of a scan of the images and binaries, at every severity, with the OpenVEX statement that judges it |
 
 Every artifact carries SLSA Build Level 3 provenance; verify one before you

@@ -242,7 +242,7 @@ fn clients(
     let named: BTreeSet<String> = section
         .issuers()
         .iter()
-        .map(|entry| entry.issuer.clone())
+        .map(|entry| entry.issuer.expose().to_owned())
         .filter(|issuer| !issuer.is_empty())
         .collect();
     let mut clients = BTreeMap::new();
@@ -286,6 +286,7 @@ fn is_client_id(client: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use ferrohealth_secret::secret_url::SecretUrl;
     use ferrohealth_smart::config::{
         AuthSection, BasicSection, BasicUser, ConfigError, IssuerEntry,
     };
@@ -305,7 +306,7 @@ mod tests {
             issuer: issuers
                 .iter()
                 .map(|issuer| IssuerEntry {
-                    issuer: (*issuer).to_owned(),
+                    issuer: SecretUrl::new(*issuer),
                     kind: Some(IssuerKind::Machines),
                     audience: vec![String::from("https://pix.example.org/fhir")],
                     ..IssuerEntry::default()

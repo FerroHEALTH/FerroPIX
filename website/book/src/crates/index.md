@@ -22,7 +22,7 @@ transactions as Rust, for any caller.
 Name the features you call. The FerroHEALTH products pin family crates by
 exact version:
 
-```toml
+```toml,cargo
 [dependencies]
 ihe-iti = { version = "={{version:ihe-iti}}", default-features = false, features = ["pixm"] }
 ihe-atna = { version = "{{dep:ihe-atna}}", default-features = false }

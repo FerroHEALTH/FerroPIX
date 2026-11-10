@@ -36,8 +36,10 @@ BSNk pseudonym service.
 The NVI client asks the Localization Service which care providers hold data
 for a patient. It never puts the pseudonym in an error, a `Debug` rendering
 or anything but the request to the service, follows a `next` link only on
-its own search endpoint, and hands an authorizer the request URL without its
-query, so the pseudonym never reaches it.
+its own search endpoint, and a `DPoP` proof names the request URL without
+its query, so the pseudonym never reaches it. The NVI and Mitz clients are
+built from the `OutboundClient` of `ferrohealth-smart` their endpoint table
+builds, with its TLS, retry table and credential.
 
 ## Mitz (`mitz`)
 

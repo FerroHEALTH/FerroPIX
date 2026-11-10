@@ -29,6 +29,15 @@ mod features;
 #[cfg(feature = "mcsd")]
 mod mcsd;
 #[cfg(test)]
+#[cfg(any(
+    feature = "pixm",
+    feature = "pdqm",
+    feature = "mcsd",
+    feature = "pmir",
+    feature = "xcpd"
+))]
+mod outbound;
+#[cfg(test)]
 #[cfg(feature = "pdqm")]
 mod pdqm;
 #[cfg(test)]

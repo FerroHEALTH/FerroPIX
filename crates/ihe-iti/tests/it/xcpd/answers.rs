@@ -21,7 +21,7 @@ use super::{
 use crate::timing;
 
 async fn ask(server: &MockServer) -> Result<Discovery, XcpdError> {
-    client()
+    client(server)
         .discover(
             &responding(server),
             &query(),
@@ -149,7 +149,7 @@ async fn every_error_names_the_status_the_gateway_answered_with() {
             "the status the gateway answered with"
         );
     }
-    let unreachable = client()
+    let unreachable = super::client_at("http://127.0.0.1:0/rg")
         .discover(
             &ihe_iti::xcpd::request::RespondingGateway::unencrypted_for_development(
                 url::Url::parse("http://127.0.0.1:0/rg").expect("a URL"),
@@ -283,7 +283,7 @@ async fn a_gateway_silent_past_the_timeout_is_a_timeout() {
         .respond_with(ResponseTemplate::new(200).set_delay(timing::SILENT))
         .mount(&server)
         .await;
-    let client = client();
+    let client = client(&server);
     let gateway = responding(&server);
     let query = query();
     let limit = Duration::from_millis(200);

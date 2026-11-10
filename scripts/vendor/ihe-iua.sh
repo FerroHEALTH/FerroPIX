@@ -9,7 +9,7 @@
 # Introspect Token [ITI-102] and Get Authorization Server Metadata
 # [ITI-103], its figures, and the repository's licence file.
 #
-# The IUA authorizer of crates/ihe-iti cites the bearer presentation of
+# The outbound send of crates/ihe-iti cites the bearer presentation of
 # ITI-72, so the text it is held to is pinned here.
 #
 # IUA is published as a supplement in IHE's own repository, with no FHIR

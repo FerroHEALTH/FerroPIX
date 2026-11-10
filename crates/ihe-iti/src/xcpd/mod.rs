@@ -37,6 +37,9 @@
 //! ```no_run
 //! use std::time::Duration;
 //!
+//! use ferrohealth_smart::client::outbound::OutboundClient;
+//! use ferrohealth_smart::config::TlsBuilder;
+//! use ferrohealth_smart::config::endpoint::EndpointSection;
 //! use ihe_iti::xcpd::XcpdClient;
 //! use ihe_iti::xcpd::discovery::Discovery;
 //! use ihe_iti::xcpd::identifier::{Oid, PatientIdentifier};
@@ -45,11 +48,14 @@
 //! use secrecy::SecretString;
 //! use url::Url;
 //!
+//! # fn configured() -> (EndpointSection, &'static dyn TlsBuilder) {
+//! #     unimplemented!("the product's configuration and its reader of TLS material")
+//! # }
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-//! let http = reqwest::Client::builder()
-//!     .redirect(reqwest::redirect::Policy::none())
-//!     .build()?;
-//! let client = XcpdClient::new(http);
+//! // The gateway's endpoint table, whose `tls` names the Secure Node's
+//! // client certificate and whose `url` is the gateway's SOAP endpoint.
+//! let (endpoint, tls) = configured();
+//! let client = XcpdClient::new(OutboundClient::build(&endpoint, "xcpd.endpoint", tls)?);
 //! let gateway = RespondingGateway::new(
 //!     Url::parse("https://xcpd.example.org/RespondingGateway")?,
 //!     Oid::new("2.999.50.1")?,
@@ -90,6 +96,8 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
+use ferrohealth_smart::client::outbound::OutboundClient;
+
 use crate::soap;
 use audit::{AuditEvent, AuditRecorder, EventOutcome, NetworkAccessPoint};
 use discovery::Discovery;
@@ -121,26 +129,30 @@ const SOAP_REQUEST: &str = "application/soap+xml; charset=UTF-8; action=\"urn:hl
 
 /// An XCPD Initiating Gateway, the client side of ITI-55.
 ///
-/// `Debug` leaves out the HTTP client, whose configuration may hold a
-/// credential.
+/// `Debug` shows whether the client carries a credential, never the
+/// credential itself.
 #[derive(Clone)]
 pub struct XcpdClient {
-    http: reqwest::Client,
+    client: OutboundClient,
     audit: Option<Arc<dyn AuditRecorder>>,
 }
 
 impl XcpdClient {
-    /// Creates a client sending through `http`.
+    /// Creates a client sending through `client`, to the gateways on the
+    /// origin of `client`'s URL.
     ///
-    /// `http` carries the transport the caller chose: the mutual TLS of the
-    /// ATNA Secure Node the actor is grouped with (ITI TF-1 Table 27.1.3-1),
-    /// and the trust roots of the network. Build it with
-    /// `redirect::Policy::none()`: the request body holds the patient
-    /// identifier, and a client that follows a `307` sends it wherever the
-    /// gateway points.
+    /// `client` carries the transport its endpoint table names: the mutual
+    /// TLS of the ATNA Secure Node the actor is grouped with (ITI TF-1 Table
+    /// 27.1.3-1), the trust roots of the network and the retry table. It
+    /// follows no redirect: the request body holds the patient identifier,
+    /// and a client that follows a `307` sends it wherever the gateway
+    /// points.
     #[must_use]
-    pub fn new(http: reqwest::Client) -> Self {
-        Self { http, audit: None }
+    pub fn new(client: OutboundClient) -> Self {
+        Self {
+            client,
+            audit: None,
+        }
     }
 
     /// This client, recording the audit message of every exchange through
@@ -160,9 +172,11 @@ impl XcpdClient {
     /// is read, and an audited client's record of it ([`ihe_atna::balp::recording`]).
     ///
     /// # Errors
-    /// An [`XcpdError`] for Case 5 of §3.55.4.2.3, a SOAP fault, an HTTP
-    /// status with no ITI-55 answer, a timeout, a transport failure, and an
-    /// answer that does not hold to ITI-55; when audited,
+    /// [`XcpdError::ForeignGateway`] before anything is sent or recorded for
+    /// a gateway off the client's origin; an [`XcpdError`] for Case 5 of
+    /// §3.55.4.2.3, a SOAP fault, an HTTP status with no ITI-55 answer, a
+    /// timeout, a transport failure, a credential that could not be had, and
+    /// an answer that does not hold to ITI-55; when audited,
     /// [`XcpdError::Audit`] for an audit message the recorder refused, or
     /// did not accept within `timeout` for an exchange that succeeded.
     pub async fn discover(
@@ -173,6 +187,11 @@ impl XcpdClient {
         on_behalf: &OnBehalfOf,
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
+        // NOTE: no specification governs this: our own design, so the client's
+        // credential and the patient identifier reach no gateway its table does not name.
+        if gateway.endpoint().origin() != self.client.url().origin() {
+            return Err(XcpdError::ForeignGateway);
+        }
         let deadline = ihe_atna::balp::recording::deadline(timeout);
         let ids = Ids::fresh();
         let written = request::envelope(query, gateway, &ids, assertion)?;
@@ -214,11 +233,13 @@ impl XcpdClient {
         timeout: Duration,
     ) -> Result<Discovery, XcpdError> {
         let answer = soap::post::<XcpdError>(
-            self.http.post(gateway.endpoint().clone()),
+            &self.client,
+            gateway.endpoint(),
             SOAP_REQUEST,
-            body,
+            &body,
             timeout,
             response::LIMIT,
+            |request| request,
         )
         .await?;
         response::read(
@@ -232,6 +253,8 @@ impl XcpdClient {
 
 impl fmt::Debug for XcpdClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("XcpdClient").finish_non_exhaustive()
+        f.debug_struct("XcpdClient")
+            .field("authorization", &self.client.authorization().is_some())
+            .finish_non_exhaustive()
     }
 }

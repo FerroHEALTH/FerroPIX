@@ -3,19 +3,21 @@
 
 //! The capabilities interaction against a stub PIX Manager (FHIR R4 http.html
 //! §capabilities): `GET [base]/metadata` through the client's transport and
-//! authorizer, and every outcome a typed answer.
+//! credential, and every outcome a typed answer.
 
-use std::sync::Arc;
-
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
+use ferrohealth_smart::config::credentials::CredentialsSection;
+use http::StatusCode;
 use http::header::{ACCEPT, AUTHORIZATION};
-use http::{HeaderMap, HeaderValue, Method, StatusCode};
-use ihe_iti::authorizer::{Authorizable, Authorized, Authorizer, Retry};
+use ihe_iti::pixm::PixmClient;
 use ihe_iti::pixm::capabilities::{CapabilitiesError, NotACapabilityStatement};
-use url::Url;
+use secrecy::SecretString;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{FHIR_JSON, PROMPT, client, unreachable_client};
+use super::{BASE, FHIR_JSON, PROMPT, client, unreachable_client};
+use crate::outbound::{build, endpoint};
 
 /// The capabilities path under the stub's FHIR base.
 const METADATA: &str = "/fhir/metadata";
@@ -44,23 +46,9 @@ async fn manager(status: u16, media: &str, body: &str) -> MockServer {
     server
 }
 
-/// An authorizer that hands out one fixed token.
-#[derive(Debug)]
-struct Fixed;
-
-impl Authorizer for Fixed {
-    fn authorize<'a>(&'a self, _method: &'a Method, _url: &'a Url) -> Authorized<'a> {
-        Box::pin(async move {
-            let mut headers = HeaderMap::new();
-            headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer token-1"));
-            Ok(headers)
-        })
-    }
-
-    fn answered(&self, _url: &Url, _status: StatusCode, _headers: &HeaderMap) -> Retry {
-        Retry::Done
-    }
-}
+/// The synthetic HTTP Basic credential of the endpoint table.
+const USER: &str = "synthetic-user";
+const PASSWORD: &str = "synthetic-password";
 
 #[tokio::test]
 async fn the_capability_statement_is_read_from_metadata() {
@@ -73,11 +61,12 @@ async fn the_capability_statement_is_read_from_metadata() {
 }
 
 #[tokio::test]
-async fn the_request_carries_the_authorizers_token() {
+async fn the_request_carries_the_tables_credential() {
     let server = MockServer::start().await;
+    let basic = format!("Basic {}", STANDARD.encode(format!("{USER}:{PASSWORD}")));
     Mock::given(method("GET"))
         .and(path(METADATA))
-        .and(header(AUTHORIZATION, "Bearer token-1"))
+        .and(header(AUTHORIZATION, basic.as_str()))
         .respond_with(
             ResponseTemplate::new(200).set_body_raw(STATEMENT.as_bytes().to_vec(), FHIR_JSON),
         )
@@ -90,8 +79,14 @@ async fn the_request_carries_the_authorizers_token() {
         .with_priority(2)
         .mount(&server)
         .await;
-    let answer = client(&server)
-        .with_authorizer(Arc::new(Fixed))
+    let mut table = endpoint(&format!("{}{BASE}", server.uri()));
+    table.credentials = CredentialsSection {
+        user: String::from(USER),
+        password: Some(SecretString::from(PASSWORD)),
+        ..CredentialsSection::default()
+    };
+    let answer = PixmClient::new(build(&table))
+        .expect("a client")
         .capabilities(PROMPT)
         .await;
     assert!(answer.is_ok(), "{answer:?}");

@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83),
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -30,7 +30,7 @@ include = ["src/**", "README.md", "LICENSE"]
 # the FHIR R4 `terminology` root set for Parameters and OperationOutcome, and
 # the redacting secret type the identifiers travel in.
 pixm = [
-  "authorizer",
+  "outbound",
   "rest",
   "dep:fhir-types",
   "dep:ihe-atna",
@@ -49,7 +49,7 @@ pixm = [
 # a search or a match answers with and the Parameters a match posts, and the
 # redacting secret type the demographics travel in.
 pdqm = [
-  "authorizer",
+  "outbound",
   "rest",
   "dep:fhir-types",
   "dep:ihe-atna",
@@ -79,7 +79,7 @@ pdqm-server = ["pdqm"]
 # root set for the Organization and Endpoint resources a directory publishes,
 # and the HTTP client of the ITI-90 searches and the ITI-91 history.
 mcsd = [
-  "authorizer",
+  "outbound",
   "rest",
   "dep:fhir-types",
   "fhir-types/r4",
@@ -104,7 +104,7 @@ pmir-server = ["pmir"]
 # an ITI-93 feed carries, and the redacting secret type the identifiers travel
 # in.
 pmir = [
-  "authorizer",
+  "outbound",
   "rest",
   "dep:fhir-types",
   "fhir-types/r4",
@@ -118,17 +118,18 @@ pmir = [
   "dep:thiserror",
   "dep:url",
 ]
-# The SOAP 1.2 envelope of ITI TF-2 Appendix V, read over the XML crate with
-# no profile, an answer's HTTP status and media type held to it, and the
-# HTTP post the envelope travels on: what XCPD sends and reads its messages
-# through, and what another crate's Appendix V transaction, such as the Mitz
-# question of `nl-generic-functions`, sends and reads its own through.
 # The FHIR R4 RESTful API pieces every FHIR client shares, with no FHIR
 # model: the JSON media types of an answer, which the NVI client of
 # `nl-generic-functions` reads its answers with too, and the family's FHIR
 # search value grammar every search and token is read and written with.
 rest = ["dep:fhir-search"]
-soap = ["dep:http", "dep:quick-xml", "dep:reqwest", "dep:thiserror"]
+# The SOAP 1.2 envelope of ITI TF-2 Appendix V, read over the XML crate with
+# no profile, an answer's HTTP status and media type held to it, and the
+# HTTP post the envelope travels on through the outbound client: what XCPD
+# sends and reads its messages through, and what another crate's Appendix V
+# transaction, such as the Mitz question of `nl-generic-functions`, sends
+# and reads its own through.
+soap = ["outbound", "dep:http", "dep:quick-xml", "dep:reqwest", "dep:thiserror"]
 # XCPD, cross-community patient discovery (ITI-55): the HTTP client the
 # SOAP 1.2 envelope travels on, the envelope reader of `soap`, the XML writer
 # of the envelope and the reader and writer of the HL7 v3 messages, the message and query ids, the creation time, the
@@ -158,20 +159,19 @@ xcpd = [
 # carries the time of its event, and the recorder's wait is bounded by the
 # exchange's own deadline.
 balp = ["dep:ihe-atna", "ihe-atna/balp", "dep:jiff", "dep:tokio"]
-# The authorizer a client supplies to authenticate each request when a fixed
-# header cannot (IUA ITI-72, and the DPoP proof of RFC 9449), and the send
-# that resends once when it asks, with no FHIR model: what the FHIR clients
-# here and the NVI client of `nl-generic-functions` send through.
-authorizer = ["dep:http", "dep:reqwest", "dep:thiserror", "dep:url"]
-# The IUA authorizer over the OAuth 2.0 client-credentials token of
-# `ferrohealth-smart`: the bearer token of each request taken from its
-# `TokenSource`, and a refused token dropped before the one resend.
-smart = [
-  "authorizer",
+# The outbound client every HTTP client of the crate is built from, with
+# no FHIR model: `ferrohealth-smart`'s `OutboundClient`, which an endpoint
+# table builds with its TLS, timeouts, retry and credential (HTTP Basic, or
+# the client credentials token with its `DPoP` proof and its one renewal on
+# a `401`), and the send that bounds an exchange by the caller's timeout.
+outbound = [
   "dep:ferrohealth-smart",
   "ferrohealth-smart/fetch",
   "dep:http",
+  "dep:reqwest",
   "dep:thiserror",
+  "dep:tokio",
+  "tokio/time",
   "dep:url",
 ]
 # ATNA, the audit record of XCPD: with `xcpd` the DICOM audit message of
@@ -199,6 +199,10 @@ uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
+# The endpoint tables the tests build each client's outbound client from.
+ferrohealth-config = { workspace = true }
+ferrohealth-secret = { workspace = true }
+ferrohealth-smart = { workspace = true, features = ["fetch", "server-tls"] }
 fhir-search = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true }

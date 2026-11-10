@@ -33,15 +33,20 @@
 //! ```no_run
 //! use std::time::Duration;
 //!
+//! use ferrohealth_smart::client::outbound::OutboundClient;
+//! use ferrohealth_smart::config::TlsBuilder;
+//! use ferrohealth_smart::config::endpoint::EndpointSection;
 //! use ihe_iti::pmir::PmirSubscriber;
 //! use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest};
 //! use url::Url;
 //!
+//! # fn configured() -> (EndpointSection, &'static dyn TlsBuilder) {
+//! #     unimplemented!("the product's configuration and its reader of TLS material")
+//! # }
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-//! let http = reqwest::Client::builder()
-//!     .redirect(reqwest::redirect::Policy::none())
-//!     .build()?;
-//! let subscriber = PmirSubscriber::new(Url::parse("https://pmir.example.org/fhir/")?, http)?;
+//! // The `[pmir.endpoint]` table, whose `url` is the Registry's FHIR base.
+//! let (endpoint, tls) = configured();
+//! let subscriber = PmirSubscriber::new(OutboundClient::build(&endpoint, "pmir.endpoint", tls)?)?;
 //! let request = SubscriptionRequest::new(
 //!     Criteria::identifier_system("urn:oid:2.999.1")?,
 //!     Url::parse("https://gateway.example.org/pmir/feed")?,
@@ -65,15 +70,17 @@ pub mod server;
 pub mod subscription;
 
 use std::fmt;
+#[cfg(feature = "balp")]
 use std::sync::Arc;
 use std::time::Duration;
 
-use http::StatusCode;
+use ferrohealth_smart::client::outbound::OutboundClient;
 use http::header::{ACCEPT, CONTENT_TYPE, LOCATION};
+use http::{Method, StatusCode};
 use url::Url;
 
-use crate::authorizer::{self, Authorizable, Authorizer};
-use crate::exchange::{self, Answer, Unanswered};
+use crate::exchange::{self, Answer};
+use crate::outbound;
 use crate::outcome;
 use error::{InvalidInput, SubscribeError, SubscriptionMalformation};
 use ihe_atna::redact::RedactedUrl;
@@ -85,63 +92,66 @@ const LIMIT: usize = 1 << 20;
 
 /// A Patient Identity Subscriber bound to one Patient Identity Registry.
 ///
-/// `Debug` shows the endpoint with its userinfo replaced by `***`, and leaves
-/// out the HTTP client, whose default headers may hold a credential.
+/// `Debug` shows the endpoint with its userinfo replaced by `***` and
+/// whether the subscriber carries a credential, never the credential
+/// itself.
 #[derive(Clone)]
 pub struct PmirSubscriber {
     endpoint: Url,
-    http: reqwest::Client,
-    authorizer: Option<Arc<dyn Authorizer>>,
+    client: OutboundClient,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
 
 impl PmirSubscriber {
-    /// Creates a subscriber for the Registry whose FHIR base URL is `base`.
+    /// Creates a subscriber for the Registry whose FHIR base URL is
+    /// `client`'s URL, reached through `client`.
     ///
-    /// `http` carries the transport the caller chose: TLS, client
-    /// certificates, default authorization headers, by which the Registry
-    /// authorizes the subscriber (§2:3.94.5). Build it with
-    /// `redirect::Policy::none()`, so the credentials go nowhere the base does
+    /// `client` carries the transport its endpoint table names: TLS, client
+    /// certificates and the credential every request carries, by which the
+    /// Registry authorizes the subscriber (§2:3.94.5), and the retry table.
+    /// It follows no redirect, so the credential goes nowhere the base does
     /// not name.
     ///
     /// # Errors
-    /// [`InvalidInput::Base`] when `base` is not an `http` or `https` URL
+    /// [`InvalidInput::Base`] when the URL is not an `http` or `https` URL
     /// without a query or a fragment.
-    pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidInput> {
-        let endpoint =
-            ihe_atna::fhir_base::under_base(base, "Subscription").ok_or(InvalidInput::Base)?;
+    pub fn new(client: OutboundClient) -> Result<Self, InvalidInput> {
+        let endpoint = ihe_atna::fhir_base::under_base(client.url().clone(), "Subscription")
+            .ok_or(InvalidInput::Base)?;
         Ok(Self {
             endpoint,
-            http,
-            authorizer: None,
+            client,
             #[cfg(feature = "balp")]
             audit: None,
         })
     }
 
-    /// Sends the request `request` builds, asking for FHIR JSON, within
-    /// `timeout`, authenticated by the authorizer when there is one.
+    /// Sends a `method` request to `url`, shaped by `prepare` and asking for
+    /// FHIR JSON, through the outbound client within `timeout`.
     async fn send(
         &self,
-        request: reqwest::RequestBuilder,
+        method: &Method,
+        url: &Url,
         timeout: Duration,
+        prepare: impl Fn(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, SubscribeError> {
-        let request = request
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(SubscribeError::failed)?;
-        authorizer::send(&self.http, self.authorizer.as_deref(), request, timeout).await
+        outbound::send(&self.client, method, url, timeout, |request| {
+            prepare(request).header(ACCEPT, FHIR_JSON)
+        })
+        .await
     }
 
-    /// Sends the request `request` builds as [`PmirSubscriber::send`] does,
-    /// and reads its answer whole.
+    /// Sends a `method` request with no body to `url` as
+    /// [`PmirSubscriber::send`] does, and reads its answer whole.
     async fn exchange(
         &self,
-        request: reqwest::RequestBuilder,
+        method: &Method,
+        url: &Url,
         timeout: Duration,
     ) -> Result<Answer, SubscribeError> {
-        exchange::read(self.send(request, timeout).await?, LIMIT, too_large).await
+        let response = self.send(method, url, timeout, |request| request).await?;
+        exchange::read(response, LIMIT, too_large).await
     }
 
     /// This subscriber, recording the audit record of every exchange with
@@ -220,7 +230,7 @@ impl PmirSubscriber {
         request: &SubscriptionRequest,
         timeout: Duration,
     ) -> Result<subscription::Search, SubscribeError> {
-        let answer = self.exchange(self.http.get(url.clone()), timeout).await?;
+        let answer = self.exchange(&Method::GET, url, timeout).await?;
         if matches!(
             answer.status,
             StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND
@@ -283,12 +293,11 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<Subscribed, SubscribeError> {
         let body = serde_json::to_vec(&request.resource()).map_err(SubscribeError::Unwritable)?;
-        let built = self
-            .http
-            .post(self.endpoint.clone())
-            .header(CONTENT_TYPE, FHIR_JSON)
-            .body(body);
-        let response = self.send(built, timeout).await?;
+        let response = self
+            .send(&Method::POST, &self.endpoint, timeout, |request| {
+                request.header(CONTENT_TYPE, FHIR_JSON).body(body.clone())
+            })
+            .await?;
         let location = response
             .headers()
             .get(LOCATION)
@@ -341,7 +350,7 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<SubscriptionStatus, SubscribeError> {
         let answer = self
-            .exchange(self.http.get(subscribed.location().clone()), timeout)
+            .exchange(&Method::GET, subscribed.location(), timeout)
             .await?;
         if answer.status != StatusCode::OK {
             return Err(rejected(&answer));
@@ -390,7 +399,7 @@ impl PmirSubscriber {
         timeout: Duration,
     ) -> Result<(), SubscribeError> {
         let answer = self
-            .exchange(self.http.delete(subscribed.location().clone()), timeout)
+            .exchange(&Method::DELETE, subscribed.location(), timeout)
             .await?;
         if matches!(
             answer.status,
@@ -406,18 +415,11 @@ impl PmirSubscriber {
     }
 }
 
-impl Authorizable for PmirSubscriber {
-    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-}
-
 impl fmt::Debug for PmirSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PmirSubscriber")
             .field("endpoint", &RedactedUrl(self.endpoint.as_str()))
-            .field("authorizer", &self.authorizer.is_some())
+            .field("authorization", &self.client.authorization().is_some())
             .finish_non_exhaustive()
     }
 }

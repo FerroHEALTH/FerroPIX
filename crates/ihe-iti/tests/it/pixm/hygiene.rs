@@ -10,13 +10,12 @@ use std::error::Error;
 use std::fmt::Write;
 use std::time::Duration;
 
+use ferrohealth_smart::config::credentials::CredentialsSection;
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pixm::error::PixmError;
 use ihe_iti::pixm::identifier::{CrossReference, SourceIdentifier};
 use ihe_iti::pixm::{Invocation, PixmClient};
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -24,6 +23,7 @@ use super::{
     BLUE, FHIR_JSON, OPERATION, PROMPT, RED, client, manager, outcome, posting_client,
     posting_manager, target, unreachable_client,
 };
+use crate::outbound::{build, endpoint};
 use crate::timing;
 
 /// A value that must appear nowhere but in the request to the Manager.
@@ -222,19 +222,13 @@ async fn no_failure_of_a_posted_query_carries_the_identifier() {
 
 #[test]
 fn a_client_shows_no_credential() {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {TOKEN}")).expect("a header value"),
-    );
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .default_headers(headers)
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse(&format!("https://{USER}:{PASSWORD}@pix.example.org/fhir/"))
-        .expect("a base with userinfo");
-    let client = PixmClient::new(base, http).expect("a client");
+    let mut table = endpoint(&format!("https://{USER}:{PASSWORD}@pix.example.org/fhir/"));
+    table.credentials = CredentialsSection {
+        user: String::from(USER),
+        password: Some(SecretString::from(TOKEN)),
+        ..CredentialsSection::default()
+    };
+    let client = PixmClient::new(build(&table)).expect("a client");
     for shown in [format!("{client:?}"), format!("{client:#?}")] {
         for credential in [USER, PASSWORD, TOKEN] {
             assert!(!shown.contains(credential), "{shown}");

@@ -11,8 +11,8 @@
 )]
 
 mod answers;
-mod authorizer;
 mod contract;
+mod credential;
 mod hygiene;
 
 use std::time::Duration;
@@ -21,7 +21,6 @@ use nl_generic_functions::identification::PseudoBsn;
 use nl_generic_functions::nvi::NviClient;
 use secrecy::SecretString;
 use serde_json::{Value, json};
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -44,12 +43,7 @@ pub(crate) fn patient() -> PseudoBsn {
 
 /// A client of the stub service, following no redirect.
 pub(crate) fn client(server: &MockServer) -> NviClient {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse(&format!("{}/fhir", server.uri())).expect("a base URL");
-    NviClient::new(base, http).expect("a client")
+    NviClient::new(crate::outbound::outbound(&format!("{}/fhir", server.uri()))).expect("a client")
 }
 
 /// A client of a service nobody listens for.
@@ -59,12 +53,7 @@ pub(crate) fn client(server: &MockServer) -> NviClient {
 /// can stand for an unreachable service. Port 0 is never listened on, so a
 /// connection to it fails at once.
 pub(crate) fn unreachable_client() -> NviClient {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse("http://127.0.0.1:0/fhir").expect("a base URL");
-    NviClient::new(base, http).expect("a client")
+    NviClient::new(crate::outbound::outbound("http://127.0.0.1:0/fhir")).expect("a client")
 }
 
 /// A localization record of the IG's profile, the example's shape: `status`

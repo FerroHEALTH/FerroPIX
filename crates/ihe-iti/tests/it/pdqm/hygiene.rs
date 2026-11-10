@@ -15,9 +15,7 @@ use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pdqm::PdqmClient;
 use ihe_iti::pdqm::error::PdqmError;
 use ihe_iti::pdqm::query::{PatientQuery, StringMatch};
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
-use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -261,19 +259,14 @@ async fn a_match_shows_no_demographics() {
 
 #[test]
 fn a_client_shows_no_credential() {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {TOKEN}")).expect("a header value"),
-    );
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .default_headers(headers)
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse(&format!("https://{USER}:{PASSWORD}@pdq.example.org/fhir/"))
-        .expect("a base with userinfo");
-    let client = PdqmClient::new(base, http).expect("a client");
+    let mut table =
+        crate::outbound::endpoint(&format!("https://{USER}:{PASSWORD}@pdq.example.org/fhir/"));
+    table.credentials = ferrohealth_smart::config::credentials::CredentialsSection {
+        user: String::from(USER),
+        password: Some(SecretString::from(TOKEN)),
+        ..ferrohealth_smart::config::credentials::CredentialsSection::default()
+    };
+    let client = PdqmClient::new(crate::outbound::build(&table)).expect("a client");
     for shown in [format!("{client:?}"), format!("{client:#?}")] {
         for credential in [USER, PASSWORD, TOKEN] {
             assert!(!shown.contains(credential), "{shown}");

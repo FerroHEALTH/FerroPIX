@@ -10,7 +10,6 @@ use std::collections::BTreeSet;
 use ihe_atna::user::OnBehalfOf;
 use ihe_iti::pixm::{Invocation, PixmClient};
 use serde::Deserialize;
-use url::Url;
 use wiremock::{MockServer, Request};
 
 use super::{
@@ -252,8 +251,8 @@ async fn posted(server: &MockServer) -> (Request, PostedParameters) {
 
 #[test]
 fn a_client_asks_with_the_get_iti_83_prescribes_unless_told_otherwise() {
-    let base = Url::parse("https://pix.example.org/fhir/").expect("a base");
-    let client = PixmClient::new(base, reqwest::Client::new()).expect("a client");
+    let client = PixmClient::new(crate::outbound::outbound("https://pix.example.org/fhir/"))
+        .expect("a client");
     assert_eq!(
         client.invocation(),
         Invocation::Get,

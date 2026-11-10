@@ -8,7 +8,6 @@
 use ihe_iti::mcsd::client::{CareResource, CareService, McsdClient, Version};
 use ihe_iti::mcsd::error::{Malformation, McsdError};
 use ihe_iti::outcome::IssueType;
-use url::Url;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -351,14 +350,9 @@ async fn a_page_link_to_another_origin_is_not_followed() {
 
 #[tokio::test]
 async fn an_unreachable_directory_did_not_answer() {
-    let base = Url::parse(&format!("http://127.0.0.1:0{BASE}")).expect("a base");
-    let client = McsdClient::new(
-        base,
-        reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .expect("an HTTP client"),
-    )
+    let client = McsdClient::new(crate::outbound::outbound(&format!(
+        "http://127.0.0.1:0{BASE}"
+    )))
     .expect("a client");
     let error = client
         .find(CareService::Organization, &[], &mut budget())
@@ -374,9 +368,8 @@ fn a_base_with_a_query_or_another_scheme_is_refused() {
         "ftp://directory.example.org/fhir",
         "urn:oid:2.999.1",
     ] {
-        let http = reqwest::Client::new();
         assert!(
-            McsdClient::new(Url::parse(base).expect("a URL"), http).is_err(),
+            McsdClient::new(crate::outbound::outbound(base)).is_err(),
             "{base}"
         );
     }
@@ -384,8 +377,10 @@ fn a_base_with_a_query_or_another_scheme_is_refused() {
 
 #[test]
 fn the_debug_of_a_client_hides_the_userinfo_of_its_base() {
-    let base = Url::parse("https://user:Qz7Sentinel@directory.example.org/fhir").expect("a URL");
-    let client = McsdClient::new(base, reqwest::Client::new()).expect("a client");
+    let client = McsdClient::new(crate::outbound::outbound(
+        "https://user:Qz7Sentinel@directory.example.org/fhir",
+    ))
+    .expect("a client");
     let rendered = format!("{client:?}");
     assert!(!rendered.contains("Qz7Sentinel"), "{rendered}");
     assert!(rendered.contains("directory.example.org"), "{rendered}");

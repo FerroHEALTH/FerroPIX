@@ -18,17 +18,19 @@
 
 mod response;
 
+use ferrohealth_smart::client::outbound::OutboundClient;
 use fhir_types::r4::endpoint::Endpoint;
 use fhir_types::r4::organization::Organization;
+use http::Method;
 use http::header::{ACCEPT, CONTENT_TYPE, DATE};
 use std::fmt;
+#[cfg(feature = "balp")]
 use std::sync::Arc;
 use url::Url;
 
 use super::budget::Budget;
 use super::error::{InvalidBase, McsdError};
-use crate::authorizer::{self, Authorizable, Authorizer};
-use crate::exchange::Unanswered;
+use crate::outbound;
 
 use ihe_atna::redact::RedactedUrl;
 
@@ -257,15 +259,14 @@ impl Updates {
 
 /// A Query Client and Update Client bound to one care services directory.
 ///
-/// `Debug` shows the base with its userinfo and query replaced by `***`, and
-/// leaves out the HTTP client, whose default headers may hold a credential.
+/// `Debug` shows the base with its userinfo and query replaced by `***` and
+/// whether the client carries a credential, never the credential itself.
 #[derive(Clone)]
 pub struct McsdClient {
     base: Url,
     organization: Interactions,
     endpoint: Interactions,
-    http: reqwest::Client,
-    authorizer: Option<Arc<dyn Authorizer>>,
+    client: OutboundClient,
     #[cfg(feature = "balp")]
     audit: Option<Arc<dyn ihe_atna::balp::AuditRecorder>>,
 }
@@ -294,24 +295,25 @@ impl Interactions {
 }
 
 impl McsdClient {
-    /// Creates a client for the directory whose FHIR base URL is `base`.
+    /// Creates a client for the directory whose FHIR base URL is `client`'s
+    /// URL, reached through `client`.
     ///
-    /// `http` carries the transport the caller chose: TLS, client
-    /// certificates, default authorization headers (ITI TF-2 Appendix Z.8).
-    /// Build it with `redirect::Policy::none()`, so a `3xx` is an error like
-    /// any other unexpected status and never takes the credentials elsewhere.
+    /// `client` carries the transport its endpoint table names: TLS, client
+    /// certificates, the credential every request carries (ITI TF-2 Appendix
+    /// Z.8) and the retry table. It follows no redirect, so a `3xx` is an
+    /// error like any other unexpected status and never takes the credential
+    /// elsewhere.
     ///
     /// # Errors
-    /// [`InvalidBase`] when `base` is not an `http` or `https` URL without a
+    /// [`InvalidBase`] when the URL is not an `http` or `https` URL without a
     /// query or a fragment.
-    pub fn new(base: Url, http: reqwest::Client) -> Result<Self, InvalidBase> {
-        let base = ihe_atna::fhir_base::under_base(base, "").ok_or(InvalidBase)?;
+    pub fn new(client: OutboundClient) -> Result<Self, InvalidBase> {
+        let base = ihe_atna::fhir_base::under_base(client.url().clone(), "").ok_or(InvalidBase)?;
         Ok(Self {
             organization: Interactions::of(&base, CareService::Organization)?,
             endpoint: Interactions::of(&base, CareService::Endpoint)?,
             base,
-            http,
-            authorizer: None,
+            client,
             #[cfg(feature = "balp")]
             audit: None,
         })
@@ -489,17 +491,12 @@ impl McsdClient {
         if url.origin() != self.base.origin() {
             return Err(McsdError::ForeignPage);
         }
-        let request = self
-            .http
-            .get(url)
-            .header(ACCEPT, FHIR_JSON)
-            .build()
-            .map_err(McsdError::failed)?;
-        let answer = authorizer::send::<McsdError>(
-            &self.http,
-            self.authorizer.as_deref(),
-            request,
+        let answer = outbound::send::<McsdError, _>(
+            &self.client,
+            &Method::GET,
+            &url,
             budget.remaining()?,
+            |request| request.header(ACCEPT, FHIR_JSON),
         )
         .await?;
         let status = answer.status();
@@ -518,18 +515,11 @@ impl McsdClient {
     }
 }
 
-impl Authorizable for McsdClient {
-    fn with_authorizer(mut self, authorizer: Arc<dyn Authorizer>) -> Self {
-        self.authorizer = Some(authorizer);
-        self
-    }
-}
-
 impl fmt::Debug for McsdClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("McsdClient")
             .field("base", &RedactedUrl(self.base.as_str()))
-            .field("authorizer", &self.authorizer.is_some())
+            .field("authorization", &self.client.authorization().is_some())
             .finish_non_exhaustive()
     }
 }

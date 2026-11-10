@@ -10,7 +10,10 @@
 
 use http::StatusCode;
 
+use ferrohealth_smart::client::outbound::SendError;
+
 use crate::exchange::Unanswered;
+use crate::outbound::Unauthenticated;
 use crate::soap::{self, FaultCode, Refusal};
 
 /// An argument the client refuses before anything is sent.
@@ -73,6 +76,14 @@ pub enum XcpdError {
     /// The request could not be sent or the answer could not be read.
     #[error("the responding gateway could not be reached")]
     Transport(#[source] reqwest::Error),
+    /// No token could be obtained for the request, or a refused one renewed
+    /// (IUA ITI-72 §3.72.4.3).
+    #[error("the request to the responding gateway could not be authenticated")]
+    Unauthenticated(#[source] SendError),
+    /// The gateway is not on the origin of the client's outbound client, so
+    /// nothing was sent.
+    #[error("the responding gateway is not on the client's origin")]
+    ForeignGateway,
     /// The request could not be written.
     #[error("the ITI-55 request could not be written")]
     Encode(#[source] std::io::Error),
@@ -99,7 +110,12 @@ impl XcpdError {
             Self::ApplicationError { .. } | Self::QueryRefused | Self::Malformed(_) => {
                 Some(StatusCode::OK)
             }
-            Self::Timeout | Self::Transport(_) | Self::Encode(_) | Self::Audit(_) => None,
+            Self::Timeout
+            | Self::Transport(_)
+            | Self::Unauthenticated(_)
+            | Self::ForeignGateway
+            | Self::Encode(_)
+            | Self::Audit(_) => None,
         }
     }
 }
@@ -203,6 +219,12 @@ impl Unanswered for XcpdError {
 
     fn transport(source: reqwest::Error) -> Self {
         Self::Transport(source)
+    }
+}
+
+impl Unauthenticated for XcpdError {
+    fn unauthenticated(source: SendError) -> Self {
+        Self::Unauthenticated(source)
     }
 }
 

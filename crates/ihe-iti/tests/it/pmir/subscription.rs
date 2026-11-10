@@ -125,12 +125,7 @@ async fn a_refused_subscription_keeps_the_status_and_the_issue_codes() {
 
 #[tokio::test]
 async fn an_unreachable_registry_is_a_transport_failure() {
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    let base = Url::parse("http://127.0.0.1:0/fhir/").expect("a base");
-    let error = PmirSubscriber::new(base, http)
+    let error = PmirSubscriber::new(crate::outbound::outbound("http://127.0.0.1:0/fhir/"))
         .expect("a subscriber")
         .subscribe(&request(), PROMPT)
         .await

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! What every HTTP client of the crate does with one exchange, with features
-//! `authorizer` or `soap`: the answer read up to a bound, and a failure to
+//! What every HTTP client of the crate does with one exchange, with feature
+//! `outbound`: the answer read up to a bound, and a failure to
 //! get one read as the client's own error.
 //!
 //! A request URL may hold a patient identifier, a search criterion or the

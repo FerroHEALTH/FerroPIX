@@ -12,16 +12,18 @@ own functions in the Netherlands.
 
 | Feature | Generic Function | Service | What the crate holds |
 |---|---|---|---|
-| `nvi` | GF-Localization | the national index (NVI) | the Localization Service search: which care providers (by URA) hold data for a patient (by pseudonymised BSN), each request authenticated by the transport, a default header, or an authorizer the caller supplies that makes its headers, as a `DPoP`-bound token needs |
+| `nvi` | GF-Localization | the national index (NVI) | the Localization Service search: which care providers (by URA) hold data for a patient (by pseudonymised BSN), each request carrying the credential of its endpoint table, a `DPoP`-bound token with a proof of the request among them |
 | `mitz` | GF-Consent | Mitz | the closed authorization question ("gesloten autorisatievraag"): may a data holder make a patient's data of each category available to a data user, asked on the BSN and answered `Permit` or `Deny` |
 | `lrza` | GF-Addressing | the national address book (LRZa) | the URA of an NL-GF `Organization`, so a directory reader can join a localization custodian to its organisation |
 | `nuts-auth` | GF-Authentication | the Nuts profile | the access token request of Nuts RFC021: the authorization server metadata, the Presentation Definition for a scope, a JWT Verifiable Presentation of the holder's credentials signed with its `did:web` key, and a `DPoP`-bound token, proven through a prover the caller supplies; and the holder's DID document, built from its keys, with the path its `did:web` DID resolves to |
 
-The NVI client authenticates each request through the authorizer of
-[`ihe-iti`](https://crates.io/crates/ihe-iti) (its `authorizer` feature): a
-data user implements `ihe_iti::authorizer::Authorizer` to give each request to
-a Generic Function its own headers, as the `DPoP`-bound token of
-GF-Authentication needs (the IG's GFI-005), with no FHIR model.
+The NVI and Mitz clients are built from the `OutboundClient` of
+[`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) that their
+endpoint table builds, and send through the `outbound` feature of
+[`ihe-iti`](https://crates.io/crates/ihe-iti): the table's TLS (the mutual
+TLS Mitz requires), its timeouts, no redirect, its `retry` table and its
+credential, HTTP Basic or a client credentials token, with a proof of each
+request for the `DPoP`-bound token of GF-Authentication (the IG's GFI-005).
 
 The identifier systems the functions share (the pseudonymised BSN and the
 URA) are in `identification`, compiled with `nvi`, `lrza` or `mitz`.
@@ -33,7 +35,7 @@ XACML 3.0 body is read here.
 
 The NVI client never puts the pseudonym in an error, a `Debug` rendering or
 anything but the request to the service, and it follows a `next` link only on
-its own search endpoint. An authorizer is handed the request URL without its
+its own search endpoint. A `DPoP` proof names the request URL without its
 query, so the pseudonym never reaches it.
 
 The Nuts client never puts a credential, the presentation, a key, a proof or

@@ -17,6 +17,11 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
+use ferrohealth_config::units::Duration as Span;
+use ferrohealth_secret::secret_url::SecretUrl;
+use ferrohealth_smart::client::outbound::OutboundClient;
+use ferrohealth_smart::config::ServerTls;
+use ferrohealth_smart::config::endpoint::{EndpointSection, RetrySection};
 use ferropix_server::audit::Audit;
 use ferropix_server::config::section::matching::Matching;
 use ferropix_server::config::section::xcpd::{Xcpd, XcpdSettings};
@@ -281,7 +286,8 @@ async fn discover(
     community: &str,
     value: &str,
 ) -> Result<Discovery, XcpdError> {
-    let endpoint = url::Url::parse(&format!("http://{address}/xcpd")).expect("a URL");
+    let url = format!("http://{address}/xcpd");
+    let endpoint = url::Url::parse(&url).expect("a URL");
     let target = RespondingGateway::unencrypted_for_development(endpoint, oid(DEVICE))
         .expect("a development gateway");
     let identifier = PatientIdentifier::new(
@@ -292,11 +298,18 @@ async fn discover(
     let query = DiscoveryQuery::new(oid(SENDER), identifier)
         .sent_for(HomeCommunityId::new(oid(community)))
         .processing(ProcessingCode::Production);
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("an HTTP client");
-    XcpdClient::new(http)
+    let table = EndpointSection {
+        url: SecretUrl::new(&url),
+        timeout: Span::from_secs(30),
+        retry: RetrySection {
+            max_attempts: 1,
+            ..RetrySection::default()
+        },
+        ..EndpointSection::default()
+    };
+    let client =
+        OutboundClient::build(&table, "xcpd.endpoint", &ServerTls).expect("the outbound client");
+    XcpdClient::new(client)
         .discover(
             &target,
             &query,

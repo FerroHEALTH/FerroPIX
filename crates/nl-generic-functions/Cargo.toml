@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -26,12 +26,15 @@ include = ["src/**", "README.md", "LICENSE"]
 [features]
 # GF-Localization through the national index (NVI): the HTTP client of the
 # Localization Service search, the FHIR R4 `resources` root set for the
-# Bundle of DocumentReference records it answers with, each request
-# authenticated through the authorizer of `ihe-iti` (the IG's GFI-005), and the
-# redacting secret type the pseudonymised patient identifier travels in.
+# Bundle of DocumentReference records it answers with, each request sent
+# through `ferrohealth-smart`'s outbound client and the send of `ihe-iti`,
+# which carry its credential (the IG's GFI-005), and the redacting secret
+# type the pseudonymised patient identifier travels in.
 nvi = [
+  "dep:ferrohealth-smart",
+  "ferrohealth-smart/fetch",
   "dep:ihe-iti",
-  "ihe-iti/authorizer",
+  "ihe-iti/outbound",
   "ihe-iti/rest",
   "dep:fhir-search",
   "dep:fhir-types",
@@ -48,9 +51,11 @@ nvi = [
 # closed authorization question of the Mitz afsprakenstelsel, a SOAP 1.2
 # request under ITI TF-2 Appendix V with an XACML 3.0 decision query, written
 # with the XML crate, its answer's envelope read by the Appendix V reader of
-# `ihe-iti`, sent over HTTP with a request id, and the redacting secret type
-# the BSN travels in.
+# `ihe-iti`, sent through `ferrohealth-smart`'s outbound client with a
+# request id, and the redacting secret type the BSN travels in.
 mitz = [
+  "dep:ferrohealth-smart",
+  "ferrohealth-smart/fetch",
   "dep:http",
   "dep:ihe-iti",
   "ihe-iti/soap",
@@ -100,11 +105,12 @@ http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 # The SOAP 1.2 envelope of ITI TF-2 Appendix V, which the Mitz question is
-# held to, and the authorizer and send the NVI client authenticates through;
+# held to, and the send the NVI client and the Mitz client go through;
 # the international crate sits below the national one, and a caret
 # requirement, as a shared crate takes on another family shared crate.
-ihe-iti = { version = "0.1.0", path = "../ihe-iti", default-features = false, optional = true }
-# The RFC 8414 issuer URL rule and metadata location the Nuts grant holds its
+ihe-iti = { version = "0.2.0", path = "../ihe-iti", default-features = false, optional = true }
+# The outbound client the NVI and Mitz clients are built from, and the RFC
+# 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.
 ferrohealth-smart = { version = "0.16.0", default-features = false, optional = true }
@@ -118,10 +124,16 @@ url = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+# The endpoint tables the tests build each client's outbound client from.
+ferrohealth-config = { workspace = true }
+ferrohealth-secret = { workspace = true }
+ferrohealth-smart = { workspace = true, features = ["fetch", "server-tls"] }
 # The synthetic keys and the Nuts node the tests run against.
 aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
 pem = { workspace = true }
+rcgen = { workspace = true }
+tempfile = { workspace = true }
 fhir-types = { workspace = true, features = ["r4", "resources"] }
 http = { workspace = true }
 jiff = { workspace = true }

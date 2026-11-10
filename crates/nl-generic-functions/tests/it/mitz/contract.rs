@@ -7,29 +7,31 @@
 
 use nl_generic_functions::identification::Ura;
 use nl_generic_functions::mitz::MitzClient;
-use nl_generic_functions::mitz::error::{ClientError, InvalidInput};
+use nl_generic_functions::mitz::error::InvalidInput;
 use nl_generic_functions::mitz::question::{
     Bsn, CareProviderType, ClosedQuestion, DataCategory, DataHolder, DataUser, MAX_CATEGORIES,
     ProfessionalId, Purpose, RoleCode,
 };
 use secrecy::SecretString;
-use url::Url;
 
 use super::{HOLDER, PATIENT, USER};
 
 fn refused(endpoint: &str) -> bool {
-    let url = Url::parse(endpoint).expect("a URL");
     matches!(
-        MitzClient::new(url, reqwest::Client::builder()),
-        Err(ClientError::Endpoint(InvalidInput::Endpoint))
+        MitzClient::new(crate::outbound::outbound(endpoint)),
+        Err(InvalidInput::Endpoint)
     )
 }
 
 #[test]
 fn an_endpoint_without_tls_is_refused_outside_development() {
     assert!(refused("http://mitz.example.org/vraag"));
-    let url = Url::parse("http://mitz.example.org/vraag").expect("a URL");
-    assert!(MitzClient::unencrypted_for_development(url, reqwest::Client::builder()).is_ok());
+    assert!(
+        MitzClient::unencrypted_for_development(crate::outbound::outbound(
+            "http://mitz.example.org/vraag"
+        ))
+        .is_ok()
+    );
 }
 
 #[test]

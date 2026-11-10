@@ -16,13 +16,16 @@
 
 use std::time::Duration;
 
-use http::StatusCode;
+use ferrohealth_smart::client::outbound::OutboundClient;
 use http::header::{ACCEPT, CONTENT_TYPE};
+use http::{Method, StatusCode};
 use quick_xml::events::{BytesDecl, BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::{NsReader, Writer};
+use url::Url;
 
-use crate::exchange::{self, Unanswered};
+use crate::exchange;
+use crate::outbound::{self, Unauthenticated};
 
 /// The SOAP 1.2 envelope namespace (SOAP 1.2 Part 1 §5).
 pub const ENVELOPE: &str = "http://www.w3.org/2003/05/soap-envelope";
@@ -311,8 +314,8 @@ pub fn write(
 }
 
 /// A client error that a SOAP 1.2 exchange over HTTP ends in, besides the
-/// failures of [`Unanswered`].
-pub trait Refusal: Unanswered {
+/// failures of [`Unanswered`](exchange::Unanswered) and [`Unauthenticated`].
+pub trait Refusal: Unauthenticated {
     /// The endpoint answered `status`, a status other than `200`, with a
     /// body longer than the client reads.
     fn rejected(status: StatusCode) -> Self;
@@ -321,30 +324,36 @@ pub trait Refusal: Unanswered {
     fn too_large(limit: usize) -> Self;
 }
 
-/// Posts the SOAP 1.2 message `body` with the media type `media_type`, its
-/// action parameter included (RFC 3902), through `request` within `timeout`,
-/// and reads the answer whole up to `limit` bytes.
+/// Posts the SOAP 1.2 message `body` to `url` through `client` within
+/// `timeout`, and reads the answer whole up to `limit` bytes.
+///
+/// The post carries the media type `media_type`, its action parameter
+/// included (RFC 3902), and the headers `headers` adds. `client` tries the post again as its `retry` table allows, so `headers`
+/// gives every try the same headers.
 ///
 /// # Errors
 ///
 /// [`Refusal::too_large`] for a `200` longer than `limit`,
-/// [`Refusal::rejected`] for any other status that is, and
-/// [`Unanswered::failed`] when no answer arrives.
+/// [`Refusal::rejected`] for any other status that is,
+/// [`failed`](exchange::Unanswered::failed) or [`timeout`](exchange::Unanswered::timeout) when no answer
+/// arrives, and [`Unauthenticated::unauthenticated`] when no credential
+/// could be had.
 pub async fn post<E: Refusal>(
-    request: reqwest::RequestBuilder,
+    client: &OutboundClient,
+    url: &Url,
     media_type: &'static str,
-    body: Vec<u8>,
+    body: &[u8],
     timeout: Duration,
     limit: usize,
+    headers: impl Fn(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
 ) -> Result<exchange::Answer, E> {
-    let response = request
-        .header(CONTENT_TYPE, media_type)
-        .header(ACCEPT, MEDIA_TYPE)
-        .timeout(timeout)
-        .body(body)
-        .send()
-        .await
-        .map_err(E::failed)?;
+    let response = outbound::send::<E, _>(client, &Method::POST, url, timeout, |request| {
+        headers(request)
+            .header(CONTENT_TYPE, media_type)
+            .header(ACCEPT, MEDIA_TYPE)
+            .body(body.to_vec())
+    })
+    .await?;
     exchange::read(response, limit, |status| {
         if status == StatusCode::OK {
             E::too_large(limit)

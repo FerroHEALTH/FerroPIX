@@ -160,7 +160,7 @@ fn enveloped(body: &str) -> String {
 /// Asks a stub answering `body` with the crate's Initiating Gateway client.
 async fn discovered(body: String) -> Result<Discovery, XcpdError> {
     let server = gateway(Templated::new(200, SOAP_XML, body)).await;
-    client()
+    client(&server)
         .discover(
             &responding(&server),
             &discovery_query(),

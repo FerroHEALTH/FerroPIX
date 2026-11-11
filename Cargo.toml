@@ -102,15 +102,15 @@ ferrohealth-usage-report = { version = "=0.4.0", default-features = false }
 # parser, the original-mode acknowledgment and the message writer, over the
 # generated v2 tables, by a caret range as every FerroBRIDGE crate above.
 # The server adds `map`, the generated v2-to-FHIR structure maps a PID runs
-# through. Verified against crates.io on 2026-11-10 (0.6.0, on
-# ferrobridge-term 0.4, #591).
-ferrobridge-hl7v2 = { version = "0.6.0", default-features = false }
+# through. Verified against crates.io on 2026-11-11 (0.8.0, on
+# ferrobridge-term 0.5, #624).
+ferrobridge-hl7v2 = { version = "0.8.0", default-features = false }
 hl7v2-types = "0.1.128"
 # FerroBRIDGE's FHIR terminology client, the one `ferrobridge-hl7v2` translates
 # every v2 table value through (`ConceptMap/$translate`), with `smart` for
 # the client built from `[terminology.endpoint]` over ferrohealth-smart's
 # outbound client, at the version that crate pins. Verified against
-# crates.io on 2026-11-10 (0.5.0, on ferrohealth-smart 0.18, #624).
+# crates.io on 2026-11-11 (0.5.0, on ferrohealth-smart 0.18, #624).
 ferrobridge-term = { version = "0.5.0", default-features = false, features = ["client", "r4", "smart"] }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`

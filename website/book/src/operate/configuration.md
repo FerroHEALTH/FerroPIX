@@ -258,7 +258,9 @@ one of the `[[auth.issuer]]` issuers signed, or, for an issuer under
 `mode = "introspection"`, a token that issuer's introspection endpoint
 vouches for. `[auth]` is the section every FerroHEALTH server shares, read by
 `ferrohealth-smart`, the FerroHEALTH resource server: each issuer is an
-`https` URL (plain `http` on a loopback host) with its `kind`, at least one
+`https` URL (plain `http` on a loopback host, and never with a user or
+password in it, which refuses the start and appears in no output) with its
+`kind`, at least one
 audience is set on each, and only asymmetric algorithms are admitted. A
 section with no issuer and no Basic user is refused, and so is
 `enabled = false`: FerroPIX always authenticates its callers.

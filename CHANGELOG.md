@@ -13,6 +13,16 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.28] - 2026-11-11
+
+### Fixed
+
+- `ferropix-console config check` and every other rendering of the console's configuration
+  show an `[oidc]` issuer, `redirect_uri` or `post_logout_redirect_uri`
+  written with userinfo as `https://***@…`, never its password. The console
+  moves to `ferrohealth-session` 0.13, which holds the three URLs as
+  `SecretUrl` (#627).
+
 ## [0.0.27] - 2026-11-11
 
 ### Added

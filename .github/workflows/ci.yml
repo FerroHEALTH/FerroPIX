@@ -146,7 +146,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          for guard in comment-style versions fast file-length todo-issues crate-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
+          for guard in comment-style versions fast file-length todo-issues crate-version-guard chart-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: self-tests / The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
@@ -503,6 +503,55 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2086 # one crate name per word by construction
           bash scripts/checks/semver.sh --baseline-rev "$BASE" $JUDGED
+
+  # A published chart version is immutable, and build-chart.yml refuses one the
+  # registry holds with other files only at publish time, after the rest of a
+  # release has shipped. So a change to the packaged chart (deploy/helm/ferropix/,
+  # its appVersion and values included) raises the chart version here, unless
+  # the `no-chart-bump` label says the diff changes no packaged byte (#632).
+  chart-version-guard:
+    name: chart-version-guard
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # the labels when the step runs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: A change to the packaged chart raises the chart version
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Read when the step runs: a re-run replays the event payload (#133).
+          NO_CHART_BUMP=$(gh api "repos/${GH_REPO}/pulls/${PR}" --jq 'any(.labels[].name; . == "no-chart-bump")')
+          export NO_CHART_BUMP
+          bash scripts/checks/chart-version-guard.sh "$BASE" "$HEAD"
+      - name: The queued change raises the chart version against the queue base
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          BASE: ${{ github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          pr="$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$GROUP_REF")"
+          NO_CHART_BUMP=false
+          if [ -n "$pr" ] && gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx 'no-chart-bump'; then
+            NO_CHART_BUMP=true
+          fi
+          export NO_CHART_BUMP
+          bash scripts/checks/chart-version-guard.sh "$BASE" "$HEAD"
 
   # A pull request that changes a user-visible surface (a crate's source or
   # features, the server, a deployment file) updates the book in the same
@@ -1132,6 +1181,7 @@ jobs:
       - guards
       - changelog-guard
       - crate-version-guard
+      - chart-version-guard
       - detect
       - manifest
       - fuzz-lockfile

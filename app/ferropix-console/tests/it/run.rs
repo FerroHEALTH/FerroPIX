@@ -44,6 +44,38 @@ fn config_check_refuses_an_invalid_configuration_with_ex_config() {
     );
 }
 
+/// An `[oidc]` issuer and redirection URIs written with a password in their
+/// userinfo reach neither stream of `config check` (RFC 3986 §3.2.1: the
+/// password is never rendered in clear text).
+#[test]
+fn config_check_never_renders_an_oidc_password() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let config = dir.path().join("console.toml");
+    std::fs::write(
+        &config,
+        "[oidc]\nissuer = \"https://u:SYNTH_ISSUER_PW@idp.example.org/realms/r\"\nclient_id = \"ferropix-console\"\nredirect_uri = \"https://u:SYNTH_REDIRECT_PW@console.example.org/auth/callback\"\npost_logout_redirect_uri = \"https://u:SYNTH_LOGOUT_PW@console.example.org/\"\n",
+    )
+    .expect("the configuration file");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ferropix-console"))
+        .arg("--config")
+        .arg(&config)
+        .args(["config", "check"])
+        .output()
+        .expect("the binary runs");
+    assert_eq!(
+        Some(i32::from(EXIT_CONFIG.get())),
+        output.status.code(),
+        "userinfo is refused"
+    );
+    for shown in [&output.stdout, &output.stderr] {
+        let shown = String::from_utf8_lossy(shown);
+        assert!(
+            !shown.contains("SYNTH_"),
+            "no oidc password reaches config check"
+        );
+    }
+}
+
 #[test]
 fn an_unreadable_configuration_file_is_ex_config() {
     let dir = tempfile::tempdir().expect("a temporary directory");

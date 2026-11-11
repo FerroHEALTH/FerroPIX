@@ -272,6 +272,13 @@ presents (RFC 8705 §2), and `min_version` the lowest TLS version (`"1.3"`,
 the default, or `"1.2"`). `timeout` (default `"10s"`) bounds one call to
 the provider.
 
+`issuer`, `redirect_uri` and `post_logout_redirect_uri` take no userinfo:
+the console refuses one written as `https://user:password@…` and does not
+start, and the refusal names the key, never the URL. Any rendering of the
+section shows such a URL as `https://***@…`, as it shows the endpoints, so
+the password never reaches a terminal or a support report (RFC 3986
+§3.2.1).
+
 `[session] store` is `memory` (the default), which keeps the sessions in the
 console's process with an opaque id in the cookie, or `sealed`, which keeps
 the whole session in one AES-256-GCM sealed cookie for a console that runs

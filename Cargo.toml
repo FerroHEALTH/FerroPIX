@@ -69,7 +69,7 @@ ferrohealth-smart = { version = "=0.18.0", default-features = false }
 # page sits behind. Pinned exactly, as a product pins every family crate.
 # Verified against crates.io on 2026-11-10 (0.12.0, the release on
 # ferrohealth-smart 0.18, #624).
-ferrohealth-session = { version = "=0.12.0", default-features = false }
+ferrohealth-session = { version = "=0.13.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and

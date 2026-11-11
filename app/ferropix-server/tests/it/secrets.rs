@@ -10,7 +10,7 @@ use ferrohealth_secret::secret::Secret;
 use ferrohealth_secret::secret_url::SecretUrl;
 use ferropix_server::config::Config;
 
-use crate::support::{DATA_KEY, FULL, PASSWORD, Secrets};
+use crate::support::{DATA_KEY, FULL, PASSWORD, Secrets, issuer_tables};
 
 #[test]
 fn the_secret_types_render_three_stars_through_debug_display_and_serialize() {
@@ -64,6 +64,31 @@ fn a_configuration_written_back_shows_no_issuer_userinfo() {
         .expect_err("an issuer with userinfo is refused (RFC 8414 §2)");
     assert!(!refused.to_string().contains(PASSWORD), "{refused}");
     assert!(!format!("{refused:?}").contains(PASSWORD));
+}
+
+/// The four `[auth]` tables that name an issuer hold it as a `SecretUrl`
+/// too: its userinfo reaches neither the written-back tree, the `Debug` of
+/// the configuration nor the refusal (RFC 3986 §3.2.1).
+#[test]
+fn a_table_naming_an_issuer_shows_no_issuer_userinfo() {
+    let secrets = Secrets::new();
+    for (host, table) in issuer_tables() {
+        let text = format!("{FULL}{table}");
+        let config =
+            Config::from_sources(Some(&text), &secrets.environment()).expect("the tree reads");
+        let written = toml::to_string(&config).expect("the tree writes");
+        assert!(!written.contains(PASSWORD), "{host}: {written}");
+        assert!(
+            written.contains(&format!("https://***@{host}/realms/pix")),
+            "{host}: the issuer renders masked: {written}"
+        );
+        assert!(!format!("{config:?}").contains(PASSWORD), "{host}");
+        let refused = config
+            .resolve()
+            .expect_err("a table naming an issuer [auth] does not trust is refused");
+        assert!(!refused.to_string().contains(PASSWORD), "{host}: {refused}");
+        assert!(!format!("{refused:?}").contains(PASSWORD), "{host}");
+    }
 }
 
 #[test]

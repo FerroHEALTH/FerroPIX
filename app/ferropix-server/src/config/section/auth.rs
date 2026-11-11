@@ -495,7 +495,7 @@ mod tests {
         dpop.0.dpop = Some(DpopSection::default());
         let mut party = auth(&[url]);
         party.0.party = vec![PartySection {
-            issuer: url.to_owned(),
+            issuer: SecretUrl::new(url),
             ..PartySection::default()
         }];
         let mut roles = auth(&[url]);

@@ -61,7 +61,7 @@ out_dir=$(mktemp -d)
 trap 'rm -r -- "$out_dir"' EXIT
 
 total=0
-for target in "${targets[@]}"; do
+for target in ${targets[@]+"${targets[@]}"}; do
   ref=${target%|*}
   platform=${target##*|}
   platform_args=()

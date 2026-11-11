@@ -154,10 +154,10 @@ if [[ "${#surfaces[@]}" -eq 0 ]]; then
 fi
 if git diff --name-only "$fork" "$head" -- website/book/src | grep -q .; then
   echo "book-guard: the change updates the book with its surfaces:"
-  printf '  %s\n' "${surfaces[@]}"
+  printf '  %s\n' ${surfaces[@]+"${surfaces[@]}"}
   exit 0
 fi
 echo "book-guard: the change touches these user-visible surfaces:" >&2
-printf '  %s\n' "${surfaces[@]}" >&2
+printf '  %s\n' ${surfaces[@]+"${surfaces[@]}"} >&2
 echo "::error::the book is not updated: change the matching page under website/book/src in this pull request, or apply the 'no-book' label when the change alters nothing the book says." >&2
 exit 1

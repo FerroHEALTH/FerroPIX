@@ -116,7 +116,7 @@ while [[ "$#" -gt 0 ]]; do
     *) shift ;;
   esac
 done
-for p in "${patterns[@]}"; do cp "$STAGE_FIXTURES/$p" "$dir/$p"; done
+for p in ${patterns[@]+"${patterns[@]}"}; do cp "$STAGE_FIXTURES/$p" "$dir/$p"; done
 STUB
   chmod +x "$tmp/bin/gh"
 

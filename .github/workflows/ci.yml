@@ -146,7 +146,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          for guard in comment-style versions fast file-length todo-issues crate-version-guard chart-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
+          for guard in comment-style versions fast bash-compat file-length todo-issues crate-version-guard chart-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: self-tests / The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
@@ -205,6 +205,13 @@ jobs:
       - name: versions
         if: ${{ !cancelled() }}
         run: bash scripts/checks/versions.sh
+
+      # ---- bash-compat -------------------------------------------------
+      # Every shell program runs under the bash macOS ships, 3.2, or declares
+      # the bash it needs (#634). CI's bash is 5, so nothing else catches it.
+      - name: bash-compat
+        if: ${{ !cancelled() }}
+        run: bash scripts/checks/bash-compat.sh
 
       # ---- file-length -------------------------------------------------
       - name: file-length

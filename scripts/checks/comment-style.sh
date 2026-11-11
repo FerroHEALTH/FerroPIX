@@ -130,7 +130,7 @@ esac
 }
 
 fail=0
-for f in "${files[@]}"; do
+for f in ${files[@]+"${files[@]}"}; do
   # The emitter writes its banner as the FIRST line of every generated file, so
   # the skip anchors there. Matching the marker anywhere would let a
   # hand-written file exempt itself by merely mentioning it in prose.

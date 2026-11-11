@@ -205,7 +205,7 @@ files_check() {
     [[ "$(cd "$(dirname "$file")" && pwd -P)/" == "$here"/* ]] && inside+=("$file")
   done
   [[ "${#inside[@]}" -gt 0 ]] || return 0
-  set -- "${inside[@]}"
+  set -- ${inside[@]+"${inside[@]}"}
   listing="$(detect "$tree" "$@")" || status=$?
   if [[ "$status" -ne 0 ]]; then
     echo "forwarders: the tool stopped with status $status" >&2

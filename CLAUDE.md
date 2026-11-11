@@ -197,7 +197,8 @@ The build order is the milestones:
   `conformance/`, which render the README's shields.io badges, #162), and
   `fast.sh`, the default local gate: rustfmt, clippy, nextest and the
   doctests over the packages a change reaches, and the fuzz crate when it
-  builds on one (#630).
+  builds on one (#630), and `bash-compat.sh`, every shell program held to
+  the bash 3.2 macOS ships (#634).
   `scripts/release/`: the
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor

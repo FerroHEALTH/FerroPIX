@@ -282,7 +282,7 @@ assemble() {
 
   cat "$out" > CHANGELOG.md
   if [[ "${#fragments[@]}" -gt 0 ]]; then
-    git rm -q -- "${fragments[@]}"
+    git rm -q -- ${fragments[@]+"${fragments[@]}"}
   fi
   echo "changelog: [$version] - $date assembled from ${#fragments[@]} fragment(s) and the [Unreleased] entries; review CHANGELOG.md and commit."
 }

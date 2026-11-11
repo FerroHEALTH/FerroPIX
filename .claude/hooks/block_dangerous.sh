@@ -258,7 +258,7 @@ judge_rm() {
     echo "BLOCKED: a recursive forced delete must name its targets (block_dangerous hook)."
     return 2
   fi
-  for t in "${targets[@]}"; do
+  for t in ${targets[@]+"${targets[@]}"}; do
     if ! allowed_target "$t"; then
       echo "BLOCKED: a recursive forced delete of '$t' is not allowed (block_dangerous hook). Delete specific files with 'git rm' or a plain 'rm <file>', or delete a directory the same command created with 'mktemp -d' or one under \$TMPDIR."
       return 2

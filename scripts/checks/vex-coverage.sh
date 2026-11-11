@@ -103,7 +103,7 @@ check() {
   local target product report
   : > "$work/findings.jsonl"
   : > "$work/targets.jsonl"
-  for target in "${targets[@]}"; do
+  for target in ${targets[@]+"${targets[@]}"}; do
     product="${target%%=*}"
     report="${target#*=}"
     [[ "$product" == pkg:* ]] || die "'$product' is not a purl (expected pkg:<type>/<name>)"
@@ -156,7 +156,7 @@ check() {
         covered: ([$joined[] | select(.statement != null)] | length),
         uncovered: ([$joined[] | select(.statement == null)] | length),
         records: $joined
-      }' "${docs[@]}" > "$work/record.json"
+      }' ${docs[@]+"${docs[@]}"} > "$work/record.json"
 
   if [[ -n "$record" ]]; then
     cp "$work/record.json" "$record"

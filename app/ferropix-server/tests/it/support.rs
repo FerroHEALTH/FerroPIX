@@ -64,6 +64,37 @@ impl Secrets {
     }
 }
 
+/// Each `[auth]` table that names an issuer, by the host it names, with
+/// [`PASSWORD`] in the issuer's userinfo, to append to a configuration.
+pub(crate) fn issuer_tables() -> [(&'static str, String); 4] {
+    [
+        (
+            "attributes.example.org",
+            format!(
+                "\n[[auth.attributes]]\nissuer = \"https://pix:{PASSWORD}@attributes.example.org/realms/pix\"\nmapping = \"iua\"\n"
+            ),
+        ),
+        (
+            "federation.example.org",
+            format!(
+                "\n[[auth.federation]]\nissuer = \"https://pix:{PASSWORD}@federation.example.org/realms/pix\"\ncontact_point = false\n"
+            ),
+        ),
+        (
+            "party.example.org",
+            format!(
+                "\n[[auth.party]]\nissuer = \"https://pix:{PASSWORD}@party.example.org/realms/pix\"\nidentifier_issuer = \"urn:example:people\"\nidentifier_type = \"guid\"\n"
+            ),
+        ),
+        (
+            "scopeless.example.org",
+            format!(
+                "\n[[auth.scopeless_subjects]]\nissuer = \"https://pix:{PASSWORD}@scopeless.example.org/realms/pix\"\nsub = \"service\"\n"
+            ),
+        ),
+    ]
+}
+
 /// A production configuration with every section of the tree set.
 pub(crate) const FULL: &str = r#"
 profile = "production"

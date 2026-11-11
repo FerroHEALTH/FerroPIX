@@ -10,8 +10,11 @@ Read both before making a change.
 
 ## Build and test
 
-Once the workspace has a member (the first crates arrive with the move from
-FerroFED):
+While you work, `scripts/checks/fast.sh` runs rustfmt, clippy, nextest and
+the doctests over the packages your change reaches, and checks the fuzz
+crate when the change reaches a crate it builds on. `--dry-run` prints the
+plan, and `--all` runs every package. CI runs the whole workspace on every
+pull request, the same as these commands:
 
 ```
 cargo fmt --all --check

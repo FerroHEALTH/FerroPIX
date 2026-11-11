@@ -194,7 +194,10 @@ The build order is the milestones:
   `writing-style.sh`, `pin-freshness.sh`, every unwatched pin against
   its newest upstream release, and `conformance.sh`, the corpus tests of
   `ihe-iti` over the vendored IG examples held to the pass lists under
-  `conformance/`, which render the README's shields.io badges, #162).
+  `conformance/`, which render the README's shields.io badges, #162), and
+  `fast.sh`, the default local gate: rustfmt, clippy, nextest and the
+  doctests over the packages a change reaches, and the fuzz crate when it
+  builds on one (#630).
   `scripts/release/`: the
   milestone check and close and the crates.io publish. Every helper, guard
   and release script has a `--self-test`, and CI runs them all; a vendor

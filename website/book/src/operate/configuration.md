@@ -285,6 +285,10 @@ the key: `[[auth.party]]`, `[auth.idp]` (the identity provider adapters only
 a party binding reads), `[auth.dpop]` (FerroPIX checks no `DPoP` proof,
 RFC 9449), a Basic user's `roles` and an issuer's `role_claims`.
 
+The issuer `auth.scopeless_subjects`, `[[auth.federation]]`,
+`[[auth.attributes]]` and `[[auth.party]]` name renders as `[[auth.issuer]]`
+does: a user or password in it appears in no output.
+
 Each `[[auth.issuer]]` table names one trusted issuer with every setting of
 its tokens: no section-level value stands in for one the table leaves out.
 `kind` is required and says whose tokens the issuer signs:

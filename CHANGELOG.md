@@ -13,6 +13,76 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-11-11
+
+### Added
+
+- Each release attaches the quickstart as one self-contained `compose.yaml`,
+  with its `.sha256sum`. The server's configuration and the database role
+  are inlined as Compose configs, so the file needs Docker Compose 2.23.1 or
+  newer and no checkout, and the README and book quick start download it
+  from the latest release. `scripts/quickstart/compose-configs.sh` holds
+  each inlined copy to its source in the repository, and CI runs the
+  quickstart tour over that same file (#619).
+
+### Changed
+
+- FerroPIX moves to `ferrohealth-smart` 0.18, `ferrohealth-session` 0.12,
+  `ihe-atna` 0.12 and `ferrobridge-term` 0.5. A configured issuer is a
+  `SecretUrl` now, so a password in an issuer's userinfo appears in no
+  `config check` output, no written-back configuration and no `Debug`
+  rendering. The start still refuses such an issuer, naming it masked (#624).
+- Breaking for crate users: `ihe-iti` 0.4.0 requires `ferrohealth-smart`
+  0.18 and `ihe-atna` 0.12, and `nl-generic-functions` 0.4.0 requires
+  `ferrohealth-smart` 0.18 and `ihe-iti` 0.4. Their public API carries the
+  types of those crates (the outbound client, the endpoint table and the
+  audit user), so a consumer moves to the same lines. Where an
+  issuer is read, use `.expose()`, and build one with `SecretUrl::new` (#624).
+
+### Removed
+
+- The Helm chart's values schema, which refused `config.auth.audience` by
+  name in the charts of v0.0.26. The value now reaches the server's
+  configuration as an unknown key under `[auth]`, and the `config check`
+  each image runs over the rendered configuration refuses it. Write each
+  issuer's `audience` under `config.auth.issuer`, as v0.0.26 asked (#605).
+
+### Fixed
+
+- `[auth]` refuses the start on a table FerroPIX would read and never
+  apply, naming the key: `[auth.dpop]` (FerroPIX checks no DPoP proof),
+  `[[auth.party]]` and `[auth.idp]` (FerroPIX binds no login to a party),
+  and a Basic user's `roles` (the permission table reads scopes). A
+  configuration that sets one of them must drop it.
+  `[[auth.federation]]` and `[[auth.attributes]]` are applied, and the book
+  documents both. The IHE IUA attributes that an `[[auth.attributes]]` table
+  reads from a token (the user's name, role, purpose of use, provider id and
+  organisation) now appear on the BALP record's user agent, as BALP 1.1.4
+  §3:5.7.5.4 maps them (#595).
+- With `[pmir]` on, `GET {base}/fhir/metadata` declares the ITI-93 message
+  as `sender` and as `receiver`, as the PMIR 1.6.0 Patient Identity Registry
+  statement does: the Registry sends the feed to each subscriber. With
+  `[pixm]` and `[pdqm]` on as well, the statement instantiates
+  `https://profiles.ihe.net/ITI/PMIR/CapabilityStatement/IHE.PMIR.PatientIdentityRegistry`.
+  `implementation.description` now names the IHE actors the instance
+  serves (#597).
+- docs.rs documents every module of `ihe-iti` and `nl-generic-functions`.
+  Both crates turn no feature on by default, and docs.rs built them with
+  their default features, so the published API reference listed no item.
+  Each manifest now carries `[package.metadata.docs.rs] all-features = true`,
+  published with `ihe-iti` 0.4.0 and `nl-generic-functions` 0.4.0, and CI builds each
+  crate's docs the way docs.rs does (#598).
+- An `[[auth.issuer]]` that sets `role_claims` refuses the start, naming
+  `auth.issuer[N].role_claims`: FerroPIX's permission table reads scopes,
+  so a role read from the token would never apply. Drop the key from the
+  issuer's table (#616).
+- The `CapabilityStatement` declares the Subscription Profile for PMIR,
+  `https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Subscription.Request`,
+  as the `supportedProfile` of `Subscription`. That is the profile PMIR
+  1.6.0 §2:3.94.4.1.2.1 constrains an ITI-94 create with, and the profile
+  the PMIR Patient Identity Registry statement declares. The statement
+  declared the base `IHE.PMIR.Subscription` before (#617).
+
 ## [0.0.26] - 2026-11-10
 
 ### Changed

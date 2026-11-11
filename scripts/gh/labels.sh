@@ -156,6 +156,7 @@ STUB
   said "$clean_case" "$out" "ok: spec:PIXm"
   said "$clean_case" "$out" "ok: upstream-report"
   said "$clean_case" "$out" "ok: no-crate-bump"
+  said "$clean_case" "$out" "ok: no-chart-bump"
   said "$clean_case" "$calls" "label create spec:HL7v2 --color 0e8a16"
   said "$clean_case" "$calls" "label create documentation --color 0075ca"
   said "$clean_case" "$calls" "--force"
@@ -262,5 +263,6 @@ label upstream-report  990000 "An outbound report of a defect in a published spe
 label no-changelog     bfdadc "PR escape hatch: the change has no user-visible effect."
 label no-crate-bump    bfdadc "PR escape hatch: the diff provably does not alter packaged crate bytes."
 label no-book          bfdadc "PR escape hatch: the change alters nothing the book under website/book says."
+label no-chart-bump    bfdadc "PR escape hatch: the diff provably does not alter packaged chart bytes."
 
 echo "done."

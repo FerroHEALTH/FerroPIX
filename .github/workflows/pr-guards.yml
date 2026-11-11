@@ -58,7 +58,7 @@ jobs:
     name: pr-guards
     if: >-
       (github.event_name == 'pull_request'
-        && contains(fromJSON('["no-changelog", "no-crate-bump", "no-book"]'), github.event.label.name))
+        && contains(fromJSON('["no-changelog", "no-crate-bump", "no-chart-bump", "no-book"]'), github.event.label.name))
       || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -79,6 +79,7 @@ jobs:
           guards=(
             "changelog-guard no-changelog"
             "crate-version-guard no-crate-bump"
+            "chart-version-guard no-chart-bump"
             "book-guard no-book"
           )
           # Every API read goes through retry: GitHub answers 5xx bursts of a minute

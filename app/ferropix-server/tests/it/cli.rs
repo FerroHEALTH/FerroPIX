@@ -189,6 +189,42 @@ fn config_check_never_prints_a_secret_it_refuses() {
 }
 
 #[test]
+fn config_check_never_prints_the_userinfo_of_an_issuer() {
+    let secrets = Secrets::new();
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("ferropix.toml");
+    let text = std::fs::read_to_string(quickstart())
+        .expect("the quickstart is read")
+        .replacen(
+            "issuer = \"http://localhost:8180/ferropix\"",
+            &format!("issuer = \"http://ferropix:{PASSWORD}@localhost:8180/ferropix\""),
+            1,
+        );
+    std::fs::write(&path, text).expect("the configuration is written");
+    let output = Command::new(env!("CARGO_BIN_EXE_ferropix"))
+        .args([
+            "config",
+            "check",
+            "--config",
+            path.to_str().expect("a UTF-8 path"),
+        ])
+        .env_clear()
+        .envs(secrets.environment())
+        .output()
+        .expect("the binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        Some(i32::from(EXIT_CONFIG.get())),
+        output.status.code(),
+        "an issuer with userinfo is refused (RFC 8414 §2): {stderr}"
+    );
+    assert!(stderr.contains("auth.issuer"), "{stderr}");
+    assert!(!stdout.contains(PASSWORD), "{stdout}");
+    assert!(!stderr.contains(PASSWORD), "{stderr}");
+}
+
+#[test]
 fn db_migrate_with_no_store_to_reach_fails_without_printing_a_secret() {
     let secrets = Secrets::new();
     let output = ferropix(

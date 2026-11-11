@@ -99,15 +99,18 @@ Beside the five faces:
 
 The quickstart runs the published images beside PostgreSQL 18 and a
 development sign-in server, feeds one synthetic patient and asks for it.
-You need a checkout, Docker Compose (or Podman with a compose provider),
-`curl`, `jq` and `openssl`. Every command below is a step of
-[`scripts/quickstart/tour.sh`](scripts/quickstart/tour.sh), which CI runs
-against the images each change builds; run the script to do every step at
-once. The [Quickstart](https://ferropix.eu/docs/integrate/getting-started.html)
+You need Docker Compose 2.23.1 or newer (or Podman with a compose
+provider), `curl`, `jq` and `openssl`, and no checkout. Every command below
+is a step of [`scripts/quickstart/tour.sh`](scripts/quickstart/tour.sh),
+which CI runs over the repository's `compose.yaml`, the file each release
+attaches, against the images each change builds. The [Quickstart](https://ferropix.eu/docs/integrate/getting-started.html)
 page explains each answer.
 
+Every release attaches the quickstart as one self-contained `compose.yaml`.
+Download the latest release's into an empty directory:
+
 ```sh
-git clone https://github.com/FerroHEALTH/FerroPIX && cd FerroPIX
+curl -fsSLO https://github.com/FerroHEALTH/FerroPIX/releases/latest/download/compose.yaml
 ```
 
 Write the secrets, start the stack and ask for readiness:

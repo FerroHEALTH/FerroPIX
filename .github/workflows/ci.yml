@@ -155,6 +155,11 @@ jobs:
       - name: self-tests / The quickstart tour holds every anchor the book includes, and the README shows each as the script holds it
         if: ${{ !cancelled() }}
         run: bash scripts/quickstart/tour.sh --self-test
+      - name: self-tests / compose.yaml inlines every file it needs, each copy held to its source
+        if: ${{ !cancelled() }}
+        run: |
+          bash scripts/quickstart/compose-configs.sh --self-test
+          bash scripts/quickstart/compose-configs.sh --check
       - name: self-tests / The release milestone script refuses open items and closes only after every leg
         if: ${{ !cancelled() }}
         run: bash scripts/release/milestone.sh --self-test

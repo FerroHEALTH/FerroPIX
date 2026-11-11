@@ -179,17 +179,17 @@ detect() {
       # The engine reads a fresh copy of the roots: the file share of a podman
       # machine on macOS serves a replaced file's old content for seconds.
       copy="$(mktemp -d "$stage_root/tree.XXXXXX")"
-      for root in "${roots[@]}"; do
+      for root in ${roots[@]+"${roots[@]}"}; do
         mkdir -p "$copy/$(dirname "$root")"
         cp -R "$tree/$root" "$copy/$root"
       done
       "$kind" run --rm --network none --user "$(id -u):$(id -g)" --env HOME=/tmp \
         -v "$copy:/src:ro" -v "$out:/out" "$JSCPD_IMAGE" \
-        "${flags[@]}" "${roots[@]}" >"$out/detector.log" 2>&1 || status=$?
+        ${flags[@]+"${flags[@]}"} ${roots[@]+"${roots[@]}"} >"$out/detector.log" 2>&1 || status=$?
       rm -rf "$copy"
       ;;
     *)
-      (cd "$tree" && "$binary" "${flags[@]}" "${roots[@]}") >"$out/detector.log" 2>&1 || status=$?
+      (cd "$tree" && "$binary" ${flags[@]+"${flags[@]}"} ${roots[@]+"${roots[@]}"}) >"$out/detector.log" 2>&1 || status=$?
       ;;
   esac
   if [[ "$status" -ne 0 || ! -f "$out/jscpd-report.json" ]]; then

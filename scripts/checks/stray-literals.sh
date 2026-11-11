@@ -103,7 +103,7 @@ self_test() {
   case_ markup-attribute 1
   fixture markup-fragment src/page.rs '    let by = format!(" aria-describedby=\"{}\"", id);'
   case_ markup-fragment 0
-  fixture markup-alone src/page.rs "$(printf '%s\n' '    h(format!(' '        "<select id=\"kind\" class=\"{SELECT}\">{kinds}</select>"' '    ))')"
+  fixture markup-alone src/page.rs "$(printf '%s\n' '    h(format!(' '        "<select id=\"kind\" class=\"{SELECT}\">{kinds}''</select>"' '    ))')"
   case_ markup-alone 0
   fixture markup-alone-words src/page.rs "$(printf '%s\n' '    h(format!(' '        "<p class=\"fui-help\">Nothing was searched</p>"' '    ))')"
   case_ markup-alone-words 1

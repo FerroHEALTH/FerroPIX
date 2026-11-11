@@ -43,6 +43,12 @@
 # Linux, where the tool reads the servers' CPU and memory from /proc. No
 # specification governs this: our own design.
 set -euo pipefail
+# The gate times each fsync with EPOCHREALTIME, which bash 5 introduced; the
+# runner's bash is 5, and macOS's 3.2 stops here with a message.
+if ((BASH_VERSINFO[0] < 5)); then
+  echo "gate.sh needs bash 5 or later for EPOCHREALTIME; this is bash $BASH_VERSION" >&2
+  exit 1
+fi
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly PLAN=perf/plan.toml

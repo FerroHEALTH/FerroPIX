@@ -303,7 +303,7 @@ if [[ "$mode" = "update" ]] || [[ "$mode" = "record" ]]; then
   {
     printf '# Known file-length breaches: "<lines> <path> #<issue>". A listed file passes\n'
     printf '# while it does not grow past its recorded count; --update lowers it.\n'
-    if [[ "${#out[@]}" -gt 0 ]]; then printf '%s\n' "${out[@]}" | sort -k2; fi
+    if [[ "${#out[@]}" -gt 0 ]]; then printf '%s\n' ${out[@]+"${out[@]}"} | sort -k2; fi
   } > "$ALLOW.tmp" && mv "$ALLOW.tmp" "$ALLOW"
   note "recorded ${#out[@]} breaches in $ALLOW"
   exit 0

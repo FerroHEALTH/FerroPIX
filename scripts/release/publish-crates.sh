@@ -97,7 +97,7 @@ do_dry_run() {
     echo "no published crate yet; nothing to package"
     return 0
   fi
-  cargo publish "${args[@]}" --dry-run --locked
+  cargo publish ${args[@]+"${args[@]}"} --dry-run --locked
 }
 
 # Package every member in one `cargo package` invocation, in dependency
@@ -115,7 +115,7 @@ do_package() {
     echo "no published crate yet; nothing to package"
     return 0
   fi
-  cargo package "${args[@]}" --locked
+  cargo package ${args[@]+"${args[@]}"} --locked
   mkdir -p "$dir"
   for crate in "${CRATES[@]}"; do
     version="$(manifest_version "$crate")"
@@ -184,8 +184,8 @@ do_docs() {
       echo "::error::$crate's [package.metadata.docs.rs] turns no feature on" >&2
       return 1
     fi
-    echo "::group::$crate docs as docs.rs builds them (${args[*]})"
-    cargo doc "${args[@]}"
+    echo "::group::$crate docs as docs.rs builds them (${args[*]+"${args[*]}"})"
+    cargo doc ${args[@]+"${args[@]}"}
     echo "::endgroup::"
   done
   echo "publish-crates: every crate documents the features docs.rs builds"

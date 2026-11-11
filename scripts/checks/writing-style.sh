@@ -120,4 +120,4 @@ else
   done < <(git ls-files 'website/*.md' 'website/*.html' 'website/*.css' 'website/*.toml' 'assets/brand/README.md' '*.md' ':!docs/**' ':!.claude/**')
 fi
 
-check_files "${files[@]}"
+check_files ${files[@]+"${files[@]}"}

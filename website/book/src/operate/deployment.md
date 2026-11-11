@@ -171,7 +171,10 @@ PersistentVolumeClaim (`state.existingClaim`).
 The release lane publishes the chart as an OCI artifact,
 `oci://ghcr.io/ferrohealth/charts/ferropix`, with the release as its app
 version and both images pinned by the digests it scanned, and attests its
-build provenance. Install a published chart by its version and verify it first:
+build provenance. A published chart version is never published again with
+other files, so each release that changes the chart, its app version included,
+raises the chart version: FerroPIX 0.0.28 is chart 0.3.21. Install a published
+chart by its version and verify it first:
 
 ```sh
 gh attestation verify oci://ghcr.io/ferrohealth/charts/ferropix:<chart version> \

@@ -54,25 +54,26 @@ fhir-search = { version = "0.1.130", default-features = false }
 # The SMART and OAuth 2.0 crate of FerroHEALTH/FerroAUTH: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers. The server pins it exactly, as a product pins every family crate;
-# the published crates take their own caret requirement on it. 0.20 is the
-# line ihe-iti, nl-generic-functions, ihe-atna 0.14, ferrohealth-session 0.15
-# and ferrobridge-term 0.7 take, so the lock holds one copy; it reads no TLS
+# the published crates take their own caret requirement on it. 0.21 is the
+# line ihe-iti, nl-generic-functions, ihe-atna 0.15, ferrohealth-session 0.16
+# and ferrobridge-term 0.8 take, so the lock holds one copy; it reads no TLS
 # material itself, and the server and the console hand it `server-tls`'s
 # builder over ferrohealth-server. Its `client::outbound::OutboundClient` is
 # the client of every outbound integration (#571); 0.17 types every endpoint
 # URL a table names as a SecretUrl (#591), 0.18 every issuer too (#624),
 # 0.19 the issuer every other `[auth]` table names (#636), 0.19.1 signs a
-# client assertion valid for 60 seconds (#640), and 0.20 masks the issuer a
-# role-issuer refusal names (#643). Verified against crates.io on
-# 2026-11-12 (0.20.0).
-ferrohealth-smart = { version = "=0.20.0", default-features = false }
+# client assertion valid for 60 seconds (#640), 0.20 masks the issuer a
+# role-issuer refusal names (#643), and 0.21 chooses the described SMART
+# issuer by one shared rule (#647). Verified against crates.io on
+# 2026-11-12 (0.21.0).
+ferrohealth-smart = { version = "=0.21.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-12 (0.15.0, the release on
-# ferrohealth-smart 0.20, #643).
-ferrohealth-session = { version = "=0.15.0", default-features = false }
+# Verified against crates.io on 2026-11-12 (0.16.0, the release on
+# ferrohealth-smart 0.21, #647).
+ferrohealth-session = { version = "=0.16.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -105,23 +106,23 @@ ferrohealth-usage-report = { version = "=0.4.1", default-features = false }
 # parser, the original-mode acknowledgment and the message writer, over the
 # generated v2 tables, by a caret range as every FerroBRIDGE crate above.
 # The server adds `map`, the generated v2-to-FHIR structure maps a PID runs
-# through. Verified against crates.io on 2026-11-12 (0.10.0, on
-# ferrobridge-term 0.7, #643).
-ferrobridge-hl7v2 = { version = "0.10.0", default-features = false }
+# through. Verified against crates.io on 2026-11-12 (0.12.0, on
+# ferrobridge-term 0.8, #647).
+ferrobridge-hl7v2 = { version = "0.12.0", default-features = false }
 hl7v2-types = "0.1.128"
 # FerroBRIDGE's FHIR terminology client, the one `ferrobridge-hl7v2` translates
 # every v2 table value through (`ConceptMap/$translate`), with `smart` for
 # the client built from `[terminology.endpoint]` over ferrohealth-smart's
 # outbound client, at the version that crate pins. Verified against
-# crates.io on 2026-11-12 (0.7.0, on ferrohealth-smart 0.20, #643).
-ferrobridge-term = { version = "0.7.0", default-features = false, features = ["client", "r4", "smart"] }
+# crates.io on 2026-11-12 (0.8.0, on ferrohealth-smart 0.21, #647).
+ferrobridge-term = { version = "0.8.0", default-features = false, features = ["client", "r4", "smart"] }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
-# Verified against crates.io on 2026-11-12 (0.14.0, on `ferrohealth-smart`
-# 0.20, #643).
-ihe-atna = { version = "=0.14.0", default-features = false }
+# Verified against crates.io on 2026-11-12 (0.15.0, on `ferrohealth-smart`
+# 0.21, #647).
+ihe-atna = { version = "=0.15.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60.2", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

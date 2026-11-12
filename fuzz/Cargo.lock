@@ -290,9 +290,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-smart"
-version = "0.19.1"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7500aedef7666c411e59030708e9171acb2a5fa9ebaa7ab459d9d24f50aa85d7"
+checksum = "5cc1f41492fd0f6d027d34dbcc6b6ffa3102281ddf6ef2412afd245df70eae73"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -680,9 +680,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "377e621c163bb75c9920220bd5bf312c46a718e18ca0c847e4b2a3ff41bfd21d"
+checksum = "2dcb9f7a608d921e800319d735848bd2c4f14c0c84b2ebe112a3f1e8c9c4dabc"
 dependencies = [
  "ferrohealth-secret",
  "url",
@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "ferrohealth-smart",
  "fhir-search",

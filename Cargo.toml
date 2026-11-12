@@ -61,9 +61,11 @@ fhir-search = { version = "0.1.130", default-features = false }
 # builder over ferrohealth-server. Its `client::outbound::OutboundClient` is
 # the client of every outbound integration (#571); 0.17 types every endpoint
 # URL a table names as a SecretUrl (#591), 0.18 every issuer too (#624),
-# and 0.19 the issuer every other `[auth]` table names (#636).
-# Verified against crates.io on 2026-11-11 (0.19.0).
-ferrohealth-smart = { version = "=0.19.0", default-features = false }
+# and 0.19 the issuer every other `[auth]` table names (#636); 0.19.1
+# signs a client assertion valid for 60 seconds (#640). 0.20 waits for
+# ihe-atna and ferrobridge-term to move to it. Verified against crates.io
+# on 2026-11-12 (0.19.1).
+ferrohealth-smart = { version = "=0.19.1", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
@@ -79,16 +81,16 @@ ferrohealth-session = { version = "=0.14.0", default-features = false }
 # requires. 0.4 and 0.8 write every span of time and size as a string with
 # its unit, under a key that names none (#561); 0.8.1 adds the run path's
 # configuration refusal, `config check` and the telemetry installer (#571).
-# Verified against crates.io on 2026-11-10.
-ferrohealth-config = "=0.4.3"
-ferrohealth-secret = "=0.2.0"
-ferrohealth-server = { version = "=0.8.2", default-features = false }
+# Verified against crates.io on 2026-11-12.
+ferrohealth-config = "=0.4.4"
+ferrohealth-secret = "=0.2.1"
+ferrohealth-server = { version = "=0.8.4", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition
 # and the panic hook, whose line names the request id. Pinned exactly, as a
-# product pins every family crate. Verified against crates.io on 2026-11-09.
-ferrohealth-telemetry = { version = "=0.4.0", default-features = false }
+# product pins every family crate. Verified against crates.io on 2026-11-12.
+ferrohealth-telemetry = { version = "=0.4.1", default-features = false }
 # The health family of FerroHEALTH/FerroSYS: the readiness document, which
 # the operator console's browser half reads too, and with `registry` the
 # indicators and the lifecycle the server runs. Pinned exactly at the version
@@ -96,8 +98,8 @@ ferrohealth-telemetry = { version = "=0.4.0", default-features = false }
 ferrohealth-health = { version = "=0.1.1", default-features = false }
 # The installation report of FerroHEALTH/FerroSYS to FerroPULSE: the
 # `[usage_report]` section, envelope v2, the instance id, the window and the
-# reporter. Pinned exactly. Verified against crates.io on 2026-11-09.
-ferrohealth-usage-report = { version = "=0.4.0", default-features = false }
+# reporter. Pinned exactly. Verified against crates.io on 2026-11-12.
+ferrohealth-usage-report = { version = "=0.4.1", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser, the original-mode acknowledgment and the message writer, over the

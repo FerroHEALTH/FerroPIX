@@ -13,6 +13,38 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-11-12
+
+### Changed
+
+- FerroPIX moves to `ferrohealth-smart` 0.19, `ferrohealth-session` 0.14,
+  `ihe-atna` 0.13, `ferrobridge-term` 0.6 and `ferrobridge-hl7v2` 0.9. The
+  issuer `[[auth.attributes]]`, `[[auth.federation]]`, `[[auth.party]]` and
+  `auth.scopeless_subjects` name is a `SecretUrl` now, so a password in its
+  userinfo appears in no `config check` output, no written-back
+  configuration and no `Debug` rendering (#636).
+- Breaking for crate users: `ihe-iti` 0.5.0 requires `ferrohealth-smart`
+  0.19 and `ihe-atna` 0.13, and `nl-generic-functions` 0.5.0 requires
+  `ferrohealth-smart` 0.19 and `ihe-iti` 0.5. Their public API carries the
+  types of those crates (the outbound client, the endpoint table and the
+  audit user), so a consumer moves to the same lines (#636).
+
+### Fixed
+
+- The Helm chart moves to 0.3.21 for FerroPIX 0.0.28. The v0.0.28 release
+  raised the chart's `appVersion` without raising the chart version, so its
+  chart leg refused to publish over 0.3.20. A pull request that changes the
+  packaged chart now has to raise its version (#632).
+- A `private_key_jwt` client assertion the server signs, for an OAuth 2.0
+  client of an outbound lane or of `[auth.issuer.introspection]`, is valid
+  for 60 seconds, down from 300, so an authorization server that caps the
+  assertion lifetime below SMART App Launch 2.2.0's five-minute ceiling
+  accepts it. FerroPIX moves to `ferrohealth-smart` 0.19.1,
+  `ferrohealth-secret` 0.2.1, `ferrohealth-config` 0.4.4,
+  `ferrohealth-telemetry` 0.4.1, `ferrohealth-server` 0.8.4 and
+  `ferrohealth-usage-report` 0.4.1; `ihe-iti` and `nl-generic-functions`
+  move to 0.5.1 and take the same lines (#640).
+
 ## [0.0.28] - 2026-11-11
 
 ### Fixed

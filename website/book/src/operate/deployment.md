@@ -173,7 +173,7 @@ The release lane publishes the chart as an OCI artifact,
 version and both images pinned by the digests it scanned, and attests its
 build provenance. A published chart version is never published again with
 other files, so each release that changes the chart, its app version included,
-raises the chart version: FerroPIX 0.0.29 is chart 0.3.22. Install a published
+raises the chart version: FerroPIX 0.0.30 is chart 0.3.23. Install a published
 chart by its version and verify it first:
 
 ```sh

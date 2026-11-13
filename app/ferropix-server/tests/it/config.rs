@@ -233,7 +233,7 @@ fn the_dev_table_is_refused_under_production() {
 fn a_basic_user_is_refused_under_production() {
     let secrets = Secrets::new();
     let text = format!(
-        "{FULL}\n[[auth.basic.users]]\nuser = \"dev-steward\"\npassword_hash = \"{PHC}\"\nscopes = [\"__ferropix.steward\"]\n"
+        "{FULL}\n[[auth.basic.users]]\nuser = \"dev-steward\"\npassword_hash = \"{PHC}\"\n\n[basic_grants.dev-steward]\nscopes = [\"__ferropix.steward\"]\n"
     );
     let error = resolve(&text, &secrets).expect_err("production refuses Basic");
     assert!(
@@ -265,6 +265,8 @@ clients = ["dev-source"]
 [[auth.basic.users]]
 user = "dev-steward"
 password_hash = "{PHC}"
+
+[basic_grants.dev-steward]
 scopes = ["__ferropix.steward"]
 
 [[domain]]
@@ -312,11 +314,15 @@ listen = "127.0.0.1:8080"
 [[auth.basic.users]]
 user = "dev-steward"
 password_hash = "{PHC}"
-scopes = ["__ferropix.steward"]
 
 [[auth.basic.users]]
 user = "east-lab"
 password_hash = "{PHC}"
+
+[basic_grants.dev-steward]
+scopes = ["__ferropix.steward"]
+
+[basic_grants.east-lab]
 scopes = ["system/Patient.cud"]
 
 [dev]
@@ -324,10 +330,53 @@ scopes = ["system/Patient.cud"]
     );
     let error = resolve(&text, &secrets).expect_err("a Basic user is a person");
     assert!(
-        matches!(&error, Error::BasicSystemScope { index: 1, user } if user == "east-lab"),
+        matches!(&error, Error::BasicSystemScope { user } if user == "east-lab"),
         "{error:?}"
     );
     assert!(error.to_string().contains("east-lab"), "{error}");
+}
+
+#[test]
+fn a_basic_users_scopes_or_roles_key_is_refused_as_unknown() {
+    for line in ["scopes = [\"__ferropix.steward\"]", "roles = [\"steward\"]"] {
+        let text = format!(
+            "[[auth.basic.users]]\nuser = \"dev-steward\"\npassword_hash = \"{PHC}\"\n{line}\n"
+        );
+        Config::from_sources(Some(&text), &BTreeMap::new())
+            .expect_err("a Basic user holds the credential alone");
+    }
+}
+
+#[test]
+fn a_grant_naming_a_user_auth_does_not_list_fails_at_boot_naming_the_user() {
+    let secrets = Secrets::new();
+    let text = format!(
+        r#"
+profile = "development"
+public_base_url = "http://localhost:8080"
+
+[server]
+listen = "127.0.0.1:8080"
+
+[[auth.basic.users]]
+user = "dev-steward"
+password_hash = "{PHC}"
+
+[basic_grants.dev-stewart]
+scopes = ["__ferropix.steward"]
+
+[dev]
+"#
+    );
+    let error = resolve(&text, &secrets).expect_err("a misspelt user-id never grants");
+    assert!(matches!(error, Error::BasicGrants { .. }), "{error:?}");
+    let cause = std::error::Error::source(&error).map(ToString::to_string);
+    assert!(
+        cause
+            .as_deref()
+            .is_some_and(|cause| cause.contains("dev-stewart")),
+        "{cause:?}"
+    );
 }
 
 #[test]
@@ -344,6 +393,8 @@ listen = "127.0.0.1:8080"
 [[auth.basic.users]]
 user = "dev-source"
 password_hash = "{PHC}"
+
+[basic_grants.dev-source]
 scopes = ["__ferropix.steward"]
 
 [[domain]]

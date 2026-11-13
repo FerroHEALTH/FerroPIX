@@ -8,9 +8,10 @@
 //! `[[auth.issuer]]` table with its `kind`, its profile and its own token
 //! rules, verified against the issuer's key set or by its RFC 7662
 //! introspection endpoint, the trust roots and the Basic users of the
-//! development profile; `ferrohealth-smart` resolves it, with the issuer URL
+//! development profile, each granted its scopes by `[basic_grants]`;
+//! `ferrohealth-smart` resolves it, with the issuer URL
 //! rule of RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric
-//! algorithms of RFC 8725 §3.1. A Basic user is a person: an entry granting a `system/`
+//! algorithms of RFC 8725 §3.1. A Basic user is a person: a grant of a `system/`
 //! scope is refused, since a machine uses the client credentials grant
 //! (RFC 6749 §4.4). Its `product_scope` is the scope of a data steward,
 //! `__ferropix.steward` unless set; the administrator's is `[operator]
@@ -24,7 +25,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ferrohealth_smart::config::{AuthSection, Resolved};
+use ferrohealth_smart::basic::PasswordStore;
+use ferrohealth_smart::config::{AuthSection, BasicGrants, Resolved};
 use ferrohealth_smart::idp::section::IdpSection;
 use ferrohealth_smart::scope::{is_extension_scope, is_scope_token};
 use serde::{Deserialize, Serialize};
@@ -84,20 +86,21 @@ impl AuthSettings {
 }
 
 impl Auth {
-    /// Resolves the section under `profile`, with `trust` and the
-    /// administrator scope `admin_scope`.
+    /// Resolves the section under `profile`, with `trust`, the Basic users'
+    /// `grants` and the administrator scope `admin_scope`.
     ///
     /// # Errors
     /// Returns [`Error::Value`] for `enabled = false`, an `[auth.dpop]`,
-    /// `[[auth.party]]` or `[auth.idp]` table, a Basic user's `roles` or an
-    /// issuer's `role_claims`,
+    /// `[[auth.party]]` or `[auth.idp]` table, a Basic user's granted `roles` or
+    /// an issuer's `role_claims`,
     /// which FerroPIX would never apply, a
     /// product scope in no
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
     /// names an issuer `[auth]` does not or one named twice, or a client id
     /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
     /// users under production; [`Error::BasicSystemScope`] for a Basic user
-    /// granted a `system/` scope; and [`Error::Auth`] for every rule
+    /// granted a `system/` scope; [`Error::BasicGrants`] for a grant naming a
+    /// user `[[auth.basic.users]]` does not list; and [`Error::Auth`] for every rule
     /// `ferrohealth-smart` checks: no issuer and no Basic
     /// user, an issuer without `kind`, no audience, an issuer outside the URL
     /// rule, a symmetric algorithm, a skew over the bound, a profile refused,
@@ -107,6 +110,7 @@ impl Auth {
         &self,
         profile: Profile,
         trust: &Trust,
+        grants: &BasicGrants,
         admin_scope: &str,
     ) -> Result<AuthSettings, Error> {
         let section = &self.0;
@@ -118,14 +122,14 @@ impl Auth {
                 "FerroPIX always authenticates its callers",
             ));
         }
-        unapplied(section)?;
+        unapplied(section, grants)?;
         if section.basic.is_some() && profile == Profile::Production {
             return Err(Error::DevelopmentOnly {
                 key: String::from("auth.basic"),
                 rule: "a Basic user sends a reusable password on every request",
             });
         }
-        persons_only(section)?;
+        persons_only(grants)?;
         let steward_scope = if section.product_scope.is_empty() {
             STEWARD_SCOPE.to_owned()
         } else {
@@ -148,9 +152,10 @@ impl Auth {
                 "it must differ from the steward scope, auth.product_scope",
             ));
         }
-        let resolved = section
+        let mut resolved = section
             .resolve_with_tls(&ferrohealth_smart::config::ServerTls)
             .map_err(|source| Error::Auth { source })?;
+        resolved.basic = granted(resolved.basic.take(), grants)?;
         let clients = clients(section, trust)?;
         Ok(AuthSettings {
             resolved,
@@ -169,12 +174,12 @@ impl Auth {
 /// services and persons holding bearer tokens, and no IHE profile it serves
 /// asks for `DPoP`. `[[auth.party]]` binds a person's login to a party, and
 /// `[auth.idp]` holds the identity provider adapters only that binding
-/// reads; FerroPIX keeps no party. A Basic user's `roles` and an issuer's
+/// reads; FerroPIX keeps no party. A Basic user's granted `roles` and an issuer's
 /// `role_claims` are refused too, since the permission table reads scopes. `[[auth.federation]]` and
 /// `[[auth.attributes]]` are applied: the first classifies the tokens of a
 /// `federation` issuer, the second states the professional's attributes the
 /// audit record carries ([`crate::audit::records::Call::of`]).
-fn unapplied(section: &AuthSection) -> Result<(), Error> {
+fn unapplied(section: &AuthSection, grants: &BasicGrants) -> Result<(), Error> {
     // NOTE: no specification governs this: our own design; a key that would be read and
     // never applied is refused, so an operator never believes it is in force.
     for (set, key, rule) in [
@@ -189,15 +194,6 @@ fn unapplied(section: &AuthSection) -> Result<(), Error> {
             "FerroPIX binds no login to a party, so the table would never apply",
         ),
         (
-            section
-                .basic
-                .iter()
-                .flat_map(|basic| basic.users.iter())
-                .any(|user| !user.roles.is_empty()),
-            "auth.basic.users[].roles",
-            "FerroPIX's permission table reads scopes, so a role would never apply",
-        ),
-        (
             section.idp != IdpSection::default(),
             "auth.idp",
             "FerroPIX binds no login to a party, the only reader of an identity provider adapter",
@@ -206,6 +202,16 @@ fn unapplied(section: &AuthSection) -> Result<(), Error> {
         if set {
             return Err(value(key, rule));
         }
+    }
+    if let Some(user) = grants
+        .users
+        .iter()
+        .find_map(|(user, grant)| (!grant.roles.is_empty()).then_some(user))
+    {
+        return Err(value(
+            &format!("basic_grants.{user}.roles"),
+            "FerroPIX's permission table reads scopes, so a role would never apply",
+        ));
     }
     if let Some(index) = section
         .issuers()
@@ -220,28 +226,45 @@ fn unapplied(section: &AuthSection) -> Result<(), Error> {
     Ok(())
 }
 
-/// Refuses a Basic user of `section` granted a `system/` scope.
+/// Refuses a Basic user `grants` grants a `system/` scope.
 ///
 /// A Basic credential is a person's, never a machine's, and
 /// `ferrohealth-smart` classifies it as a person (its `Caller::basic`); a
 /// `system/` scope (SMART App Launch 2.2.0, Scopes and Launch Context) on
 /// it would grant a person what only a client credentials token (RFC 6749
 /// §4.4) may hold.
-fn persons_only(section: &AuthSection) -> Result<(), Error> {
-    let users = section.basic.iter().flat_map(|basic| basic.users.iter());
-    for (index, user) in users.enumerate() {
-        if user
+fn persons_only(grants: &BasicGrants) -> Result<(), Error> {
+    for (user, grant) in &grants.users {
+        if grant
             .scopes
             .iter()
             .any(|scope| scope.split(' ').any(|token| token.starts_with("system/")))
         {
-            return Err(Error::BasicSystemScope {
-                index,
-                user: user.user.clone(),
-            });
+            return Err(Error::BasicSystemScope { user: user.clone() });
         }
     }
     Ok(())
+}
+
+/// Returns the Basic users of `store` with the scopes of `grants` granted,
+/// `None` when `[auth]` admits no Basic user and nothing is granted.
+///
+/// A grant naming a user the store does not admit is refused, also when
+/// `[auth]` lists no Basic user at all, so a misspelt user-id never grants
+/// silently (no specification governs this: our own design).
+fn granted(
+    store: Option<PasswordStore>,
+    grants: &BasicGrants,
+) -> Result<Option<PasswordStore>, Error> {
+    let store = match store {
+        Some(store) => store,
+        None if grants.users.is_empty() => return Ok(None),
+        None => PasswordStore::new(),
+    };
+    store
+        .with_grants(grants)
+        .map(Some)
+        .map_err(|source| Error::BasicGrants { source })
 }
 
 /// Returns the Source clients of each `[[trust.issuer]]`, by issuer, each
@@ -298,8 +321,9 @@ fn is_client_id(client: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use ferrohealth_secret::secret_url::SecretUrl;
+    use ferrohealth_smart::basic::StoreError;
     use ferrohealth_smart::config::{
-        AuthSection, BasicSection, BasicUser, ConfigError, IssuerEntry,
+        AuthSection, BasicGrant, BasicGrants, BasicSection, BasicUser, ConfigError, IssuerEntry,
     };
     use ferrohealth_smart::kind::IssuerKind;
     use ferrohealth_smart::party::config::PartySection;
@@ -327,17 +351,29 @@ mod tests {
         })
     }
 
-    fn basic(user: &str, scopes: &[&str]) -> BasicSection {
+    fn basic(user: &str) -> BasicSection {
         BasicSection {
             users: vec![BasicUser {
                 user: user.to_owned(),
                 password_hash: Some(SecretString::from(
                     "$argon2id$v=19$m=19456,t=2,p=1$c3ludGhldGljLXNhbHQtMTY$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 )),
-                scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
                 ..BasicUser::default()
             }],
             ..BasicSection::default()
+        }
+    }
+
+    fn grants(user: &str, scopes: &[&str], roles: &[&str]) -> BasicGrants {
+        BasicGrants {
+            users: [(
+                user.to_owned(),
+                BasicGrant {
+                    scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
+                    roles: roles.iter().map(|role| (*role).to_owned()).collect(),
+                },
+            )]
+            .into(),
         }
     }
 
@@ -360,6 +396,7 @@ mod tests {
             .resolve(
                 Profile::Production,
                 &trust(&[(url, &["lab-source"])]),
+                &BasicGrants::default(),
                 ADMIN,
             )
             .expect("one issuer resolves");
@@ -373,13 +410,23 @@ mod tests {
     #[test]
     fn a_section_with_no_issuer_and_no_basic_user_and_a_disabled_one_are_refused() {
         let error = auth(&[])
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                ADMIN,
+            )
             .expect_err("a surface that admits no credential fails closed");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
         let mut off = auth(&["https://idp.example.org"]);
         off.0.enabled = false;
         let error = off
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                ADMIN,
+            )
             .expect_err("FerroPIX is never open");
         assert!(
             matches!(&error, Error::Value { key, .. } if key == "auth.enabled"),
@@ -390,7 +437,12 @@ mod tests {
     #[test]
     fn an_issuer_the_family_crate_refuses_is_refused() {
         let error = auth(&["http://idp.example.org"])
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                ADMIN,
+            )
             .expect_err("RFC 8414 §2 wants https off loopback");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
     }
@@ -407,7 +459,7 @@ mod tests {
             (trust(&[(url, &["caf\u{e9}"])]), "trust.issuer[0].clients"),
         ] {
             let error = auth(&[url])
-                .resolve(Profile::Production, &bad, ADMIN)
+                .resolve(Profile::Production, &bad, &BasicGrants::default(), ADMIN)
                 .expect_err("refused");
             assert!(
                 matches!(&error, Error::Value { key: named, .. } if named == key),
@@ -429,17 +481,32 @@ mod tests {
             Err(ConfigError::ProductScope { .. })
         ));
         assert!(matches!(
-            auth(&[url]).resolve(Profile::Production, &Trust::default(), "admin"),
+            auth(&[url]).resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                "admin"
+            ),
             Err(Error::Value { .. })
         ));
         assert!(matches!(
-            auth(&[url]).resolve(Profile::Production, &Trust::default(), STEWARD_SCOPE),
+            auth(&[url]).resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                STEWARD_SCOPE
+            ),
             Err(Error::Value { .. })
         ));
         let mut uri = auth(&[url]);
         uri.0.product_scope = String::from("https://pix.example.org/scope/steward");
         let resolved = uri
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                ADMIN,
+            )
             .expect("a full URI is an extension scope");
         assert_eq!(
             "https://pix.example.org/scope/steward",
@@ -450,16 +517,17 @@ mod tests {
     #[test]
     fn a_basic_user_is_refused_under_production_and_is_no_source_under_development() {
         let mut person = auth(&[]);
-        person.0.basic = Some(basic("dev-steward", &[STEWARD_SCOPE]));
+        person.0.basic = Some(basic("dev-steward"));
+        let steward = grants("dev-steward", &[STEWARD_SCOPE], &[]);
         let error = person
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .resolve(Profile::Production, &Trust::default(), &steward, ADMIN)
             .expect_err("Basic is a development credential");
         assert!(
             matches!(&error, Error::DevelopmentOnly { key, .. } if key == "auth.basic"),
             "{error:?}"
         );
         let resolved = person
-            .resolve(Profile::Development, &Trust::default(), ADMIN)
+            .resolve(Profile::Development, &Trust::default(), &steward, ADMIN)
             .expect("development admits a Basic person");
         assert!(
             !resolved.admits("dev-steward"),
@@ -475,16 +543,47 @@ mod tests {
             &["__ferropix.steward system/Subscription.cruds"][..],
         ] {
             let mut machine = auth(&[]);
-            machine.0.basic = Some(basic("east-lab", scopes));
+            machine.0.basic = Some(basic("east-lab"));
             let error = machine
-                .resolve(Profile::Development, &Trust::default(), ADMIN)
+                .resolve(
+                    Profile::Development,
+                    &Trust::default(),
+                    &grants("east-lab", scopes, &[]),
+                    ADMIN,
+                )
                 .expect_err("a Basic credential is never a machine's");
             assert!(
-                matches!(&error, Error::BasicSystemScope { index: 0, user } if user == "east-lab"),
+                matches!(&error, Error::BasicSystemScope { user } if user == "east-lab"),
                 "{scopes:?}: {error:?}"
             );
             assert!(error.to_string().contains("east-lab"), "{error}");
             assert!(error.to_string().contains("client credentials"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_grant_naming_a_user_auth_does_not_list_is_refused_naming_the_user() {
+        let url = "https://idp.example.org";
+        let mut listed = auth(&[url]);
+        listed.0.basic = Some(basic("dev-steward"));
+        for section in [listed, auth(&[url])] {
+            let error = section
+                .resolve(
+                    Profile::Development,
+                    &Trust::default(),
+                    &grants("dev-stewart", &[STEWARD_SCOPE], &[]),
+                    ADMIN,
+                )
+                .expect_err("a misspelt user-id never grants");
+            assert!(
+                matches!(
+                    &error,
+                    Error::BasicGrants {
+                        source: StoreError::UnknownUser { username },
+                    } if username == "dev-stewart"
+                ),
+                "{error:?}"
+            );
         }
     }
 
@@ -499,19 +598,19 @@ mod tests {
             ..PartySection::default()
         }];
         let mut roles = auth(&[url]);
-        let mut users = basic("dev-steward", &[STEWARD_SCOPE]);
-        users.users[0].roles = vec![String::from("steward")];
-        roles.0.basic = Some(users);
+        roles.0.basic = Some(basic("dev-steward"));
+        let steward = grants("dev-steward", &[STEWARD_SCOPE], &["steward"]);
         let mut role_claims = auth(&[url, "https://idp.example.org/second"]);
         role_claims.0.issuer[1].role_claims = Some(vec![String::from("groups")]);
-        for (section, key) in [
-            (dpop, "auth.dpop"),
-            (party, "auth.party"),
-            (roles, "auth.basic.users[].roles"),
-            (role_claims, "auth.issuer[1].role_claims"),
+        let none = BasicGrants::default();
+        for (section, granted, key) in [
+            (dpop, &none, "auth.dpop"),
+            (party, &none, "auth.party"),
+            (roles, &steward, "basic_grants.dev-steward.roles"),
+            (role_claims, &none, "auth.issuer[1].role_claims"),
         ] {
             let error = section
-                .resolve(Profile::Production, &Trust::default(), ADMIN)
+                .resolve(Profile::Production, &Trust::default(), granted, ADMIN)
                 .expect_err("a table read and never applied is refused");
             assert!(
                 matches!(&error, Error::Value { key: named, .. } if named == key),
@@ -528,7 +627,12 @@ mod tests {
             entry.kind = None;
         }
         let error = kindless
-            .resolve(Profile::Production, &Trust::default(), ADMIN)
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                ADMIN,
+            )
             .expect_err("kind has no default");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
     }

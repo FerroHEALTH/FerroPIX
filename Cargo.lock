@@ -1249,9 +1249,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5270ca271df20c76f50a1307a71fb81b566fba34bd9948dcc48fa75f902d1921"
+checksum = "e5760d62ada4bf5ea70aa38e20140440cd7b2946203e82dcb75ddfa05257530b"
 dependencies = [
  "bytes",
  "chumsky",
@@ -1275,9 +1275,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-term"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f6a5253085a3ff81362e9f10432fef134aaf7c46b3b8a04923920aaa753b30d"
+checksum = "1be812150c490ac544354c313ca23fd320e4eb9b44233ba3e31faba098a1bdac"
 dependencies = [
  "async-trait",
  "backon",
@@ -1363,9 +1363,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-session"
-version = "0.17.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e933d6e37c428392ff47c870016bd8f8287c04b577e5c79a7fdeb3d2f9281241"
+checksum = "de74bc9ec726531cf48c91a59f6effe39846ea591541f58c60414fc73fb5a5b4"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1388,9 +1388,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-smart"
-version = "0.22.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06b8ef3426a2992354c80195d3e9f1d6bc635f2e158c3078b0b09a8839324966"
+checksum = "1e84a29cc5592183ff830d0b1b0eb9b8b9945ac9e57f79706fffc4dc8361ebbc"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -2396,9 +2396,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.16.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2aef40fdaa49a33b0fe7ec469b012c47ac4cd680cb2a5e3540b81b1a37c13d3"
+checksum = "1c226a0463d61c9ea2177b876451a97028b95f26811b204777851bcda58fbe6c"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2421,7 +2421,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2900,7 +2900,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

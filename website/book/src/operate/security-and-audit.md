@@ -77,9 +77,9 @@ in front of FerroPIX ([The HL7 v2 face](../integrate/hl7v2-face.md),
 
 Basic users are for a run on your own machine: they need
 `profile = "development"` and the `[dev]` table. A Basic user is a person,
-a steward or an administrator, and never a Source or another machine: an
-entry granting a `system/` scope refuses the start, naming the user, and a
-machine signs in with a client credentials token (RFC 6749 §4.4) of an
+a steward or an administrator, and never a Source or another machine: a
+`[basic_grants]` table granting a `system/` scope refuses the start, naming
+the user, and a machine signs in with a client credentials token (RFC 6749 §4.4) of an
 `[[auth.issuer]]`.
 
 ## No identifying data where it was not sent

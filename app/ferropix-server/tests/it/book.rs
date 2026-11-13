@@ -31,6 +31,8 @@ cache_ttl = "1min"
 [[auth.basic.users]]
 user = "dev-steward"
 password_hash = "{PHC}"
+
+[basic_grants.dev-steward]
 scopes = ["__ferropix.steward"]
 
 [dev]
@@ -49,6 +51,8 @@ fn walk(table: &toml::Table, prefix: &str, keys: &mut BTreeSet<String>) {
     for (name, value) in table {
         let key = if prefix == "matching.fields" {
             format!("{prefix}.<field>")
+        } else if prefix == "basic_grants" {
+            format!("{prefix}.<user-id>")
         } else if prefix.is_empty() {
             name.clone()
         } else {

@@ -65,7 +65,7 @@ that failed to serve.
 run on your own machine, and only it admits:
 
 - the `[dev]` table;
-- Basic users under `[auth.basic]`;
+- Basic users under `[auth.basic]`, with their `[basic_grants]`;
 - a secret set inline, such as `db.url`, where production takes the
   `_file` key;
 - a plain `http` public base URL on a host other than a loopback one;
@@ -388,8 +388,9 @@ whose `source_client_id` no entry lists is refused.
 
 `[auth.basic]` holds Basic users, for the development profile only, and
 only beside the `[dev]` table. A Basic user is a person, a steward or an
-administrator on your own machine, and never a Source: an entry granting a
-`system/` scope refuses the start, naming the user. A machine, a Source
+administrator on your own machine, and never a Source. A Basic user holds
+its credential alone; what it is granted is set in
+[`[basic_grants]`](#basic_grants). A machine, a Source
 among them, signs in with a client credentials token of an
 `[[auth.issuer]]`. Who needs which scope is on the
 [Security and audit](security-and-audit.md#who-may-call-the-server) page.
@@ -400,8 +401,35 @@ among them, signs in with a client credentials token of an
 | `auth.basic.users[].user` | none | The user-id. |
 | `auth.basic.users[].password_hash` | none | The Argon2id PHC string of the password. |
 | `auth.basic.users[].password_hash_file` | none | The file holding that string. |
-| `auth.basic.users[].scopes` | `[]` | The scopes the user is granted, never a `system/` scope: a `system/` scope fails the configuration load, naming the user and the scope. |
-| `auth.basic.users[].roles` | `[]` | Refused when set: the permission table reads scopes. |
+
+A `scopes` or `roles` key in an `[[auth.basic.users]]` entry refuses the
+start as an unknown key.
+
+### `[basic_grants]`
+
+What each Basic user of `[[auth.basic.users]]` is granted, one table per
+user named by its user-id, `[basic_grants.<user-id>]`. A user with no table
+is granted nothing. A table naming a user `[[auth.basic.users]]` does not
+list refuses the start, naming the user, so a misspelt user-id never grants
+anything.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `basic_grants.<user-id>.scopes` | `[]` | The scopes the user is granted, never a `system/` scope: a `system/` scope fails the configuration load, naming the user. |
+| `basic_grants.<user-id>.roles` | `[]` | Refused when set: the permission table reads scopes. |
+
+```toml
+profile = "development"
+
+[[auth.basic.users]]
+user = "dev-steward"
+password_hash_file = "/run/secrets/dev-steward.phc"
+
+[basic_grants.dev-steward]
+scopes = ["__ferropix.steward"]
+
+[dev]
+```
 
 ### `[[domain]]`
 

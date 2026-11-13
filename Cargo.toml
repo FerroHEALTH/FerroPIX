@@ -68,7 +68,7 @@ fhir-search = { version = "0.1.130", default-features = false }
 # external_url` for the product's public URL (#649), 0.23 leaves a Basic
 # user's scopes to the product's `[basic_grants]` and 0.24 asks a standing
 # source (#651). Verified against crates.io on 2026-11-13 (0.24.0).
-ferrohealth-smart = { version = "=0.24.0", default-features = false }
+ferrohealth-smart = { version = "=0.24.1", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every

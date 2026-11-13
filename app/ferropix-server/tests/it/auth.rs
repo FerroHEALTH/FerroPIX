@@ -813,6 +813,8 @@ listen = "127.0.0.1:0"
 [[auth.basic.users]]
 user = "dev-steward"
 password_hash = "{phc}"
+
+[basic_grants.dev-steward]
 scopes = ["__ferropix.steward"]
 
 [dev]

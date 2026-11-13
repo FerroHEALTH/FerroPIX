@@ -75,6 +75,10 @@ pub struct Config {
     pub auth: section::auth::Auth,
     /// What each issuer's tokens are honoured for (`[trust]`).
     pub trust: section::auth::Trust,
+    /// The scopes each Basic user of `[[auth.basic.users]]` is granted, by
+    /// user-id (`[basic_grants.<user-id>]`): the table `ferrohealth-smart`
+    /// defines for a product to compose into its own tree.
+    pub basic_grants: ferrohealth_smart::config::BasicGrants,
     /// The identifier domains seeded at start (`[[domain]]`).
     pub domain: Vec<section::domain::Domain>,
     /// The pseudonymisation domains seeded at start (`[[pseudonym_domain]]`).

@@ -81,6 +81,9 @@ pub(crate) fn entry(method: &str, url: &str, resource: Option<&str>, status: &st
     )
 }
 
+/// The `extra` field of a Patient in active use.
+pub(crate) const ACTIVE: &str = r#","active":true"#;
+
 /// A Patient `id` with one identifier `value` in [`DOMAIN`] and a name,
 /// with `extra` fields.
 pub(crate) fn patient(id: &str, value: &str, extra: &str) -> String {

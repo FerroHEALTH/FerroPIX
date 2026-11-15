@@ -159,8 +159,10 @@ is the Consumer side of ITI-93, Mobile Patient Identity Feed: it reads a
 message the Registry sends to your channel into typed creates, updates,
 deletes and merges, refuses one that departs from the PMIR profiles, and
 `acknowledgement` writes the response message. The feed keeps the resource
-ids and the identifiers only, each value in a `secrecy::SecretString`, and
-drops every demographic as it reads; no type has `Display`, and no error
+ids, the identifiers, `active` and every link (`feed::Link`, its FHIR R4
+`link-type` and the other reference), each id and value in a
+`secrecy::SecretString`, and drops every demographic as it reads. It refuses
+a created, updated or merged Patient that omits `active`; no type has `Display`, and no error
 carries a value, a URL or the Registry's text. PMIR leaves the
 authentication of the Registry to your channel to the two parties, so your
 code authenticates each message before it reads it.

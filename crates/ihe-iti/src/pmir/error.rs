@@ -274,6 +274,20 @@ pub enum FeedError {
         /// The entry's position.
         index: usize,
     },
+    /// A created, updated or merged Patient omits `active`, which this
+    /// Consumer reads every Patient's state from.
+    #[error("history entry {index} carries a Patient that omits active")]
+    NoActive {
+        /// The entry's position.
+        index: usize,
+    },
+    /// A Patient's link has a type outside the FHIR R4 `link-type` value
+    /// set, a required binding, or no reference to the other resource.
+    #[error("history entry {index} carries a Patient link with no known type or no reference")]
+    Link {
+        /// The entry's position.
+        index: usize,
+    },
     /// Two history entries change the same Patient, and each entry is a
     /// unique Patient (§2:3.93.4.1.2.3).
     #[error("history entry {index} changes a Patient an earlier entry changes")]

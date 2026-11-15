@@ -7,10 +7,10 @@
 
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pmir::error::FeedError;
-use ihe_iti::pmir::feed::{Event, EventKind, Feed, refusal};
+use ihe_iti::pmir::feed::{Event, EventKind, Feed, LinkType, refusal};
 use secrecy::ExposeSecret;
 
-use super::{DOMAIN, FHIR_JSON, HEADER, entry, merged, message, message_with, patient};
+use super::{ACTIVE, DOMAIN, FHIR_JSON, HEADER, entry, merged, message, message_with, patient};
 
 /// A value that stands for a patient identifier.
 const VALUE: &str = "SYNTHETIC-1001";
@@ -23,7 +23,7 @@ fn update(id: &str) -> String {
     entry(
         "PUT",
         &format!("Patient/{id}"),
-        Some(&patient(id, VALUE, "")),
+        Some(&patient(id, VALUE, ACTIVE)),
         "200",
     )
 }
@@ -56,12 +56,151 @@ fn a_merge_reads_as_the_subsumed_identity_and_the_surviving_reference() {
 }
 
 #[test]
+fn a_merge_states_the_deprecated_patient_inactive_with_its_one_replaced_by_link() {
+    let body = message(&[entry(
+        "PUT",
+        "Patient/p-old",
+        Some(&merged("p-old", VALUE, "p-new")),
+        "200",
+    )]);
+    let feed = read(&body).expect("a merge");
+    let [Event::Merged { subsumed, .. }] = feed.events() else {
+        panic!("one merge");
+    };
+    assert_eq!(Some(false), subsumed.active());
+    let [link] = subsumed.links() else {
+        panic!("one link");
+    };
+    assert_eq!(LinkType::ReplacedBy, link.kind());
+    assert_eq!("Patient/p-new", link.other().expose_secret());
+}
+
+#[test]
+fn an_update_of_a_deprecated_patient_restates_its_merge_and_is_never_an_unmerge() {
+    let body = message(&[entry(
+        "PUT",
+        "Patient/p-old",
+        Some(&merged("p-old", "SYNTHETIC-1003", "p-new")),
+        "200",
+    )]);
+    let feed = read(&body).expect("an update of the deprecated patient");
+    assert_eq!(0, feed.count(EventKind::Update), "never an unmerge");
+    let [
+        Event::Merged {
+            subsumed,
+            surviving,
+        },
+    ] = feed.events()
+    else {
+        panic!("the merge restated");
+    };
+    assert_eq!(Some(false), subsumed.active());
+    assert_eq!("Patient/p-new", surviving.expose_secret());
+}
+
+#[test]
+fn a_revert_reads_as_both_patients_reinstated_with_no_merge_link() {
+    let body = message(&[
+        entry(
+            "PUT",
+            "Patient/p-new",
+            Some(&patient("p-new", VALUE, ACTIVE)),
+            "200",
+        ),
+        entry(
+            "PUT",
+            "Patient/p-old",
+            Some(&patient("p-old", "SYNTHETIC-1002", ACTIVE)),
+            "200",
+        ),
+    ]);
+    let feed = read(&body).expect("a revert");
+    assert_eq!(2, feed.count(EventKind::Update));
+    for event in feed.events() {
+        let Event::Updated(identity) = event else {
+            panic!("an update");
+        };
+        assert_eq!(Some(true), identity.active(), "{identity:?}");
+        assert!(identity.links().is_empty(), "{identity:?}");
+    }
+}
+
+#[test]
+fn every_link_is_read_with_its_type_and_reference() {
+    let body = message(&[entry(
+        "PUT",
+        "Patient/p-1",
+        Some(&patient(
+            "p-1",
+            VALUE,
+            r#","active":true,"link":[{"other":{"reference":"Patient/p-9"},"type":"replaces"},{"other":{"reference":"RelatedPerson/r-1"},"type":"seealso"},{"other":{"reference":"Patient/p-8"},"type":"refer"}]"#,
+        )),
+        "200",
+    )]);
+    let feed = read(&body).expect("an update");
+    let [Event::Updated(identity)] = feed.events() else {
+        panic!("one update");
+    };
+    let links: Vec<(LinkType, &str)> = identity
+        .links()
+        .iter()
+        .map(|link| (link.kind(), link.other().expose_secret()))
+        .collect();
+    assert_eq!(
+        vec![
+            (LinkType::Replaces, "Patient/p-9"),
+            (LinkType::SeeAlso, "RelatedPerson/r-1"),
+            (LinkType::Refer, "Patient/p-8"),
+        ],
+        links
+    );
+    let shown = format!("{identity:?}");
+    assert!(shown.contains("Replaces"), "{shown}");
+    assert!(!shown.contains("p-9") && !shown.contains(VALUE), "{shown}");
+}
+
+#[test]
+fn a_patient_that_omits_active_is_refused() {
+    for (method, url) in [("POST", "Patient"), ("PUT", "Patient/p-1")] {
+        let body = message(&[entry(method, url, Some(&patient("p-1", VALUE, "")), "200")]);
+        assert_eq!(
+            Err(FeedError::NoActive { index: 0 }),
+            read(&body).map(|_| ()),
+            "{method}"
+        );
+    }
+    let delete = message(&[entry("DELETE", "Patient/p-1", None, "204")]);
+    assert!(read(&delete).is_ok(), "a delete carries no state");
+}
+
+#[test]
+fn a_link_with_no_known_type_or_no_reference_is_refused() {
+    for link in [
+        r#"{"other":{"reference":"Patient/p-2"},"type":"twin"}"#,
+        r#"{"other":{"display":"elsewhere"},"type":"seealso"}"#,
+    ] {
+        let resource = patient("p-1", VALUE, &format!(r#","active":true,"link":[{link}]"#));
+        assert_eq!(
+            Err(FeedError::Link { index: 0 }),
+            read(&message(&[entry(
+                "PUT",
+                "Patient/p-1",
+                Some(&resource),
+                "200"
+            )]))
+            .map(|_| ()),
+            "{link}"
+        );
+    }
+}
+
+#[test]
 fn creates_updates_and_deletes_read_in_history_order() {
     let body = message(&[
         entry(
             "POST",
             "Patient",
-            Some(&patient("p-1", VALUE, "")),
+            Some(&patient("p-1", VALUE, ACTIVE)),
             "201 Created",
         ),
         update("p-2"),
@@ -80,7 +219,7 @@ fn a_delete_that_carries_its_patient_keeps_the_identifiers() {
     let body = message(&[entry(
         "DELETE",
         "Patient/p-3",
-        Some(&patient("p-3", VALUE, "")),
+        Some(&patient("p-3", VALUE, ACTIVE)),
         "200",
     )]);
     let feed = read(&body).expect("a delete");
@@ -228,7 +367,7 @@ fn an_empty_history_is_refused() {
 
 #[test]
 fn a_history_entry_off_the_profile_is_refused() {
-    let resource = patient("p-1", VALUE, "");
+    let resource = patient("p-1", VALUE, ACTIVE);
     let cases = [
         (
             entry("PATCH", "Patient/p-1", Some(&resource), "200"),

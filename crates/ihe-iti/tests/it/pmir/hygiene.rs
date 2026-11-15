@@ -14,7 +14,7 @@ use url::Url;
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{FHIR_JSON, PROMPT, entry, merged, message, patient, subscriber};
+use super::{ACTIVE, FHIR_JSON, PROMPT, entry, merged, message, patient, subscriber};
 use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest};
 
 /// A value that stands for a patient identifier.
@@ -46,7 +46,7 @@ fn no_rendering_of_a_feed_shows_an_identifier_or_a_demographic() {
         entry(
             "POST",
             "Patient",
-            Some(&patient("p-2", SENTINEL, "").replacen("Synthetic", SENTINEL_NAME, 1)),
+            Some(&patient("p-2", SENTINEL, ACTIVE).replacen("Synthetic", SENTINEL_NAME, 1)),
             "201",
         ),
     ]);
@@ -64,7 +64,7 @@ fn no_refusal_quotes_the_message() {
         message(&[entry(
             "PUT",
             &format!("Patient/{SENTINEL_ID}"),
-            Some(&patient("other", SENTINEL, "")),
+            Some(&patient("other", SENTINEL, ACTIVE)),
             "200",
         )]),
         message(&[entry(
@@ -81,7 +81,7 @@ fn no_refusal_quotes_the_message() {
         message(&[entry(
             "PUT",
             "Patient/p-1",
-            Some(&patient("p-1", SENTINEL, "")),
+            Some(&patient("p-1", SENTINEL, ACTIVE)),
             &format!("500 {SENTINEL}"),
         )]),
     ];

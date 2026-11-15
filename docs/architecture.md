@@ -183,7 +183,7 @@ message and position without quoting the line.
 | `[basic_grants]` | `ferrohealth-smart`'s `BasicGrants`: the scopes of each Basic user, `[basic_grants.<user-id>] scopes`, never a `system/` scope or a role, and never for a user `[[auth.basic.users]]` does not list (our own design) |
 | `[[domain]]` | the identifier domains to seed at start, each `system`, `name`, `kind` and `source_client_id`; applied as insert-if-absent, never an update, so the database stays the record (section 4) |
 | `[matching]` | the thresholds, the field weights, the blocking keys, `auto_link` |
-| `[pixm]`, `[pdqm]`, `[pmir]` | each profile's switch and options: `[pixm] remove_patient` (PIXm 3.1.0 §1:41.2.1), `[pdqm] deprecated` (which of the policy choices of PDQm 3.2.0 §2:3.78.4.1.3 case 6 the supplier takes), `[pmir] feed` (the outbound ITI-93 sender's retry bounds) |
+| `[pixm]`, `[pdqm]`, `[pmir]` | each profile's switch and options: `[pixm] remove_patient` (PIXm 3.1.0 §1:41.2.1), `[pdqm] deprecated` (which of the policy choices of PDQm 3.2.0 §2:3.78.4.1.3 case 6 the supplier takes), `[pmir] feed` (the outbound ITI-93 sender's retry bounds and, in `[[pmir.feed.consumers]]`, the Consumers it authenticates to with IUA or mutual TLS) |
 | `[hl7v2]` | `listen`, `default_charset`, `frame_limit`, the timeouts, `[[hl7v2.senders]]` (section 7) |
 | `[audit]` | the ATNA repository the BALP records go to (`[audit.endpoint]`, `ferrohealth-smart`'s endpoint table, whose `url` is a FHIR base for the FHIR Feed, BALP 1.1.4 §1:52.1.1.1, reached through its outbound client), the spool directory and its bounds |
 | `[terminology]` | the FHIR R4 terminology server the HL7 v2 face translates every table value on (`[terminology.endpoint]`, the same endpoint table, section 7) |
@@ -719,7 +719,17 @@ person as the deprecated `Patient` (PMIR 1.6.0 §2:3.93.4.1.2.4). The
 sender delivers a subscription's messages one at a time and in order, with
 the headers the subscription's `channel.header` asks for (FHIR R4
 `Subscription.channel.header`), within the retry bounds of `[pmir] feed`.
-When the bounds are spent it sets the subscription's `status` to `error`
+It authenticates to each Patient Identity Consumer the operator names in
+`[[pmir.feed.consumers]]`, the family's endpoint table: a message whose
+channel endpoint lies under an entry's URL prefix carries that Consumer's
+IUA client credentials token, renewed once on a `401`, and presents its
+client certificate for ATNA mutual TLS (PMIR 1.6.0 §2:3.93.5). The
+subscription carries no credential (§2:3.94.5), so the Consumer's token
+replaces any `Authorization` header it names, and an endpoint under no
+prefix gets no credential, so a token never reaches an endpoint the
+operator did not name; the prefix rule is our own design. A `401` or `403`
+after the renewal counts as a failed attempt like any other and names the
+refusal in the subscription's `error`. When the bounds are spent it sets the subscription's `status` to `error`
 with the error text (PMIR 1.6.0 §2:3.94.4.1.3), and its later messages wait
 until an enable makes it `active` again. The dependency report names each
 subscriber with the outcome of its latest message, and the `outbox`

@@ -327,35 +327,36 @@ fn with_feed(store: store::Store, settings: &Settings, wake: &store::outbox::Wak
     store.with_feed(store::subscription::FeedSettings {
         registry,
         master,
-        max_attempts: settings.pmir.feed.max_attempts,
+        max_attempts: settings.pmir.max_attempts,
         wake: wake.clone(),
     })
 }
 
 /// The outbox channel of the ITI-93 messages to subscribers when `[pmir]`
-/// is on: a client that follows no redirect, with the `[pmir.feed]` retry
-/// waits.
+/// is on: each `[[pmir.feed.consumers]]` client, a client that follows no
+/// redirect for an endpoint under no Consumer's prefix, and the
+/// `[pmir.feed]` retry waits.
 ///
 /// # Errors
 /// Returns [`ServeError::Pmir`] when the client cannot be built.
 fn pmir_channel(
-    pmir: &config::section::profiles::Pmir,
-) -> Result<Option<outbox::HttpChannel>, ServeError> {
+    pmir: &config::section::profiles::PmirSettings,
+) -> Result<Option<outbox::PmirChannel>, ServeError> {
     if !pmir.enabled {
         return Ok(None);
     }
-    let feed = &pmir.feed;
     // NOTE: no specification governs this: our own design; a subscriber's redirect would steer the server's posts, as D33 refuses for XCPD.
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(ServeError::Pmir)?;
-    Ok(Some(outbox::HttpChannel {
+    Ok(Some(outbox::PmirChannel {
         client,
+        consumers: pmir.consumers.clone().into(),
         backoff: outbox::Backoff {
-            initial: feed.initial_backoff.get(),
-            max: feed.max_backoff.get(),
+            initial: pmir.initial_backoff,
+            max: pmir.max_backoff,
         },
     }))
 }

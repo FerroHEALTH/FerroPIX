@@ -28,17 +28,17 @@ use super::pixm::{Harness, synthetic_seeds};
 use super::xcpd::{FEMALE, SOAP, asynchronous, gateway_with, named, post, section, seeded};
 
 /// The certificates of one run, as PEM text.
-struct Pki {
+pub(super) struct Pki {
     /// The authority's certificate.
-    authority: String,
+    pub(super) authority: String,
     /// The reply endpoint's certificate and key.
-    server: (String, String),
+    pub(super) server: (String, String),
     /// The gateway's client certificate and key.
-    client: (String, String),
+    pub(super) client: (String, String),
 }
 
 /// Generates an authority and the server and client certificates it signs.
-fn pki() -> Pki {
+pub(super) fn pki() -> Pki {
     let mut params = CertificateParams::new(Vec::<String>::new()).expect("authority params");
     params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     params
@@ -63,11 +63,11 @@ fn pki() -> Pki {
 /// What the reply endpoint saw: per connection, whether the handshake
 /// completed, and the requests it read.
 #[derive(Clone, Default)]
-struct Seen(Arc<Mutex<(Vec<bool>, Vec<String>)>>);
+pub(super) struct Seen(Arc<Mutex<(Vec<bool>, Vec<String>)>>);
 
 /// Starts a reply endpoint on a loopback port that requires a client
 /// certificate the authority signed, answering every request `202`.
-async fn endpoint(pki: &Pki) -> (SocketAddr, Seen) {
+pub(super) async fn endpoint(pki: &Pki) -> (SocketAddr, Seen) {
     let mut roots = RootCertStore::empty();
     roots
         .add(CertificateDer::from_pem_slice(pki.authority.as_bytes()).expect("the authority"))
@@ -119,7 +119,7 @@ async fn endpoint(pki: &Pki) -> (SocketAddr, Seen) {
 }
 
 /// Waits until the endpoint has seen `count` connections.
-async fn connections(seen: &Seen, count: usize) -> (Vec<bool>, Vec<String>) {
+pub(super) async fn connections(seen: &Seen, count: usize) -> (Vec<bool>, Vec<String>) {
     for _ in 0..200 {
         let now = seen.0.lock().unwrap().clone();
         if now.0.len() >= count {
@@ -131,7 +131,7 @@ async fn connections(seen: &Seen, count: usize) -> (Vec<bool>, Vec<String>) {
 }
 
 /// Writes `text` to `name` under `dir` and returns its path.
-fn written(dir: &tempfile::TempDir, name: &str, text: &str) -> std::path::PathBuf {
+pub(super) fn written(dir: &tempfile::TempDir, name: &str, text: &str) -> std::path::PathBuf {
     let path = dir.path().join(name);
     std::fs::write(&path, text).expect("written");
     path

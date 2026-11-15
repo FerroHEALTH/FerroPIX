@@ -13,8 +13,11 @@
 //! timeout, and a message it never reached stays in the outbox for the next
 //! start. [`Backlog`] is its readiness indicator. An ITI-10 notification
 //! goes over MLLP through `ferrobridge-hl7v2`'s sender ([`MllpChannel`]),
-//! its acknowledgment read and checked (ITI TF-2 §3.10.4.1.2). No
-//! specification governs the sender: our own design.
+//! its acknowledgment read and checked (ITI TF-2 §3.10.4.1.2). An ITI-93
+//! message to an endpoint under a `[[pmir.feed.consumers]]` prefix goes
+//! through that Consumer's client, with its IUA token and its ATNA client
+//! certificate (PMIR 1.6.0 §2:3.93.5). No specification governs the sender:
+//! our own design.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,6 +31,7 @@ use crate::audit::records::{self, Identifier};
 use crate::config::section::hl7v2::Consumer;
 use crate::config::section::hl7v2::authority::Authorities;
 use crate::config::section::outbox::Retention;
+use crate::config::section::profiles::{FeedConsumer, consumer_of};
 use crate::store::Store;
 use crate::store::outbox::{self, Channel, Claimed, LEASE, Wake};
 use crate::v2::notification::{self, Acknowledged, Party};
@@ -76,6 +80,19 @@ pub struct HttpChannel {
     pub backoff: Backoff,
 }
 
+/// The HTTP delivery of the ITI-93 messages to PMIR subscribers.
+#[derive(Debug, Clone)]
+pub struct PmirChannel {
+    /// The client of an endpoint under no Consumer's prefix, which presents
+    /// no credential.
+    pub client: reqwest::Client,
+    /// The Patient Identity Consumers, each with the client that
+    /// authenticates to it.
+    pub consumers: Arc<[FeedConsumer]>,
+    /// The retry waits.
+    pub backoff: Backoff,
+}
+
 /// The MLLP delivery of the ITI-10 notifications.
 #[derive(Debug, Clone)]
 pub struct MllpChannel {
@@ -97,7 +114,7 @@ pub struct Channels {
     /// The XCPD asynchronous answers, when `[xcpd]` is on.
     pub xcpd: Option<HttpChannel>,
     /// The ITI-93 messages to PMIR subscribers, when `[pmir]` is on.
-    pub pmir: Option<HttpChannel>,
+    pub pmir: Option<PmirChannel>,
     /// The ITI-10 notifications, when `[[hl7v2.consumers]]` names one.
     pub hl7v2: Option<MllpChannel>,
 }
@@ -256,20 +273,17 @@ async fn prune(store: &Store, retention: Retention) {
 /// Delivers one claimed row and records how it went.
 async fn deliver(store: &Store, channels: &Channels, row: Claimed) {
     let (outcome, backoff) = match row.channel {
-        Channel::Xcpd | Channel::Pmir => {
-            let channel = match row.channel {
-                Channel::Xcpd => channels.xcpd.as_ref(),
-                _ => channels.pmir.as_ref(),
-            };
-            let outcome = match channel {
-                Some(channel) => match headers(store, &row).await {
-                    Ok(headers) => post(channel, &row, headers).await,
-                    Err(failure) => Err(failure),
-                },
-                None => Err(String::from("the channel is switched off")),
-            };
-            (outcome, channel.map(|channel| channel.backoff))
-        }
+        Channel::Xcpd => match channels.xcpd.as_ref() {
+            Some(channel) => (
+                post(&channel.client, &row, http::HeaderMap::new()).await,
+                Some(channel.backoff),
+            ),
+            None => (Err(String::from("the channel is switched off")), None),
+        },
+        Channel::Pmir => match channels.pmir.as_ref() {
+            Some(channel) => (feed(store, channel, &row).await, Some(channel.backoff)),
+            None => (Err(String::from("the channel is switched off")), None),
+        },
         Channel::Hl7v2 => match channels.hl7v2.as_ref() {
             Some(channel) => (notify(channel, &row).await, Some(channel.backoff)),
             None => (Err(String::from("the channel is switched off")), None),
@@ -442,16 +456,81 @@ async fn headers(store: &Store, row: &Claimed) -> Result<http::HeaderMap, String
     Ok(map)
 }
 
-/// Posts the row's payload to its destination with `headers`: a `2xx` is
-/// delivered, and anything else a failure named by its status or its kind,
-/// never its body.
+/// Delivers the row's ITI-93 message with its subscription's headers:
+/// through the client of the Consumer whose prefix serves its endpoint,
+/// with that Consumer's credential in place of any `Authorization` header
+/// the subscription names, or with no credential under no prefix.
+async fn feed(store: &Store, channel: &PmirChannel, row: &Claimed) -> Result<(), String> {
+    let mut headers = headers(store, row).await?;
+    let destination = url::Url::parse(&row.destination)
+        .map_err(|_error| String::from("the endpoint is no URL"))?;
+    let Some(consumer) = consumer_of(&channel.consumers, &destination) else {
+        return post(&channel.client, row, headers).await;
+    };
+    // NOTE: PMIR 1.6.0 §2:3.94.5: no credential travels in the subscription, so the Consumer's own one replaces it.
+    headers.remove(http::header::AUTHORIZATION);
+    let body = row.payload.expose_secret();
+    let sent = consumer
+        .client
+        .send(&http::Method::POST, &destination, |request| {
+            request
+                .headers(headers.clone())
+                .header(http::header::CONTENT_TYPE, row.media_type.as_str())
+                .body(body.to_owned())
+        })
+        .await;
+    match sent {
+        Ok(response) if refuses_credential(response.status()) => Err(format!(
+            "the consumer refused the credential: {}",
+            response.status()
+        )),
+        Ok(response) => answered(response.status()),
+        Err(ferrohealth_smart::client::outbound::SendError::Transport(error)) => {
+            Err(unanswered(&error))
+        }
+        Err(_) => Err(String::from(
+            "no credential could be obtained for the consumer",
+        )),
+    }
+}
+
+/// Whether `status` refuses the credential a request presented: `401`
+/// after the renewal the client already made once (RFC 6750 §3.1), or
+/// `403`.
+fn refuses_credential(status: http::StatusCode) -> bool {
+    status == http::StatusCode::UNAUTHORIZED || status == http::StatusCode::FORBIDDEN
+}
+
+/// The outcome of an answer with `status`: a `2xx` is delivered, and
+/// anything else a failure named by its status.
+fn answered(status: http::StatusCode) -> Result<(), String> {
+    if status.is_success() {
+        Ok(())
+    } else {
+        Err(format!("the endpoint answered {status}"))
+    }
+}
+
+/// The failure of a request that got no answer, by its kind.
+fn unanswered(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        String::from("the attempt timed out")
+    } else if error.is_connect() {
+        String::from("the endpoint refused the connection")
+    } else {
+        String::from("the request failed")
+    }
+}
+
+/// Posts the row's payload to its destination through `client` with
+/// `headers`: a `2xx` is delivered, and anything else a failure named by its
+/// status or its kind, never its body.
 async fn post(
-    channel: &HttpChannel,
+    client: &reqwest::Client,
     row: &Claimed,
     headers: http::HeaderMap,
 ) -> Result<(), String> {
-    let sent = channel
-        .client
+    let sent = client
         .post(row.destination.as_str())
         .headers(headers)
         .header(http::header::CONTENT_TYPE, row.media_type.as_str())
@@ -459,13 +538,8 @@ async fn post(
         .send()
         .await;
     match sent {
-        Ok(response) if response.status().is_success() => Ok(()),
-        Ok(response) => Err(format!("the endpoint answered {}", response.status())),
-        Err(error) if error.is_timeout() => Err(String::from("the attempt timed out")),
-        Err(error) if error.is_connect() => {
-            Err(String::from("the endpoint refused the connection"))
-        }
-        Err(_) => Err(String::from("the request failed")),
+        Ok(response) => answered(response.status()),
+        Err(error) => Err(unanswered(&error)),
     }
 }
 

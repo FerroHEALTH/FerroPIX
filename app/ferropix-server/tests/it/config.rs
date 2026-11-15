@@ -61,7 +61,16 @@ fn every_section_loads_and_resolves() {
     assert_eq!(1, settings.matching.fields.len());
     assert!(settings.pixm.remove_patient);
     assert_eq!(Deprecated::Omit, settings.pdqm.deprecated);
-    assert_eq!(5, settings.pmir.feed.max_attempts);
+    assert_eq!(5, settings.pmir.max_attempts);
+    assert_eq!(
+        vec!["https://ehr.example.org/pmir"],
+        settings
+            .pmir
+            .consumers
+            .iter()
+            .map(|consumer| consumer.base.as_str())
+            .collect::<Vec<_>>()
+    );
     assert_eq!(
         Some(1),
         settings.hl7v2.as_ref().map(|hl7v2| hl7v2.senders.len())
@@ -101,6 +110,7 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[pdqm]", "[pdqm]\n"),
         ("[pmir]", "[pmir]\n"),
         ("[pmir.feed]", "[pmir.feed]\n"),
+        ("[[pmir.feed.consumers]]", "[[pmir.feed.consumers]]\n"),
         ("[hl7v2]", "[hl7v2]\n"),
         ("[[hl7v2.senders]]", "[[hl7v2.senders]]\n"),
         ("[terminology.endpoint]", "[terminology.endpoint]\n"),

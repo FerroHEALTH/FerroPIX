@@ -14,7 +14,7 @@ use crate::config::section::domain::{self, DomainSeed};
 use crate::config::section::hl7v2::Hl7v2Settings;
 use crate::config::section::matching::Matching;
 use crate::config::section::outbox::Retention;
-use crate::config::section::profiles::{Pdqm, Pixm, Pmir};
+use crate::config::section::profiles::{Pdqm, Pixm, PmirSettings};
 use crate::config::section::pseudonym::{self, PseudonymSeed};
 use crate::config::section::public;
 use crate::config::section::xcpd::XcpdSettings;
@@ -47,7 +47,7 @@ pub struct Settings {
     /// The PDQm Supplier.
     pub pdqm: Pdqm,
     /// The PMIR Registry.
-    pub pmir: Pmir,
+    pub pmir: PmirSettings,
     /// The HL7 v2 face, when it is on.
     pub hl7v2: Option<Hl7v2Settings>,
     /// The XCPD Responding Gateway, when it is on.
@@ -107,7 +107,7 @@ impl Config {
         let domains = domain::resolve(&self.domain, &auth)?;
         let pseudonym_domains = pseudonym::resolve(&self.pseudonym_domain, &domains)?;
         let matching = self.matching.resolve()?;
-        let pmir = self.pmir.resolve()?;
+        let pmir = self.pmir.resolve(self.profile)?;
         let terminology = self.terminology.resolve(self.profile)?;
         let hl7v2 = self.hl7v2.resolve(terminology.as_ref())?;
         let xcpd = self.xcpd.resolve()?;

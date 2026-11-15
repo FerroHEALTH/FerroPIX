@@ -154,7 +154,10 @@ The Patient Identity Subscriber and Patient Identity Consumer sides of PMIR
 1.6.0. `ihe_iti::pmir::PmirSubscriber` is ITI-94, Subscribe to Patient
 Updates: it creates a `Subscription` at the Patient Identity Registry from a
 `SubscriptionRequest` (the criteria the Registry must accept, and your
-channel endpoint), reads its status and deletes it. `ihe_iti::pmir::feed::Feed::read`
+channel endpoint), reads its status and deletes it.
+`ihe_iti::pmir::subscription::Subscribed::at` rebuilds the handle from the
+`Location` you stored, refusing one off the Registry's base, so a subscriber
+that keeps no state between requests can read or delete its subscription. `ihe_iti::pmir::feed::Feed::read`
 is the Consumer side of ITI-93, Mobile Patient Identity Feed: it reads a
 message the Registry sends to your channel into typed creates, updates,
 deletes and merges, refuses one that departs from the PMIR profiles, and

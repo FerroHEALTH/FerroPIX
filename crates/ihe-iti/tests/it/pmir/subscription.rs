@@ -11,7 +11,9 @@ use http::StatusCode;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pmir::PmirSubscriber;
 use ihe_iti::pmir::error::{SubscribeError, SubscriptionMalformation};
-use ihe_iti::pmir::subscription::{Criteria, Search, SubscriptionRequest, SubscriptionStatus};
+use ihe_iti::pmir::subscription::{
+    Criteria, Search, Subscribed, SubscriptionRequest, SubscriptionStatus,
+};
 use url::Url;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -151,6 +153,53 @@ async fn the_status_is_read_from_the_subscription() {
         SubscriptionStatus::Error,
         client.status(&subscribed, PROMPT).await.expect("a status")
     );
+}
+
+#[tokio::test]
+async fn a_stored_location_rebuilds_the_handle_a_status_and_a_delete_use() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/fhir/Subscription/s-7"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{"resourceType":"Subscription","id":"s-7","status":"active","reason":"x","criteria":"Patient","channel":{"type":"message","endpoint":"https://gateway.example.org/pmir/feed","payload":"application/fhir+json"}}"#,
+            FHIR_JSON,
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/fhir/Subscription/s-7"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    let client = subscriber(&server);
+    let stored = format!("{}/fhir/Subscription/s-7/_history/3", server.uri());
+    for location in ["Subscription/s-7", stored.as_str()] {
+        let subscribed = Subscribed::at(client.endpoint(), location).expect("under the base");
+        assert_eq!(
+            format!("{}/fhir/Subscription/s-7", server.uri()),
+            subscribed.location().as_str(),
+            "{location}"
+        );
+        assert_eq!(
+            SubscriptionStatus::Active,
+            client.status(&subscribed, PROMPT).await.expect("a status")
+        );
+        client
+            .unsubscribe(&subscribed, PROMPT)
+            .await
+            .expect("deleted");
+    }
+    for location in [
+        "https://elsewhere.example.org/fhir/Subscription/s-7",
+        "Patient/s-7",
+        "Subscription/s-7/extra",
+    ] {
+        assert_eq!(
+            Err(SubscriptionMalformation::Location),
+            Subscribed::at(client.endpoint(), location).map(|_| ()),
+            "{location}"
+        );
+    }
 }
 
 #[tokio::test]

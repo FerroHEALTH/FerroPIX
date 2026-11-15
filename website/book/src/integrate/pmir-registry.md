@@ -56,9 +56,13 @@ leaves.
 Every committed change to a patient is an ITI-93 message to each active
 subscription whose criteria match. A message is written in the same
 transaction as the change, so a change is never left unannounced, and it is
-written in the format the subscription's `channel.payload` names. A
-merged patient is sent as the deprecated `Patient`, `active` false with its
-`replaced-by` link.
+written in the format the subscription's `channel.payload` names. Every
+`Patient` in a message states `active` and carries its current links, so a
+subscriber reads the patient's state from the message alone. A merged
+patient is sent as the deprecated `Patient`, `active` false with its
+`replaced-by` link. A steward's revert of a merge is one message that sends
+both patients as they now stand: each `active` true, with no `replaced-by`
+link.
 
 The sender posts a subscription's messages to its channel endpoint one at a
 time and in order, with the headers the subscription's `channel.header`

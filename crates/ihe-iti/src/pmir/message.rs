@@ -20,7 +20,7 @@ use crate::bundle;
 use crate::rest;
 
 use super::error::FeedError;
-use super::feed::{Event, Identifier, PatientIdentity, Unwritable};
+use super::feed::{Event, Identifier, Link, LinkType, PatientIdentity, Unwritable};
 
 /// The event of a feed message (the PMIR `MessageHeader` profile,
 /// `MessageHeader.event[x]`).
@@ -91,16 +91,22 @@ pub(super) fn read(media: Option<&str>, body: &[u8]) -> Result<(String, Vec<Even
     })?;
     let object: &Object = value.as_object().ok_or(FeedError::NotAResource)?;
     let message = read_bundle(object)?;
-    let events = message.changes.iter().map(Change::event).collect();
+    let events = message
+        .changes
+        .iter()
+        .enumerate()
+        .map(|(index, change)| change.event(index))
+        .collect::<Result<_, _>>()?;
     Ok((message.id, events))
 }
 
 impl Change {
-    /// The change as the Consumer keeps it: ids and identifiers only.
-    fn event(&self) -> Event {
-        match self {
-            Self::Created(patient) => Event::Created(identity(patient)),
-            Self::Updated(patient) => Event::Updated(identity(patient)),
+    /// The change at history entry `index` as the Consumer keeps it: ids,
+    /// identifiers, `active` and links only.
+    fn event(&self, index: usize) -> Result<Event, FeedError> {
+        Ok(match self {
+            Self::Created(patient) => Event::Created(stated(index, patient)?),
+            Self::Updated(patient) => Event::Updated(stated(index, patient)?),
             Self::Deleted { id, patient } => {
                 let identifiers = patient
                     .as_deref()
@@ -115,11 +121,45 @@ impl Change {
                 deprecated,
                 surviving,
             } => Event::Merged {
-                subsumed: identity(deprecated),
+                subsumed: stated(index, deprecated)?,
                 surviving: SecretString::from(surviving.clone()),
             },
-        }
+        })
     }
+}
+
+/// The identity of `patient` at history entry `index` with its state: its
+/// `active`, which it must state, and every link, each with a FHIR R4
+/// `link-type` code and a reference.
+fn stated(index: usize, patient: &Patient) -> Result<PatientIdentity, FeedError> {
+    // NOTE: FHIR R4 Patient.active is 0..1 and PMIR 1.6.0 §2:3.93.4.1.3
+    // reads an unmerge from it, so requiring it is our own design.
+    let active = patient
+        .active
+        .as_ref()
+        .and_then(|active| active.value)
+        .ok_or(FeedError::NoActive { index })?;
+    let links = patient
+        .link
+        .iter()
+        .map(|link| {
+            let kind = link
+                .r#type
+                .value
+                .as_deref()
+                .and_then(LinkType::from_code)
+                .ok_or(FeedError::Link { index })?;
+            let other = link
+                .other
+                .reference
+                .as_ref()
+                .and_then(|reference| reference.value.clone())
+                .filter(|reference| !reference.is_empty())
+                .ok_or(FeedError::Link { index })?;
+            Ok(Link::new(kind, SecretString::from(other)))
+        })
+        .collect::<Result<Vec<_>, FeedError>>()?;
+    Ok(identity(patient).with_active(active).with_links(links))
 }
 
 /// Reads the message from its decoded `object`, held to the PMIR profiles

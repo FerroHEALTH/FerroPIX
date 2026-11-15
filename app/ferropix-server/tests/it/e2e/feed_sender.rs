@@ -10,7 +10,9 @@
 //!   from the next message;
 //! - no identifier or name reaches the log;
 //! - a steward merge and its revert each queue one message per matching
-//!   subscription.
+//!   subscription;
+//! - every Patient a message carries states `active` and its current links,
+//!   and a revert sends both persons reinstated in one message.
 //!
 //! Every name, date and identifier is synthetic.
 #![expect(
@@ -479,4 +481,136 @@ async fn a_steward_merge_and_its_revert_each_queue_one_message_per_matching_subs
     .expect("reverted");
     transaction.commit().await.expect("committed");
     assert_eq!(2, rows(&store).await.len(), "and one for the revert");
+}
+
+/// The `(id, active, links)` of each Patient of each message `stub`
+/// received on `route`, in order, each link as `type other`.
+async fn states(stub: &MockServer, route: &str) -> Vec<Vec<(String, Option<bool>, Vec<String>)>> {
+    stub.received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|request| request.url.path() == route)
+        .map(|request| {
+            let message: Value = serde_json::from_slice(&request.body).expect("a JSON message");
+            message["entry"][1]["resource"]["entry"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|entry| {
+                    let patient = &entry["resource"];
+                    let links = patient["link"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|link| {
+                            format!(
+                                "{} {}",
+                                link["type"].as_str().unwrap_or_default(),
+                                link["other"]["reference"].as_str().unwrap_or_default()
+                            )
+                        })
+                        .collect();
+                    (
+                        patient["id"].as_str().unwrap_or_default().to_owned(),
+                        patient["active"].as_bool(),
+                        links,
+                    )
+                })
+                .collect()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_merge_and_its_revert_state_every_patients_active_and_links() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(with_master()).await;
+    let wake = Wake::default();
+    let store = feeding(&harness, 3, &wake);
+    let stub = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&stub)
+        .await;
+    let feeder = Feeder::new(store.clone(), &harness.matching);
+    for (id, given) in [(FIRST, "Anna"), (SECOND, "Bea")] {
+        let mut fed = patient(id, given);
+        fed.identifier.clear();
+        feeder
+            .master(MasterChange::Create, MASTER, person(id), &fed, &context())
+            .await
+            .expect("created");
+    }
+    subscribe(&store, "Patient", &format!("{}/pmir", stub.uri())).await;
+    let version = |id: &'static str| {
+        let store = store.clone();
+        async move {
+            let mut connection = store.pool().acquire().await.expect("a connection");
+            merging::version(&mut connection, person(id))
+                .await
+                .expect("reads")
+                .expect("a person")
+        }
+    };
+    let steward = Context {
+        actor: String::from("synthetic-steward"),
+        channel: Channel::Fhir,
+        request_id: None,
+    };
+    let request = MergeRequest {
+        survivor: person(FIRST),
+        survivor_version: version(FIRST).await,
+        merged: person(SECOND),
+        merged_version: version(SECOND).await,
+        reason: String::from("one patient"),
+    };
+    let (transaction, change) = merging::merge(&store, &request, &steward)
+        .await
+        .expect("merged");
+    transaction.commit().await.expect("committed");
+    feeder
+        .master(
+            MasterChange::Update,
+            MASTER,
+            person(FIRST),
+            &patient(FIRST, "Annie"),
+            &context(),
+        )
+        .await
+        .expect("the survivor updated");
+    let (transaction, _reverted) = merging::revert(
+        &store,
+        change.merge,
+        &version(FIRST).await,
+        "two patients",
+        &steward,
+    )
+    .await
+    .expect("reverted");
+    transaction.commit().await.expect("committed");
+
+    let _stop = sender(&store, &wake);
+    until(&store, |rows| {
+        rows.len() == 3 && rows.iter().all(|row| row.2)
+    })
+    .await;
+    let replaced_by = vec![format!("replaced-by Patient/{FIRST}")];
+    assert_eq!(
+        vec![
+            vec![
+                (SECOND.to_owned(), Some(false), replaced_by.clone()),
+                (FIRST.to_owned(), Some(true), Vec::new()),
+            ],
+            vec![(FIRST.to_owned(), Some(true), Vec::new())],
+            vec![
+                (FIRST.to_owned(), Some(true), Vec::new()),
+                (SECOND.to_owned(), Some(true), Vec::new()),
+            ],
+        ],
+        states(&stub, "/pmir").await,
+        "the merge, the survivor's update, then the revert reinstating both in one message"
+    );
 }

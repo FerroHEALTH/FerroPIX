@@ -102,8 +102,11 @@ The Patient Identity Subscriber and Consumer sides of PMIR 1.6.0:
 - **ITI-93, Mobile Patient Identity Feed:** `ihe_iti::pmir::feed::Feed::read`
   reads a message the Registry sends to the subscription's channel into
   typed creates, updates, deletes and merges, and `acknowledgement` writes the
-  response. The feed keeps the resource ids and the identifiers and drops
-  every demographic as it reads.
+  response. The feed keeps the resource ids, the identifiers, `active` and
+  every link (its type and the other reference) and drops every demographic
+  as it reads. It refuses a created, updated or merged `Patient` that omits
+  `active`, so an update that reinstates a merged patient reads as the
+  unmerge it is.
 
 The specification leaves the authentication of the Registry to your channel
 to the two parties, so your code authenticates each message before it reads

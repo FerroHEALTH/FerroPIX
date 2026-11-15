@@ -13,6 +13,21 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-11-15
+
+### Changed
+
+- Breaking for crate users: `ihe-iti` 0.11.0 requires `ihe-atna` 0.19,
+  and `nl-generic-functions` 0.11.0 requires `ihe-iti` 0.11. Their public
+  API carries `ihe-atna` types (the audit user an exchange is made for), so
+  a consumer moves `ihe-atna`, and `ehds-logging` with it, to 0.19 in the
+  same change and links one copy. The server pins `ihe-atna` 0.19.0, which
+  changes nothing FerroPIX records (#663).
+
+### Fixed
+
+- The server and the operator console move to ferrohealth-telemetry 0.5, ferrohealth-server 0.9 and ferrohealth-usage-report 0.5, whose subscriber installs its own bridge from the `log` crate in place of `tracing-log`'s `LogTracer`. Under a console filter that lets a target through above its default level, such as `info,ferrohealth_smart=debug`, a dependency's `log::log_enabled!` check no longer drops the next event on its thread, which lost the request line of a request that ran such a check (FerroHEALTH/FerroSYS#388) (#662).
+
 ## [0.0.31] - 2026-11-15
 
 ### Added

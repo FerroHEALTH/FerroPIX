@@ -13,6 +13,80 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-11-15
+
+### Added
+
+- The ITI-93 sender authenticates to each Patient Identity Consumer named
+  in `[[pmir.feed.consumers]]`, the family's endpoint table: a message to a
+  subscription whose channel endpoint lies under the entry's `url` carries
+  its IUA client credentials token (`credentials.oauth`), renewed once when
+  the Consumer answers `401`, and presents its client certificate for ATNA
+  mutual TLS (`tls.client_identity_file`), as PMIR 1.6.0 §2:3.93.5 asks.
+  The token replaces any `Authorization` header the subscription names,
+  and an endpoint under no entry gets no credential. A `401` or `403` after
+  the renewal is retried within `[pmir.feed]` and then sets the
+  subscription to `error` naming the refusal (#655).
+- `ihe-iti` 0.10.1 makes `pmir::subscription::Subscribed::at` public: a
+  PMIR subscriber that keeps no state between requests rebuilds the
+  subscription handle from the `Location` it stored, to read its status or
+  delete it. A `Location` off the Registry's `[base]/Subscription` is
+  refused as before, so the subscriber's credential never goes elsewhere (#658).
+
+### Changed
+
+- FerroPIX moves to `ferrohealth-smart` 0.21, `ferrohealth-session` 0.16,
+  `ihe-atna` 0.15, `ferrobridge-term` 0.8 and `ferrobridge-hl7v2` 0.12, the
+  releases on the smart line that chooses the described SMART issuer by one
+  shared rule and adds the optional `described_issuer` key to `AuthSection` (#647).
+- Breaking for crate users: `ihe-iti` 0.7.0 requires `ferrohealth-smart`
+  0.21 and `ihe-atna` 0.15, and `nl-generic-functions` 0.7.0 requires
+  `ferrohealth-smart` 0.21 and `ihe-iti` 0.7. Their public API carries the
+  types of those crates (the outbound client, the endpoint table and the
+  audit user), so a consumer moves to the same lines (#647).
+- FerroPIX moves to `ferrohealth-smart` 0.22, `ferrohealth-session` 0.17,
+  `ihe-atna` 0.16, `ferrobridge-term` 0.9 and `ferrobridge-hl7v2` 0.13, the
+  releases on the smart line where `DpopSection` no longer carries
+  `external_url`. FerroPIX sets no `[auth.dpop]`, so no configuration key
+  changes (#649).
+- Breaking for crate users: `ihe-iti` 0.8.0 requires `ferrohealth-smart`
+  0.22 and `ihe-atna` 0.16, and `nl-generic-functions` 0.8.0 requires
+  `ferrohealth-smart` 0.22 and `ihe-iti` 0.8. Their public API carries the
+  types of those crates (the outbound client, the endpoint table and the
+  audit user), so a consumer moves to the same lines (#649).
+- Breaking: a Basic user's scopes move out of `[[auth.basic.users]]`,
+  which holds the credential alone (`user`, `password_hash`,
+  `password_hash_file`), into FerroPIX's own `[basic_grants.<user-id>]`
+  table with `scopes` and `roles`. A `scopes` or `roles` key in
+  `[[auth.basic.users]]` now refuses the start as an unknown key, and so
+  does a `[basic_grants]` table naming a user `[[auth.basic.users]]` does
+  not list. A granted `system/` scope or role is refused as before, now
+  naming `basic_grants.<user-id>`. Upgrade: move each user's `scopes` line
+  into a `[basic_grants.<user>]` table named by its `user` (#651).
+- FerroPIX moves to `ferrohealth-smart` 0.24, `ferrohealth-session` 0.19,
+  `ihe-atna` 0.18, `ferrobridge-term` 0.10 and `ferrobridge-hl7v2` 0.14,
+  the releases on the smart line where the caller classification asks each
+  issuer's standing source. FerroPIX keeps its client lists in `[auth]`,
+  the default source, so no further configuration key changes (#651).
+- Breaking for crate users: `ihe-iti` 0.9.0 requires `ferrohealth-smart`
+  0.24 and `ihe-atna` 0.18, and `nl-generic-functions` 0.9.0 requires
+  `ferrohealth-smart` 0.24 and `ihe-iti` 0.9. Their public API carries the
+  types of those crates (the outbound client, the endpoint table and the
+  audit user), so a consumer moves to the same lines (#651).
+- Breaking for crate users: `ihe-iti` 0.10.0 reads the state of every
+  Patient an ITI-93 message carries. `pmir::feed::PatientIdentity` now has
+  `active` and every `Patient.link`, read as `pmir::feed::Link` with its
+  `LinkType` (FHIR R4 `link-type`) and the other reference, and
+  `Feed::read` refuses a created, updated or merged Patient that omits
+  `active` (`FeedError::NoActive`) or a link with an unknown type or no
+  reference (`FeedError::Link`). A subscriber reads an unmerge, an update
+  with `active` true and no `replaced-by` link, from the message alone.
+  `nl-generic-functions` 0.10.0 requires `ihe-iti` 0.10 (#656).
+- The ITI-93 feed FerroPIX sends states `active` and the current links of
+  every `Patient`, and a steward's revert of a merge is one message with
+  both patients as they now stand, each `active` true with no
+  `replaced-by` link (PMIR 1.6.0 §2:3.93.4.1.3) (#656).
+
 ## [0.0.30] - 2026-11-12
 
 ### Changed

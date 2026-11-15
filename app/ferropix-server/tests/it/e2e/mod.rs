@@ -13,6 +13,7 @@ mod blocking;
 mod cli;
 mod decisions;
 mod feed;
+mod feed_auth;
 mod feed_sender;
 mod feeds;
 mod gate;

@@ -25,7 +25,7 @@ use ferropix_server::config::section::outbox::Outbox;
 use ferropix_server::feed::master::MasterChange;
 use ferropix_server::feed::merging::{self, MergeRequest};
 use ferropix_server::feed::{Context, Feeder};
-use ferropix_server::outbox::{self, Backoff, Channels, HttpChannel};
+use ferropix_server::outbox::{self, Backoff, Channels, PmirChannel};
 use ferropix_server::store::Store;
 use ferropix_server::store::outbox::Wake;
 use ferropix_server::store::record::{Channel, PersonId};
@@ -46,10 +46,10 @@ use super::leak::Capture;
 use super::pixm::{Harness, SOURCE, synthetic_seeds};
 
 /// The master domain: the harness's public base URL.
-const MASTER: &str = "http://localhost:8080";
+pub(super) const MASTER: &str = "http://localhost:8080";
 
 /// The first master identity.
-const FIRST: &str = "4a0c2a5e-0000-4000-8000-000000000001";
+pub(super) const FIRST: &str = "4a0c2a5e-0000-4000-8000-000000000001";
 
 /// The second master identity.
 const SECOND: &str = "4a0c2a5e-0000-4000-8000-000000000002";
@@ -61,7 +61,7 @@ const BSN: &str = "111222333";
 const FAMILY: &str = "Zandvoortje";
 
 /// The seeds with the master domain, fed by [`SOURCE`].
-fn with_master() -> Vec<DomainSeed> {
+pub(super) fn with_master() -> Vec<DomainSeed> {
     let mut seeds = synthetic_seeds();
     seeds.push(DomainSeed {
         system: MASTER.to_owned(),
@@ -75,7 +75,7 @@ fn with_master() -> Vec<DomainSeed> {
 
 /// The harness's store announcing changes with `max_attempts`, woken by
 /// `wake`.
-fn feeding(harness: &Harness, max_attempts: u32, wake: &Wake) -> Store {
+pub(super) fn feeding(harness: &Harness, max_attempts: u32, wake: &Wake) -> Store {
     harness.store.clone().with_feed(FeedSettings {
         registry: url::Url::parse(&format!("{MASTER}/fhir")).expect("a URL"),
         master: MASTER.to_owned(),
@@ -85,7 +85,7 @@ fn feeding(harness: &Harness, max_attempts: u32, wake: &Wake) -> Store {
 }
 
 /// The Source's context on the PMIR channel.
-fn context() -> Context {
+pub(super) fn context() -> Context {
     Context {
         actor: SOURCE.to_owned(),
         channel: Channel::Pmir,
@@ -94,7 +94,7 @@ fn context() -> Context {
 }
 
 /// The synthetic Patient `id`, carrying the BSN.
-fn patient(id: &str, given: &str) -> Patient {
+pub(super) fn patient(id: &str, given: &str) -> Patient {
     let value = serde_json::json!({
         "resourceType": "Patient",
         "id": id,
@@ -112,7 +112,7 @@ fn patient(id: &str, given: &str) -> Patient {
 }
 
 /// The person `id` names.
-fn person(id: &str) -> PersonId {
+pub(super) fn person(id: &str) -> PersonId {
     PersonId::from_uuid(Uuid::parse_str(id).expect("a UUID"))
 }
 
@@ -129,7 +129,7 @@ async fn subscribe(store: &Store, criteria: &str, endpoint: &str) -> Uuid {
 
 /// The vendored PMIR Subscription request with `criteria`, `endpoint` and
 /// `status`.
-fn request(criteria: &str, endpoint: &str, status: &str) -> Value {
+pub(super) fn request(criteria: &str, endpoint: &str, status: &str) -> Value {
     let file = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/specs/ihe-pmir/package/example/Subscription-ex-subscription-request.json"
@@ -145,7 +145,7 @@ fn request(criteria: &str, endpoint: &str, status: &str) -> Value {
 
 /// The outbox's PMIR rows as `(subscription, created_at, delivered,
 /// abandoned)`, oldest first.
-async fn rows(store: &Store) -> Vec<(Uuid, String, bool, bool)> {
+pub(super) async fn rows(store: &Store) -> Vec<(Uuid, String, bool, bool)> {
     sqlx::query_as(
         "SELECT subscription_id, created_at::text, delivered_at IS NOT NULL,
                 abandoned_at IS NOT NULL
@@ -160,8 +160,9 @@ async fn rows(store: &Store) -> Vec<(Uuid, String, bool, bool)> {
 fn sender(store: &Store, wake: &Wake) -> tokio::sync::watch::Sender<bool> {
     let channels = Channels {
         xcpd: None,
-        pmir: Some(HttpChannel {
+        pmir: Some(PmirChannel {
             client: reqwest::Client::new(),
+            consumers: Vec::new().into(),
             backoff: Backoff {
                 initial: Duration::from_millis(20),
                 max: Duration::from_millis(40),
@@ -176,7 +177,7 @@ fn sender(store: &Store, wake: &Wake) -> tokio::sync::watch::Sender<bool> {
 }
 
 /// Waits until `done` holds of the PMIR rows.
-async fn until(store: &Store, done: impl Fn(&[(Uuid, String, bool, bool)]) -> bool) {
+pub(super) async fn until(store: &Store, done: impl Fn(&[(Uuid, String, bool, bool)]) -> bool) {
     for _ in 0..400 {
         if done(&rows(store).await) {
             return;

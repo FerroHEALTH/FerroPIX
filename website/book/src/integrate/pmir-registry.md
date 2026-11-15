@@ -62,7 +62,15 @@ merged patient is sent as the deprecated `Patient`, `active` false with its
 
 The sender posts a subscription's messages to its channel endpoint one at a
 time and in order, with the headers the subscription's `channel.header`
-lists. It follows no redirect. A failed post is tried again with a doubling
+lists. It follows no redirect. A subscription carries no credential (PMIR
+1.6.0 §2:3.94.5), so you name each Patient Identity Consumer the sender
+authenticates to in `[[pmir.feed.consumers]]`: a message to an endpoint
+under its `url` carries its IUA token, renewed once when it answers `401`,
+in place of any `Authorization` header the subscription names, and presents
+its client certificate for ATNA mutual TLS (§2:3.93.5,
+[Configuration](../operate/configuration.md)). An endpoint under no entry
+gets no credential. A `401` or `403` after the renewal is a failed attempt,
+and the subscription's `error` names the refusal. A failed post is tried again with a doubling
 wait, within `[pmir.feed]`. Once the attempts are spent, the subscription's
 `status` becomes `error` and its `error` says why. Its later messages wait,
 and an enable (`PUT` with `status` `requested`) resumes from the next one.

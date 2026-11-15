@@ -182,6 +182,10 @@ max_attempts = 5
 initial_backoff = "500ms"
 max_backoff = "1min"
 
+[[pmir.feed.consumers]]
+url = "https://ehr.example.org/pmir"
+timeout = "10s"
+
 [hl7v2]
 enabled = true
 listen = "0.0.0.0:2575"

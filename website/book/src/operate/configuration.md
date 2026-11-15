@@ -486,6 +486,30 @@ namespace named twice, or one an identifier domain holds, is refused.
 | `pmir.feed.initial_backoff` | `"1s"` | The wait before the first retry. |
 | `pmir.feed.max_backoff` | `"5min"` | The longest wait between two retries. |
 
+Each `[[pmir.feed.consumers]]` entry is the endpoint table of one Patient
+Identity Consumer, the family's `[<lane>.endpoint]` keys of
+`ferrohealth-smart`. A message to a subscription whose channel endpoint
+lies under an entry's `url` goes through that entry's client: its client
+certificate for ATNA mutual TLS and its OAuth 2.0 client credentials grant
+for an IUA token, renewed once when the Consumer answers `401` (PMIR 1.6.0
+§2:3.93.5). The Consumer's token replaces any `Authorization` header the
+subscription names. A subscription under no entry's `url` gets no
+credential. No consumer is configured by default.
+
+| Key | Default | What it sets |
+|---|---|---|
+| `pmir.feed.consumers[].url` | required | The endpoint prefix the Consumer's subscriptions name: `https`, or plain `http` under development, with no userinfo, query or fragment. An endpoint lies under it when it has the same origin and its path equals the prefix's or continues it at a `/`; the longest prefix wins. |
+| `pmir.feed.consumers[].timeout` | `"10s"` | How long one try may take. |
+| `pmir.feed.consumers[].connect_timeout` | none | How long opening the connection may take. |
+| `pmir.feed.consumers[].retry.max_attempts` | `3` | How many times one delivery attempt sends the message when the Consumer is unreachable or answers `5xx`; the attempts and waits of `[pmir.feed]` come on top. |
+| `pmir.feed.consumers[].retry.initial_backoff` | `"200ms"` | The wait before the second try of an attempt. |
+| `pmir.feed.consumers[].retry.max_backoff` | `"5s"` | The longest wait between two tries of an attempt. |
+| `pmir.feed.consumers[].credentials.oauth` | none | The IUA client credentials grant, the keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table; its `client_secret_file` is a secret. |
+| `pmir.feed.consumers[].credentials.user` | `""` | The HTTP Basic user instead, with `password_file` (a secret), when the Consumer agrees to it. |
+| `pmir.feed.consumers[].tls.client_identity_file` | none | The certificate chain and private key presented for ATNA mutual TLS, in one PEM. |
+| `pmir.feed.consumers[].tls.trust_roots_file` | none | PEM certificates trusted for the Consumer's certificate, beside the platform roots. |
+| `pmir.feed.consumers[].tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
+
 ### `[hl7v2]`
 
 | Key | Default | What it sets |

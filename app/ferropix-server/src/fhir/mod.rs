@@ -40,7 +40,7 @@ use crate::auth::table::{self, Mount};
 use crate::auth::{Discovery, Smart};
 use crate::config::section::matching::Matching;
 use crate::config::section::operator::Operator;
-use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, Pmir};
+use crate::config::section::profiles::{Deprecated, Pdqm, Pixm, PmirSettings};
 use crate::outcome::body;
 use crate::store::Store;
 
@@ -97,7 +97,7 @@ impl Mounts {
     /// Returns the switches the `[pixm]`, `[pdqm]`, `[pmir]` and `[operator]`
     /// sections set.
     #[must_use]
-    pub const fn of(pixm: &Pixm, pdqm: &Pdqm, pmir: &Pmir, operator: &Operator) -> Self {
+    pub const fn of(pixm: &Pixm, pdqm: &Pdqm, pmir: &PmirSettings, operator: &Operator) -> Self {
         Self {
             pixm: pixm.enabled,
             remove_patient: pixm.remove_patient,

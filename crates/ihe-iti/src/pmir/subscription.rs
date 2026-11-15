@@ -145,13 +145,22 @@ impl Subscribed {
         &self.location
     }
 
-    /// The subscription at the `Location` the Registry answered, resolved
-    /// against `endpoint`, the `[base]/Subscription` it was created at.
+    /// The subscription at `location`, the `Location` the Registry answered
+    /// its create with (FHIR R4 http.html, create), resolved against
+    /// `endpoint`, the `[base]/Subscription` it was created at
+    /// ([`super::PmirSubscriber::endpoint`]).
     ///
-    /// Only a `Subscription` under that same base is accepted, so a later
-    /// read or delete, which carries the Registry's credentials, never goes
-    /// elsewhere.
-    pub(super) fn at(endpoint: &Url, location: &str) -> Result<Self, SubscriptionMalformation> {
+    /// A subscriber that keeps no handle between requests stores the
+    /// location and rebuilds the handle here to read its status or delete
+    /// it. Only a `Subscription` under that same base is accepted, and its
+    /// version is dropped, so a later read or delete, which carries the
+    /// subscriber's credential (PMIR 1.6.0 §2:3.94.5), never goes elsewhere.
+    ///
+    /// # Errors
+    /// [`SubscriptionMalformation::Location`] when `location` does not
+    /// resolve to `[base]/Subscription/[id]`, with or without
+    /// `/_history/[vid]`, under `endpoint`.
+    pub fn at(endpoint: &Url, location: &str) -> Result<Self, SubscriptionMalformation> {
         let resolved = endpoint
             .join(location)
             .map_err(|_unparsable| SubscriptionMalformation::Location)?;

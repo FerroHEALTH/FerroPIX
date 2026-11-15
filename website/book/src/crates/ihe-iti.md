@@ -98,7 +98,8 @@ The Patient Identity Subscriber and Consumer sides of PMIR 1.6.0:
 
 - **ITI-94, Subscribe to Patient Updates:** `ihe_iti::pmir::PmirSubscriber`
   creates a `Subscription` at the Patient Identity Registry, reads its status
-  and deletes it.
+  and deletes it. `Subscribed::at` rebuilds the handle from a stored
+  `Location`, refusing one off the Registry's base.
 - **ITI-93, Mobile Patient Identity Feed:** `ihe_iti::pmir::feed::Feed::read`
   reads a message the Registry sends to the subscription's channel into
   typed creates, updates, deletes and merges, and `acknowledgement` writes the

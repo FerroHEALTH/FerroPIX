@@ -1,0 +1,1 @@
+- Breaking for crate users: `ihe-iti` 0.13.0 and `nl-generic-functions` 0.13.0 require `ferrohealth-smart` 0.27, whose types their public API carries, so a consumer moves to the same line. The server and the console move to `ferrohealth-smart` 0.27, `ferrohealth-session` 0.22, `ferrobridge-term` 0.12 and `ferrobridge-hl7v2` 0.17, so one smart links (#646).

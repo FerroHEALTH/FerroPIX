@@ -19,6 +19,8 @@ mod cli;
 #[cfg(test)]
 mod config;
 #[cfg(test)]
+mod described;
+#[cfg(test)]
 mod e2e;
 #[cfg(test)]
 mod health;

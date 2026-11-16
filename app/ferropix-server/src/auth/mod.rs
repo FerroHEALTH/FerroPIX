@@ -8,7 +8,8 @@
 //! under `mode = "introspection"` asks the issuer's RFC 7662 introspection
 //! endpoint, trusting the `[auth.tls]` roots beside the platform's, validates
 //! every access token, checks the Basic users of the development
-//! profile and builds the SMART discovery document. This module holds what
+//! profile, picks the issuer the SMART discovery document describes
+//! (`resource::described::describe`) and builds that document. This module holds what
 //! is FerroPIX's own: the permission table of every route ([`table`]), the
 //! layer that applies it with its `OperationOutcome` refusals ([`guard`]),
 //! and the rule that a Patient Identity Source feeds only its own domain
@@ -25,10 +26,12 @@ pub mod table;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use ferrohealth_secret::secret_url::SecretUrl;
 use ferrohealth_smart::guard::Gate;
 use ferrohealth_smart::resource::configuration::{
-    OpenIdConnect, PermissionCapability, SmartOptions,
+    OpenIdConnect, PermissionCapability, Purpose, SmartOptions,
 };
+use ferrohealth_smart::resource::described::{Candidate, DescribeError, describe};
 use ferrohealth_smart::resource::introspection::{
     IntrospectionError, IntrospectionSettings, Introspector,
 };
@@ -61,11 +64,22 @@ pub enum SmartError {
         #[source]
         source: Box<IntrospectionError>,
     },
-    /// No issuer's metadata names a token endpoint, which the discovery
-    /// document requires (SMART App Launch 2.2.0, Conformance, §Metadata,
-    /// `token_endpoint`: REQUIRED).
-    #[error("no [auth] issuer metadata names a token_endpoint")]
-    NoTokenEndpoint,
+    /// No issuer can be described: `[auth] described_issuer` names an issuer
+    /// the rule refuses, or without it no single issuer is eligible.
+    #[error("the SMART discovery document can describe no issuer (auth.described_issuer)")]
+    Described {
+        /// Why `describe` refused.
+        #[source]
+        source: DescribeError,
+    },
+    /// The described issuer's metadata names no token endpoint, which the
+    /// discovery document requires (SMART App Launch 2.2.0, Conformance,
+    /// §Metadata, `token_endpoint`: REQUIRED).
+    #[error("the authorization server metadata of {issuer} names no token_endpoint")]
+    NoTokenEndpoint {
+        /// The issuer identifier.
+        issuer: String,
+    },
 }
 
 /// The issuer the discovery document and the `CapabilityStatement` name.
@@ -75,9 +89,11 @@ struct Primary {
     checker: Checker,
     /// The token endpoint its metadata names.
     token_endpoint: String,
+    /// What the two documents describe that issuer for.
+    purpose: Purpose,
 }
 
-/// How the primary issuer's tokens are checked.
+/// How the described issuer's tokens are checked.
 #[derive(Debug)]
 enum Checker {
     /// Against its key set.
@@ -87,6 +103,22 @@ enum Checker {
 }
 
 impl Checker {
+    /// The token endpoint the issuer's metadata names.
+    fn token_endpoint(&self) -> Option<&String> {
+        match self {
+            Self::Jwt(server) => server.metadata().token_endpoint.as_ref(),
+            Self::Introspection(checker) => checker.metadata().token_endpoint.as_ref(),
+        }
+    }
+
+    /// The issuer identifier.
+    fn issuer(&self) -> &str {
+        match self {
+            Self::Jwt(server) => &server.settings().issuer,
+            Self::Introspection(checker) => &checker.settings().issuer,
+        }
+    }
+
     /// The SMART discovery document over the issuer's metadata.
     fn smart_configuration(&self, options: &SmartOptions) -> Discovery {
         Discovery(match self {
@@ -129,9 +161,10 @@ impl Smart {
     ///
     /// Returns [`SmartError::Issuer`] for an issuer whose metadata or key set
     /// could not be read or that breaks a rule, [`SmartError::Introspector`]
-    /// for an introspecting issuer that cannot be set up, and
-    /// [`SmartError::NoTokenEndpoint`] when issuers are configured and none
-    /// names a token endpoint.
+    /// for an introspecting issuer that cannot be set up,
+    /// [`SmartError::Described`] when issuers are configured and none can be
+    /// described, and [`SmartError::NoTokenEndpoint`] when the described
+    /// issuer names no token endpoint.
     pub async fn discover(auth: AuthSettings, domains: &[DomainSeed]) -> Result<Self, SmartError> {
         let AuthSettings {
             resolved,
@@ -140,7 +173,12 @@ impl Smart {
             clients,
         } = auth;
         let mut gate = Gate::open();
-        let (issuers, primary) = discover_issuers(resolved.issuers, resolved.introspection).await?;
+        let (issuers, primary) = discover_issuers(
+            resolved.issuers,
+            resolved.introspection,
+            resolved.described_issuer.as_ref(),
+        )
+        .await?;
         if let Some(issuers) = issuers {
             gate = gate.with_bearer(Arc::new(issuers));
         }
@@ -222,6 +260,7 @@ impl Smart {
             capabilities: self.capabilities.clone(),
             permissions: BTreeSet::from([PermissionCapability::V1]),
             openid_connect: OpenIdConnect::Withheld,
+            purpose: primary.purpose,
             ..SmartOptions::default()
         }))
     }
@@ -230,27 +269,26 @@ impl Smart {
 /// Reads the metadata and the key set of every JWT issuer of `settings`
 /// and sets up every introspected issuer of `introspection`, and returns
 /// the one set that checks all their tokens, `None` for no issuer, with the
-/// issuer the discovery documents name: the first JWT issuer whose metadata
-/// names a token endpoint, else the first introspected one.
-///
-/// No specification governs which issuer the discovery documents name: our
-/// own design, which keeps the order the issuers are written in.
+/// issuer the discovery documents name: `named`, else the one issuer
+/// `describe` allows, never by the order the issuers are written in.
 ///
 /// # Errors
 ///
 /// Returns [`SmartError::Issuer`] for an issuer that cannot be read,
 /// [`SmartError::Introspector`] for an introspected issuer that cannot be
-/// set up, and [`SmartError::NoTokenEndpoint`] when none names a token
+/// set up, [`SmartError::Described`] when no issuer can be described, and
+/// [`SmartError::NoTokenEndpoint`] when the described issuer names no token
 /// endpoint.
 async fn discover_issuers(
     settings: Vec<ferrohealth_smart::resource::Settings>,
     introspection: Vec<IntrospectionSettings>,
+    named: Option<&SecretUrl>,
 ) -> Result<(Option<IssuerSet>, Option<Primary>), SmartError> {
     if settings.is_empty() && introspection.is_empty() {
         return Ok((None, None));
     }
     let mut issuers = IssuerSet::new();
-    let mut primary = None;
+    let mut candidates = Vec::new();
     for one in settings {
         let name = one.issuer.clone();
         let server = ResourceServer::discover(one)
@@ -260,14 +298,10 @@ async fn discover_issuers(
                 source: Box::new(source),
             })?;
         let server = Arc::new(server);
-        if primary.is_none()
-            && let Some(token_endpoint) = server.metadata().token_endpoint.clone()
-        {
-            primary = Some(Primary {
-                checker: Checker::Jwt(Arc::clone(&server)),
-                token_endpoint,
-            });
-        }
+        candidates.push(Candidate::of_server(
+            &server,
+            Checker::Jwt(Arc::clone(&server)),
+        ));
         issuers = issuers.with(server);
     }
     for one in introspection {
@@ -280,17 +314,28 @@ async fn discover_issuers(
                     source: Box::new(source),
                 })?;
         let checker = Arc::new(checker);
-        if primary.is_none()
-            && let Some(token_endpoint) = checker.metadata().token_endpoint.clone()
-        {
-            primary = Some(Primary {
-                checker: Checker::Introspection(Arc::clone(&checker)),
-                token_endpoint,
-            });
-        }
+        candidates.push(Candidate::of_introspector(
+            &checker,
+            Checker::Introspection(Arc::clone(&checker)),
+        ));
         issuers = issuers.with_introspector(checker);
     }
-    let primary = primary.ok_or(SmartError::NoTokenEndpoint)?;
+    let described =
+        describe(candidates, named).map_err(|source| SmartError::Described { source })?;
+    let purpose = described.purpose();
+    let checker = described.into_check();
+    let token_endpoint =
+        checker
+            .token_endpoint()
+            .cloned()
+            .ok_or_else(|| SmartError::NoTokenEndpoint {
+                issuer: checker.issuer().to_owned(),
+            })?;
+    let primary = Primary {
+        checker,
+        token_endpoint,
+        purpose,
+    };
     Ok((Some(issuers), Some(primary)))
 }
 

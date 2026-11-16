@@ -196,6 +196,11 @@ impl Issuer {
         Self { server, key }
     }
 
+    /// Returns the issuer identifier.
+    pub(crate) fn uri(&self) -> String {
+        self.server.uri()
+    }
+
     /// Returns a valid token of `client` granting `scope`.
     pub(crate) fn token(&self, client: &str, scope: &str) -> String {
         self.key.token(&self.server.uri(), client, scope)

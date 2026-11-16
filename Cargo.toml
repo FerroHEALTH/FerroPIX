@@ -87,7 +87,7 @@ ferrohealth-session = { version = "=0.21.0", default-features = false }
 # configuration refusal, `config check` and the telemetry installer (#571);
 # 0.9 builds on ferrohealth-telemetry 0.5.
 # Verified against crates.io on 2026-11-15.
-ferrohealth-config = "=0.4.4"
+ferrohealth-config = "=0.4.5"
 ferrohealth-secret = "=0.2.1"
 ferrohealth-server = { version = "=0.10.0", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the

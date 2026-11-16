@@ -362,7 +362,7 @@ grant). Each takes the keys of an OAuth 2.0 client: `issuer` or
 default, `"client_secret_post"`, `"private_key_jwt"`, `"tls_client_auth"`,
 `"self_signed_tls_client_auth"`), `client_secret` or `client_secret_file`,
 `private_key_file`, `kid`, `assertion_alg`, `scope`, `resource`,
-`audience`, `refresh_margin`, `timeout`, `assertion_audience` and the
+`audience`, `refresh_margin`, `timeout`, `security_profile` and the
 `tls` table (`trust_roots_file`, `client_identity_file`, `min_version`). `client` stands
 in the issuer when it names neither `issuer` nor `token_endpoint`.
 

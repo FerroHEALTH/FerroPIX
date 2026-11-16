@@ -37,7 +37,7 @@ toml = { version = "1.1.6", default-features = false, features = ["std", "parse"
 # exactly, moved in lockstep with every console (.claude/rules/console-ui.md),
 # and the console's own Fluent catalog. Verified against crates.io on
 # 2026-10-31 (0.6.2).
-ferrohealth-ui = "=0.6.9"
+ferrohealth-ui = "=0.6.10"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
@@ -69,14 +69,14 @@ fhir-search = { version = "0.1.130", default-features = false }
 # user's scopes to the product's `[basic_grants]` and 0.24 asks a standing
 # source (#651), and 0.26 builds on ferrohealth-server 0.10 (#669).
 # Verified against crates.io on 2026-11-16 (0.26.0).
-ferrohealth-smart = { version = "=0.26.0", default-features = false }
+ferrohealth-smart = { version = "=0.28.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
 # Verified against crates.io on 2026-11-16 (0.21.0, the release on
 # ferrohealth-smart 0.26, #669).
-ferrohealth-session = { version = "=0.21.0", default-features = false }
+ferrohealth-session = { version = "=0.23.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -87,7 +87,7 @@ ferrohealth-session = { version = "=0.21.0", default-features = false }
 # configuration refusal, `config check` and the telemetry installer (#571);
 # 0.9 builds on ferrohealth-telemetry 0.5.
 # Verified against crates.io on 2026-11-15.
-ferrohealth-config = "=0.4.4"
+ferrohealth-config = "=0.4.5"
 ferrohealth-secret = "=0.2.1"
 ferrohealth-server = { version = "=0.10.0", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
@@ -127,7 +127,7 @@ http = "1.5.0"
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
 # Verified against crates.io on 2026-11-16 (0.21.0, on `ferrohealth-smart`
 # 0.26, #669).
-ihe-atna = { version = "=0.21.0", default-features = false }
+ihe-atna = { version = "=0.22.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60.2", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

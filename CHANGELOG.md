@@ -13,6 +13,17 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-11-16
+
+### Changed
+
+- Breaking for crate users: `ihe-iti` 0.13.0 and `nl-generic-functions` 0.13.0 require `ferrohealth-smart` 0.28 and `ihe-atna` 0.22, whose types their public API carries, so a consumer moves to the same lines. The server and the console move to `ferrohealth-smart` 0.28, `ferrohealth-session` 0.23, `ihe-atna` 0.22, `ferrobridge-term` 0.12 and `ferrobridge-hl7v2` 0.17, so one smart links, and the console to `ferrohealth-ui` 0.6.10 and the configuration loader to `ferrohealth-config` 0.4.5 (#646).
+- Breaking: the `assertion_audience` key of an OAuth client table (`[[auth.issuer]]` introspection `client`, and every outbound `credentials.oauth` table) is removed, and a configuration that still sets it refuses to load as an unknown key. A `private_key_jwt` client assertion now takes its `aud` and `typ` from the grant's security profile: the token endpoint under `typ` `JWT` by default (SMART App Launch 2.2.0, Client Authentication: Asymmetric), or, with `security_profile = "fapi2"`, the issuer identifier under `client-authentication+jwt` (FAPI 2.0 Security Profile §5.3.3.1). Upgrade: delete `assertion_audience`; a grant that set it to `issuer` sets `security_profile = "fapi2"` instead (#646).
+
+### Fixed
+
+- The SMART discovery document and the capability statement name the issuer `ferrohealth-smart`'s shared rule describes, never the first `[[auth.issuer]]` table whose metadata names a token endpoint, and `[auth] described_issuer` names it. Without the key FerroPIX describes the one issuer of kind `persons`, `patients` or `federation` whose metadata it holds, and a FerroPIX that trusts only `machines` issuers describes its one `machines` issuer for SMART Backend Services alone: the token endpoint, the client credentials grant, `private_key_jwt` and the `system/` scopes, with no authorization endpoint. Breaking: a FerroPIX that trusts several such issuers and sets no `described_issuer` refuses the start, naming them and the key, and so does a `described_issuer` that names an unknown issuer, an issuer without metadata, or a `machines` issuer beside one that serves a user launch, and a described issuer whose metadata names no token endpoint (#646).
+
 ## [0.0.33] - 2026-11-16
 
 ### Changed

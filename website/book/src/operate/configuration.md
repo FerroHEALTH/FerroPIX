@@ -304,9 +304,13 @@ its tokens: no section-level value stands in for one the table leaves out.
 
 The profile is how the issuer's tokens read: `profile` picks a preset,
 `"rfc9068"` (the JWT access token profile of RFC 9068, the default),
-`"entra"`, `"keycloak"`, `"okta"` or `"nl"`, and any profile key set on the table
-takes the place of the preset's. A token whose `sub` is its client is a
-machine's under `"rfc9068"` (RFC 9068 §2.2).
+`"ferrosmart"` (the tokens of FerroSMART, the family's SMART authorization
+server: `typ` `at+jwt` alone and `scope` required; see
+[Behind FerroSMART](behind-ferrosmart.md)), `"entra"`, `"keycloak"`,
+`"okta"` or `"nl"`, and any profile key set on the table takes the place of
+the preset's. A token whose `sub` is its client is a machine's under
+`"rfc9068"` and `"ferrosmart"` (RFC 9068 §2.2). Name each issuer in one
+table only: a second table of the same issuer refuses the start.
 
 ```toml
 [auth]
@@ -332,7 +336,7 @@ audience = ["https://pix.example.org/fhir"]
 |---|---|---|
 | `auth.issuer[].issuer` | none, required | The issuer identifier every token's `iss` equals. |
 | `auth.issuer[].kind` | none, required | `"persons"`, `"machines"`, `"patients"` or `"federation"`. |
-| `auth.issuer[].profile` | `"rfc9068"` | The preset the issuer's profile starts from. |
+| `auth.issuer[].profile` | `"rfc9068"` | The preset the issuer's profile starts from: `"rfc9068"`, `"ferrosmart"`, `"entra"`, `"keycloak"`, `"okta"` or `"nl"`. |
 | `auth.issuer[].audience` | `[]` | The audiences, of which a token's `aud` must contain one; at least one. |
 | `auth.issuer[].algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
 | `auth.issuer[].clock_skew` | `"1min"` | The clock skew a token's times are checked with, at most `"5min"`. |

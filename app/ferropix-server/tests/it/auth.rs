@@ -140,10 +140,36 @@ impl SigningKey {
         if let Some(object) = claims.as_object_mut() {
             object.extend(extra);
         }
+        self.sign(&claims)
+    }
+
+    /// Returns the token of [`SigningKey::token_for`] with no `claim`.
+    pub(crate) fn token_without(
+        &self,
+        issuer: &str,
+        client: &str,
+        subject: &str,
+        claim: &str,
+    ) -> String {
+        let token = self.token_for(issuer, client, subject, "");
+        let payload = token.split('.').nth(1).expect("a JWS");
+        let mut claims: serde_json::Value = serde_json::from_slice(
+            &base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload)
+                .expect("base64url"),
+        )
+        .expect("the claims");
+        if let Some(object) = claims.as_object_mut() {
+            object.remove(claim);
+        }
+        self.sign(&claims)
+    }
+
+    /// Returns `claims` signed as `k1` with `typ` `at+jwt`.
+    fn sign(&self, claims: &serde_json::Value) -> String {
         let mut header = Header::new(Algorithm::ES256);
         header.kid = Some(String::from("k1"));
         header.typ = Some(String::from("at+jwt"));
-        jsonwebtoken::encode(&header, &claims, &self.encoding).expect("the token signs")
+        jsonwebtoken::encode(&header, claims, &self.encoding).expect("the token signs")
     }
 }
 
@@ -196,6 +222,19 @@ impl Issuer {
         Self { server, key }
     }
 
+    /// Returns a valid token of `client` granting `scope` to `subject`, a
+    /// person's when `subject` is not the client.
+    pub(crate) fn token_for(&self, client: &str, subject: &str, scope: &str) -> String {
+        self.key
+            .token_for(&self.server.uri(), client, subject, scope)
+    }
+
+    /// Returns a valid token of `client` for `subject` with no `claim`.
+    pub(crate) fn token_without(&self, client: &str, subject: &str, claim: &str) -> String {
+        self.key
+            .token_without(&self.server.uri(), client, subject, claim)
+    }
+
     /// Returns the issuer identifier.
     pub(crate) fn uri(&self) -> String {
         self.server.uri()
@@ -226,6 +265,27 @@ pub(crate) fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
 /// Returns the settings of [`settings`] with the tables of `extra` after
 /// its own, each `{issuer}` in them naming `issuer`.
 pub(crate) fn settings_with(issuer: &Issuer, secrets: &Secrets, extra: &str) -> Settings {
+    let clients = CONSOLES
+        .iter()
+        .chain(&[SOURCE_FIRST_PARTY])
+        .map(|client| format!("\"{client}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let tables = format!(
+        "[[auth.issuer]]\nissuer = \"{{issuer}}\"\nkind = \"persons\"\nprofile = \"rfc9068\"\naudience = [\"{AUDIENCE}\"]\nfirst_party_clients = [{clients}]\n"
+    );
+    settings_trusting(issuer, secrets, &tables, extra)
+}
+
+/// Returns the settings of a server whose `[[auth.issuer]]` tables are
+/// `issuer_tables`, every switch on, with the tables of `extra` after its
+/// own; each `{issuer}` in either names `issuer`.
+pub(crate) fn settings_trusting(
+    issuer: &Issuer,
+    secrets: &Secrets,
+    issuer_tables: &str,
+    extra: &str,
+) -> Settings {
     let text = format!(
         r#"
 public_base_url = "http://localhost:8080"
@@ -233,12 +293,7 @@ public_base_url = "http://localhost:8080"
 [server]
 listen = "127.0.0.1:0"
 
-[[auth.issuer]]
-issuer = "{issuer}"
-kind = "persons"
-profile = "rfc9068"
-audience = ["{AUDIENCE}"]
-first_party_clients = [{clients}]
+{issuer_tables}
 
 [[trust.issuer]]
 issuer = "{issuer}"
@@ -268,14 +323,9 @@ enabled = true
 
 {extra}
 "#,
+        issuer_tables = issuer_tables.replace("{issuer}", &issuer.server.uri()),
         extra = extra.replace("{issuer}", &issuer.server.uri()),
         issuer = issuer.server.uri(),
-        clients = CONSOLES
-            .iter()
-            .chain(&[SOURCE_FIRST_PARTY])
-            .map(|client| format!("\"{client}\""))
-            .collect::<Vec<_>>()
-            .join(", "),
     );
     Config::from_sources(Some(&text), &secrets.environment())
         .expect("the configuration reads")

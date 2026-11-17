@@ -23,6 +23,8 @@ mod described;
 #[cfg(test)]
 mod e2e;
 #[cfg(test)]
+mod ferrosmart;
+#[cfg(test)]
 mod health;
 #[cfg(test)]
 mod matching;

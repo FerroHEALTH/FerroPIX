@@ -81,7 +81,7 @@ and FerroPIX is the one that owns patient identity:
 - **FerroBRIDGE** provides the HL7 v2 parser, MLLP codec and v2-to-FHIR
   maps the HL7 v2 face reads with, and **FerroTERM** is the terminology
   server those maps translate table values on.
-- **FerroAUTH** provides `ferrohealth-smart`, the resource server that
+- **FerroSMART** provides `ferrohealth-smart`, the resource server that
   checks every token, and **FerroAUDIT** provides `ihe-atna`, the audit
   trail the BALP records travel on.
 

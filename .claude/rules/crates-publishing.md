@@ -94,10 +94,10 @@ incompatible", so while a crate is 0.x a breaking change moves the minor
   crate** (owner decision 2026-10-26): `ihe-iti` requires
   `ihe-atna = "0.21.0"` and `ferrohealth-smart = "0.26.0"`, and
   `nl-generic-functions` requires `ferrohealth-smart = "0.26.0"`, never an
-  `=` pin, because the FerroAUTH, FerroAUDIT and FerroSYS lines never break
+  `=` pin, because the FerroSMART, FerroAUDIT and FerroSYS lines never break
   on a patch. A patch of theirs then reaches a product through its lockfile
   without a release of these crates first. A product, the FerroPIX server
-  included, still pins every FerroAUTH, FerroAUDIT, FerroSYS and FerroUI
+  included, still pins every FerroSMART, FerroAUDIT, FerroSYS and FerroUI
   crate exactly in `[workspace.dependencies]`.
 - **Every FerroBRIDGE crate is required by a caret range** (`fhir-types`,
   `fhir-search`, `hl7v2-types`, `ferrobridge-*` and the rest), with its floor

@@ -51,7 +51,7 @@ fhir-types = { version = "0.1.130", default-features = false }
 # The FHIR R4 search value grammar of FerroBRIDGE, which every search value
 # and token is read and written with.
 fhir-search = { version = "0.1.130", default-features = false }
-# The SMART and OAuth 2.0 crate of FerroHEALTH/FerroAUTH: the RFC 8414
+# The SMART and OAuth 2.0 crate of FerroHEALTH/FerroSMART: the RFC 8414
 # issuer rule and metadata location of the Nuts grant, without its HTTP
 # fetchers. The server pins it exactly, as a product pins every family crate;
 # the published crates take their own caret requirement on it. 0.26 is the
@@ -72,7 +72,7 @@ fhir-search = { version = "0.1.130", default-features = false }
 # and 0.28 takes a client assertion's `aud` and `typ` from the grant's
 # security profile. Verified against crates.io on 2026-11-16 (0.28.0).
 ferrohealth-smart = { version = "=0.28.0", default-features = false }
-# The console sign-in and session of FerroHEALTH/FerroAUTH: the `[oidc]`
+# The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
@@ -192,7 +192,7 @@ quote = { version = "1.0.47", default-features = false }
 syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "printing"] }
 
 # The reliability bar (no specification governs it: our own design), the
-# FerroHEALTH family's lint set as FerroAUTH carries it.
+# FerroHEALTH family's lint set as FerroSMART carries it.
 [workspace.lints.rust]
 unsafe_code = "forbid"
 non_ascii_idents = "forbid"

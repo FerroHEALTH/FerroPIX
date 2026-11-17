@@ -534,7 +534,7 @@ fn every_key_v0_0_24_renamed_fails_as_an_unknown_key() {
 }
 
 // NOTE: `ferrohealth-smart` 0.15 dropped the named refusal of each removed key one release
-// after it removed them (FerroHEALTH/FerroAUTH#388), so each fails as an unknown key.
+// after it removed them (FerroHEALTH/FerroSMART#388), so each fails as an unknown key.
 #[test]
 fn every_removed_auth_key_fails_at_boot_as_an_unknown_key() {
     let secrets = Secrets::new();

@@ -182,7 +182,7 @@ atna = ["dep:ihe-atna", "ihe-atna/atna"]
 async-trait = { workspace = true, optional = true }
 # A shared crate takes a caret requirement on another family shared crate
 # (crates-publishing rule), so a patch of either reaches a product's lockfile.
-ferrohealth-smart = { version = "0.29.0", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.29.1", default-features = false, optional = true }
 fhir-search = { workspace = true, optional = true }
 fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }

@@ -10,8 +10,8 @@
 //! app the `persons` table lists in `delegates`. A Backend Services client's
 //! token, whose `sub` is its `client_id` (RFC 9068 §2.2), reads as the
 //! system under the same table: a `persons` issuer also signs its machines'
-//! app-only tokens. One table names the FerroSMART issuer, since two tables
-//! of one issuer collapse into the later (FerroHEALTH/FerroAUTH#591).
+//! app-only tokens. One table names the FerroSMART issuer: two tables of one
+//! issuer refuse the start (FerroHEALTH/FerroAUTH#591).
 
 use http::{Method, StatusCode};
 

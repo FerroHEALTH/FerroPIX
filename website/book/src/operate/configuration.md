@@ -310,7 +310,7 @@ server: `typ` `at+jwt` alone and `scope` required; see
 `"okta"` or `"nl"`, and any profile key set on the table takes the place of
 the preset's. A token whose `sub` is its client is a machine's under
 `"rfc9068"` and `"ferrosmart"` (RFC 9068 §2.2). Name each issuer in one
-table only: a second table of the same issuer replaces the first.
+table only: a second table of the same issuer refuses the start.
 
 ```toml
 [auth]

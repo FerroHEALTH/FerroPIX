@@ -62,7 +62,7 @@ delegates = [{ client = "growth-chart" }]
   ([Configuration](configuration.md)).
 - **One table per issuer.** Name FerroSMART in this one table. A second
   `[[auth.issuer]]` table of the same issuer, such as a `machines` table
-  beside it, replaces the first, and the people behind it are refused
+  beside it, refuses the start, naming the issuer
   (FerroHEALTH/FerroAUTH#591).
 
 The scopes a token grants still meet FerroPIX's permission table: the

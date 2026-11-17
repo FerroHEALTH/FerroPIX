@@ -37,7 +37,7 @@ toml = { version = "1.1.6", default-features = false, features = ["std", "parse"
 # exactly, moved in lockstep with every console (.claude/rules/console-ui.md),
 # and the console's own Fluent catalog. Verified against crates.io on
 # 2026-10-31 (0.6.2).
-ferrohealth-ui = "=0.6.10"
+ferrohealth-ui = "=0.6.11"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
@@ -74,7 +74,7 @@ fhir-search = { version = "0.1.130", default-features = false }
 # FerroSMART's tokens (#681), whose 0.29.1 refuses an issuer named in two
 # `[[auth.issuer]]` tables (FerroHEALTH/FerroSMART#591). Verified against
 # crates.io on 2026-11-17 (0.29.1).
-ferrohealth-smart = { version = "=0.29.1", default-features = false }
+ferrohealth-smart = { version = "=0.30.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
@@ -94,7 +94,7 @@ ferrohealth-session = { version = "=0.24.0", default-features = false }
 # Verified against crates.io on 2026-11-15.
 ferrohealth-config = "=0.4.5"
 ferrohealth-secret = "=0.2.1"
-ferrohealth-server = { version = "=0.10.0", default-features = false }
+ferrohealth-server = { version = "=0.11.0", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition

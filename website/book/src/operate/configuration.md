@@ -122,7 +122,9 @@ way.
 | `server.idle_timeout` | `"2min"` | How long a kept-alive HTTP/1.1 connection may wait for its next request after an answer; past it the server closes the connection with a clean end of stream. HTTP/2 connections keep their own protocol's rules. |
 | `server.drain_delay` | `"0s"` | How long the listener keeps accepting after `SIGTERM`, with readiness already answering `503`, so an orchestrator stops routing first. |
 | `server.shutdown_timeout` | `"10s"` | How long the requests in flight may take to finish once the listener closed; a connection still open after it is closed. |
-| `server.max_concurrent_requests` | `256` | How many requests the server serves at once, always bounded; past it a request is answered `503` with `Retry-After`. The health routes are never refused. |
+| `server.max_concurrent_requests` | `256` | How many requests the server serves at once, always bounded; past it a request waits for a slot in the queue below and is answered `503` with `Retry-After` when the queue is full or the wait expires. The health routes are never refused or queued. |
+| `server.max_waiting_requests` | `256` | How many requests past `max_concurrent_requests` may wait for a slot at once, first come first served; `0` keeps no queue. |
+| `server.admission_wait` | 100 milliseconds | How long a request past `max_concurrent_requests` waits for a slot before it is refused, written with the `ms` or `s` unit; `"0s"` keeps no queue. |
 | `server.retry_after` | `"1s"` | How long a request refused for load is told to wait, a whole number of seconds. |
 | `server.trusted_proxies` | `[]` | The reverse proxies whose forwarded client address is believed, each an address or a CIDR block such as `10.0.0.0/8`; empty, every request is named by its peer. |
 | `server.forwarded_header` | `"forwarded"` | The header a trusted proxy names the client in: `"forwarded"` (RFC 7239) or `"x-forwarded-for"`. |

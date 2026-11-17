@@ -51,29 +51,29 @@ pub fn router(
     metrics: Option<Arc<Telemetry>>,
 ) -> Router {
     let mut routes = Router::new();
+    let policy = policy(server.base_path.as_str(), log, metrics.as_deref());
     if let Some(telemetry) = metrics {
         routes = routes.route(METRICS, prometheus_route(telemetry));
     }
     if let Some(guarded) = guarded {
         routes = routes.merge(guarded);
     }
-    stack::app(
-        routes,
-        health,
-        server,
-        policy(server.base_path.as_str(), log),
-    )
+    stack::app(routes, health, server, policy)
 }
 
-/// The policy of the stack under `base`: a panic and every refusal the
-/// stack writes answer an `OperationOutcome` under the FHIR face and the
-/// XCPD gateway and a problem elsewhere, and `log` is the request log.
+/// The policy of the stack under `base`.
+///
+/// A panic and every refusal the stack writes answer an `OperationOutcome`
+/// under the FHIR face and the XCPD gateway and a problem elsewhere, `log` is
+/// the request log, and the meter of `telemetry` records the admission's
+/// waits and refusals.
 #[must_use]
-pub fn policy(base: &str, log: RequestLog) -> StackPolicy {
+pub fn policy(base: &str, log: RequestLog, telemetry: Option<&Telemetry>) -> StackPolicy {
     StackPolicy {
         panic_body: problem::panic_body(base),
         refusal_body: problem::refusal_body(base),
         request_log: log,
+        meter: telemetry.map(|telemetry| telemetry.meter(crate::METER)),
     }
 }
 

@@ -47,8 +47,12 @@ ihe-iti = { path = "../../crates/ihe-iti", features = ["balp", "pixm-server", "p
 # feature; `nvi` brings no dependency the server lacks.
 nl-generic-functions = { path = "../../crates/nl-generic-functions", features = ["nvi"] }
 # The BALP records of the Manager and the Supplier, their ITI-20 spool and
-# the FHIR Feed to the audit repository (FerroAUDIT).
-ihe-atna = { workspace = true, features = ["balp", "smart"] }
+# the FHIR Feed to the audit repository (FerroAUDIT), sent through the
+# server's own outbound client (`feed`, `audit::Feed`).
+ihe-atna = { workspace = true, features = ["balp", "feed"] }
+# The FHIR Feed's client seam, `ihe_atna::atna::feed::FeedClient`, is an
+# async trait.
+async-trait.workspace = true
 # The readiness document and the dependency report, shared with the
 # operator console.
 ferropix-operator-api = { path = "../ferropix-operator-api" }

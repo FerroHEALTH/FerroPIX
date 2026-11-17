@@ -20,9 +20,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
-use ferrohealth_smart::client::outbound::OutboundClient;
+use ferrohealth_smart::client::outbound::{OutboundClient, SendError};
 use ferropix_operator_api::health::{self, Upstream, UpstreamKind};
-use ihe_atna::atna::feed::{FeedConfigError, FeedRepository};
+use http::header::CONTENT_TYPE;
+use http::{Method, StatusCode};
+use ihe_atna::atna::feed::{FeedClient, FeedConfigError, FeedRepository, FeedSendError};
 use ihe_atna::atna::forwarder::Forwarder;
 use ihe_atna::atna::spool::{Bounds, Content, Spool, SpoolError};
 use ihe_atna::balp::{Exchange, NetworkAddress, Observer, RecordError, SOURCE_APPLICATION_SERVER};
@@ -233,13 +235,53 @@ impl HealthIndicator for Headroom {
     }
 }
 
+/// The FHIR Feed's client: the server's own outbound client of
+/// `[audit.repository.endpoint]`, with its TLS, timeouts, credential and
+/// retries (no specification governs the seam: `ihe-atna`'s design).
+struct Feed(OutboundClient);
+
+#[async_trait::async_trait]
+impl FeedClient for Feed {
+    fn authorizes(&self) -> bool {
+        self.0.authorization().is_some()
+    }
+
+    async fn post(
+        &self,
+        url: &url::Url,
+        content_type: &'static str,
+        body: &[u8],
+    ) -> Result<StatusCode, FeedSendError> {
+        let answer = self
+            .0
+            .send(&Method::POST, url, |request| {
+                request
+                    .header(CONTENT_TYPE, content_type)
+                    .body(body.to_vec())
+            })
+            .await
+            .map_err(|error| match error {
+                SendError::Transport(error) => {
+                    FeedSendError::Transport(Box::new(error.without_url()))
+                }
+                other => FeedSendError::Credentials(Box::new(other)),
+            })?;
+        Ok(answer.status())
+    }
+}
+
 /// Returns the FHIR Feed through `client`, plain `http` only where the
-/// configuration admitted it (the development profile).
+/// configuration admitted it (the development profile), waiting the
+/// endpoint's longest backoff between rounds.
 fn feed(client: OutboundClient) -> Result<FeedRepository, OpenError> {
-    if client.url().scheme() == "http" {
-        FeedRepository::cleartext(client)
+    let base = client.url().clone();
+    let between_rounds = std::time::Duration::from(client.retry().max_backoff);
+    let cleartext = base.scheme() == "http";
+    let client: Arc<dyn FeedClient> = Arc::new(Feed(client));
+    if cleartext {
+        FeedRepository::cleartext(&base, client, between_rounds)
     } else {
-        FeedRepository::new(client)
+        FeedRepository::new(&base, client, between_rounds)
     }
     .map_err(OpenError::Repository)
 }

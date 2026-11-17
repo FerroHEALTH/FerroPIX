@@ -30,6 +30,7 @@
 - [Configuration](operate/configuration.md)
 - [Matching](operate/matching.md)
 - [Deployment](operate/deployment.md)
+- [Behind FerroSMART](operate/behind-ferrosmart.md)
 - [The operator console](operate/console.md)
 - [The steward's guide](operate/steward-guide.md)
 - [The operator API](operate/operator-api.md)

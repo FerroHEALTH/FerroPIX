@@ -13,6 +13,16 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-11-17
+
+### Added
+
+- FerroPIX runs behind FerroSMART, the family's SMART App Launch 2.x authorization server: an `[[auth.issuer]]` table with `profile = "ferrosmart"` reads FerroSMART's RFC 9068 tokens (`typ` `at+jwt` alone, `scope` required), a person through a SMART app listed in `delegates` as delegated, and a Backend Services client as the system. The book's new page "Behind FerroSMART" gives FerroSMART's resource table, FerroPIX's issuer table and its discovery document. Breaking for crate users: `ihe-iti` and `nl-generic-functions` 0.14.0 require `ferrohealth-smart` 0.29. The server and the console move to `ferrohealth-smart` 0.29.1, `ferrohealth-session` 0.24, `ferrobridge-term` 0.13 and `ferrobridge-hl7v2` 0.19, so one smart links (#681).
+
+### Changed
+
+- The FHIR Feed to the audit repository goes out through the server's own outbound client of `[audit.repository.endpoint]`, with its TLS, timeouts, credential and retries, behind `ihe-atna` 0.23's `atna::feed::FeedClient`. `ihe-atna` and `ehds-logging` move to 0.23, which depend on no `ferrohealth-smart`, so a smart release no longer waits on an audit release. Breaking for crate users: `ihe-iti` 0.14.0 requires `ihe-atna` 0.23, whose `user` model its public API carries (#680).
+
 ## [0.0.34] - 2026-11-16
 
 ### Changed

@@ -151,7 +151,7 @@ the workspace version.
 
 `scripts/checks/semver.sh` judges each published crate's version against
 its change with `cargo-semver-checks`, the version the family pins
-(FerroBRIDGE, FerroSYS, FerroAUTH and FerroAUDIT). It reads its pin from
+(FerroBRIDGE, FerroSYS, FerroSMART and FerroAUDIT). It reads its pin from
 this row and refuses another installed version, and CI and the release
 plan install this version through `taiki-e/install-action` (#586).
 

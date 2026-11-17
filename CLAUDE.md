@@ -34,7 +34,7 @@ FerroPIX in prose, `ferropix` in identifiers.
   `ihe-atna`; FerroPIX audits the Manager side through it.
   `oauth-server-metadata` is retired; authentication and the SMART scopes
   come from `ferrohealth-smart`, and the policy decision belongs to
-  `ferrohealth-authz`, both FerroAUTH's, never a local copy.
+  `ferrohealth-authz`, both FerroSMART's, never a local copy.
 - **The server and the console (owner, 2026-10-21):** FerroPIX is a
   standalone server with its cross-reference in PostgreSQL, and it ships
   two OCI images, the server (`ghcr.io/ferrohealth/ferropix`) and the
@@ -401,10 +401,10 @@ pull request under their own `CLAUDE.md`.
   of `fhir-types`, `hl7v2-types` and the MLLP codec and parser FerroPIX
   reuses.
 - **FerroTERM** (`../FerroTERM`): the FHIR terminology server.
-- **FerroAUTH** (`../FerroSMART`, the repository renamed from FerroSMART on
-  2026-10-25): the shared authentication and authorization crates,
-  `ferrohealth-smart` (OAuth 2.0, SMART, the authenticated subject) and
-  `ferrohealth-authz` (the policy decision).
+- **FerroSMART** (`../FerroSMART`): the SMART App Launch 2.x authorization
+  server, a product again since 2026-11-17, and the shared authentication and
+  authorization crates, `ferrohealth-smart` (OAuth 2.0, SMART, the
+  authenticated subject) and `ferrohealth-authz` (the policy decision).
 - **FerroAUDIT**: the shared audit crates, `ihe-atna` (the whole audit
   trail, ATNA and BALP) and `ehds-logging` (the EHDS access record).
 - **FerroUI** (`../FerroUI`): the shared console component library,

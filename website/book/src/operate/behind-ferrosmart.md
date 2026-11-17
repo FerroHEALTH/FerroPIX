@@ -8,8 +8,8 @@ server. It signs people in at any OpenID Connect provider and uses that
 provider for login alone. It issues plain RFC 9068 access tokens carrying
 the launch context. FerroPIX runs behind it as a resource server: the
 person never signs in to FerroPIX, and FerroPIX never sees the provider's
-tokens. FerroAUTH's architecture describes the whole deployment in
-[§13.21, A product behind FerroSMART](https://github.com/FerroHEALTH/FerroAUTH/blob/main/docs/architecture.md#1321-a-product-behind-ferrosmart).
+tokens. FerroSMART's architecture describes the whole deployment in
+[§13.21, A product behind FerroSMART](https://github.com/FerroHEALTH/FerroSMART/blob/main/docs/architecture.md#1321-a-product-behind-ferrosmart).
 This page is FerroPIX's side of it.
 
 ```text
@@ -63,7 +63,7 @@ delegates = [{ client = "growth-chart" }]
 - **One table per issuer.** Name FerroSMART in this one table. A second
   `[[auth.issuer]]` table of the same issuer, such as a `machines` table
   beside it, refuses the start, naming the issuer
-  (FerroHEALTH/FerroAUTH#591).
+  (FerroHEALTH/FerroSMART#591).
 
 The scopes a token grants still meet FerroPIX's permission table: the
 `system/` scopes and the steward and administrator scopes

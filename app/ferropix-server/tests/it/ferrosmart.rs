@@ -11,7 +11,7 @@
 //! token, whose `sub` is its `client_id` (RFC 9068 §2.2), reads as the
 //! system under the same table: a `persons` issuer also signs its machines'
 //! app-only tokens. One table names the FerroSMART issuer: two tables of one
-//! issuer refuse the start (FerroHEALTH/FerroAUTH#591).
+//! issuer refuse the start (FerroHEALTH/FerroSMART#591).
 
 use http::{Method, StatusCode};
 

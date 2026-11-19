@@ -37,7 +37,7 @@ toml = { version = "1.1.6", default-features = false, features = ["std", "parse"
 # exactly, moved in lockstep with every console (.claude/rules/console-ui.md),
 # and the console's own Fluent catalog. Verified against crates.io on
 # 2026-10-31 (0.6.2).
-ferrohealth-ui = "=0.6.10"
+ferrohealth-ui = "=0.6.11"
 fluent-templates = { version = "0.15.1", default-features = false, features = ["macros", "walkdir"] }
 # The synthetic test keys of the Nuts tests, at the version FerroFED pins.
 aws-lc-rs = { version = "1.18.1", default-features = false, features = ["aws-lc-sys"] }
@@ -74,14 +74,14 @@ fhir-search = { version = "0.1.130", default-features = false }
 # FerroSMART's tokens (#681), whose 0.29.1 refuses an issuer named in two
 # `[[auth.issuer]]` tables (FerroHEALTH/FerroSMART#591), and 0.30 builds on
 # ferrohealth-server 0.11. Verified against crates.io on 2026-11-17 (0.30.0).
-ferrohealth-smart = { version = "=0.30.0", default-features = false }
+ferrohealth-smart = { version = "=0.30.2", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
 # Verified against crates.io on 2026-11-17 (0.25.0, the release on
 # ferrohealth-smart 0.30).
-ferrohealth-session = { version = "=0.25.0", default-features = false }
+ferrohealth-session = { version = "=0.25.1", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and

@@ -72,16 +72,18 @@ fhir-search = { version = "0.1.130", default-features = false }
 # 0.28 takes a client assertion's `aud` and `typ` from the grant's
 # security profile, and 0.29 ships the `ferrosmart` issuer preset for
 # FerroSMART's tokens (#681), whose 0.29.1 refuses an issuer named in two
-# `[[auth.issuer]]` tables (FerroHEALTH/FerroSMART#591), and 0.30 builds on
-# ferrohealth-server 0.11. Verified against crates.io on 2026-11-17 (0.30.0).
-ferrohealth-smart = { version = "=0.30.0", default-features = false }
+# `[[auth.issuer]]` tables (FerroHEALTH/FerroSMART#591), 0.30 builds on
+# ferrohealth-server 0.11, and 0.31 reads a patient's own FerroSMART token
+# as the person (`fhir_user_patient`, FerroHEALTH/FerroSMART#681). Verified
+# against crates.io on 2026-11-20 (0.31.0).
+ferrohealth-smart = { version = "=0.31.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-17 (0.25.0, the release on
-# ferrohealth-smart 0.30).
-ferrohealth-session = { version = "=0.25.0", default-features = false }
+# Verified against crates.io on 2026-11-20 (0.26.0, the release on
+# ferrohealth-smart 0.31).
+ferrohealth-session = { version = "=0.26.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -116,16 +118,16 @@ ferrohealth-usage-report = { version = "=0.5.0", default-features = false }
 # parser, the original-mode acknowledgment and the message writer, over the
 # generated v2 tables, by a caret range as every FerroBRIDGE crate above.
 # The server adds `map`, the generated v2-to-FHIR structure maps a PID runs
-# through. Verified against crates.io on 2026-11-17 (0.22.0, on
-# ferrobridge-term 0.14).
-ferrobridge-hl7v2 = { version = "0.22.0", default-features = false }
+# through. Verified against crates.io on 2026-11-20 (0.23.0, on
+# ferrobridge-term 0.15).
+ferrobridge-hl7v2 = { version = "0.23.0", default-features = false }
 hl7v2-types = "0.1.128"
 # FerroBRIDGE's FHIR terminology client, the one `ferrobridge-hl7v2` translates
 # every v2 table value through (`ConceptMap/$translate`), with `smart` for
 # the client built from `[terminology.endpoint]` over ferrohealth-smart's
 # outbound client, at the version that crate pins. Verified against
-# crates.io on 2026-11-17 (0.14.0, on ferrohealth-smart 0.30).
-ferrobridge-term = { version = "0.14.0", default-features = false, features = ["client", "r4", "smart"] }
+# crates.io on 2026-11-20 (0.15.0, on ferrohealth-smart 0.31).
+ferrobridge-term = { version = "0.15.0", default-features = false, features = ["client", "r4", "smart"] }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product

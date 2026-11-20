@@ -13,6 +13,12 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-11-20
+
+### Changed
+
+- Breaking for crate users: `ihe-iti` 0.16.0 requires `ferrohealth-smart` 0.31, and `nl-generic-functions` 0.16.0 requires `ferrohealth-smart` 0.31 and `ihe-iti` 0.16. Their public API carries smart's outbound client and endpoint table, so a consumer moves to the same lines. The server and the console move to `ferrohealth-smart` 0.31, `ferrohealth-session` 0.26, `ferrobridge-term` 0.15 and `ferrobridge-hl7v2` 0.23, so one smart links; under the `ferrosmart` issuer preset a patient's own token now reads as the patient (FerroHEALTH/FerroSMART#681) (#695).
+
 ## [0.0.36] - 2026-11-17
 
 ### Changed

@@ -1281,7 +1281,7 @@ checksum = "39f9fd9fea13cd73d2672c797d8a54f0dc578627dc0747c978a779116a2a4c3e"
 dependencies = [
  "async-trait",
  "backon",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.30.0",
  "fhir-types",
  "http",
  "reqwest",
@@ -1364,9 +1364,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-session"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97f92e61525ceec83e982afb0526156aa101dba690e9eab54a223a14cb482737"
+checksum = "9076067d33d3b7af79442e29a54e01e1e72452c4cb6c31f398736dc5376d3e22"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1374,7 +1374,7 @@ dependencies = [
  "cookie",
  "ferrohealth-config",
  "ferrohealth-secret",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.31.0",
  "ferrohealth-ui",
  "http",
  "jiff",
@@ -1392,6 +1392,32 @@ name = "ferrohealth-smart"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c3f770943ab27b707735821bc7208b83bc9ab48e429307f7dbbf11aa12e2052"
+dependencies = [
+ "argon2",
+ "aws-lc-rs",
+ "base64 0.23.1",
+ "ferrohealth-config",
+ "ferrohealth-secret",
+ "http",
+ "jiff",
+ "jsonwebtoken",
+ "reqwest",
+ "rustls",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "ferrohealth-smart"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d401b16d0cdfa5c238920f0403caae82a4d87b1041a03ec7de41d55c5719f95"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -1508,7 +1534,7 @@ dependencies = [
  "ferrohealth-secret",
  "ferrohealth-server",
  "ferrohealth-session",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.31.0",
  "ferrohealth-telemetry",
  "ferrohealth-ui",
  "ferropix-operator-api",
@@ -1557,7 +1583,7 @@ dependencies = [
  "ferrohealth-health",
  "ferrohealth-secret",
  "ferrohealth-server",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.31.0",
  "ferrohealth-telemetry",
  "ferrohealth-usage-report",
  "ferropix-console",
@@ -2424,13 +2450,13 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
  "ferrohealth-config",
  "ferrohealth-secret",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.31.0",
  "fhir-search",
  "fhir-types",
  "http",
@@ -2903,13 +2929,13 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
  "ferrohealth-config",
  "ferrohealth-secret",
- "ferrohealth-smart",
+ "ferrohealth-smart 0.31.0",
  "fhir-search",
  "fhir-types",
  "http",

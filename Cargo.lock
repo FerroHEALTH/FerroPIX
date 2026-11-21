@@ -1230,9 +1230,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.25.0"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb34824447c837f7d4c1705f903937ae1617dc3bf31083d7d9bb03391916359"
+checksum = "ba3c80686c782b086990d421b65764983d027044d94f2f1857203c0579e2a6eb"
 dependencies = [
  "bytes",
  "chumsky",
@@ -1256,9 +1256,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-term"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e551a417eb463d64867e98d33d87030605630b78ac031dee19e040fbaf41908"
+checksum = "403abc5cf83141b99a569a565280c555859e5aa873ee561ada8b2a650748d317"
 dependencies = [
  "async-trait",
  "backon",

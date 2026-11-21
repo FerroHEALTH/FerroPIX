@@ -9,8 +9,8 @@
 //! the map's canonical `url` and the code asked, and answers each as an R4
 //! `$translate` `Parameters` (FHIR R4 `conceptmap-operation-translate`):
 //! `result` true with one `equivalent` match, or `result` false for a pair
-//! it does not hold. It records every pair asked, so a suite can assert
-//! what reached the server.
+//! it does not hold, alone or as the entries of a `batch`. It records every
+//! pair asked, so a suite can assert what reached the server.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -220,11 +220,13 @@ impl Translations {
     /// wiremock never gives.
     pub async fn serve(&self) -> Result<(MockServer, url::Url), url::ParseError> {
         let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/r4/ConceptMap/$translate"))
-            .respond_with(self.clone())
-            .mount(&server)
-            .await;
+        for route in ["/r4/ConceptMap/$translate", "/r4"] {
+            Mock::given(method("POST"))
+                .and(path(route))
+                .respond_with(self.clone())
+                .mount(&server)
+                .await;
+        }
         let base = url::Url::parse(&format!("{}/r4", server.uri()))?;
         Ok((server, base))
     }
@@ -310,7 +312,34 @@ struct Coding {
 
 impl Respond for Translations {
     fn respond(&self, request: &Request) -> ResponseTemplate {
-        let asking: Asking = serde_json::from_slice(&request.body).unwrap_or_default();
+        let received: Received = serde_json::from_slice(&request.body).unwrap_or_default();
+        let response =
+            ResponseTemplate::new(200).insert_header("content-type", "application/fhir+json");
+        if received.resource_type != "Bundle" {
+            return response.set_body_json(self.reply(&Asking {
+                parameter: received.parameter,
+            }));
+        }
+        // NOTE: FHIR R4 http.html §3.1.0.11, a batch-response answers each entry in request order.
+        let entry = received
+            .entry
+            .iter()
+            .map(|entry| Answered {
+                resource: self.reply(&entry.resource),
+                response: Status { status: "200 OK" },
+            })
+            .collect();
+        response.set_body_json(BatchResponse {
+            resource_type: "Bundle",
+            kind: "batch-response",
+            entry,
+        })
+    }
+}
+
+impl Translations {
+    /// Records the pair `asking` names and returns its `$translate` answer.
+    fn reply(&self, asking: &Asking) -> Answer {
         let key = (asking.value("url"), asking.value("code"));
         self.asked
             .lock()
@@ -350,11 +379,52 @@ impl Respond for Translations {
                 },
             ],
         };
-        ResponseTemplate::new(200)
-            .insert_header("content-type", "application/fhir+json")
-            .set_body_json(Answer {
-                resource_type: "Parameters",
-                parameter,
-            })
+        Answer {
+            resource_type: "Parameters",
+            parameter,
+        }
     }
+}
+
+/// A request body: a `$translate` `Parameters`, or a `batch` `Bundle` of
+/// them.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Received {
+    #[serde(default)]
+    resource_type: String,
+    #[serde(default)]
+    parameter: Vec<In>,
+    #[serde(default)]
+    entry: Vec<Entry>,
+}
+
+/// One entry of a `batch`, its `Parameters`.
+#[derive(Debug, Deserialize)]
+struct Entry {
+    #[serde(default)]
+    resource: Asking,
+}
+
+/// The `batch-response` `Bundle` of a `batch`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchResponse {
+    resource_type: &'static str,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    entry: Vec<Answered>,
+}
+
+/// One entry of a `batch-response`: the answer and its status.
+#[derive(Debug, Serialize)]
+struct Answered {
+    resource: Answer,
+    response: Status,
+}
+
+/// The status of one `batch-response` entry.
+#[derive(Debug, Serialize)]
+struct Status {
+    status: &'static str,
 }

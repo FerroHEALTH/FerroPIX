@@ -18,12 +18,13 @@ use crate::e2e::hl7v2::{V2, adt, code};
 /// shared buffers, the WAL and the bytes 2% above the values measured on
 /// 2026-11-21 (#713). The search keys (#722) cost a revision one nested
 /// statement and 16 shared buffers, the trigger that compares what a search
-/// reads.
+/// reads. Dropping the hot tables' unread keys (#730) lowered the WAL from
+/// 1925 to 1629 bytes.
 const CEILING: Ceiling = Ceiling {
     statements: 18,
     nested: 1,
-    blocks: 115,
-    wal: 1964,
+    blocks: 111,
+    wal: 1662,
     audit: 1444,
     answer: 106,
 };

@@ -248,3 +248,105 @@ async fn db_reseal_rewrites_the_payloads_waiting_in_the_outbox() {
         claimed[0].payload.expose_secret()
     );
 }
+
+/// A rotation over more carried identifiers than one batch walks them by
+/// their key (#730); interrupted by one it cannot open, it keeps the batches
+/// it committed, and resumed it finishes, every identifier found by the new
+/// key alone.
+#[tokio::test]
+async fn an_interrupted_rotation_over_many_carried_identifiers_resumes_and_finishes() {
+    if !e2e_enabled() {
+        return;
+    }
+    let postgres = postgres().await.unwrap();
+    let url = app_role(&postgres).await;
+    let (old_key, new_key) = (fresh_key(), fresh_key());
+    let old = Store::start(
+        &settings(&url, &old_key, true),
+        &super::feeds::seeds(),
+        Job::Migrate,
+    )
+    .await
+    .unwrap();
+    let feeder = super::feeds::feeder(&old);
+    let carried: Vec<IdentifierValue> = (0..8).map(bsn).collect();
+    for (index, value) in carried.iter().enumerate() {
+        let patient = super::feeds::Patient::new(
+            HOSPITAL_DOMAIN,
+            &format!("H-7{index:03}"),
+            ferropix_testkit::synthetic::FAMILY_NAMES[index % 8],
+            ferropix_testkit::synthetic::GIVEN_NAMES[index % 8],
+        )
+        .carrying(BSN_SYSTEM, value.expose());
+        feeder
+            .revise(&patient.revision(), &super::feeds::context())
+            .await
+            .unwrap();
+    }
+    let bsn_domain = domain(&old, BSN_SYSTEM).await;
+    old.close().await;
+
+    let new = Store::connect(&settings(&url, &new_key, true))
+        .await
+        .unwrap();
+    let old_sealer = Sealer::new(&old_key).unwrap();
+    let last: (Uuid, i32, Uuid, Vec<u8>, Vec<u8>) = sqlx::query_as(
+        "SELECT record_id, version, domain_id, identifier_hmac, identifier_sealed
+         FROM pix.carried_identifier WHERE identifier_sealed IS NOT NULL
+         ORDER BY record_id DESC, version DESC, domain_id DESC, identifier_hmac DESC LIMIT 1",
+    )
+    .fetch_one(new.pool())
+    .await
+    .unwrap();
+    let corrupt = |sealed: Vec<u8>| {
+        sqlx::query(
+            "UPDATE pix.carried_identifier SET identifier_sealed = $5
+             WHERE record_id = $1 AND version = $2 AND domain_id = $3 AND identifier_hmac = $4",
+        )
+        .bind(last.0)
+        .bind(last.1)
+        .bind(last.2)
+        .bind(last.3.clone())
+        .bind(sealed)
+    };
+    corrupt(vec![0_u8; last.4.len()])
+        .execute(new.pool())
+        .await
+        .unwrap();
+    let interrupted = reseal::run(&new, &old_sealer, 2).await;
+    assert!(
+        matches!(interrupted, Err(StoreError::Seal(_))),
+        "the rotation stops at the identifier it cannot open: {interrupted:?}"
+    );
+    let resealed: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pix.carried_identifier WHERE key_id = $1")
+            .bind(new.sealer().key_id().as_bytes().as_slice())
+            .fetch_one(new.pool())
+            .await
+            .unwrap();
+    assert!(resealed > 2, "the batches before it are kept: {resealed}");
+
+    corrupt(last.4.clone()).execute(new.pool()).await.unwrap();
+    reseal::run(&new, &old_sealer, 2)
+        .await
+        .expect("the resumed rotation finishes");
+    let left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pix.carried_identifier WHERE key_id <> $1")
+            .bind(new.sealer().key_id().as_bytes().as_slice())
+            .fetch_one(new.pool())
+            .await
+            .unwrap();
+    assert_eq!(0, left, "every carried identifier is under the new key");
+    for value in &carried {
+        let found: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pix.carried_identifier
+             WHERE domain_id = $1 AND identifier_hmac = $2",
+        )
+        .bind(bsn_domain.id.uuid())
+        .bind(new.sealer().hmac(bsn_domain.id.uuid(), value).as_slice())
+        .fetch_one(new.pool())
+        .await
+        .unwrap();
+        assert_eq!(1, found, "each BSN is found by the new key's HMAC");
+    }
+}

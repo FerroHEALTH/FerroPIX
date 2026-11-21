@@ -162,6 +162,20 @@ For each request they count:
 Each ceiling is the measured value. A change that lowers a figure lowers
 its ceiling in the same pull request, and no ceiling is raised.
 
+## The capacity campaign
+
+The gate compares a change with its base, and the budget holds each
+request's cost; neither says how far the server goes. `scripts/perf/capacity.sh`
+measures that on a quiet host
+([#740](https://github.com/FerroHEALTH/FerroPIX/issues/740)). `up` starts
+PostgreSQL, the stub OpenID Provider, the terminology server and the release
+server of the checkout; `seed N` feeds N synthetic patients over ITI-104;
+`snapshot` and `restore` keep the seeded store so every step starts from the
+same one; and `run GROUP RATE` runs one open-loop step of a plan under
+`perf/capacity/` (ITI-83 by `GET` and `POST`, ITI-78, ITI-119, ITI-104,
+ITI-8, and a mix of nine reads to one feed) at the rate you give it, with the
+server's CPU and memory sampled beside it.
+
 ## Changing the plan or the tolerances
 
 The plan is the head's: a change to `perf/plan.toml` is measured on both

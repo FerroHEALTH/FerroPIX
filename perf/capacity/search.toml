@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+
+# A step of the capacity campaign (scripts/perf/capacity.sh, #740): one open-loop
+# phase at the rate the script sets, against the seeded store. The idle
+# table is a token one; the campaign judges latency and throughput, not
+# idleness. No specification governs this: our own design.
+
+[idle]
+duration_secs = 5
+max_cpu_percent = 100.0
+max_transactions_per_second = 100000.0
+settle_secs = 1
+
+[load]
+rate = 1.0
+warmup_secs = 15
+duration_secs = 60
+max_in_flight = 2048
+settle_secs = 2
+
+[[requests]]
+group = "pdqm-search"
+method = "GET"
+path = "/fhir/Patient?family=Proefbeeldten&birthdate=1970-09-13"
+status = 200
+headers = { authorization = "Bearer {consumer_token}" }

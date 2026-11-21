@@ -13,9 +13,9 @@
 )]
 
 use ferropix_server::feed::{Action, FeedError};
-use ferropix_server::store::reseal;
 use ferropix_server::store::seal::Sealer;
 use ferropix_server::store::xref::{self, Lookup};
+use ferropix_server::store::{Store, reseal};
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::{
     FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN,
@@ -24,6 +24,22 @@ use uuid::Uuid;
 
 use super::feeds::{Patient, context, feeder, person_of, start};
 use super::{BSN_SYSTEM, bsn};
+
+/// Reads the cross-reference of `value` in the domain `system`.
+async fn lookup(
+    store: &Store,
+    connection: &mut sqlx::PgConnection,
+    system: &str,
+    value: &str,
+) -> Lookup {
+    let ask = xref::Ask {
+        system,
+        value,
+        targets: &[],
+        pseudonyms: false,
+    };
+    xref::query(connection, store, &ask).await.unwrap().lookup
+}
 
 /// Returns the identifier values of `lookup`, by system.
 fn values(lookup: &Lookup) -> Vec<(String, String)> {
@@ -212,13 +228,8 @@ async fn a_replaced_by_feed_moves_every_reference_to_the_survivor() {
     assert_eq!("source", kind);
 
     let mut connection = started.store.pool().acquire().await.unwrap();
-    let keys = started.store.sealer();
-    let by_subsumed = xref::lookup(&mut connection, keys, HOSPITAL_DOMAIN, "H-40")
-        .await
-        .unwrap();
-    let by_survivor = xref::lookup(&mut connection, keys, HOSPITAL_DOMAIN, "H-41")
-        .await
-        .unwrap();
+    let by_subsumed = lookup(&started.store, &mut connection, HOSPITAL_DOMAIN, "H-40").await;
+    let by_survivor = lookup(&started.store, &mut connection, HOSPITAL_DOMAIN, "H-41").await;
     assert_eq!(
         values(&by_survivor),
         values(&by_subsumed),
@@ -240,7 +251,6 @@ async fn a_removal_makes_the_identifier_not_found_and_leaves_the_versions_readab
     }
     let started = start().await;
     let feeder = feeder(&started.store);
-    let keys = started.store.sealer();
     let b2 = bsn(41).expose().to_owned();
     let subsumed = Patient::new(HOSPITAL_DOMAIN, "H-40", FAMILY_NAMES[3], GIVEN_NAMES[3]);
     let laboratory = Patient::new(LABORATORY_DOMAIN, "L-40", FAMILY_NAMES[3], GIVEN_NAMES[3]);
@@ -267,9 +277,7 @@ async fn a_removal_makes_the_identifier_not_found_and_leaves_the_versions_readab
     for value in ["H-41", "H-40"] {
         assert_eq!(
             Lookup::NotFound,
-            xref::lookup(&mut connection, keys, HOSPITAL_DOMAIN, value)
-                .await
-                .unwrap(),
+            lookup(&started.store, &mut connection, HOSPITAL_DOMAIN, value).await,
             "{value} is not found after the removal"
         );
     }
@@ -500,7 +508,7 @@ async fn db_reseal_rewrites_the_carried_identifiers_so_a_bsn_still_links() {
     let postgres = ferropix_testkit::containers::postgres().await.unwrap();
     let url = super::app_role(&postgres).await;
     let (old, new) = (super::fresh_key(), super::fresh_key());
-    let store = ferropix_server::store::Store::start(
+    let store = Store::start(
         &super::settings(&url, &old, true),
         &super::feeds::seeds(),
         ferropix_server::store::Job::Migrate,
@@ -515,7 +523,7 @@ async fn db_reseal_rewrites_the_carried_identifiers_so_a_bsn_still_links() {
         .await
         .unwrap();
     store.close().await;
-    let resealed = ferropix_server::store::Store::connect(&super::settings(&url, &new, true))
+    let resealed = Store::connect(&super::settings(&url, &new, true))
         .await
         .unwrap();
     reseal::run(&resealed, &Sealer::new(&old).unwrap(), reseal::BATCH)
@@ -592,11 +600,9 @@ async fn the_feed_writes_its_balp_record_after_the_commit() {
     )
     .await
     .unwrap();
-    let records: Vec<serde_json::Value> = std::fs::read_dir(&directory)
-        .unwrap()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().extension().is_some_and(|e| e == "msg"))
-        .map(|entry| serde_json::from_slice(&std::fs::read(entry.path()).unwrap()).unwrap())
+    let records: Vec<serde_json::Value> = ferropix_testkit::spool::records(&directory)
+        .iter()
+        .map(|record| serde_json::from_slice(record).unwrap())
         .collect();
     assert_eq!(1, records.len(), "one record in the spool");
     assert_eq!(

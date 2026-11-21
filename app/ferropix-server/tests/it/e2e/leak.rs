@@ -217,14 +217,16 @@ async fn no_identifier_or_name_reaches_a_log_a_debug_rendering_or_an_error_throu
         .expect_err("the eleven-proof fails");
     shown.push(format!("{not_a_bsn} {not_a_bsn:?} {}", chain(&not_a_bsn)));
     let mut connection = started.store.pool().acquire().await.unwrap();
-    let found = ferropix_server::store::xref::lookup(
-        &mut connection,
-        started.store.sealer(),
-        ferropix_testkit::synthetic::HOSPITAL_DOMAIN,
-        "H-leak-1",
-    )
-    .await
-    .unwrap();
+    let ask = ferropix_server::store::xref::Ask {
+        system: ferropix_testkit::synthetic::HOSPITAL_DOMAIN,
+        value: "H-leak-1",
+        targets: &[],
+        pseudonyms: false,
+    };
+    let found = ferropix_server::store::xref::query(&mut connection, &started.store, &ask)
+        .await
+        .unwrap()
+        .lookup;
     shown.push(format!(
         "{:?}",
         matches!(found, ferropix_server::store::xref::Lookup::Found(_))

@@ -16,19 +16,21 @@ use crate::e2e::hl7v2::{V2, adt, code};
 
 /// The ceiling of one ITI-8 revision: the statements as measured, and the
 /// shared buffers, the WAL and the bytes 2% above the values measured on
-/// 2026-11-21 (#713).
+/// 2026-11-21 (#713). The search keys (#722) cost a revision one nested
+/// statement and 16 shared buffers, the trigger that compares what a search
+/// reads.
 const CEILING: Ceiling = Ceiling {
     statements: 18,
-    nested: 0,
-    blocks: 98,
+    nested: 1,
+    blocks: 115,
     wal: 1964,
     audit: 1444,
     answer: 106,
 };
 
-/// The translations one ITI-8 revision asks the terminology server for, one
-/// call each (#713).
-const TRANSLATIONS: u64 = 2;
+/// The terminology requests one ITI-8 revision sends: its translations go
+/// in one `batch` (#734).
+const TRANSLATIONS: u64 = 1;
 
 /// Sends the revision with control id `control` and returns the bytes of
 /// its acknowledgment.
@@ -78,7 +80,7 @@ async fn an_iti_8_revision_stays_within_its_budget() {
     let each = calls.div_ceil(REQUESTS);
     writeln!(
         report,
-        "  translations per message: {each} (ceiling {TRANSLATIONS})"
+        "  terminology requests per message: {each} (ceiling {TRANSLATIONS})"
     )
     .expect("a String takes it");
     over |= each > TRANSLATIONS;

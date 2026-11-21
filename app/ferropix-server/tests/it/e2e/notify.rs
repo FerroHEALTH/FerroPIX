@@ -175,11 +175,9 @@ fn values(pid_3: &str) -> Vec<String> {
 
 /// The ITI-10 audit records in the spool under `directory`.
 fn audited(directory: &std::path::Path) -> Vec<serde_json::Value> {
-    std::fs::read_dir(directory)
-        .expect("the spool reads")
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().extension().is_some_and(|e| e == "msg"))
-        .map(|entry| serde_json::from_slice(&std::fs::read(entry.path()).unwrap()).unwrap())
+    ferropix_testkit::spool::records(directory)
+        .iter()
+        .map(|record| serde_json::from_slice(record).unwrap())
         .filter(|record: &serde_json::Value| record.to_string().contains("ITI-10"))
         .collect()
 }

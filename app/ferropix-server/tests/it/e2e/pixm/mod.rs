@@ -13,6 +13,7 @@
     reason = "the test seam: the answers are read as JSON values"
 )]
 
+mod golden;
 mod iti104;
 mod iti83;
 mod reconnect;

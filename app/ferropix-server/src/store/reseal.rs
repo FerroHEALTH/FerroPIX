@@ -7,8 +7,10 @@
 //! takes the new one from `[db] data_key_file`. It records the new key as
 //! pending, which refuses every `serve` until it is done, then rewrites the
 //! HMAC of every record, and of every identifier a version carries, and the
-//! sealed value of every sealed one in batches,
-//! one transaction each, so it resumes where an interrupted run stopped.
+//! sealed value of every sealed one in batches, one transaction each,
+//! walking each relation once by its key with a cursor: a run interrupted
+//! keeps every batch it committed, and a resumed run walks again from the
+//! first row, passing over each already under the new key.
 //! The payloads waiting in the outbox are sealed the same way and are
 //! rewritten after the identifiers.
 //! When no row is left under the old key it records the new key as the
@@ -35,63 +37,32 @@ pub struct ResealReport {
     pub records: u64,
 }
 
-/// One record as the rotation reads it.
-type Row = (Uuid, Uuid, Option<Vec<u8>>, Option<String>);
+/// One record as the rotation reads it: id, key id, domain, sealed value,
+/// plain value.
+type RecordRow = (Uuid, Vec<u8>, Uuid, Option<Vec<u8>>, Option<String>);
 
-/// The relations whose rows hold an identifier under the key: the records,
-/// then the identifiers each version carries.
-const TABLES: [Table; 2] = [Table::Record, Table::Carried];
+/// One carried identifier as the rotation reads it: its key (record,
+/// version, domain, HMAC), its key id, then its sealed and plain value.
+type CarriedRow = (
+    Uuid,
+    i32,
+    Uuid,
+    Vec<u8>,
+    Vec<u8>,
+    Option<Vec<u8>>,
+    Option<String>,
+);
 
-/// A relation the rotation rewrites.
-#[derive(Debug, Clone, Copy)]
-enum Table {
-    /// `pix.source_record`.
-    Record,
-    /// `pix.carried_identifier`.
-    Carried,
-}
+/// The key of the last carried identifier a batch read, where the next
+/// batch goes on.
+type CarriedKey = (Uuid, i32, Uuid, Vec<u8>);
 
-impl Table {
-    /// The statement that reads and locks one batch.
-    const fn select(self) -> &'static str {
-        match self {
-            Self::Record => {
-                "SELECT id, domain_id, identifier_sealed, identifier_value
-                 FROM pix.source_record WHERE key_id = $1 ORDER BY id LIMIT $2 FOR UPDATE"
-            }
-            Self::Carried => {
-                "SELECT id, domain_id, identifier_sealed, identifier_value
-                 FROM pix.carried_identifier WHERE key_id = $1 ORDER BY id LIMIT $2 FOR UPDATE"
-            }
-        }
-    }
-
-    /// The statement that rewrites one row.
-    const fn update(self) -> &'static str {
-        match self {
-            Self::Record => {
-                "UPDATE pix.source_record
-                 SET identifier_hmac = $2, identifier_sealed = COALESCE($3, identifier_sealed),
-                     key_id = $4
-                 WHERE id = $1"
-            }
-            Self::Carried => {
-                "UPDATE pix.carried_identifier
-                 SET identifier_hmac = $2, identifier_sealed = COALESCE($3, identifier_sealed),
-                     key_id = $4
-                 WHERE id = $1"
-            }
-        }
-    }
-
-    /// The statement that finds a row left under another key.
-    const fn left(self) -> &'static str {
-        match self {
-            Self::Record => "SELECT key_id FROM pix.source_record WHERE key_id <> $1 LIMIT 1",
-            Self::Carried => "SELECT key_id FROM pix.carried_identifier WHERE key_id <> $1 LIMIT 1",
-        }
-    }
-}
+/// The statements that find a row left under another key than the store's.
+const LEFT: [&str; 3] = [
+    "SELECT key_id FROM pix.source_record WHERE key_id <> $1 LIMIT 1",
+    "SELECT key_id FROM pix.carried_identifier WHERE key_id <> $1 LIMIT 1",
+    "SELECT key_id FROM pix.outbox WHERE key_id <> $1 LIMIT 1",
+];
 
 /// Rewrites every record written under `old` under `new`, the key the store
 /// holds.
@@ -113,17 +84,24 @@ pub async fn run(store: &Store, old: &Sealer, batch: i64) -> Result<ResealReport
     }
     begin(store, from, to).await?;
     let mut records: u64 = 0;
-    for table in TABLES {
-        loop {
-            let rewritten = rewrite_batch(store, table, old, new, batch).await?;
-            if rewritten == 0 {
-                break;
-            }
-            if matches!(table, Table::Record) {
-                records = records.saturating_add(rewritten);
-            }
-            tracing::info!(?table, rewritten, "identifiers resealed in a batch");
-        }
+    let mut after = None;
+    loop {
+        let (rewritten, last) = reseal_records(store, old, new, batch, after).await?;
+        let Some(last) = last else {
+            break;
+        };
+        records = records.saturating_add(rewritten);
+        after = Some(last);
+        tracing::info!(rewritten, "records resealed in a batch");
+    }
+    let mut after = None;
+    loop {
+        let (rewritten, last) = reseal_carried(store, old, new, batch, after).await?;
+        let Some(last) = last else {
+            break;
+        };
+        after = Some(last);
+        tracing::info!(rewritten, "carried identifiers resealed in a batch");
     }
     loop {
         let rewritten = reseal_outbox_batch(store, old, new, batch).await?;
@@ -184,44 +162,141 @@ async fn begin(store: &Store, from: KeyId, to: KeyId) -> Result<(), StoreError> 
     Ok(())
 }
 
-/// Rewrites one batch of `table`'s rows still written under another key
-/// than `new`'s, and returns how many it rewrote.
-async fn rewrite_batch(
+/// Opens the identifier of `domain` stored as `sealed` or `plain` under
+/// `old`, and returns its HMAC and, for a sealed one, its seal under `new`.
+fn resealed(
+    old: &Sealer,
+    new: &Sealer,
+    domain: Uuid,
+    sealed: Option<&[u8]>,
+    plain: Option<String>,
+) -> Result<([u8; 32], Option<Vec<u8>>), StoreError> {
+    let value = match (sealed, plain) {
+        (Some(sealed), _) => old.open(domain, sealed)?,
+        (None, Some(plain)) => IdentifierValue::new(plain).ok_or(SealError::Malformed)?,
+        (None, None) => return Err(StoreError::Seal(SealError::Malformed)),
+    };
+    let resealed = sealed
+        .is_some()
+        .then(|| new.seal(domain, &value))
+        .transpose()?;
+    Ok((new.hmac(domain, &value), resealed))
+}
+
+/// Rewrites the next batch of records after `after`, in id order, and
+/// returns how many it rewrote and the id it read last; `None` once no
+/// record follows.
+///
+/// The walk reads the primary key in order and passes over a record already
+/// under the new key, so one pass covers the store, and a run resumed after
+/// an interruption walks it again from the first.
+async fn reseal_records(
     store: &Store,
-    table: Table,
     old: &Sealer,
     new: &Sealer,
     batch: i64,
-) -> Result<u64, StoreError> {
+    after: Option<Uuid>,
+) -> Result<(u64, Option<Uuid>), StoreError> {
     let mut transaction = store.pool().begin().await?;
-    let rows: Vec<Row> = sqlx::query_as(table.select())
-        .bind(old.key_id().as_bytes().as_slice())
-        .bind(batch)
-        .fetch_all(&mut *transaction)
-        .await?;
+    let rows: Vec<RecordRow> = sqlx::query_as(
+        "SELECT id, key_id, domain_id, identifier_sealed, identifier_value
+         FROM pix.source_record WHERE $2::uuid IS NULL OR id > $2
+         ORDER BY id LIMIT $1 FOR UPDATE",
+    )
+    .bind(batch)
+    .bind(after)
+    .fetch_all(&mut *transaction)
+    .await?;
+    let last = rows.last().map(|row| row.0);
     let mut rewritten: u64 = 0;
-    for (id, domain, sealed, plain) in rows {
-        let value = match (sealed.as_deref(), plain) {
-            (Some(sealed), _) => old.open(domain, sealed)?,
-            (None, Some(plain)) => IdentifierValue::new(plain).ok_or(SealError::Malformed)?,
-            (None, None) => return Err(StoreError::Seal(SealError::Malformed)),
-        };
-        let resealed = sealed
-            .is_some()
-            .then(|| new.seal(domain, &value))
-            .transpose()?;
-        sqlx::query(table.update())
-            .bind(id)
-            .bind(new.hmac(domain, &value).as_slice())
-            .bind(resealed)
-            .bind(new.key_id().as_bytes().as_slice())
-            .execute(&mut *transaction)
-            .await?;
-        tracing::debug!(row = %id, ?table, "an identifier is resealed");
+    for (id, key_id, domain, sealed, plain) in rows {
+        if key_id.as_slice() != old.key_id().as_bytes().as_slice() {
+            continue;
+        }
+        let (hmac, resealed) = resealed(old, new, domain, sealed.as_deref(), plain)?;
+        sqlx::query(
+            "UPDATE pix.source_record
+             SET identifier_hmac = $2, identifier_sealed = COALESCE($3, identifier_sealed),
+                 key_id = $4
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(hmac.as_slice())
+        .bind(resealed)
+        .bind(new.key_id().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await?;
+        tracing::debug!(row = %id, "a record is resealed");
         rewritten = rewritten.saturating_add(1);
     }
     transaction.commit().await?;
-    Ok(rewritten)
+    Ok((rewritten, last))
+}
+
+/// Rewrites the next batch of carried identifiers after `after`, in key
+/// order, and returns how many it rewrote and the key it read last; `None`
+/// once no identifier follows.
+///
+/// A rewritten identifier takes a new HMAC, which can sort after the cursor;
+/// the walk passes over it as it is under the new key.
+async fn reseal_carried(
+    store: &Store,
+    old: &Sealer,
+    new: &Sealer,
+    batch: i64,
+    after: Option<CarriedKey>,
+) -> Result<(u64, Option<CarriedKey>), StoreError> {
+    let mut transaction = store.pool().begin().await?;
+    let (record, version, domain, hmac) = match &after {
+        Some((record, version, domain, hmac)) => (
+            Some(*record),
+            Some(*version),
+            Some(*domain),
+            Some(hmac.clone()),
+        ),
+        None => (None, None, None, None),
+    };
+    let rows: Vec<CarriedRow> = sqlx::query_as(
+        "SELECT record_id, version, domain_id, identifier_hmac, key_id,
+                    identifier_sealed, identifier_value
+             FROM pix.carried_identifier
+             WHERE $2::uuid IS NULL
+                OR (record_id, version, domain_id, identifier_hmac) > ($2, $3, $4, $5)
+             ORDER BY record_id, version, domain_id, identifier_hmac LIMIT $1 FOR UPDATE",
+    )
+    .bind(batch)
+    .bind(record)
+    .bind(version)
+    .bind(domain)
+    .bind(hmac)
+    .fetch_all(&mut *transaction)
+    .await?;
+    let last = rows.last().map(|row| (row.0, row.1, row.2, row.3.clone()));
+    let mut rewritten: u64 = 0;
+    for (record, version, domain, hmac, key_id, sealed, plain) in rows {
+        if key_id.as_slice() != old.key_id().as_bytes().as_slice() {
+            continue;
+        }
+        let (new_hmac, resealed) = resealed(old, new, domain, sealed.as_deref(), plain)?;
+        sqlx::query(
+            "UPDATE pix.carried_identifier
+             SET identifier_hmac = $5, identifier_sealed = COALESCE($6, identifier_sealed),
+                 key_id = $7
+             WHERE record_id = $1 AND version = $2 AND domain_id = $3 AND identifier_hmac = $4",
+        )
+        .bind(record)
+        .bind(version)
+        .bind(domain)
+        .bind(hmac)
+        .bind(new_hmac.as_slice())
+        .bind(resealed)
+        .bind(new.key_id().as_bytes().as_slice())
+        .execute(&mut *transaction)
+        .await?;
+        rewritten = rewritten.saturating_add(1);
+    }
+    transaction.commit().await?;
+    Ok((rewritten, last))
 }
 
 /// Reseals one batch of outbox payloads written under `old`, each sealed for
@@ -258,11 +333,7 @@ async fn reseal_outbox_batch(
 /// Records `to` as the store's key once no row is written under another.
 async fn finish(store: &Store, to: KeyId) -> Result<(), StoreError> {
     let mut transaction = store.pool().begin().await?;
-    for statement in TABLES
-        .map(Table::left)
-        .into_iter()
-        .chain(["SELECT key_id FROM pix.outbox WHERE key_id <> $1 LIMIT 1"])
-    {
+    for statement in LEFT {
         let left: Option<Vec<u8>> = sqlx::query_scalar(statement)
             .bind(to.as_bytes().as_slice())
             .fetch_optional(&mut *transaction)

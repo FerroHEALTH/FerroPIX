@@ -14,18 +14,21 @@ use ferropix_testkit::containers::e2e_enabled;
 use super::{Ceiling, Meter, REQUESTS, WARMUP};
 use crate::e2e::hl7v2::{V2, adt, code};
 
-/// The ceiling of one ITI-8 revision.
+/// The ceiling of one ITI-8 revision: the statements as measured, and the
+/// shared buffers, the WAL and the bytes 2% above the values measured on
+/// 2026-11-21 (#713).
 const CEILING: Ceiling = Ceiling {
-    statements: 0,
+    statements: 19,
     nested: 0,
-    blocks: 0,
-    wal: 0,
-    audit: 0,
-    answer: 0,
+    blocks: 98,
+    wal: 1964,
+    audit: 1444,
+    answer: 106,
 };
 
-/// The translations one ITI-8 revision asks the terminology server for.
-const TRANSLATIONS: u64 = 0;
+/// The translations one ITI-8 revision asks the terminology server for, one
+/// call each (#713).
+const TRANSLATIONS: u64 = 2;
 
 /// Sends the revision with control id `control` and returns the bytes of
 /// its acknowledgment.

@@ -238,65 +238,67 @@ struct Case {
     expected: StatusCode,
 }
 
-/// The ceilings of the FHIR face's hot requests.
+/// The ceilings of the FHIR face's hot requests: the statements as
+/// measured, and the shared buffers, the WAL and the bytes 2% above the
+/// values measured on 2026-11-21 (#713).
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
-            statements: 0,
+            statements: 22,
             nested: 0,
-            blocks: 0,
-            wal: 0,
-            audit: 0,
-            answer: 0,
+            blocks: 1957,
+            wal: 2952,
+            audit: 2036,
+            answer: 173,
         },
         expected: StatusCode::OK,
     },
     Case {
         name: "ITI-83 GET",
         ceiling: Ceiling {
-            statements: 0,
+            statements: 7,
             nested: 0,
-            blocks: 0,
+            blocks: 79,
             wal: 0,
-            audit: 0,
-            answer: 0,
+            audit: 2188,
+            answer: 263,
         },
         expected: StatusCode::OK,
     },
     Case {
         name: "ITI-83 POST",
         ceiling: Ceiling {
-            statements: 0,
+            statements: 7,
             nested: 0,
-            blocks: 0,
+            blocks: 79,
             wal: 0,
-            audit: 0,
-            answer: 0,
+            audit: 2433,
+            answer: 361,
         },
         expected: StatusCode::OK,
     },
     Case {
         name: "ITI-78 search",
         ceiling: Ceiling {
-            statements: 0,
-            nested: 0,
-            blocks: 0,
+            statements: 9,
+            nested: 202,
+            blocks: 1433,
             wal: 0,
-            audit: 0,
-            answer: 0,
+            audit: 2057,
+            answer: 1084,
         },
         expected: StatusCode::OK,
     },
     Case {
         name: "ITI-119 match",
         ceiling: Ceiling {
-            statements: 0,
+            statements: 10,
             nested: 0,
-            blocks: 0,
+            blocks: 1674,
             wal: 0,
-            audit: 0,
-            answer: 0,
+            audit: 2728,
+            answer: 1067,
         },
         expected: StatusCode::OK,
     },

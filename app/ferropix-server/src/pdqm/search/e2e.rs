@@ -151,7 +151,7 @@ impl Patient {
             FAMILY_NAMES[index % FAMILY_NAMES.len()].to_owned()
         };
         let mut given = vec![GIVEN_NAMES[(index * 3) % GIVEN_NAMES.len()].to_owned()];
-        if index % 5 == 0 {
+        if index.is_multiple_of(5) {
             given.push(GIVEN_NAMES[(index * 7 + 1) % GIVEN_NAMES.len()].to_owned());
         }
         let year = 1930 + index % 70;
@@ -188,8 +188,9 @@ impl Patient {
             )),
             _ => None,
         };
-        let maiden =
-            (index % 11 == 0).then(|| FAMILY_NAMES[(index + 3) % FAMILY_NAMES.len()].to_owned());
+        let maiden = index
+            .is_multiple_of(11)
+            .then(|| FAMILY_NAMES[(index + 3) % FAMILY_NAMES.len()].to_owned());
         Self {
             system,
             value: format!("C-{index:05}"),
@@ -297,7 +298,7 @@ fn bsn(index: usize) -> String {
     ferropix_testkit::synthetic::bsn(index)
         .expect("a synthetic BSN")
         .digits()
-        .to_owned()
+        .clone()
 }
 
 /// Merges `merged` into `survivor` as a steward and returns the merge.
@@ -485,14 +486,14 @@ async fn every_search_of_the_matrix_answers_as_the_oracle_over_the_corpus() {
     for index in 0..CORPUS {
         let mut patient = Patient::at(index);
         if index % 13 < 2 {
-            patient.bsn = Some(bsn(index - index % 13));
+            patient.bsn = Some(bsn(index.div_euclid(13)));
         }
         persons.push(feed(&started, &patient).await);
     }
     for index in (0..CORPUS).step_by(26) {
         let mut authoritative = Patient::at(index + 500);
         authoritative.system = BSN;
-        authoritative.value = bsn(index);
+        authoritative.value = bsn(index.div_euclid(13));
         authoritative.family = String::from("Gezaghebber");
         feed(&started, &authoritative).await;
     }
@@ -569,6 +570,8 @@ async fn a_search_right_after_each_change_sees_it() {
     let mut lab = Patient::at(4);
     lab.family = String::from("Labbeling");
     lab.bsn = Some(bsn(1));
+    lab.birth.clone_from(&ada.birth);
+    lab.gender = ada.gender;
     let joined = feed(&started, &lab).await;
     assert_eq!(person, joined, "the carried BSN joins the person");
     agree(&started, "family=labbe", false).await;
@@ -577,6 +580,8 @@ async fn a_search_right_after_each_change_sees_it() {
     authority.system = BSN;
     authority.value = bsn(1);
     authority.family = String::from("Gezaghebber");
+    authority.birth.clone_from(&ada.birth);
+    authority.gender = ada.gender;
     feed(&started, &authority).await;
     assert_eq!(
         vec![person.uuid()],

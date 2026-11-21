@@ -304,10 +304,10 @@ const CASES: [Case; 5] = [
     },
 ];
 
-/// Feeds [`POPULATION`] synthetic patients of the hospital, each its own
+/// Feeds the synthetic patients `patients` of the hospital, each its own
 /// person.
-async fn populate(harness: &Harness) {
-    for index in 0..POPULATION {
+async fn populate(harness: &Harness, patients: std::ops::Range<usize>) {
+    for index in patients {
         let value = format!("H-3{index:05}");
         let patient: Document = serde_json::from_value(json!({
             "resourceType": "Patient",
@@ -381,7 +381,7 @@ async fn each_fhir_transaction_stays_within_its_budget() {
     }
     let harness = Harness::start(synthetic_seeds()).await;
     let (hospital, _bsn) = feed_both(&harness).await;
-    populate(&harness).await;
+    populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
     let mut report = String::new();
     let mut over = false;
@@ -410,4 +410,38 @@ async fn each_fhir_transaction_stays_within_its_budget() {
     }
     assert!(!over, "a transaction is over its budget:\n{report}");
     eprintln!("{report}");
+}
+
+/// The shared buffers `REQUESTS` ITI-78 searches touch.
+async fn search_buffers(harness: &Harness, meter: &mut Meter, hospital: &str) -> u64 {
+    for _ in 0..WARMUP {
+        send(harness, "ITI-78 search", hospital).await;
+    }
+    meter.start().await;
+    for _ in 0..REQUESTS {
+        let answer = send(harness, "ITI-78 search", hospital).await;
+        assert_eq!(StatusCode::OK, answer.status, "{}", answer.body);
+    }
+    meter.finish(0).await.blocks
+}
+
+/// An ITI-78 search reads its persons through indexes (#722): twice the
+/// persons, the same buffers, within the noise of a B-tree's depth.
+#[tokio::test]
+async fn an_iti_78_search_reads_no_more_over_twice_the_persons() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(synthetic_seeds()).await;
+    let (hospital, _bsn) = feed_both(&harness).await;
+    populate(&harness, 0..POPULATION).await;
+    let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
+    let before = search_buffers(&harness, &mut meter, &hospital).await;
+    populate(&harness, POPULATION..POPULATION * 2).await;
+    let after = search_buffers(&harness, &mut meter, &hospital).await;
+    assert!(
+        after.saturating_mul(100) <= before.saturating_mul(105),
+        "an ITI-78 search over {} persons touches {after} buffers, over {POPULATION} {before}",
+        POPULATION * 2
+    );
 }

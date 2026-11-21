@@ -117,9 +117,9 @@ async fn feeds_per_hour(connection: &mut PgConnection) -> Result<Vec<HourFeeds>,
         .saturating_sub(1);
     let rows: Vec<(String, i64, i64, i64)> = sqlx::query_as(
         "SELECT to_char(h, 'YYYY-MM-DD\"T\"HH24:00:00\"Z\"'),
-                count(v.record_id) FILTER (WHERE v.channel = 'fhir'),
-                count(v.record_id) FILTER (WHERE v.channel = 'v2'),
-                count(v.record_id) FILTER (WHERE v.channel = 'pmir')
+                count(v.id) FILTER (WHERE v.channel = 'fhir'),
+                count(v.id) FILTER (WHERE v.channel = 'v2'),
+                count(v.id) FILTER (WHERE v.channel = 'pmir')
          FROM generate_series(
                   date_trunc('hour', now() AT TIME ZONE 'UTC') - make_interval(hours => $1),
                   date_trunc('hour', now() AT TIME ZONE 'UTC'),

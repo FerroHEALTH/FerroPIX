@@ -465,8 +465,7 @@ async fn an_identifier_is_normalised_before_it_is_sealed_and_kept_out_of_the_dem
         assert!(!text.contains("identifier"), "{text}");
     }
     let carried: Vec<Option<String>> = sqlx::query_scalar(
-        "SELECT identifier_value FROM pix.carried_identifier WHERE record_id = $1
-         ORDER BY version, domain_id, identifier_hmac",
+        "SELECT identifier_value FROM pix.carried_identifier WHERE record_id = $1 ORDER BY id",
     )
     .bind(first.record.uuid())
     .fetch_all(started.store.pool())

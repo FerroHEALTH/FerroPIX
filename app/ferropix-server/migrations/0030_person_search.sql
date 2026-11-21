@@ -21,10 +21,12 @@
 -- (a person and a record are never deleted). No specification governs the
 -- copy: our own design.
 
+-- A person names the record it is served by; the version is that record's
+-- head, so a revision that changes neither the record, the gender nor the
+-- birth date writes nothing here.
 CREATE TABLE pix.person_served (
     person_id uuid PRIMARY KEY,
     record_id uuid NOT NULL,
-    version integer NOT NULL,
     gender text,
     birth daterange
 );
@@ -95,13 +97,19 @@ CREATE FUNCTION pix.serve(persons uuid[]) RETURNS void
     SET search_path = pg_catalog
 AS $$
     WITH chosen AS (
-        SELECT DISTINCT ON (l.person_id) l.person_id, r.id AS record_id, v.version, v.demographics
-        FROM pix.link l
+        SELECT DISTINCT ON (l.person_id) l.person_id, r.id AS record_id, v.demographics
+        FROM unnest(persons) AS asked (id)
+        JOIN pix.link l ON l.person_id = asked.id AND upper_inf(l.valid)
         JOIN pix.source_record r ON r.id = l.record_id
         JOIN pix.identifier_domain d ON d.id = r.domain_id
-        JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version
-        WHERE l.person_id = ANY(persons) AND upper_inf(l.valid)
-          AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL
+        -- The head version of each record, read through its key whatever the
+        -- planner guesses of the array's size.
+        CROSS JOIN LATERAL (
+            SELECT h.demographics, h.received_at
+            FROM pix.source_record_version h
+            WHERE h.record_id = r.id AND h.version = r.head_version
+        ) AS v
+        WHERE r.active AND r.removed_at IS NULL AND d.retired_at IS NULL
         ORDER BY l.person_id, (d.kind = 'authoritative') DESC, v.received_at DESC, r.id
     ),
     gone AS (
@@ -110,14 +118,14 @@ AS $$
           AND NOT EXISTS (SELECT 1 FROM chosen c WHERE c.person_id = s.person_id)
     ),
     served AS (
-        INSERT INTO pix.person_served AS s (person_id, record_id, version, gender, birth)
-        SELECT c.person_id, c.record_id, c.version, c.demographics->>'gender',
+        INSERT INTO pix.person_served AS s (person_id, record_id, gender, birth)
+        SELECT c.person_id, c.record_id, c.demographics->>'gender',
                pix.birth_range(c.demographics->>'birthDate')
         FROM chosen c
         ON CONFLICT (person_id) DO UPDATE
-            SET record_id = excluded.record_id, version = excluded.version,
-                gender = excluded.gender, birth = excluded.birth
-            WHERE (s.record_id, s.version) IS DISTINCT FROM (excluded.record_id, excluded.version)
+            SET record_id = excluded.record_id, gender = excluded.gender, birth = excluded.birth
+            WHERE (s.record_id, s.gender, s.birth)
+                  IS DISTINCT FROM (excluded.record_id, excluded.gender, excluded.birth)
     ),
     keys AS (
         SELECT DISTINCT c.person_id, k.field, k.value, k.system

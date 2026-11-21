@@ -38,15 +38,15 @@ pub const PDQM_PATIENT: &str =
 const MAX_HOPS: i32 = 64;
 
 /// The demographics each person serves, one row per person: the person,
-/// the demographics of the record and version `pix.person_served` names,
-/// which `pix.serve` keeps at the end of every statement that changes them
-/// (#722).
+/// the head version of the record `pix.person_served` names, which
+/// `pix.serve` keeps at the end of every statement that changes it (#722).
 ///
 /// The ITI-78 search reads the same rows, so a search matches the values
 /// the answer shows.
 pub(crate) const SERVED: &str = "SELECT s.person_id, v.demographics::text
      FROM pix.person_served s
-     JOIN pix.source_record_version v ON v.record_id = s.record_id AND v.version = s.version";
+     JOIN pix.source_record r ON r.id = s.record_id
+     JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version";
 
 /// One person as the store holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

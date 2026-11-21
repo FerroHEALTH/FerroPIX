@@ -13,8 +13,10 @@
 //! domain, so no sealed value is opened to search (`docs/architecture.md`
 //! §4.2). A `birthdate` compares the ranges of days the value and the
 //! stored date cover (FHIR R4 search, date). The demographics searched are
-//! those the answer shows ([`crate::pdqm::patient`]); a merged person holds
-//! no record, so only `_id` and `active` find it. The page is the persons
+//! those the answer shows ([`crate::pdqm::patient`]), read from the served
+//! row and the search keys `pix.serve` keeps for each person (#722), so a
+//! criterion reads an index; a merged person holds no record, so only `_id`
+//! and `active` find it. The page is the persons
 //! after a cursor in id order, so a page does not shift when a person is
 //! created or merged while a client pages (our own design).
 
@@ -32,10 +34,12 @@ use uuid::Uuid;
 
 use crate::matching::subject::MOTHERS_MAIDEN_NAME;
 use crate::pdqm::PdqError;
-use crate::pdqm::patient::{SERVED, SERVED_ORDER};
 use crate::store::identifier::Rule;
 use crate::store::record::{self, Domain};
 use crate::store::seal::Sealer;
+
+#[cfg(test)]
+mod oracle;
 
 /// One page of a search's result set.
 #[derive(Clone, PartialEq, Eq)]
@@ -88,12 +92,12 @@ pub async fn run(
         .into_iter()
         .filter(|domain| !domain.retired)
         .collect::<Vec<_>>();
-    let mut query: QueryBuilder<Postgres> = QueryBuilder::new(format!(
-        "WITH served AS ({SERVED} {SERVED_ORDER}),
-         matched AS (
-             SELECT p.id FROM pix.person p LEFT JOIN served s ON s.person_id = p.id
-             WHERE true"
-    ));
+    let mut query: QueryBuilder<Postgres> = QueryBuilder::new(
+        "WITH matched AS (
+             SELECT p.id FROM pix.person p
+             LEFT JOIN pix.person_served s ON s.person_id = p.id
+             WHERE true",
+    );
     if window.omit_merged {
         query.push(" AND p.status = 'active'");
     }
@@ -102,6 +106,19 @@ pub async fn run(
         push_criterion(&mut query, criterion, keys, master, &domains)?;
         query.push(")");
     }
+    page(connection, query, window).await
+}
+
+/// Ends `query`, whose `matched` names the persons a search matches, with
+/// the count and the page `window` names, and runs it.
+///
+/// # Errors
+/// Returns [`PdqError::Store`] when the statement fails.
+pub(super) async fn page(
+    connection: &mut PgConnection,
+    mut query: QueryBuilder<'_, Postgres>,
+    window: Window,
+) -> Result<Page, PdqError> {
     query.push(
         ")
          SELECT (SELECT count(*) FROM matched),
@@ -133,6 +150,9 @@ pub async fn run(
         more,
     })
 }
+
+/// The served birth range a `birthdate` criterion compares.
+const BIRTH: &str = "s.birth";
 
 /// Writes the condition of one criterion.
 ///
@@ -172,23 +192,31 @@ fn push_criterion(
                 .iter()
                 .map(|value| value.expose_secret().to_owned())
                 .collect();
-            query.push("EXISTS (SELECT 1 FROM (");
-            push_fields(query, *parameter)?;
-            query.push(") AS f(field) WHERE ");
+            let field = field(*parameter)?;
             match matching {
                 StringMatch::Exact => {
-                    query.push("f.field = ANY(");
+                    query.push(
+                        "p.id IN (SELECT k.person_id FROM pix.person_search_key k WHERE k.field = ",
+                    );
+                    query.push_bind(field);
+                    query.push("::\"char\" AND k.value = ANY(");
                     query.push_bind(values);
                     query.push(")");
                 }
                 StringMatch::StartsWith => {
-                    query.push("EXISTS (SELECT 1 FROM unnest(");
+                    query.push("p.id IN (SELECT k.person_id FROM unnest(");
                     query.push_bind(values);
                     query.push(
-                        "::text[]) AS v(value) WHERE starts_with(pix.fold(f.field), pix.fold(v.value)))",
+                        "::text[]) AS v(value) JOIN pix.person_search_key k ON k.folded ^@ pix.folded_key(",
                     );
+                    query.push_bind(field);
+                    query.push("::\"char\", v.value) WHERE true");
                 }
                 _ => return Err(PdqError::Unsupported),
+            }
+            if matches!(parameter, StringParameter::MothersMaidenName) {
+                query.push(" AND k.system = ");
+                query.push_bind(MOTHERS_MAIDEN_NAME);
             }
             query.push(")");
         }
@@ -199,12 +227,12 @@ fn push_criterion(
             for value in values {
                 if let Some((low, high)) = range(value.date().expose_secret()) {
                     query.push(" OR ");
-                    push_date(query, value.prefix(), low, high);
+                    push_date(query, BIRTH, value.prefix(), low, high);
                 }
             }
         }
         Criterion::Gender(gender) => {
-            query.push("s.demographics->>'gender' = ");
+            query.push("s.gender = ");
             query.push_bind(gender_code(*gender)?);
         }
         _ => return Err(PdqError::Unsupported),
@@ -212,44 +240,23 @@ fn push_criterion(
     Ok(())
 }
 
-/// Writes the select of the values `parameter` is matched against, one
-/// `text` column per row.
-fn push_fields(
-    query: &mut QueryBuilder<Postgres>,
-    parameter: StringParameter,
-) -> Result<(), PdqError> {
-    let address =
-        |part: &str| format!("SELECT a->>'{part}' FROM pix.elements(s.demographics->'address') a");
-    let select = match parameter {
-        StringParameter::Family => {
-            String::from("SELECT n->>'family' FROM pix.elements(s.demographics->'name') n")
-        }
-        StringParameter::Given => String::from(
-            "SELECT g FROM pix.elements(s.demographics->'name') n, pix.texts(n->'given') g",
-        ),
-        StringParameter::Address => String::from(
-            "SELECT part FROM pix.elements(s.demographics->'address') a,
-                 LATERAL (SELECT a->>'text' UNION ALL SELECT a->>'city'
-                          UNION ALL SELECT a->>'district' UNION ALL SELECT a->>'state'
-                          UNION ALL SELECT a->>'postalCode' UNION ALL SELECT a->>'country'
-                          UNION ALL SELECT pix.texts(a->'line')) AS parts(part)",
-        ),
-        StringParameter::AddressCity => address("city"),
-        StringParameter::AddressCountry => address("country"),
-        StringParameter::AddressPostalcode => address("postalCode"),
-        StringParameter::AddressState => address("state"),
-        StringParameter::MothersMaidenName => {
-            query.push(
-                "SELECT e->>'valueString' FROM pix.elements(s.demographics->'extension') e
-                 WHERE e->>'url' = ",
-            );
-            query.push_bind(MOTHERS_MAIDEN_NAME);
-            return Ok(());
-        }
-        _ => return Err(PdqError::Unsupported),
-    };
-    query.push(select);
-    Ok(())
+/// Returns the field of `parameter`'s search keys (`pix.person_search_key`).
+///
+/// # Errors
+/// Returns [`PdqError::Unsupported`] for a parameter this build does not
+/// read.
+fn field(parameter: StringParameter) -> Result<&'static str, PdqError> {
+    match parameter {
+        StringParameter::Family => Ok("f"),
+        StringParameter::Given => Ok("g"),
+        StringParameter::Address => Ok("a"),
+        StringParameter::AddressCity => Ok("c"),
+        StringParameter::AddressCountry => Ok("n"),
+        StringParameter::AddressPostalcode => Ok("p"),
+        StringParameter::AddressState => Ok("s"),
+        StringParameter::MothersMaidenName => Ok("x"),
+        _ => Err(PdqError::Unsupported),
+    }
 }
 
 /// Writes the condition of an `identifier` criterion: a person one of whose
@@ -257,7 +264,7 @@ fn push_fields(
 /// `authoritative` domain where no record holds it, as a PIX query finds
 /// it ([`crate::store::xref`]), each found by the HMAC of the value its
 /// domain normalises; or whose master identifier is one of them.
-fn push_identifiers(
+pub(super) fn push_identifiers(
     query: &mut QueryBuilder<Postgres>,
     tokens: &[Token],
     keys: &Sealer,
@@ -323,30 +330,37 @@ fn push_identifiers(
 /// value is one of `tokens`, in the token's `ContactPoint.system` when it
 /// names one (FHIR R4 search, token on a `ContactPoint`).
 fn push_telecom(query: &mut QueryBuilder<Postgres>, tokens: &[Token]) {
-    query.push("EXISTS (SELECT 1 FROM pix.elements(s.demographics->'telecom') t WHERE false");
+    query.push(
+        "p.id IN (SELECT k.person_id FROM pix.person_search_key k WHERE k.field = 't' AND (false",
+    );
     for token in tokens {
-        query.push(" OR (t->>'value' = ");
+        query.push(" OR (k.value = ");
         query.push_bind(token.value().expose_secret().to_owned());
         match token.system() {
             None => {}
             Some("") => {
-                query.push(" AND t->>'system' IS NULL");
+                query.push(" AND k.system IS NULL");
             }
             Some(system) => {
-                query.push(" AND t->>'system' = ");
+                query.push(" AND k.system = ");
                 query.push_bind(system.to_owned());
             }
         }
         query.push(")");
     }
-    query.push(")");
+    query.push("))");
 }
 
 /// Writes the comparison of the stored birth date with the days
 /// `[low, high)` a search value covers, as `prefix` asks (FHIR R4 search,
 /// prefixes).
-fn push_date(query: &mut QueryBuilder<Postgres>, prefix: Prefix, low: Date, high: Date) {
-    let stored = "pix.birth_range(s.demographics->>'birthDate')";
+pub(super) fn push_date(
+    query: &mut QueryBuilder<Postgres>,
+    stored: &str,
+    prefix: Prefix,
+    low: Date,
+    high: Date,
+) {
     let mut bind = |query: &mut QueryBuilder<Postgres>, date: Date| {
         query.push_bind(date.to_string());
         query.push("::date");
@@ -407,7 +421,7 @@ fn push_date(query: &mut QueryBuilder<Postgres>, prefix: Prefix, low: Date, high
 /// precision: a year, a month or a day, read by the FHIR search grammar
 /// (FHIR R4 search.html §3.1.1.4.7). `None` when the range runs past the
 /// year 9999, which no birth date reaches.
-fn range(text: &str) -> Option<(Date, Date)> {
+pub(super) fn range(text: &str) -> Option<(Date, Date)> {
     // NOTE: no specification governs this: our own design; the reader held the
     // value to a FHIR date, so a value that does not read here is no birth date.
     let range = SearchDate::parse(text).ok()?.range();
@@ -434,7 +448,7 @@ fn approximately(low: Date, high: Date) -> (Date, Date) {
 ///
 /// # Errors
 /// Returns [`PdqError::Unsupported`] for a gender this build does not know.
-fn gender_code(gender: Gender) -> Result<&'static str, PdqError> {
+pub(super) fn gender_code(gender: Gender) -> Result<&'static str, PdqError> {
     match gender {
         Gender::Male => Ok("male"),
         Gender::Female => Ok("female"),

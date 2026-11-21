@@ -1,9 +1,11 @@
 -- SPDX-FileCopyrightText: Cadasto B.V.
 -- SPDX-License-Identifier: BUSL-1.1
 
--- The grants again, last in the set (0029_grants.sql says why), with the
--- served rows and search keys of 0030, which pix.serve deletes from when a
--- person's demographics change.
+-- The grants again, last in the set. A released migration is never edited
+-- or renumbered, since a store that applied it would refuse the set, so a
+-- migration added after a release is followed by this file, which grants
+-- what 0015_grants granted over every relation the set now holds, the ITI-10
+-- consumer column of the outbox included.
 
 DO $$
 BEGIN
@@ -14,7 +16,7 @@ BEGIN
         REVOKE UPDATE ON pix.source_record_version, pix.merge_effect, pix.pseudonym,
             pix.steward_action, pix._sqlx_migrations FROM ferropix;
         REVOKE INSERT ON pix._sqlx_migrations FROM ferropix;
-        GRANT DELETE ON pix.v2_receipt, pix.person_served, pix.person_search_key TO ferropix;
+        GRANT DELETE ON pix.v2_receipt TO ferropix;
         GRANT EXECUTE ON FUNCTION pix.prune_outbox(interval, integer) TO ferropix;
     END IF;
 END

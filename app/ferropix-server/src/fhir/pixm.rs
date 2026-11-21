@@ -30,7 +30,9 @@ use http::request::Parts;
 use http::{HeaderValue, Method, header};
 use ihe_atna::balp::Outcome;
 use ihe_iti::pixm::audit::manager_query;
-use ihe_iti::pixm::identifier::{PatientReference, SourceIdentifier, TargetIdentifier};
+use ihe_iti::pixm::identifier::{
+    PatientReference, SourceIdentifier, TargetIdentifier, TargetSystem,
+};
 use ihe_iti::pixm::server::answer;
 use ihe_iti::pixm::server::feed::{Feed, Removal};
 use ihe_iti::pixm::server::query::PixQuery;
@@ -210,7 +212,7 @@ impl Manager {
     /// Manager).
     async fn lookup(&self, pix: &PixQuery, client: Option<&str>) -> Result<Looked, Case> {
         let source = pix.source();
-        let targets: Vec<&str> = pix.targets().iter().map(|target| target.as_str()).collect();
+        let targets: Vec<&str> = pix.targets().iter().map(TargetSystem::as_str).collect();
         let mut connection = self.store.pool().acquire().await.map_err(unavailable)?;
         let answered = xref::query(
             &mut connection,

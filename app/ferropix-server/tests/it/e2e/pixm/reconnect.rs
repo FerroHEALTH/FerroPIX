@@ -81,8 +81,15 @@ async fn a_cut_session_is_refused_cleanly_once_and_found_by_the_idle_probe() {
         }
         last = answer.status;
     }
-    assert!(refused <= POOL, "each cut connection refuses one query at most");
-    assert_eq!(StatusCode::OK, last, "a fresh connection answers after the cut ones");
+    assert!(
+        refused <= POOL,
+        "each cut connection refuses one query at most"
+    );
+    assert_eq!(
+        StatusCode::OK,
+        last,
+        "a fresh connection answers after the cut ones"
+    );
 
     warm(&harness, &hospital).await;
     assert!(cut(&harness).await >= 1, "the warm pool holds sessions");

@@ -51,11 +51,12 @@ use crate::store::seal::{KeyId, SealError, Sealer};
 /// server's sessions in `pg_stat_activity`.
 const APPLICATION_NAME: &str = "ferropix";
 
-/// How long a pooled connection sits unused before it is pinged on its next
-/// checkout: a loaded server sends no ping, and a quiet one pays one round
-/// trip for a connection idle that long, so a session the database cut while
-/// nobody used it is replaced before a request gets it. No specification
-/// governs connection handling: our own design.
+/// How long a pooled connection sits unused before its next checkout pings it.
+///
+/// A loaded server sends no ping, and a quiet one pays one round trip for a
+/// connection idle that long, so a session the database cut while nobody
+/// used it is replaced before a request gets it. No specification governs
+/// connection handling: our own design.
 pub const IDLE_PROBE: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// A pool of connections to the store, with the keys of its sealing.

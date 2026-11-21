@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The Dutch identifiers over PostgreSQL 18 (#117), behind `FERROPIX_E2E`:
+//! The Dutch identifiers over PostgreSQL 19 (#117), behind `FERROPIX_E2E`:
 //! a pseudonymised BSN held in an authoritative, sealed domain links two
 //! records deterministically, is found through ITI-83 and never reaches the
 //! log; and a BSN that fails the eleven-proof is refused at the feed.

@@ -203,7 +203,7 @@ Without a `[telemetry.otlp]` table nothing is exported.
 
 ### The store
 
-The server keeps the cross-reference in schema `pix` of a PostgreSQL 18
+The server keeps the cross-reference in schema `pix` of a PostgreSQL 19
 database. `ferropix db migrate`, and `serve` unless `db.migrate = false`, run
 these steps in order:
 

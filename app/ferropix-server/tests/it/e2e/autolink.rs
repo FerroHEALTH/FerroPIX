@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Automatic probabilistic linking over PostgreSQL 18 (#112), behind
+//! Automatic probabilistic linking over PostgreSQL 19 (#112), behind
 //! `FERROPIX_E2E`: with `auto_link` off a certain pair is a candidate and no
 //! link; on, the same feed links the records with the score and the evidence
 //! on the link, and the dashboard's auto-link count counts only that link.

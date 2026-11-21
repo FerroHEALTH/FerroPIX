@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-93 received over PostgreSQL 18 (#103), behind `FERROPIX_E2E`: the
+//! ITI-93 received over PostgreSQL 19 (#103), behind `FERROPIX_E2E`: the
 //! four vendored PMIR 1.6.0 message Bundles and an unmerge attempt, each in
 //! FHIR JSON and XML, with the response's per-entry codes; a merged master
 //! identity read inactive with its `replaced-by` link in ITI-78 and its

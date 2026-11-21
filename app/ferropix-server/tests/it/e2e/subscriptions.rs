@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-94 over PostgreSQL 18 (#105), behind `FERROPIX_E2E`: a subscription
+//! ITI-94 over PostgreSQL 19 (#105), behind `FERROPIX_E2E`: a subscription
 //! created from the vendored PMIR example with each of the four criteria,
 //! read, disabled, enabled and deleted; a fifth criteria, a missing channel
 //! and an `http` endpoint refused; each request audited; the criteria

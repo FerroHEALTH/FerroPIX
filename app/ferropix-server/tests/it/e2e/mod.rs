@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The store against PostgreSQL 18, behind `FERROPIX_E2E`.
+//! The store against PostgreSQL 19, behind `FERROPIX_E2E`.
 //!
 //! Each case starts its own container with the testkit, connects as a role
 //! made for it that owns nothing but what it creates, and returns at once

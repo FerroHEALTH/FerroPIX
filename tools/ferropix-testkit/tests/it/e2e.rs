@@ -20,8 +20,8 @@ async fn postgres_starts_at_major_version_18() {
         .await
         .unwrap();
     assert!(
-        version.starts_with("18"),
-        "the server is PostgreSQL 18, got {version}"
+        version.starts_with("19"),
+        "the server is PostgreSQL 19, got {version}"
     );
     pool.close().await;
 }

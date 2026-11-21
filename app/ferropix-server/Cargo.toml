@@ -97,7 +97,7 @@ serde.workspace = true
 # The bodies of the FHIR face, written from the generated model, and the
 # demographics a source record version carries, stored as jsonb.
 serde_json.workspace = true
-# The cross-reference store: PostgreSQL 18 with the embedded migration set,
+# The cross-reference store: PostgreSQL 19 with the embedded migration set,
 # uuid ids and jsonb demographics, over rustls for a `sslmode=require` URL.
 sqlx = { workspace = true, features = ["macros", "migrate", "uuid", "json", "tls-rustls-aws-lc-rs"] }
 # The Jaro-Winkler comparator of the scorer (docs/architecture.md section 5.2).

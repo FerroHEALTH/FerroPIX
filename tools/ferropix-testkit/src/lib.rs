@@ -4,7 +4,7 @@
 //! Test support for the FerroPIX suites, consumed as a path-only
 //! dev-dependency so it never ships.
 //!
-//! [`containers`] starts PostgreSQL 18 and the stub OpenID Provider behind
+//! [`containers`] starts PostgreSQL 19 and the stub OpenID Provider behind
 //! the `FERROPIX_E2E` gate, each image pinned by digest; [`synthetic`] holds
 //! the synthetic BSN range with its eleven-proof, the synthetic identifier
 //! domains and the synthetic names; [`oidc`] is the test OpenID Provider the

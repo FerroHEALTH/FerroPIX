@@ -110,7 +110,7 @@ our own design, after the siblings.
    └───────────────┬──────────────────────────┬───────────────┘
                    │                          │
                    ▼                          ▼
-          PostgreSQL 18 (schema pix)     ATNA repository (BALP)
+          PostgreSQL 19 (schema pix)     ATNA repository (BALP)
                    ▲
                    │  /operator, with the steward's token
    ┌───────────────┴──────────────────────────────────────────┐
@@ -1085,7 +1085,7 @@ spool directory is created in the image, `0700`, owned by the runtime user.
 
 **The quickstart.** `compose.yaml` at the root runs the published server
 image with the hardening set (`read_only`, `cap_drop: [ALL]`,
-`no-new-privileges`, `tmpfs` for `/tmp`), the official `postgres:18` image
+`no-new-privileges`, `tmpfs` for `/tmp`), the official `postgres:19` image
 pinned by digest with its data on a volume, every secret as a file secret
 (`FERROPIX__DB__URL_FILE`), the `console` profile that runs the console
 beside the server, and a `dev` issuer for the sign-in: the testkit's stub
@@ -1860,7 +1860,7 @@ The milestones carry the order; every issue cites the section it builds.
 
 | # | Decision | Chosen | Ground |
 |---|---|---|---|
-| D1 | The store | PostgreSQL 18, one schema `pix`, write-once versions, a temporal link table | owner 2026-10-21; FerroEHR's storage discipline; no specification governs it |
+| D1 | The store | PostgreSQL 19, one schema `pix`, write-once versions, a temporal link table | owner 2026-10-21, moved to PostgreSQL 19 on 2026-11-21; FerroEHR's storage discipline; no specification governs it |
 | D2 | What a `Patient` is | the person (the cross-reference), with every linked identifier | PIXm 3.1.0 §2:3.104.4.1.3 leaves it open; one resource serves ITI-83 `targetId`, ITI-78, ITI-119 and PMIR |
 | D3 | A merged identifier in ITI-83 | answered with the survivor's identifiers | PIXm 3.1.0 §2:3.83.4.2.2.5 defers to policy; §2:3.104.4.2.3 replaces the subsumed identifier's references |
 | D4 | A removed identifier | `not-found` everywhere; the versions stay | PIXm 3.1.0 §2:3.104.4.3.3; the audit trail needs the history |

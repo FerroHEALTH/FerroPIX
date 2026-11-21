@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-119 against PostgreSQL 18 through the guarded route: the ten cases
+//! ITI-119 against PostgreSQL 19 through the guarded route: the ten cases
 //! of PDQm 3.2.0 §2:3.119.4.1.3 with the testkit's and the vendored
 //! examples, the score and the grade of each entry equal to the scorer's
 //! for the same pair and following the configured thresholds, the bare

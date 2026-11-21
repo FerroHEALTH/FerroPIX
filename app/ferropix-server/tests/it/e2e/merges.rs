@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! A steward's merge and its revert over PostgreSQL 18 (#108), behind
+//! A steward's merge and its revert over PostgreSQL 19 (#108), behind
 //! `FERROPIX_E2E`: merges and reverts unwind in order with the ITI-83
 //! answers checked after each step, the preview names what the merge then
 //! does, and a feed between the preview and the merge makes it `409`.

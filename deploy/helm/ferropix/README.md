@@ -5,7 +5,7 @@
 
 FerroPIX is the FerroHEALTH Master Patient Index over IHE PIXm, PDQm, PMIR
 and the HL7 v2 identity transactions. This chart runs its server against an
-external PostgreSQL 18, and its operator console when you switch it on.
+external PostgreSQL 19, and its operator console when you switch it on.
 
 Each release publishes the chart as an OCI artifact, with its images pinned
 by digest and a build provenance attestation:

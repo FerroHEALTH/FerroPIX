@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The review queue and the steward's decisions over PostgreSQL 18 (#107),
+//! The review queue and the steward's decisions over PostgreSQL 19 (#107),
 //! behind `FERROPIX_E2E`: a link merges the two persons, a decision on a
 //! stale read is `409`, a not-a-match pair stays out of the queue until a
 //! record's demographics change, a deferral comes back on its day, and the

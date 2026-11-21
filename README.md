@@ -97,7 +97,7 @@ Beside the five faces:
 
 ## Quick start
 
-The quickstart runs the published images beside PostgreSQL 18 and a
+The quickstart runs the published images beside PostgreSQL 19 and a
 development sign-in server, feeds one synthetic patient and asks for it.
 You need Docker Compose 2.23.1 or newer (or Podman with a compose
 provider), `curl`, `jq` and `openssl`, and no checkout. Every command below
@@ -218,7 +218,7 @@ Every release publishes, from one tag:
 - static `ferropix` and `ferropix-console` binaries for `x86_64` and
   `aarch64` Linux on the [GitHub release](https://github.com/FerroHEALTH/FerroPIX/releases).
 
-The server runs beside PostgreSQL 18, the authorization server whose tokens
+The server runs beside PostgreSQL 19, the authorization server whose tokens
 it reads, an ATNA audit repository and, for the HL7 v2 face, a FHIR R4
 terminology server such as FerroTERM.
 [Deployment](https://ferropix.eu/docs/operate/deployment.html) covers the

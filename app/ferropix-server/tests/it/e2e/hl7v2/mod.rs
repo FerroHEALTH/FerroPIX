@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The HL7 v2 face over PostgreSQL 18 (#85, #86, #87, #88), behind
+//! The HL7 v2 face over PostgreSQL 19 (#85, #86, #87, #88), behind
 //! `FERROPIX_E2E`: the MLLP listener driven by the testkit's sender, ITI-8
 //! fed beside ITI-104, ITI-9 asked beside ITI-83 and ITI-21 beside ITI-78,
 //! on one store.

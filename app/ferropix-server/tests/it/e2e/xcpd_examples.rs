@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The XCPD Responding Gateway over PostgreSQL 18 answering IHE's own
+//! The XCPD Responding Gateway over PostgreSQL 19 answering IHE's own
 //! example request (#228), behind `FERROPIX_E2E`: the request IHE publishes
 //! as ITI-55 implementation material (ITI TF-2 Appendix W), vendored under
 //! `docs/specs/ihe-xcpd-examples/`, finds the patient its shared identifier

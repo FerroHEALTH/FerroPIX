@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Cadasto B.V.
 # SPDX-License-Identifier: BUSL-1.1
 #
-# The external PostgreSQL 18 the cluster check installs the chart against:
+# The external PostgreSQL 19 the cluster check installs the chart against:
 # the image compose.yaml pins, initialised with the quickstart's role script
 # (docker/postgres/10-ferropix-role.sh), its passwords in the Secret the
 # check writes. A test fixture, not a production database.
@@ -22,7 +22,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: postgres
-          image: postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+          image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
           env:
             - name: POSTGRES_DB
               value: ferropix

@@ -508,7 +508,7 @@ async fn db_reseal_rewrites_the_carried_identifiers_so_a_bsn_still_links() {
     let postgres = ferropix_testkit::containers::postgres().await.unwrap();
     let url = super::app_role(&postgres).await;
     let (old, new) = (super::fresh_key(), super::fresh_key());
-    let store = ferropix_server::store::Store::start(
+    let store = Store::start(
         &super::settings(&url, &old, true),
         &super::feeds::seeds(),
         ferropix_server::store::Job::Migrate,
@@ -523,7 +523,7 @@ async fn db_reseal_rewrites_the_carried_identifiers_so_a_bsn_still_links() {
         .await
         .unwrap();
     store.close().await;
-    let resealed = ferropix_server::store::Store::connect(&super::settings(&url, &new, true))
+    let resealed = Store::connect(&super::settings(&url, &new, true))
         .await
         .unwrap();
     reseal::run(&resealed, &Sealer::new(&old).unwrap(), reseal::BATCH)

@@ -395,7 +395,12 @@ boundaries: our own design.
 Reads take no lock. A PIX query (section 6.1) is one statement: the record
 by `(domain, hmac)`, its open link's person, that person resolved through
 `merged_into` to the active survivor, and the open links of the survivor
-joined to their records and domains. A PDQm search reads persons and their
+joined to their records and domains, with the target domains the query
+names and the survivor's pseudonyms. The HMAC is keyed by the domain's id,
+which the server keeps per system once read, since a domain's system never
+changes and a domain is never deleted; the statement reads the domain row
+by that id, so a retired domain is refused at once. Minting a pseudonym is
+its own write. A PDQm search reads persons and their
 current versions. Nothing a read returns is written back.
 
 ## 5. Matching

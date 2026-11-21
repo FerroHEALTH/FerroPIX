@@ -63,6 +63,8 @@ pub struct Store {
     /// What a cross-reference change is notified with, while HL7 v2
     /// consumers are configured.
     consumers: Option<std::sync::Arc<outbox::Notifying>>,
+    /// The id of each identifier domain a PIX query read, by system.
+    domain_ids: std::sync::Arc<xref::DomainIds>,
 }
 
 /// The job a store is started for, which decides the steps it runs.
@@ -124,6 +126,7 @@ impl Store {
             sealer: std::sync::Arc::new(sealer),
             feed: None,
             consumers: None,
+            domain_ids: std::sync::Arc::default(),
         })
     }
 
@@ -149,6 +152,7 @@ impl Store {
             sealer: std::sync::Arc::new(sealer),
             feed: None,
             consumers: None,
+            domain_ids: std::sync::Arc::default(),
         })
     }
 
@@ -156,6 +160,12 @@ impl Store {
     #[must_use]
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    /// Returns the id of each identifier domain a PIX query read, by system.
+    #[must_use]
+    pub fn domain_ids(&self) -> &xref::DomainIds {
+        &self.domain_ids
     }
 
     /// Returns this store announcing every change to a person as an ITI-93

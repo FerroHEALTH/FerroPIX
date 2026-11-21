@@ -5,7 +5,7 @@
 //!
 //! QBP^Q23 names one identifier in QPD-3 and, in QPD-4, the domains whose
 //! identifiers it wants (ITI TF-2 §3.9.4.1.2.2). The answer is RSP^K23 from
-//! the cross-reference ITI-83 reads ([`xref::lookup`]), with the same policy
+//! the cross-reference ITI-83 reads ([`xref::query`]), with the same policy
 //! for a merged identifier (the survivor's identifiers) and a removed one
 //! (not found), and the six cases of §3.9.4.2.2.6: `OK` with one PID whose
 //! PID-3 holds every identifier but the one asked, `NF` with none, and `AE`
@@ -26,7 +26,6 @@ use crate::config::section::hl7v2::authority::Hd;
 use crate::hl7v2::{Answer, Face, Response, respond};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::store::identifier::Rule;
-use crate::store::record;
 use crate::store::xref::{self, Lookup};
 use crate::v2::pid::{self, Shown};
 use crate::v2::stamped::Stamped;
@@ -175,17 +174,29 @@ async fn settle(
             return Settled::rejected("the store could not be read");
         }
     };
-    let found = match xref::lookup(&mut connection, face.store.sealer(), system, value).await {
-        Ok(found) => found,
+    let domains = wanted_domains(face, wanted);
+    let asked: Vec<&str> = domains
+        .iter()
+        .filter_map(|(_index, target)| target.as_deref())
+        .collect();
+    let ask = xref::Ask {
+        system,
+        value,
+        targets: &asked,
+        pseudonyms: false,
+    };
+    let answered = match xref::query(&mut connection, &face.store, &ask).await {
+        Ok(answered) => answered,
         Err(error) => {
             tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-9 query could not be read");
             return Settled::rejected("the store could not be read");
         }
     };
+    let found = answered.lookup;
     if found == Lookup::UnknownDomain {
         return unknown_domain();
     }
-    let targets = match targets(face, &mut connection, wanted).await {
+    let targets = match targets(&domains, &answered.targets) {
         Ok(targets) => targets,
         Err(settled) => return settled,
     };
@@ -237,27 +248,41 @@ async fn settle(
     }
 }
 
-/// Reads QPD-4, the domains whose identifiers are returned, refusing every
-/// one the store does not hold or retired (ITI TF-2 §3.9.4.2.2.6, Case 5).
-async fn targets(
-    face: &Face,
-    connection: &mut sqlx::PgConnection,
-    wanted: Option<&Field>,
+/// Reads QPD-4 as the system of each valued repetition, in order: `None`
+/// for an assigning authority no system is configured for.
+fn wanted_domains(face: &Face, wanted: Option<&Field>) -> Vec<(usize, Option<String>)> {
+    wanted
+        .map(Field::repetitions)
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+        .filter(|(_index, repetition)| repetition.is_valued())
+        .map(|(index, repetition)| {
+            (
+                index,
+                face.authorities.system(&Hd::of(repetition.component(4))),
+            )
+        })
+        .collect()
+}
+
+/// Returns the systems of QPD-4, `wanted`, refusing every one the store
+/// does not hold or retired, as `known` says (ITI TF-2 §3.9.4.2.2.6, Case
+/// 5).
+fn targets(
+    wanted: &[(usize, Option<String>)],
+    known: &[(String, bool)],
 ) -> Result<Vec<String>, Settled> {
-    let domains = record::domains(&mut *connection).await.map_err(|error| {
-        tracing::error!(error = %ferrohealth_server::run::chain(&error), "the domains could not be read for an ITI-9 query");
-        Settled::rejected("the store could not be read")
-    })?;
     let mut targets = Vec::new();
     let mut faults = Vec::new();
-    let repetitions = wanted.map(Field::repetitions).unwrap_or_default();
-    for (index, repetition) in repetitions.iter().enumerate() {
-        if !repetition.is_valued() {
-            continue;
-        }
-        let target = face.authorities.system(&Hd::of(repetition.component(4)));
-        match target.filter(|target| domains.iter().any(|d| d.system == *target && !d.retired)) {
-            Some(target) => targets.push(target),
+    for (index, target) in wanted {
+        let held = target.as_ref().filter(|target| {
+            known
+                .iter()
+                .any(|(system, unretired)| *unretired && system == *target)
+        });
+        match held {
+            Some(target) => targets.push(target.clone()),
             None => faults.push(fault_at(
                 location("QPD", 1, 4, Some(index.saturating_add(1)), None),
                 ErrorCode::UnknownKeyIdentifier,

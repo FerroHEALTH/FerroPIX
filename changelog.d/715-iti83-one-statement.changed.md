@@ -1,0 +1,1 @@
+- An ITI-83 or ITI-9 query reads the cross-reference, the target domains it names and the person's pseudonyms in one statement under one snapshot, where it sent about seven, and the identifiers of a PDQm `Patient` are read in one statement, where they took two.

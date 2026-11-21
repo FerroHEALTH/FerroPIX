@@ -15,9 +15,21 @@ use uuid::Uuid;
 use super::{Page, Window, gender_code, page, push_date, push_identifiers, range};
 use crate::matching::subject::MOTHERS_MAIDEN_NAME;
 use crate::pdqm::PdqError;
-use crate::pdqm::patient::{SERVED, SERVED_ORDER};
 use crate::store::record::{self, Domain};
 use crate::store::seal::Sealer;
+
+/// The demographics each person served before the copy: the record of an
+/// open link, active, unremoved and in an unretired domain, at its head.
+const SERVED: &str = "SELECT DISTINCT ON (l.person_id) l.person_id, v.demographics
+     FROM pix.link l
+     JOIN pix.source_record r ON r.id = l.record_id
+     JOIN pix.identifier_domain d ON d.id = r.domain_id
+     JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version
+     WHERE upper_inf(l.valid) AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL";
+
+/// The order [`SERVED`] picks a person's record in.
+const SERVED_ORDER: &str =
+    "ORDER BY l.person_id, (d.kind = 'authoritative') DESC, v.received_at DESC, r.id";
 
 /// Runs `search` as the search read before the keys.
 pub(crate) async fn run(

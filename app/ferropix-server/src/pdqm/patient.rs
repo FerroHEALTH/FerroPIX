@@ -37,22 +37,16 @@ pub const PDQM_PATIENT: &str =
 /// The hops a chain of merged persons is followed.
 const MAX_HOPS: i32 = 64;
 
-/// The open links, active records and current versions the served
-/// demographics are chosen from, one row per person: the person, the
-/// demographics.
+/// The demographics each person serves, one row per person: the person,
+/// the demographics of the record and version `pix.person_served` names,
+/// which `pix.serve` keeps at the end of every statement that changes them
+/// (#722).
 ///
 /// The ITI-78 search reads the same rows, so a search matches the values
 /// the answer shows.
-pub(crate) const SERVED: &str = "SELECT DISTINCT ON (l.person_id) l.person_id, v.demographics
-     FROM pix.link l
-     JOIN pix.source_record r ON r.id = l.record_id
-     JOIN pix.identifier_domain d ON d.id = r.domain_id
-     JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version
-     WHERE upper_inf(l.valid) AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL";
-
-/// The order [`SERVED`] picks a person's record in.
-pub(crate) const SERVED_ORDER: &str =
-    "ORDER BY l.person_id, (d.kind = 'authoritative') DESC, v.received_at DESC, r.id";
+pub(crate) const SERVED: &str = "SELECT s.person_id, v.demographics::text
+     FROM pix.person_served s
+     JOIN pix.source_record_version v ON v.record_id = s.record_id AND v.version = s.version";
 
 /// One person as the store holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,7 +117,7 @@ pub async fn patients(
 ) -> Result<BTreeMap<Uuid, Patient>, PdqError> {
     let ids: Vec<Uuid> = persons.iter().map(|person| person.id).collect();
     let served: Vec<(Uuid, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT person_id, demographics::text FROM ({SERVED} AND l.person_id = ANY($1) {SERVED_ORDER}) s"
+        "{SERVED} WHERE s.person_id = ANY($1)"
     )))
     .bind(&ids)
     .fetch_all(&mut *connection)

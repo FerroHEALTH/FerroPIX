@@ -254,7 +254,9 @@ struct Case {
 /// values measured (#713). The search keys (#722) lowered ITI-78 from 1062
 /// to 101 buffers and from 202 to 0 nested statements, and ITI-119 from
 /// 1044 to 587 buffers; their price is the one nested statement an ITI-104
-/// revision now spends on the trigger that keeps the keys.
+/// revision now spends on the trigger that keeps the keys. Dropping the hot
+/// tables' unread keys (#730) lowered an ITI-104 revision's WAL from 2898 to
+/// 2439 bytes.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
@@ -262,7 +264,7 @@ const CASES: [Case; 5] = [
             statements: 19,
             nested: 1,
             blocks: 1121,
-            wal: 2952,
+            wal: 2488,
             audit: 2036,
             answer: 173,
         },

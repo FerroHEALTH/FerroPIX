@@ -10,6 +10,7 @@
 
 mod autolink;
 mod blocking;
+mod budget;
 mod cli;
 mod decisions;
 mod feed;

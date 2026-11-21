@@ -553,14 +553,26 @@ mod tests {
         person.0.basic = Some(basic("dev-steward"));
         let steward = grants("dev-steward", &[STEWARD_SCOPE], &[]);
         let error = person
-            .resolve(Profile::Production, &Trust::default(), &steward, ADMIN, BASE)
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &steward,
+                ADMIN,
+                BASE,
+            )
             .expect_err("Basic is a development credential");
         assert!(
             matches!(&error, Error::DevelopmentOnly { key, .. } if key == "auth.basic"),
             "{error:?}"
         );
         let resolved = person
-            .resolve(Profile::Development, &Trust::default(), &steward, ADMIN, BASE)
+            .resolve(
+                Profile::Development,
+                &Trust::default(),
+                &steward,
+                ADMIN,
+                BASE,
+            )
             .expect("development admits a Basic person");
         assert!(
             !resolved.admits("dev-steward"),

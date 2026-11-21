@@ -13,7 +13,9 @@
 //! triggers, foreign-key checks; `pg_stat_statements.track = all`), the
 //! shared buffers they touch, the write-ahead log of the requests read with
 //! `pg_walinspect` (the server writes no full-page images, so a checkpoint
-//! adds nothing), the bytes of the audit records the spool takes, and the
+//! adds nothing, and the pruning, vacuum and visibility records are left out,
+//! since they run when the xmin horizon lets them, not when a request asks,
+//! #731), the bytes of the audit records the spool takes, and the
 //! bytes of the answer. Each container serves one case, so the counts are
 //! the case's alone; the test's own reads carry [`OWN`] and are left out,
 //! and so are the reads of the WAL position, whose comment the server does
@@ -182,8 +184,14 @@ impl Meter {
         let wal: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "/* {OWN} */ SELECT CASE WHEN pg_current_wal_flush_lsn() > $1::pg_lsn THEN (
                  SELECT coalesce(sum(combined_size), 0)::bigint
-                 FROM pg_get_wal_stats($1::pg_lsn, pg_current_wal_flush_lsn())
-                 WHERE \"resource_manager/record_type\" NOT IN ('XLOG', 'Standby')
+                 FROM pg_get_wal_stats($1::pg_lsn, pg_current_wal_flush_lsn(), true)
+                 WHERE \"resource_manager/record_type\" NOT LIKE 'XLOG/%'
+                   AND \"resource_manager/record_type\" NOT LIKE 'Standby/%'
+                   AND \"resource_manager/record_type\" NOT LIKE 'Heap2/PRUNE%'
+                   AND \"resource_manager/record_type\" NOT LIKE 'Heap2/VACUUM%'
+                   AND \"resource_manager/record_type\" NOT LIKE 'Heap2/VISIBLE%'
+                   AND \"resource_manager/record_type\" NOT LIKE 'Btree/DELETE%'
+                   AND \"resource_manager/record_type\" NOT LIKE 'Btree/VACUUM%'
              ) ELSE 0 END"
         )))
         .bind(&self.start)
@@ -249,9 +257,9 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
-            statements: 20,
+            statements: 19,
             nested: 0,
-            blocks: 1957,
+            blocks: 1121,
             wal: 2952,
             audit: 2036,
             answer: 173,
@@ -287,7 +295,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 7,
             nested: 202,
-            blocks: 1433,
+            blocks: 1083,
             wal: 0,
             audit: 2057,
             answer: 1084,
@@ -299,7 +307,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 1674,
+            blocks: 1065,
             wal: 0,
             audit: 2728,
             answer: 1067,

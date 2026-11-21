@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-10 sent over PostgreSQL 18 (#113), behind `FERROPIX_E2E`:
+//! ITI-10 sent over PostgreSQL 19 (#113), behind `FERROPIX_E2E`:
 //! - a link and a merge each write one notification per consumer whose
 //!   domains of interest the person holds, and none for another;
 //! - each consumer receives its notifications in order, over MLLP, and

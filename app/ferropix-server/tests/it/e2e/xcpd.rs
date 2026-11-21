@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The XCPD Responding Gateway over PostgreSQL 18 (#231), behind
+//! The XCPD Responding Gateway over PostgreSQL 19 (#231), behind
 //! `FERROPIX_E2E`: each case of ITI TF-2 §3.55.4.2.3 answered over the
 //! store, a shared-identifier query sent by `ihe-iti`'s Initiating Gateway
 //! client, the `NS250` refusal of a Deferred request, the fault of a request

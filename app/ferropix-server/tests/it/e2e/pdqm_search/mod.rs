@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-78 against PostgreSQL 18 through the guarded routes: every parameter
+//! ITI-78 against PostgreSQL 19 through the guarded routes: every parameter
 //! of PDQm 3.2.0 §2:3.78.4.1.2.1 alone, the two required combinations
 //! (§2:3.78.4.1.2.1.1), AND and OR, `:exact` (§2:3.78.4.1.2.2), the domain
 //! filter (§2:3.78.4.1.2.3) and the paging, each over `GET` and `POST`; the

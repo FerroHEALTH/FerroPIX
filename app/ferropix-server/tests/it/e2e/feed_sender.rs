@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-93 sent over PostgreSQL 18 (#104), behind `FERROPIX_E2E`:
+//! ITI-93 sent over PostgreSQL 19 (#104), behind `FERROPIX_E2E`:
 //! - a change to a person writes one outbox row per matching subscription
 //!   in its own transaction, and none for a subscription it does not match;
 //! - each subscriber receives its messages in order;

@@ -42,7 +42,7 @@ config:
     endpoint:
       url: ""
 
-# PostgreSQL 18 is an external dependency: the Secret `existingSecret` holds
+# PostgreSQL 19 is an external dependency: the Secret `existingSecret` holds
 # its connection URL (`postgresql://ferropix:…@host:5432/ferropix`) under
 # `key`.
 database:

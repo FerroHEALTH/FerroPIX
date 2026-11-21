@@ -22,7 +22,7 @@ and need nothing at run time beyond the servers they call.
 
 - **the clinical systems that feed and ask it,** FerroEHR and FerroFED
   among them ([What FerroPIX is](../evaluate/what-ferropix-is.md));
-- **a PostgreSQL 18 database** that holds the cross-reference, reached as a
+- **a PostgreSQL 19 database** that holds the cross-reference, reached as a
   role that is no superuser (the server refuses one at boot, because a
   superuser reads every schema);
 - **an authorization server** whose access tokens it reads, and whose
@@ -112,7 +112,7 @@ names by default.
 
 | Profile | What it adds |
 |---|---|
-| none | the server, PostgreSQL 18 and the development issuer |
+| none | the server, PostgreSQL 19 and the development issuer |
 | `console` | the operator console on `http://localhost:3000/` |
 | `hl7v2` | FerroTERM, the terminology server the HL7 v2 face needs, reading the three packages under `./terminology` (`FERROPIX_TERMINOLOGY_DIR`), which the header of `compose.yaml` fetches; set `FERROPIX__HL7V2__ENABLED=true` and `FERROPIX__TERMINOLOGY__ENDPOINT__URL=http://localhost:8280/r4` to switch the face on |
 
@@ -148,7 +148,7 @@ names by default.
 ## The Helm chart
 
 `deploy/helm/ferropix` installs the server and, with `console.enabled`, the
-operator console, against a PostgreSQL 18 you run yourself. Install it from
+operator console, against a PostgreSQL 19 you run yourself. Install it from
 a checkout:
 
 ```sh

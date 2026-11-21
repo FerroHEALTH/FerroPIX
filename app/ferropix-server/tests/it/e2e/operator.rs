@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The operator API over PostgreSQL 18 (#90), behind `FERROPIX_E2E`: every
+//! The operator API over PostgreSQL 19 (#90), behind `FERROPIX_E2E`: every
 //! served route's document read from a store the PIXm feed filled, each
 //! answered `no-store`, with no identifier value in any answer, and the
 //! steward actions and BALP records a view, a search and an export write.

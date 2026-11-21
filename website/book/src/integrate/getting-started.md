@@ -41,7 +41,7 @@ Then start the stack and ask for readiness:
 {{#include ../../../../scripts/quickstart/tour.sh:start}}
 ```
 
-`compose.yaml` runs the published server image beside PostgreSQL 18 and a
+`compose.yaml` runs the published server image beside PostgreSQL 19 and a
 development OpenID Provider, with the configuration it inlines (a copy of
 `app/ferropix-server/quickstart.toml`): three identifier domains (a
 synthetic hospital, `urn:oid:2.999.1.1`, the BSN and the pseudonymised BSN),

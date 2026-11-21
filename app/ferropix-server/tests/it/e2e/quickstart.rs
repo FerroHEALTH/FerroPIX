@@ -6,7 +6,7 @@
 //!
 //! The issuer is the pinned `mock-oauth2-server` started with the
 //! `JSON_CONFIG` of `compose.yaml`, the server runs `quickstart.toml` over
-//! PostgreSQL 18, and the console is configured as the compose `console`
+//! PostgreSQL 19, and the console is configured as the compose `console`
 //! profile configures it. The case signs in at the provider's login form,
 //! as a browser would, and holds the server's answers to the console's
 //! operator API calls: a login token whose shape the quickstart's

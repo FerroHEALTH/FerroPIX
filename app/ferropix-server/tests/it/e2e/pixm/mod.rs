@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The PIXm Manager over PostgreSQL 18 (#66, #68, #52), behind
+//! The PIXm Manager over PostgreSQL 19 (#66, #68, #52), behind
 //! `FERROPIX_E2E`: ITI-104 fed through the router as a Source sends it, and
 //! ITI-83 asked by `GET` and by `POST`, in JSON and in XML.
 //!

@@ -158,7 +158,7 @@ The build order is the milestones:
   the FerroPIX server (`src/pix.rs`), every page of the design with its
   refused state, and the boundary test (`tests/it/boundary.rs`).
 - `tools/ferropix-testkit`: the test support, `publish = false`, taken as a
-  path-only dev-dependency (#65): PostgreSQL 18 and the stub OpenID
+  path-only dev-dependency (#65): PostgreSQL 19 and the stub OpenID
   Provider behind `FERROPIX_E2E` (CI's `e2e` job sets it), each image
   pinned by digest in `docs/VERSIONS.md` and held to its row by the suite;
   the synthetic BSN range with its eleven-proof, the synthetic domains and

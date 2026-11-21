@@ -4,13 +4,13 @@ apiVersion: v2
 name: ferropix
 description: >-
   FerroPIX, the FerroHEALTH Master Patient Index over IHE PIX, PIXm, PDQ and
-  PDQm, with its cross-reference in an external PostgreSQL 18, and its
+  PDQm, with its cross-reference in an external PostgreSQL 19, and its
   operator console. The server runs as a non-root, read-only-rootfs workload;
   every credential is a Secret read through a file.
 type: application
 # The chart's own version line, SemVer over its values and rendered output
 # (https://helm.sh/docs/topics/charts/#charts-and-versioning).
-version: 0.4.1
+version: 0.4.2
 # The default image tag of the server and the console: the product version,
 # which scripts/checks/versions.sh holds equal to the workspace version.
 appVersion: "0.0.38"

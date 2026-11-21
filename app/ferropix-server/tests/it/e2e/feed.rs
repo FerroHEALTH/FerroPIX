@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The feed transaction against PostgreSQL 18: concurrent joins, the hard
+//! The feed transaction against PostgreSQL 19: concurrent joins, the hard
 //! conflict, the Source's duplicate resolution and removal (PIXm 3.1.0
 //! §2:3.104.4.2.3, §2:3.104.4.3.3), a local domain's shared value, the
 //! steward action of every system action, the normalised identifier, the

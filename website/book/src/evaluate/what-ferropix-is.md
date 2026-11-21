@@ -60,7 +60,7 @@ The server is built on both.
 | The Helm chart, `oci://ghcr.io/ferrohealth/charts/ferropix` | The server and, when you switch it on, the console, on Kubernetes. |
 | `compose.yaml` | The quickstart: the server beside PostgreSQL and a development issuer, with the console and a terminology server as profiles. |
 
-Beside them you run PostgreSQL 18, an OAuth 2.0 authorization server whose
+Beside them you run PostgreSQL 19, an OAuth 2.0 authorization server whose
 tokens FerroPIX reads, an audit repository that takes the BALP records,
 and, for the HL7 v2 face, a FHIR terminology server
 ([Deployment](../operate/deployment.md)). Releases are built at SLSA Build

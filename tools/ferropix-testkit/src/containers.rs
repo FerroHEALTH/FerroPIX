@@ -90,7 +90,7 @@ impl PinnedImage {
     ///
     /// ```
     /// let reference = ferropix_testkit::containers::POSTGRES.reference();
-    /// assert!(reference.starts_with("postgres:18."));
+    /// assert!(reference.starts_with("postgres:19."));
     /// assert!(reference.contains("@sha256:"));
     /// ```
     #[must_use]
@@ -108,13 +108,13 @@ impl PinnedImage {
     }
 }
 
-/// PostgreSQL 18, the one store of FerroPIX (`docs/architecture.md` §4),
+/// PostgreSQL 19, the one store of FerroPIX (`docs/architecture.md` §4),
 /// as the official image publishes it.
 pub const POSTGRES: PinnedImage = PinnedImage {
     item: "PostgreSQL test image",
     repository: "postgres",
-    tag: "18.6",
-    digest: "sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6",
+    tag: "19.0",
+    digest: "sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60",
 };
 
 /// The stub OpenID Provider: NAV's `mock-oauth2-server` (MIT), which serves
@@ -206,7 +206,7 @@ impl Postgres {
     }
 }
 
-/// Starts PostgreSQL 18 and returns it with the URL of its login role.
+/// Starts PostgreSQL 19 and returns it with the URL of its login role.
 ///
 /// The role and its password are `pix_super`, the database `ferropix`, and
 /// the role is the database's superuser, so a suite can create the restricted
@@ -559,17 +559,17 @@ mod tests {
         let image = PinnedImage {
             item: "x",
             repository: "postgres",
-            tag: "18.6",
+            tag: "19.0",
             digest: "sha256:0000",
         };
-        assert_eq!("postgres:18.6@sha256:0000", image.reference());
+        assert_eq!("postgres:19.0@sha256:0000", image.reference());
     }
 
     #[test]
     fn the_postgres_request_names_the_pinned_digest() {
         let request = postgres_request();
         assert_eq!(
-            "18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6",
+            "19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60",
             request.image().tag(),
             "the request must resolve the image by digest"
         );

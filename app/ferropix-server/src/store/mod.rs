@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The cross-reference store: schema `pix` in PostgreSQL 18.
+//! The cross-reference store: schema `pix` in PostgreSQL 19.
 //!
 //! [`schema`] holds the embedded migration set, [`gate`] the boot gate that
 //! refuses a role able to read a schema beside `pix`, [`seal`] the sealing of
@@ -32,6 +32,7 @@ pub mod reseal;
 pub mod schema;
 pub mod seal;
 pub mod seed;
+pub mod server_version;
 pub mod subscription;
 pub mod xref;
 
@@ -81,7 +82,7 @@ impl Store {
     /// # Errors
     /// Returns [`StoreError::Url`] for a URL the driver refuses,
     /// [`StoreError::Connect`] when no connection opens, every refusal of
-    /// [`gate::check`], [`schema::apply`], [`key::verify`] and
+    /// [`server_version::check`], [`gate::check`], [`schema::apply`], [`key::verify`] and
     /// [`seed::apply`], and [`StoreError::Seal`] when the keys cannot be
     /// derived.
     pub async fn start(
@@ -90,6 +91,7 @@ impl Store {
         job: Job,
     ) -> Result<Self, StoreError> {
         let store = Self::connect(db).await?;
+        server_version::check(&store).await?;
         if job == Job::Serve {
             gate::check(&store).await?;
         }
@@ -230,6 +232,16 @@ pub enum StoreError {
     /// A statement on the store failed.
     #[error("a statement on the store failed")]
     Query(#[source] DbFailure),
+    /// The store runs a PostgreSQL older than FerroPIX supports.
+    #[error(
+        "the store runs PostgreSQL server_version_num {found}, and FerroPIX needs {required} or newer"
+    )]
+    UnsupportedServer {
+        /// The `server_version_num` the store reported.
+        found: i32,
+        /// [`server_version::MINIMUM`].
+        required: i32,
+    },
     /// The connected role is a superuser, which reads every schema.
     #[error(
         "the role {role} is a superuser, which reads every schema; connect as a role that owns pix alone"

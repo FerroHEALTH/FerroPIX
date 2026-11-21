@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The durable outbox over PostgreSQL 18 (#239), behind `FERROPIX_E2E`: an
+//! The durable outbox over PostgreSQL 19 (#239), behind `FERROPIX_E2E`: an
 //! XCPD asynchronous answer accepted with `202` is in the outbox before the
 //! sender runs, so a sender started later, as after a restart, delivers it;
 //! the drain waits for the message in flight; a message whose attempts are

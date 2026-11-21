@@ -108,7 +108,7 @@ design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| PostgreSQL test image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
+| PostgreSQL test image | `postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
 | Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
 
 ## The images and the release lanes
@@ -134,7 +134,7 @@ choice: our own design, FerroBRIDGE's set.
 | Item | Pin | Repeated in |
 |---|---|---|
 | distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329` | `docker/Dockerfile`, `docker/console/Dockerfile` |
-| PostgreSQL quickstart image | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` | `compose.yaml` |
+| PostgreSQL quickstart image | `postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60` | `compose.yaml` |
 | Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | `compose.yaml` |
 | Quickstart terminology server image | `ghcr.io/ferrohealth/ferroterm:0.4.2@sha256:1853486ae6f85a66424561cbf90f9905027c38d506bdeb24a9e1a831b4b97424` | `compose.yaml` |
 | hadolint image | `v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d` | `.github/workflows/ci.yml` |

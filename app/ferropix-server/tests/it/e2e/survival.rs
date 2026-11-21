@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Which person survives a merge, over PostgreSQL 18 (#103), behind
+//! Which person survives a merge, over PostgreSQL 19 (#103), behind
 //! `FERROPIX_E2E`: the person created first survives whatever its id's
 //! format, a v4 id sorting below an older v7 one included; a master identity
 //! survives any other; and matching never merges two master identities,

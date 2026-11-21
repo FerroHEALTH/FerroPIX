@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pseudonyms over PostgreSQL 18 (#114, #115), behind `FERROPIX_E2E`:
+//! Pseudonyms over PostgreSQL 19 (#114, #115), behind `FERROPIX_E2E`:
 //! - an ITI-83 query from a domain's consumer that names the domain as
 //!   `targetSystem` mints the person's pseudonym on the first ask and answers
 //!   the same value on every later one, by GET and by POST;

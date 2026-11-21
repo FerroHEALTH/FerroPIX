@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The operator API's writes over PostgreSQL 18 (#90), behind
+//! The operator API's writes over PostgreSQL 19 (#90), behind
 //! `FERROPIX_E2E`: the reveal, a privacy disclosure recorded as a steward
 //! action and a BALP disclosure record before the value is answered, and the
 //! identifier domain writes behind the administrator scope, which the guard

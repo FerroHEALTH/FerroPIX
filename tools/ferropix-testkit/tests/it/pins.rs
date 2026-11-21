@@ -28,14 +28,14 @@ fn the_harness_starts_no_image_outside_the_pinned_set() {
 }
 
 #[test]
-fn the_store_image_is_postgresql_18() {
+fn the_store_image_is_postgresql_19() {
     let postgres = IMAGES
         .iter()
         .find(|image| image.repository == "postgres")
         .unwrap();
     assert!(
-        postgres.tag.starts_with("18."),
-        "the store is PostgreSQL 18, got {}",
+        postgres.tag.starts_with("19."),
+        "the store is PostgreSQL 19, got {}",
         postgres.tag
     );
 }

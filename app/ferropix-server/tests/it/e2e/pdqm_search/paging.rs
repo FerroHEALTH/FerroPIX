@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! ITI-78's paging against PostgreSQL 18: the pages bounded and stable over
+//! ITI-78's paging against PostgreSQL 19: the pages bounded and stable over
 //! `GET` and `POST`, and the first page of a search over 100,000 records
 //! within the request timeout.
 #![expect(

@@ -5,7 +5,7 @@
 //!
 //! - ITI-83, `$ihe-pix` by `GET` (PIXm 3.1.0 §2:3.83.4.1.2) and by `POST`
 //!   of a `Parameters` body (FHIR R4 Operations, "Executing an Operation"),
-//!   read by `ihe-iti`'s [`PixQuery`], answered from [`xref::lookup`] by
+//!   read by `ihe-iti`'s [`PixQuery`], answered from [`xref::query`] by
 //!   [`answer::cross_references`] or the refusal the transaction names
 //!   (§2:3.83.4.2.2), and recorded as the PIXm Query Manager audit profile
 //!   before the answer leaves (§2:3.83.5.1.2).
@@ -30,7 +30,9 @@ use http::request::Parts;
 use http::{HeaderValue, Method, header};
 use ihe_atna::balp::Outcome;
 use ihe_iti::pixm::audit::manager_query;
-use ihe_iti::pixm::identifier::{PatientReference, SourceIdentifier, TargetIdentifier};
+use ihe_iti::pixm::identifier::{
+    PatientReference, SourceIdentifier, TargetIdentifier, TargetSystem,
+};
 use ihe_iti::pixm::server::answer;
 use ihe_iti::pixm::server::feed::{Feed, Removal};
 use ihe_iti::pixm::server::query::PixQuery;
@@ -48,7 +50,7 @@ use crate::fhir::status::Case;
 use crate::fhir::wire;
 use crate::store::Store;
 use crate::store::pseudonym;
-use crate::store::record::{self, Channel};
+use crate::store::record::Channel;
 use crate::store::xref::{self, Lookup};
 use ferrohealth_telemetry::request_log::RequestId;
 
@@ -210,44 +212,40 @@ impl Manager {
     /// Manager).
     async fn lookup(&self, pix: &PixQuery, client: Option<&str>) -> Result<Looked, Case> {
         let source = pix.source();
+        let targets: Vec<&str> = pix.targets().iter().map(TargetSystem::as_str).collect();
         let mut connection = self.store.pool().acquire().await.map_err(unavailable)?;
-        let found = xref::lookup(
+        let answered = xref::query(
             &mut connection,
-            self.store.sealer(),
-            source.system(),
-            source.value().expose_secret(),
+            &self.store,
+            &xref::Ask {
+                system: source.system(),
+                value: source.value().expose_secret(),
+                targets: &targets,
+                pseudonyms: true,
+            },
         )
         .await
         .map_err(|error| store_failure(&error))?;
-        if found == Lookup::UnknownDomain {
+        if answered.lookup == Lookup::UnknownDomain {
             return Err(Case::SourceDomainNotRecognized);
         }
-        let pseudonymised = pseudonym::domains(&mut connection)
-            .await
-            .map_err(|error| store_failure(&error))?;
-        let asked: Vec<&pseudonym::PseudonymDomain> = pseudonymised
+        let asked: Vec<&(pseudonym::PseudonymDomain, Option<uuid::Uuid>)> = answered
+            .pseudonymised
             .iter()
-            .filter(|domain| {
-                !domain.retired
-                    && pix
-                        .targets()
-                        .iter()
-                        .any(|target| target.as_str() == domain.namespace)
+            .filter(|(domain, _held)| {
+                !domain.retired && targets.iter().any(|target| *target == domain.namespace)
             })
             .collect();
-        if !pix.targets().is_empty() {
-            let domains = record::domains(&mut *connection)
-                .await
-                .map_err(|error| store_failure(&error))?;
-            let known = |system: &str| {
-                domains.iter().any(|d| d.system == system && !d.retired)
-                    || asked.iter().any(|domain| domain.namespace == system)
-            };
-            if !pix.targets().iter().all(|target| known(target.as_str())) {
-                return Err(Case::TargetDomainNotRecognized);
-            }
+        let known = |(system, identifier_domain): &(String, bool)| {
+            *identifier_domain
+                || asked
+                    .iter()
+                    .any(|(domain, _held)| domain.namespace == *system)
+        };
+        if !answered.targets.iter().all(known) {
+            return Err(Case::TargetDomainNotRecognized);
         }
-        let cross_reference = match found {
+        let cross_reference = match &answered.lookup {
             Lookup::Found(cross_reference) => cross_reference,
             Lookup::Ambiguous => return Err(Case::SourceIdentifierAmbiguous),
             Lookup::UnknownDomain | Lookup::NotFound => {
@@ -261,13 +259,19 @@ impl Manager {
             .map(|(system, value)| (system.clone(), value.expose().to_owned()))
             .collect();
         let mut minted = Vec::new();
-        if pix.targets().is_empty() {
-            held.extend(own_pseudonyms(&mut connection, person, &pseudonymised, client).await?);
+        if targets.is_empty() {
+            held.extend(own_pseudonyms(&answered.pseudonymised, client));
         }
-        for domain in asked.iter().filter(|domain| domain.serves(client)) {
-            let resolved = pseudonym::resolve(&mut connection, person, domain.id, true)
-                .await
-                .map_err(|error| store_failure(&error))?;
+        for (domain, already) in asked.iter().filter(|(domain, _held)| domain.serves(client)) {
+            let resolved = match already {
+                Some(value) => Some(pseudonym::Resolved {
+                    value: *value,
+                    minted: false,
+                }),
+                None => pseudonym::resolve(&mut connection, person, domain.id, true)
+                    .await
+                    .map_err(|error| store_failure(&error))?,
+            };
             if let Some(resolved) = resolved {
                 if resolved.minted {
                     minted.push((
@@ -522,25 +526,18 @@ fn internal(what: &'static str) -> Case {
     Case::Internal
 }
 
-/// The pseudonyms `person` already holds in the domains of `pseudonymised`
-/// the caller of client id `client` is the consumer of, as `(namespace,
-/// value)`: a query naming no `targetSystem` carries no other domain's.
-async fn own_pseudonyms(
-    connection: &mut sqlx::PgConnection,
-    person: record::PersonId,
-    pseudonymised: &[pseudonym::PseudonymDomain],
+/// The pseudonyms the person already holds in the domains of
+/// `pseudonymised` the caller of client id `client` is the consumer of, as
+/// `(namespace, value)`: a query naming no `targetSystem` carries no other
+/// domain's.
+fn own_pseudonyms(
+    pseudonymised: &[(pseudonym::PseudonymDomain, Option<uuid::Uuid>)],
     client: Option<&str>,
-) -> Result<Vec<(String, String)>, Case> {
-    let pseudonyms = pseudonym::held(connection, person)
-        .await
-        .map_err(|error| store_failure(&error))?;
-    Ok(pseudonyms
-        .into_iter()
-        .filter(|(namespace, _value)| {
-            pseudonymised
-                .iter()
-                .any(|domain| &domain.namespace == namespace && domain.serves(client))
+) -> impl Iterator<Item = (String, String)> {
+    pseudonymised
+        .iter()
+        .filter(move |(domain, _held)| domain.serves(client))
+        .filter_map(|(domain, held)| {
+            held.map(|value| (domain.namespace.clone(), value.to_string()))
         })
-        .map(|(namespace, value)| (namespace, value.to_string()))
-        .collect())
 }

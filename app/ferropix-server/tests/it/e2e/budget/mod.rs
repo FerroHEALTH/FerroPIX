@@ -242,17 +242,19 @@ struct Case {
 }
 
 /// The ceilings of the FHIR face's hot requests: the statements as
-/// measured once a feed took its advisory locks in one statement (#716),
-/// and the shared buffers, the WAL and the bytes 2% above the values
-/// measured on 2026-11-21 (#713).
+/// measured, and the shared buffers, the WAL and the bytes 2% above the
+/// values measured (#713). The search keys (#722) lowered ITI-78 from 1404
+/// to 101 buffers and 202 to 0 nested statements, and ITI-119 from 1641 to
+/// 985 buffers; their price is the one nested statement and 90 bytes of WAL
+/// an ITI-104 revision now spends on the trigger that keeps the keys.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
             statements: 20,
-            nested: 0,
+            nested: 1,
             blocks: 1957,
-            wal: 2952,
+            wal: 3044,
             audit: 2036,
             answer: 173,
         },
@@ -286,8 +288,8 @@ const CASES: [Case; 5] = [
         name: "ITI-78 search",
         ceiling: Ceiling {
             statements: 8,
-            nested: 202,
-            blocks: 1433,
+            nested: 0,
+            blocks: 104,
             wal: 0,
             audit: 2057,
             answer: 1084,
@@ -299,7 +301,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 9,
             nested: 0,
-            blocks: 1674,
+            blocks: 1005,
             wal: 0,
             audit: 2728,
             answer: 1067,

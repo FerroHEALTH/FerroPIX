@@ -258,8 +258,7 @@ struct Case {
 /// tables' unread keys (#730) lowered an ITI-104 revision's WAL from 2898 to
 /// 2439 bytes, and with the domains read once (#715) an ITI-78 search reads
 /// 84 buffers. The blocking keys on the record head (#724) lowered ITI-104
-/// from 1113 to BLOCKS104 buffers and from 2439 to WAL104 WAL bytes, and ITI-119
-/// from 588 to BLOCKS119 buffers.
+/// from 1113 to 218 buffers and ITI-119 from 588 to 115 buffers.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",

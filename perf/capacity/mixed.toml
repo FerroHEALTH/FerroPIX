@@ -67,7 +67,7 @@ headers = { authorization = "Bearer {consumer_token}", content-type = "applicati
 [[requests]]
 group = "pdqm-search"
 method = "GET"
-path = "/fhir/Patient?family=Proefbeeldten&birthdate=1970-09-13"
+path = "/fhir/Patient?family=Proefikink&birthdate=1987-04-10"
 status = 200
 headers = { authorization = "Bearer {consumer_token}" }
 [[requests]]
@@ -75,12 +75,12 @@ group = "pdqm-match"
 method = "POST"
 path = "/fhir/Patient/$match"
 status = 200
-body = '{"resourceType":"Parameters","parameter":[{"name":"resource","resource":{"resourceType":"Patient","name":[{"family":"Proefbeeldten","given":["Gijs"]}],"gender":"female","birthDate":"1970-09-13"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
+body = '{"resourceType":"Parameters","parameter":[{"name":"resource","resource":{"resourceType":"Patient","name":[{"family":"Proefikink","given":["Xena"]}],"gender":"female","birthDate":"1987-04-10"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
 headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }
 [[requests]]
 group = "pixm-feed"
 method = "PUT"
 path = "/fhir/Patient?identifier=urn%3Aoid%3A2.999.1.1%7CC-0500000"
 status = 200
-body = '{"resourceType":"Patient","identifier":[{"system":"urn:oid:2.999.1.1","value":"C-0500000"}],"active":true,"name":[{"use":"official","family":"Proefbeeldten","given":["Gijs"]}],"gender":"female","birthDate":"1970-09-13","address":[{"use":"home","line":["Synthetische straat 200"],"city":"Teststad","postalCode":"6000 MT","country":"NL"}]}'
+body = '{"resourceType":"Patient","identifier":[{"system":"urn:oid:2.999.1.1","value":"C-0500000"}],"active":true,"name":[{"use":"official","family":"Proefikink","given":["Xena"]}],"gender":"female","birthDate":"1987-04-10","address":[{"use":"home","line":["Synthetische straat 200"],"city":"Teststad","postalCode":"2070 CN","country":"NL"}]}'
 headers = { authorization = "Bearer {source_token}", content-type = "application/fhir+json" }

@@ -24,5 +24,5 @@ group = "pixm-feed"
 method = "PUT"
 path = "/fhir/Patient?identifier=urn%3Aoid%3A2.999.1.1%7CC-0500000"
 status = 200
-body = '{"resourceType":"Patient","identifier":[{"system":"urn:oid:2.999.1.1","value":"C-0500000"}],"active":true,"name":[{"use":"official","family":"Proefbeeldten","given":["Gijs"]}],"gender":"female","birthDate":"1970-09-13","address":[{"use":"home","line":["Synthetische straat 200"],"city":"Teststad","postalCode":"6000 MT","country":"NL"}]}'
+body = '{"resourceType":"Patient","identifier":[{"system":"urn:oid:2.999.1.1","value":"C-0500000"}],"active":true,"name":[{"use":"official","family":"Proefikink","given":["Xena"]}],"gender":"female","birthDate":"1987-04-10","address":[{"use":"home","line":["Synthetische straat 200"],"city":"Teststad","postalCode":"2070 CN","country":"NL"}]}'
 headers = { authorization = "Bearer {source_token}", content-type = "application/fhir+json" }

@@ -22,6 +22,6 @@ settle_secs = 2
 [[requests]]
 group = "pdqm-search"
 method = "GET"
-path = "/fhir/Patient?family=Proefbeeldten&birthdate=1970-09-13"
+path = "/fhir/Patient?family=Proefikink&birthdate=1987-04-10"
 status = 200
 headers = { authorization = "Bearer {consumer_token}" }

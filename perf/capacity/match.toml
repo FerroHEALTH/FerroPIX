@@ -24,5 +24,5 @@ group = "pdqm-match"
 method = "POST"
 path = "/fhir/Patient/$match"
 status = 200
-body = '{"resourceType":"Parameters","parameter":[{"name":"resource","resource":{"resourceType":"Patient","name":[{"family":"Proefbeeldten","given":["Gijs"]}],"gender":"female","birthDate":"1970-09-13"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
+body = '{"resourceType":"Parameters","parameter":[{"name":"resource","resource":{"resourceType":"Patient","name":[{"family":"Proefikink","given":["Xena"]}],"gender":"female","birthDate":"1987-04-10"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
 headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }

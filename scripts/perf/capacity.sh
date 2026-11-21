@@ -93,6 +93,7 @@ serve() {
     FERROPIX__DB__URL_FILE="$WORK/db-url" FERROPIX__DB__DATA_KEY_FILE="$WORK/data-key" \
     FERROPIX__DB__POOL_SIZE="${POOL:-32}" \
     FERROPIX__AUDIT__SPOOL_WRITE_TIMEOUT="${SPOOL_TIMEOUT:-2s}" \
+    FERROPIX__AUDIT__SPOOL_MAX_SIZE="${SPOOL_MAX_SIZE:-1GiB}" FERROPIX__AUDIT__SPOOL_MAX_EVENTS="${SPOOL_MAX_EVENTS:-1000000}" \
     FERROPIX__AUDIT__SPOOL_DIR="$WORK/audit" \
     "$root/target/release/ferropix" serve --config "$root/perf/ferropix.toml" \
     > "$WORK/server.log" 2>&1 &
@@ -167,12 +168,16 @@ chunk() {
     split("- en er s ing a o e", L, " ")
     split("Ada Bram Cato Daan Elin Floor Gijs Hanna Ilse Joost Kiki Lars Mira Noud Olga Piet Quinta Ruud Saar Teun Uma Vera Wout Xena Yara Zeno", G, " ")
     split("A B C D E F G H J K L M N P R S T V W X Z", P, " ")
+    split("an el ik om ur is ad ef og uk ber dor fen gal hum jor", S, " ")
     for (i = start; i < end; i++) {
-      last = L[int(i / 256) % 8 + 1]; if (last == "-") last = ""
-      family = F[i % 16 + 1] M[int(i / 16) % 16 + 1] last
-      given = G[int(i / 7) % 26 + 1]
-      year = 1930 + (i * 7919) % 90; month = 1 + (i * 31) % 12; day = 1 + (i * 17) % 28
-      postal = sprintf("%04d %s%s", 1000 + (i * 37) % 9000, P[i % 21 + 1], P[int(i / 21) % 21 + 1])
+      # Two multiplicative hashes of i, so each attribute varies on its own.
+      h = (i * 2654435761) % 4294967296
+      k = (i * 40503 + 7919) % 1048576
+      last = L[int(h / 4096) % 8 + 1]; if (last == "-") last = ""
+      family = F[h % 16 + 1] S[int(h / 16) % 16 + 1] M[int(h / 256) % 16 + 1] last
+      given = G[int(h / 32768) % 26 + 1]
+      year = 1930 + int(h / 851968) % 90; month = 1 + k % 12; day = 1 + int(k / 12) % 28
+      postal = sprintf("%04d %s%s", 1000 + int(k / 336) % 9000, P[int(h / 65536) % 21 + 1], P[int(k / 64) % 21 + 1])
       gender = (i % 2 == 0) ? "female" : "male"
       body = sprintf("{\\\"resourceType\\\":\\\"Patient\\\",\\\"identifier\\\":[{\\\"system\\\":\\\"urn:oid:2.999.1.1\\\",\\\"value\\\":\\\"C-%07d\\\"}],\\\"active\\\":true,\\\"name\\\":[{\\\"use\\\":\\\"official\\\",\\\"family\\\":\\\"%s\\\",\\\"given\\\":[\\\"%s\\\"]}],\\\"gender\\\":\\\"%s\\\",\\\"birthDate\\\":\\\"%04d-%02d-%02d\\\",\\\"address\\\":[{\\\"use\\\":\\\"home\\\",\\\"line\\\":[\\\"Synthetische straat %d\\\"],\\\"city\\\":\\\"Teststad\\\",\\\"postalCode\\\":\\\"%s\\\",\\\"country\\\":\\\"NL\\\"}]}", i, family, given, gender, year, month, day, i % 300, postal)
       if (i > start) printf "next\n"
@@ -265,7 +270,7 @@ self_test() {
   cfg="$(chunk 500000 500002 TOKEN http://x)"
   check "two feeds are two transfers" 1 "$(grep -c '^next$' <<< "$cfg")"
   check "the identifier is in the URL" 1 "$(grep -c 'C-0500000"$' <<< "$cfg")"
-  check "the body is the synthetic patient" "Proefbeeldten Gijs female 1970-09-13 6000 MT" \
+  check "the body is the synthetic patient" "Proefikink Xena female 1987-04-10 2070 CN" \
     "$(sed -n 's/^data = "\(.*\)"$/\1/p' <<< "$cfg" | sed -n 1p | sed 's/\\"/"/g' \
       | jq -r '[.name[0].family, .name[0].given[0], .gender, .birthDate, .address[0].postalCode] | join(" ")')"
   check "each body is JSON once unescaped" 2 \

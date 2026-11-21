@@ -32,7 +32,7 @@ use crate::operator::{
     Operator, OperatorError, Recorded, channel, demographics, domain_kind, opened, record_action,
     snapshot, wire,
 };
-use crate::pdqm::patient::{SERVED, SERVED_ORDER};
+use crate::pdqm::patient::SERVED;
 use crate::problem::{self, Kind};
 use crate::store::seal::Sealer;
 
@@ -126,12 +126,13 @@ pub(super) async fn leading(
     connection: &mut PgConnection,
     person: Uuid,
 ) -> Result<Option<ferropix_operator_api::patient::Demographics>, OperatorError> {
-    let served: Option<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT demographics::text FROM ({SERVED} AND l.person_id = $1 {SERVED_ORDER}) s"
+    let served: Option<(Uuid, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{SERVED} WHERE s.person_id = $1"
     )))
     .bind(person)
     .fetch_optional(&mut *connection)
     .await?;
+    let served = served.map(|(_, demographics)| demographics);
     Ok(served.as_deref().map(demographics::stored).transpose()?)
 }
 

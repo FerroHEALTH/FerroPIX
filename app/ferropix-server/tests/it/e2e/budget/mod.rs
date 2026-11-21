@@ -250,15 +250,17 @@ struct Case {
 }
 
 /// The ceilings of the FHIR face's hot requests: the statements as
-/// measured once a feed took its advisory locks in one statement (#716),
-/// and the shared buffers, the WAL and the bytes 2% above the values
-/// measured on 2026-11-21 (#713).
+/// measured, and the shared buffers, the WAL and the bytes 2% above the
+/// values measured (#713). The search keys (#722) lowered ITI-78 from 1062
+/// to 101 buffers and from 202 to 0 nested statements, and ITI-119 from
+/// 1044 to 587 buffers; their price is the one nested statement an ITI-104
+/// revision now spends on the trigger that keeps the keys.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
             statements: 19,
-            nested: 0,
+            nested: 1,
             blocks: 1121,
             wal: 2952,
             audit: 2036,
@@ -294,8 +296,8 @@ const CASES: [Case; 5] = [
         name: "ITI-78 search",
         ceiling: Ceiling {
             statements: 7,
-            nested: 202,
-            blocks: 1083,
+            nested: 0,
+            blocks: 104,
             wal: 0,
             audit: 2057,
             answer: 1084,
@@ -307,7 +309,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 1065,
+            blocks: 599,
             wal: 0,
             audit: 2728,
             answer: 1067,
@@ -316,16 +318,16 @@ const CASES: [Case; 5] = [
     },
 ];
 
-/// Feeds [`POPULATION`] synthetic patients of the hospital, each its own
+/// Feeds the synthetic patients `patients` of the hospital, each its own
 /// person.
-async fn populate(harness: &Harness) {
-    for index in 0..POPULATION {
+async fn populate(harness: &Harness, patients: std::ops::Range<usize>) {
+    for index in patients {
         let value = format!("H-3{index:05}");
         let patient: Document = serde_json::from_value(json!({
             "resourceType": "Patient",
             "identifier": [{"system": HOSPITAL_DOMAIN, "value": value}],
             "name": [{
-                "family": FAMILY_NAMES[index % FAMILY_NAMES.len()],
+                "family": family(index),
                 "given": [GIVEN_NAMES[(index * 7) % GIVEN_NAMES.len()]],
             }],
             "gender": if index % 2 == 0 { "female" } else { "male" },
@@ -334,6 +336,17 @@ async fn populate(harness: &Harness) {
         .expect("a document");
         let fed = harness.feed(HOSPITAL_DOMAIN, &value, &patient).await;
         assert_eq!(StatusCode::CREATED, fed.status, "{}", fed.body);
+    }
+}
+
+/// The family name of the synthetic patient `index`: the testkit's names in
+/// turn, and past [`POPULATION`] none the ITI-78 case searches, so a larger
+/// store adds persons the search must pass over and none it finds.
+fn family(index: usize) -> &'static str {
+    if index < POPULATION {
+        FAMILY_NAMES[index % FAMILY_NAMES.len()]
+    } else {
+        FAMILY_NAMES[1 + index % (FAMILY_NAMES.len() - 1)]
     }
 }
 
@@ -393,7 +406,7 @@ async fn each_fhir_transaction_stays_within_its_budget() {
     }
     let harness = Harness::start(synthetic_seeds()).await;
     let (hospital, _bsn) = feed_both(&harness).await;
-    populate(&harness).await;
+    populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
     let mut report = String::new();
     let mut over = false;
@@ -423,3 +436,43 @@ async fn each_fhir_transaction_stays_within_its_budget() {
     assert!(!over, "a transaction is over its budget:\n{report}");
     eprintln!("{report}");
 }
+
+/// The shared buffers `REQUESTS` ITI-78 searches touch.
+async fn search_buffers(harness: &Harness, meter: &mut Meter, hospital: &str) -> u64 {
+    for _ in 0..WARMUP {
+        send(harness, "ITI-78 search", hospital).await;
+    }
+    meter.start().await;
+    for _ in 0..REQUESTS {
+        let answer = send(harness, "ITI-78 search", hospital).await;
+        assert_eq!(StatusCode::OK, answer.status, "{}", answer.body);
+    }
+    meter.finish(0).await.blocks
+}
+
+/// An ITI-78 search reads its persons through indexes (#722): over four
+/// times the persons, each request reads at most a few more buffers, the
+/// deeper levels of the indexes it descends, where a scan of every person
+/// would read about four times as many.
+#[tokio::test]
+async fn an_iti_78_search_reads_no_more_over_four_times_the_persons() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(synthetic_seeds()).await;
+    let (hospital, _bsn) = feed_both(&harness).await;
+    populate(&harness, 0..POPULATION).await;
+    let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
+    let before = search_buffers(&harness, &mut meter, &hospital).await;
+    populate(&harness, POPULATION..POPULATION * 4).await;
+    let after = search_buffers(&harness, &mut meter, &hospital).await;
+    assert!(
+        after <= before.saturating_add(REQUESTS.saturating_mul(DEEPER)),
+        "{REQUESTS} ITI-78 searches over {} persons touch {after} buffers, over {POPULATION} {before}",
+        POPULATION * 4
+    );
+}
+
+/// The buffers one request may read more once the store holds four times
+/// the persons: a level more in each of the indexes it descends.
+const DEEPER: u64 = 8;

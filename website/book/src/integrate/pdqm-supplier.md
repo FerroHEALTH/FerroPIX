@@ -68,9 +68,12 @@ included (§2:3.78.4.1.2.1.1). A parameter FerroPIX does not read, or another
 modifier, is ignored and left out of the `self` link, which names exactly
 what the search respected.
 
-A search reads the demographics each `Patient` shows. A merged person holds
-no records, since a merge moves them to the survivor, so only `_id` and
-`active` find it.
+A search reads the demographics each `Patient` shows. FerroPIX keeps each
+person's searchable values in an index, written in the same transaction as
+every feed, merge, removal or domain change, so a search costs the same
+whether the store holds a thousand persons or a million. A merged person
+holds no records, since a merge moves them to the survivor, so only `_id`
+and `active` find it.
 
 ### The domain filter
 

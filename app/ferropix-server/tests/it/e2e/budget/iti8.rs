@@ -16,11 +16,13 @@ use crate::e2e::hl7v2::{V2, adt, code};
 
 /// The ceiling of one ITI-8 revision: the statements as measured, and the
 /// shared buffers, the WAL and the bytes 2% above the values measured on
-/// 2026-11-21 (#713).
+/// 2026-11-21 (#713). The search keys (#722) cost a revision one nested
+/// statement and 16 shared buffers, the trigger that compares what a search
+/// reads.
 const CEILING: Ceiling = Ceiling {
     statements: 18,
-    nested: 0,
-    blocks: 98,
+    nested: 1,
+    blocks: 115,
     wal: 1964,
     audit: 1444,
     answer: 106,

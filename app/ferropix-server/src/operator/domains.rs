@@ -175,7 +175,7 @@ async fn feeds(connection: &mut PgConnection, id: Uuid) -> Result<Vec<Feed>, Ope
          FROM pix.source_record_version v
          JOIN pix.source_record r ON r.id = v.record_id
          WHERE r.domain_id = $1
-         ORDER BY v.received_at DESC, v.id DESC
+         ORDER BY v.received_at DESC, v.record_id DESC, v.version DESC
          LIMIT $2",
     )
     .bind(id)

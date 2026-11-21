@@ -118,7 +118,7 @@ pub async fn run(
 /// Returns [`PdqError::Store`] when the statement fails.
 pub(super) async fn page(
     connection: &mut PgConnection,
-    mut query: QueryBuilder<'_, Postgres>,
+    mut query: QueryBuilder<Postgres>,
     window: Window,
 ) -> Result<Page, PdqError> {
     query.push(

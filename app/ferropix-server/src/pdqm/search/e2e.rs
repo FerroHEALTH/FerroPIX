@@ -517,11 +517,11 @@ async fn every_search_of_the_matrix_answers_as_the_oracle_over_the_corpus() {
             .await
             .expect("resolved");
     }
-    let mut merges = Vec::new();
+    let mut made = Vec::new();
     for index in (13..CORPUS - 40).step_by(89) {
         let (survivor, merged) = (persons[index], persons[index + 31]);
         if survivor != merged && active(&started, &[survivor, merged]).await {
-            merges.push((merge(&started, survivor, merged).await, survivor));
+            made.push((merge(&started, survivor, merged).await, survivor));
         }
     }
     assert!(
@@ -529,7 +529,7 @@ async fn every_search_of_the_matrix_answers_as_the_oracle_over_the_corpus() {
         "the corpus holds merges: {}",
         merges.len()
     );
-    if let Some((merge_id, survivor)) = merges.first().copied() {
+    if let Some((merge_id, survivor)) = made.first().copied() {
         revert(&started, merge_id, survivor).await;
     }
     retire(&started, PRACTICE_DOMAIN, true).await;

@@ -13,9 +13,10 @@
 -- :exact and the telecom token, and the field with the value folded to its
 -- base letters and lowercased for the default match, which an SP-GiST index
 -- answers by prefix. pix.serve recomputes both for a set of persons and
--- writes only what changed; a constraint trigger on each relation the choice
--- reads calls it before the transaction commits, so the copy is never out of
--- step with what it copies. The copy names persons and records by id with
+-- writes only what changed; a statement trigger on each relation the choice
+-- reads calls it at the end of every statement that changes one, in that
+-- statement's transaction, so the copy is never out of step with what it
+-- copies. The copy names persons and records by id with
 -- no foreign key, since pix.serve alone writes it from the rows it reads
 -- (a person and a record are never deleted). No specification governs the
 -- copy: our own design.
@@ -137,64 +138,86 @@ AS $$
     ON CONFLICT DO NOTHING
 $$;
 
--- A link opened, closed or moved: both persons it named.
-CREATE FUNCTION pix.serve_link() RETURNS trigger
+-- The persons whose links a statement opened.
+CREATE FUNCTION pix.serve_links_opened() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path = pg_catalog
 AS $$
 BEGIN
-    IF TG_OP = 'UPDATE' AND OLD.person_id IS DISTINCT FROM NEW.person_id THEN
-        PERFORM pix.serve(ARRAY[OLD.person_id, NEW.person_id]);
-    ELSE
-        PERFORM pix.serve(ARRAY[NEW.person_id]);
-    END IF;
+    PERFORM pix.serve(ARRAY(SELECT DISTINCT person_id FROM opened));
     RETURN NULL;
 END
 $$;
 
--- A record's head version, activity or removal: the person of its open link.
-CREATE FUNCTION pix.serve_record() RETURNS trigger
+-- The persons whose links a statement closed or moved, before and after.
+CREATE FUNCTION pix.serve_links_changed() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path = pg_catalog
 AS $$
 BEGIN
     PERFORM pix.serve(ARRAY(
-        SELECT l.person_id FROM pix.link l
-        WHERE l.record_id = NEW.id AND upper_inf(l.valid)
+        SELECT person_id FROM before_change UNION SELECT person_id FROM after_change
     ));
     RETURN NULL;
 END
 $$;
 
--- A domain retired, restored or of another kind: every person one of its
--- records is open in.
-CREATE FUNCTION pix.serve_domain() RETURNS trigger
+-- The persons of the open links of the records a statement gave another
+-- head version, activity or removal.
+CREATE FUNCTION pix.serve_records_changed() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path = pg_catalog
 AS $$
 BEGIN
     PERFORM pix.serve(ARRAY(
-        SELECT DISTINCT l.person_id FROM pix.source_record r
+        SELECT DISTINCT l.person_id
+        FROM after_change n
+        JOIN before_change o ON o.id = n.id
+        JOIN pix.link l ON l.record_id = n.id AND upper_inf(l.valid)
+        WHERE (o.head_version, o.active, o.removed_at)
+              IS DISTINCT FROM (n.head_version, n.active, n.removed_at)
+    ));
+    RETURN NULL;
+END
+$$;
+
+-- Every person one of whose records is open in a domain a statement
+-- retired, restored or gave another kind.
+CREATE FUNCTION pix.serve_domains_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path = pg_catalog
+AS $$
+BEGIN
+    PERFORM pix.serve(ARRAY(
+        SELECT DISTINCT l.person_id
+        FROM after_change n
+        JOIN before_change o ON o.id = n.id
+        JOIN pix.source_record r ON r.domain_id = n.id
         JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-        WHERE r.domain_id = NEW.id
+        WHERE (o.retired_at, o.kind) IS DISTINCT FROM (n.retired_at, n.kind)
     ));
     RETURN NULL;
 END
 $$;
 
-CREATE CONSTRAINT TRIGGER link_served AFTER INSERT OR UPDATE ON pix.link
-    DEFERRABLE INITIALLY DEFERRED
-    FOR EACH ROW EXECUTE FUNCTION pix.serve_link();
+-- Each runs once per statement, over every row the statement changed, so a
+-- statement that writes many rows recomputes each person once, and the
+-- statements after it in the transaction read the copy they left.
+CREATE TRIGGER link_opened_served AFTER INSERT ON pix.link
+    REFERENCING NEW TABLE AS opened
+    FOR EACH STATEMENT EXECUTE FUNCTION pix.serve_links_opened();
 
-CREATE CONSTRAINT TRIGGER source_record_served
-    AFTER UPDATE OF head_version, active, removed_at ON pix.source_record
-    DEFERRABLE INITIALLY DEFERRED
-    FOR EACH ROW EXECUTE FUNCTION pix.serve_record();
+CREATE TRIGGER link_changed_served AFTER UPDATE ON pix.link
+    REFERENCING OLD TABLE AS before_change NEW TABLE AS after_change
+    FOR EACH STATEMENT EXECUTE FUNCTION pix.serve_links_changed();
 
-CREATE CONSTRAINT TRIGGER identifier_domain_served
-    AFTER UPDATE OF retired_at, kind ON pix.identifier_domain
-    DEFERRABLE INITIALLY DEFERRED
-    FOR EACH ROW EXECUTE FUNCTION pix.serve_domain();
+CREATE TRIGGER source_record_served AFTER UPDATE ON pix.source_record
+    REFERENCING OLD TABLE AS before_change NEW TABLE AS after_change
+    FOR EACH STATEMENT EXECUTE FUNCTION pix.serve_records_changed();
+
+CREATE TRIGGER identifier_domain_served AFTER UPDATE ON pix.identifier_domain
+    REFERENCING OLD TABLE AS before_change NEW TABLE AS after_change
+    FOR EACH STATEMENT EXECUTE FUNCTION pix.serve_domains_changed();
 
 -- Every person the store holds, a thousand at a time, so no statement reads
 -- the whole store at once.

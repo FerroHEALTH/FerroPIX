@@ -3,8 +3,9 @@
 
 //! The migration set: applied on an empty store and again without change,
 //! every relation and constraint of `docs/architecture.md` §4.2 present, the
-//! temporal link constraint refusing a second open link, and `serve`
-//! migrating only when `[db] migrate` says so.
+//! temporal link constraint refusing a second open link, the open link found
+//! through its B-tree index, and `serve` migrating only when `[db] migrate`
+//! says so.
 
 use ferropix_server::store::schema::migrator;
 use ferropix_server::store::{Job, Store, StoreError};
@@ -214,6 +215,53 @@ async fn a_second_open_link_for_one_record_is_refused_by_the_temporal_constraint
             .and_then(ferropix_server::store::DbFailure::code),
         "restrict_violation"
     );
+    store.close().await;
+}
+
+#[tokio::test]
+async fn the_open_link_of_a_record_is_found_through_its_b_tree_index() {
+    if !e2e_enabled() {
+        return;
+    }
+    let postgres = postgres().await.unwrap();
+    let url = app_role(&postgres).await;
+    let store = Store::start(&settings(&url, &fresh_key(), true), &seeds(), Job::Migrate)
+        .await
+        .unwrap();
+    let bsn_domain = domain(&store, BSN_SYSTEM).await;
+    let record = create(&store, &bsn_domain, &bsn(0), 0).await;
+    let person: Uuid = sqlx::query_scalar("INSERT INTO pix.person DEFAULT VALUES RETURNING id")
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO pix.link (record_id, person_id, kind, valid, made_by)
+         VALUES ($1, $2, 'feed', tstzrange(now(), NULL), 'e2e')",
+    )
+    .bind(record.uuid())
+    .bind(person)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let mut transaction = store.pool().begin().await.unwrap();
+    sqlx::query("SET LOCAL enable_seqscan = off")
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    let plan: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN SELECT person_id FROM pix.link
+         WHERE record_id = '{}' AND upper_inf(valid)",
+        record.uuid()
+    )))
+    .fetch_all(&mut *transaction)
+    .await
+    .unwrap();
+    assert!(
+        plan.iter()
+            .any(|line| line.contains("link_open_record_idx")),
+        "{plan:#?}"
+    );
+    transaction.rollback().await.unwrap();
     store.close().await;
 }
 

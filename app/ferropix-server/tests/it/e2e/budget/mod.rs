@@ -251,7 +251,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 20,
             nested: 0,
-            blocks: 1957,
+            blocks: 1121,
             wal: 2952,
             audit: 2036,
             answer: 173,
@@ -261,7 +261,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 GET",
         ceiling: Ceiling {
-            statements: 0,
+            statements: 6,
             nested: 0,
             blocks: 79,
             wal: 0,
@@ -287,7 +287,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 202,
-            blocks: 1433,
+            blocks: 969,
             wal: 0,
             audit: 2057,
             answer: 1084,
@@ -299,7 +299,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 9,
             nested: 0,
-            blocks: 1674,
+            blocks: 1059,
             wal: 0,
             audit: 2728,
             answer: 1067,

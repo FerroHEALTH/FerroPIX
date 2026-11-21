@@ -19,6 +19,7 @@
 //! specification governs how it is stored: our own design
 //! (`docs/architecture.md` §4).
 
+pub mod blocking;
 pub mod demographics;
 pub mod estimate;
 pub mod gate;

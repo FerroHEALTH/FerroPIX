@@ -151,7 +151,8 @@ pub(super) async fn lock(
     }))
 }
 
-/// Locks the record of `value` in `domain`, or inserts it.
+/// Locks the record of `value` in `domain`, or inserts it with `blocks`,
+/// the blocking keys of the first version it is about to take.
 ///
 /// An inserted record waits for its first version, which the deferred
 /// head-version constraint requires before the commit.
@@ -160,6 +161,7 @@ pub(super) async fn lock_or_insert(
     keys: &Sealer,
     domain: &Domain,
     value: &IdentifierValue,
+    blocks: &Blocks,
 ) -> Result<Locked, StoreError> {
     let domain_id = domain.id.uuid();
     let hmac = keys.hmac(domain_id, value);
@@ -173,8 +175,9 @@ pub(super) async fn lock_or_insert(
     };
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO pix.source_record
-             (domain_id, identifier_hmac, identifier_sealed, identifier_value, key_id)
-         VALUES ($1, $2, $3, $4, $5)
+             (domain_id, identifier_hmac, identifier_sealed, identifier_value, key_id,
+              block_phonetic, block_postal)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id",
     )
     .bind(domain_id)
@@ -182,6 +185,8 @@ pub(super) async fn lock_or_insert(
     .bind(sealed)
     .bind(plain)
     .bind(keys.key_id().as_bytes().as_slice())
+    .bind(blocks.phonetic.as_deref())
+    .bind(blocks.postal.as_deref())
     .fetch_one(&mut *connection)
     .await?;
     Ok(Locked {
@@ -193,7 +198,8 @@ pub(super) async fn lock_or_insert(
     })
 }
 
-/// The text blocking keys of a version.
+/// The text blocking keys of a version, kept on its record while it is the
+/// head (`docs/architecture.md` §5.2).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct Blocks {
     /// `(birth year, phonetic key of the family name)`.
@@ -202,8 +208,12 @@ pub(super) struct Blocks {
     pub postal: Option<String>,
 }
 
-/// Inserts the next version of `record` and makes it the head, a removed
-/// record coming back with it; returns the version's number.
+/// Inserts the next version of `record` and makes it the head with its
+/// blocking keys `blocks`, a removed record coming back with it; returns the
+/// version's number.
+///
+/// A record [`lock_or_insert`] created already holds `blocks` and names
+/// version 1 as its head.
 pub(super) async fn add_version(
     connection: &mut PgConnection,
     record: &Locked,
@@ -217,24 +227,26 @@ pub(super) async fn add_version(
         .ok_or(StoreError::VersionOverflow)?;
     sqlx::query(
         "INSERT INTO pix.source_record_version
-             (record_id, version, demographics, channel, request_id, block_phonetic, block_postal)
-         VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)",
+             (record_id, version, demographics, channel, request_id)
+         VALUES ($1, $2, $3::jsonb, $4, $5)",
     )
     .bind(record.id.uuid())
     .bind(version)
     .bind(demographics.expose())
     .bind(context.channel.as_str())
     .bind(context.request_id.as_deref())
-    .bind(blocks.phonetic.as_deref())
-    .bind(blocks.postal.as_deref())
     .execute(&mut *connection)
     .await?;
     if !record.created {
         sqlx::query(
-            "UPDATE pix.source_record SET head_version = $2, removed_at = NULL WHERE id = $1",
+            "UPDATE pix.source_record
+             SET head_version = $2, removed_at = NULL, block_phonetic = $3, block_postal = $4
+             WHERE id = $1",
         )
         .bind(record.id.uuid())
         .bind(version)
+        .bind(blocks.phonetic.as_deref())
+        .bind(blocks.postal.as_deref())
         .execute(&mut *connection)
         .await?;
     }

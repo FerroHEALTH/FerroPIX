@@ -5,7 +5,7 @@
 //!
 //! `(birth year, the phonetic key of the family name)` and `(postal code,
 //! birth date)` are text keys the store keeps as indexed columns of the
-//! version, and an identifier shared across domains is found through the
+//! record's head, and an identifier shared across domains is found through the
 //! identifiers each version carries (`docs/architecture.md` §5.2). The
 //! phonetic key is American Soundex over the last word of the family name,
 //! so a Dutch prefix (`van`, `de`, `van der`) does not decide the block. No

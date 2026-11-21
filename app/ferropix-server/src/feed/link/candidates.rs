@@ -14,29 +14,11 @@ use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
 use crate::feed::{FeedError, Feeder};
 use crate::matching::subject::{IdentifierKey, Subject};
+use crate::store::blocking::{FEED_BY_PHONETIC, FEED_BY_POSTAL};
 use crate::store::demographics;
 use crate::store::record::{PersonId, RecordId};
 
 use super::{Me, Other, store};
-
-/// The records in another person whose current version has the phonetic
-/// blocking key `$1`.
-pub(super) const BY_PHONETIC: &str =
-    "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-     FROM pix.source_record_version v
-     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     WHERE v.block_phonetic = $1 AND r.id <> $2 AND l.person_id <> $3
-       AND r.active AND r.removed_at IS NULL";
-
-/// The records in another person whose current version has the postal
-/// blocking key `$1`.
-pub(super) const BY_POSTAL: &str = "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-     FROM pix.source_record_version v
-     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     WHERE v.block_postal = $1 AND r.id <> $2 AND l.person_id <> $3
-       AND r.active AND r.removed_at IS NULL";
 
 /// A row of another record: id, current version, person, demographics.
 pub(super) type OtherRow = (Uuid, i32, Uuid, String);
@@ -83,9 +65,9 @@ pub(super) async fn blocked(
         let found: Vec<OtherRow> = match key {
             BlockingKey::BirthYearFamilyPhonetic | BlockingKey::PostalCodeBirthDate => {
                 let (statement, value) = if *key == BlockingKey::BirthYearFamilyPhonetic {
-                    (BY_PHONETIC, me.phonetic.as_deref())
+                    (FEED_BY_PHONETIC, me.phonetic.as_deref())
                 } else {
-                    (BY_POSTAL, me.postal.as_deref())
+                    (FEED_BY_POSTAL, me.postal.as_deref())
                 };
                 let Some(value) = value else {
                     continue;

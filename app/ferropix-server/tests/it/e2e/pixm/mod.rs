@@ -95,7 +95,7 @@ pub(crate) struct Harness {
     pub public_base_url: url::Url,
     /// The `[audit]` section the router records under.
     pub audit_settings: ferropix_server::config::section::audit::AuditSettings,
-    _postgres: Postgres,
+    postgres: Postgres,
     _secrets: Secrets,
 }
 
@@ -178,9 +178,14 @@ impl Harness {
             deprecated: settings.pdqm.deprecated,
             public_base_url: settings.public_base_url.clone(),
             audit_settings: settings.audit.clone(),
-            _postgres: postgres,
+            postgres,
             _secrets: secrets,
         }
+    }
+
+    /// The PostgreSQL the store runs on.
+    pub(crate) fn postgres(&self) -> &Postgres {
+        &self.postgres
     }
 
     /// A Consumer's token.

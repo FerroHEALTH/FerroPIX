@@ -442,10 +442,12 @@ async fn search_buffers(harness: &Harness, meter: &mut Meter, hospital: &str) ->
     meter.finish(0).await.blocks
 }
 
-/// An ITI-78 search reads its persons through indexes (#722): twice the
-/// persons, the same buffers, within the noise of a B-tree's depth.
+/// An ITI-78 search reads its persons through indexes (#722): over four
+/// times the persons, each request reads at most a few more buffers, the
+/// deeper levels of the indexes it descends, where a scan of every person
+/// would read about four times as many.
 #[tokio::test]
-async fn an_iti_78_search_reads_no_more_over_twice_the_persons() {
+async fn an_iti_78_search_reads_no_more_over_four_times_the_persons() {
     if !e2e_enabled() {
         return;
     }
@@ -454,11 +456,15 @@ async fn an_iti_78_search_reads_no_more_over_twice_the_persons() {
     populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
     let before = search_buffers(&harness, &mut meter, &hospital).await;
-    populate(&harness, POPULATION..POPULATION * 2).await;
+    populate(&harness, POPULATION..POPULATION * 4).await;
     let after = search_buffers(&harness, &mut meter, &hospital).await;
     assert!(
-        after.saturating_mul(100) <= before.saturating_mul(105),
-        "an ITI-78 search over {} persons touches {after} buffers, over {POPULATION} {before}",
-        POPULATION * 2
+        after <= before.saturating_add(REQUESTS.saturating_mul(DEEPER)),
+        "{REQUESTS} ITI-78 searches over {} persons touch {after} buffers, over {POPULATION} {before}",
+        POPULATION * 4
     );
 }
+
+/// The buffers one request may read more once the store holds four times
+/// the persons: a level more in each of the indexes it descends.
+const DEEPER: u64 = 8;

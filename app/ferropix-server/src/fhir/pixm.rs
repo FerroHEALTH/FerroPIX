@@ -534,7 +534,7 @@ fn own_pseudonyms(
 ) -> impl Iterator<Item = (String, String)> {
     pseudonymised
         .iter()
-        .filter(|(domain, _held)| domain.serves(client))
+        .filter(move |(domain, _held)| domain.serves(client))
         .filter_map(|(domain, held)| {
             held.map(|value| (domain.namespace.clone(), value.to_string()))
         })

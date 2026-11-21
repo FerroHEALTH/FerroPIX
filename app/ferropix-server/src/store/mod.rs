@@ -112,22 +112,12 @@ impl Store {
     /// [`StoreError::Connect`] when no connection opens and
     /// [`StoreError::Seal`] when the keys cannot be derived.
     pub async fn connect(db: &DbSettings) -> Result<Self, StoreError> {
-        let options = PgConnectOptions::from_str(db.url.expose())
-            .map_err(|source| StoreError::Url(DbFailure(source)))?
-            .application_name(APPLICATION_NAME);
-        let pool = PgPoolOptions::new()
-            .max_connections(db.pool_size)
+        let (options, pool) = Self::options(db)?;
+        let pool = pool
             .connect_with(options)
             .await
             .map_err(|source| StoreError::Connect(DbFailure(source)))?;
-        let sealer = Sealer::new(&db.data_key)?;
-        Ok(Self {
-            pool,
-            sealer: std::sync::Arc::new(sealer),
-            feed: None,
-            consumers: None,
-            domain_ids: std::sync::Arc::default(),
-        })
+        Self::over(pool, db)
     }
 
     /// Returns a store over `db` whose connections open on first use, and
@@ -140,12 +130,21 @@ impl Store {
     /// Returns [`StoreError::Url`] for a URL the driver refuses and
     /// [`StoreError::Seal`] when the keys cannot be derived.
     pub fn lazy(db: &DbSettings) -> Result<Self, StoreError> {
+        let (options, pool) = Self::options(db)?;
+        Self::over(pool.connect_lazy_with(options), db)
+    }
+
+    /// Returns the connection options and the pool options `db` names.
+    fn options(db: &DbSettings) -> Result<(PgConnectOptions, PgPoolOptions), StoreError> {
         let options = PgConnectOptions::from_str(db.url.expose())
             .map_err(|source| StoreError::Url(DbFailure(source)))?
             .application_name(APPLICATION_NAME);
-        let pool = PgPoolOptions::new()
-            .max_connections(db.pool_size)
-            .connect_lazy_with(options);
+        Ok((options, PgPoolOptions::new().max_connections(db.pool_size)))
+    }
+
+    /// Returns the store over `pool`, sealing under the keys `db`'s data key
+    /// yields.
+    fn over(pool: PgPool, db: &DbSettings) -> Result<Self, StoreError> {
         let sealer = Sealer::new(&db.data_key)?;
         Ok(Self {
             pool,

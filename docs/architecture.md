@@ -395,8 +395,16 @@ boundaries: our own design.
 Reads take no lock. A PIX query (section 6.1) is one statement: the record
 by `(domain, hmac)`, its open link's person, that person resolved through
 `merged_into` to the active survivor, and the open links of the survivor
-joined to their records and domains. A PDQm search reads persons and their
-current versions. Nothing a read returns is written back.
+joined to their records and domains. A PDQm search reads the served row
+and the search keys of each person (`pix.person_served`,
+`pix.person_search_key`, #722): the record and version the answer shows a
+person by, and each value a string or telecom parameter matches, folded for
+the default match. `pix.serve` writes them, called by a statement trigger on
+`pix.link`, `pix.source_record` and `pix.identifier_domain` at the end of
+every statement that changes what a person serves, in that statement's
+transaction, so a search reads an index and never every person, and the
+copy is never out of step with what it copies. Nothing a read returns is
+written back.
 
 ## 5. Matching
 

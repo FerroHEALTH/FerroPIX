@@ -261,7 +261,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 GET",
         ceiling: Ceiling {
-            statements: 6,
+            statements: 0,
             nested: 0,
             blocks: 79,
             wal: 0,

@@ -524,11 +524,7 @@ async fn every_search_of_the_matrix_answers_as_the_oracle_over_the_corpus() {
             made.push((merge(&started, survivor, merged).await, survivor));
         }
     }
-    assert!(
-        merges.len() >= 5,
-        "the corpus holds merges: {}",
-        merges.len()
-    );
+    assert!(made.len() >= 5, "the corpus holds merges: {}", made.len());
     if let Some((merge_id, survivor)) = made.first().copied() {
         revert(&started, merge_id, survivor).await;
     }

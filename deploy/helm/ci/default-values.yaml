@@ -11,6 +11,6 @@ usageReport:
 config:
   auth:
     issuer:
-      - issuer: "https://idp.example.org"
+      idp:
+        issuer: "https://idp.example.org"
         kind: machines
-        audience: ["https://pix.example.org/fhir"]

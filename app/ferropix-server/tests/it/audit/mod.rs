@@ -479,7 +479,7 @@ async fn a_persons_token_s_iua_attributes_reach_the_user_agent_of_the_record() {
     let settings = crate::auth::settings_with(
         &issuer,
         &secrets,
-        "[[auth.attributes]]\nissuer = \"{issuer}\"\nmapping = \"iua\"\n",
+        "[auth.issuer.idp.attributes]\nmapping = \"iua\"\n",
     );
     let smart = Box::pin(ferropix_server::auth::Smart::discover(
         settings.auth,

@@ -64,32 +64,33 @@ impl Secrets {
     }
 }
 
-/// Each `[auth]` table that names an issuer, by the host it names, with
-/// [`PASSWORD`] in the issuer's userinfo, to append to a configuration.
+/// Each `[auth.issuer.<name>]` table with a table nested under it, by the
+/// host its issuer names, with [`PASSWORD`] in the issuer's userinfo, to
+/// append to a configuration.
 pub(crate) fn issuer_tables() -> [(&'static str, String); 4] {
     [
         (
             "attributes.example.org",
             format!(
-                "\n[[auth.attributes]]\nissuer = \"https://pix:{PASSWORD}@attributes.example.org/realms/pix\"\nmapping = \"iua\"\n"
+                "\n[auth.issuer.attributes]\nissuer = \"https://pix:{PASSWORD}@attributes.example.org/realms/pix\"\nkind = \"persons\"\n\n[auth.issuer.attributes.attributes]\nmapping = \"iua\"\n"
             ),
         ),
         (
             "federation.example.org",
             format!(
-                "\n[[auth.federation]]\nissuer = \"https://pix:{PASSWORD}@federation.example.org/realms/pix\"\ncontact_point = false\n"
+                "\n[auth.issuer.federation]\nissuer = \"https://pix:{PASSWORD}@federation.example.org/realms/pix\"\nkind = \"federation\"\n\n[auth.issuer.federation.federation]\ncontact_point = false\n"
             ),
         ),
         (
             "party.example.org",
             format!(
-                "\n[[auth.party]]\nissuer = \"https://pix:{PASSWORD}@party.example.org/realms/pix\"\nidentifier_issuer = \"urn:example:people\"\nidentifier_type = \"guid\"\n"
+                "\n[auth.issuer.party]\nissuer = \"https://pix:{PASSWORD}@party.example.org/realms/pix\"\nkind = \"persons\"\n\n[auth.issuer.party.party]\nidentifier_issuer = \"urn:example:people\"\nidentifier_type = \"guid\"\n"
             ),
         ),
         (
             "scopeless.example.org",
             format!(
-                "\n[[auth.scopeless_subjects]]\nissuer = \"https://pix:{PASSWORD}@scopeless.example.org/realms/pix\"\nsub = \"service\"\n"
+                "\n[auth.issuer.scopeless]\nissuer = \"https://pix:{PASSWORD}@scopeless.example.org/realms/pix\"\nkind = \"machines\"\nscopeless_subjects = [\"service\"]\n"
             ),
         ),
     ]
@@ -125,10 +126,10 @@ product_scope = "__ferropix.steward"
 capabilities = ["client-confidential-asymmetric"]
 scopes_supported = ["system/Patient.rs"]
 
-[[auth.issuer]]
+[auth.issuer.idp]
 issuer = "https://idp.example.org/realms/pix"
 kind = "persons"
-profile = "rfc9068"
+preset = "rfc9068"
 audience = ["https://pix.example.org/pix/fhir"]
 algorithms = ["PS256"]
 clock_skew = "10s"
@@ -136,10 +137,12 @@ jwks_max_age = "1min"
 jwks_refresh_interval = "10s"
 jwks_file = ""
 timeout = "5s"
+
+[auth.issuer.idp.profile]
 first_party_clients = ["ferropix-console"]
 
 [[trust.issuer]]
-issuer = "https://idp.example.org/realms/pix"
+issuer = "idp"
 clients = ["east-lab", "west-lab"]
 
 [[domain]]

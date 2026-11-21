@@ -8,8 +8,8 @@ SPDX-License-Identifier: BUSL-1.1
 {{- if not .Values.dataKey.existingSecret }}
 {{- fail "dataKey.existingSecret must name the Secret that holds the sealing key" }}
 {{- end }}
-{{- if not (or (dig "auth" "issuer" list .Values.config) (dig "auth" "basic" dict .Values.config)) }}
-{{- fail "config.auth.issuer must name at least one [[auth.issuer]] entry, each with its issuer, kind and audience" }}
+{{- if not (or (dig "auth" "issuer" dict .Values.config) (dig "auth" "basic" dict .Values.config)) }}
+{{- fail "config.auth.issuer must name at least one issuer, an [auth.issuer.<name>] table by its name, each with its issuer and kind" }}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap

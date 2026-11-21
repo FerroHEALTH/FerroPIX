@@ -272,14 +272,14 @@ pub(crate) fn settings_with(issuer: &Issuer, secrets: &Secrets, extra: &str) -> 
         .collect::<Vec<_>>()
         .join(", ");
     let tables = format!(
-        "[[auth.issuer]]\nissuer = \"{{issuer}}\"\nkind = \"persons\"\nprofile = \"rfc9068\"\naudience = [\"{AUDIENCE}\"]\nfirst_party_clients = [{clients}]\n"
+        "[auth.issuer.idp]\nissuer = \"{{issuer}}\"\nkind = \"persons\"\npreset = \"rfc9068\"\naudience = [\"{AUDIENCE}\"]\n\n[auth.issuer.idp.profile]\nfirst_party_clients = [{clients}]\n"
     );
     settings_trusting(issuer, secrets, &tables, extra)
 }
 
-/// Returns the settings of a server whose `[[auth.issuer]]` tables are
-/// `issuer_tables`, every switch on, with the tables of `extra` after its
-/// own; each `{issuer}` in either names `issuer`.
+/// Returns the settings of a server whose `[auth.issuer.<name>]` tables are
+/// `issuer_tables`, the trusted one named `idp`, every switch on, with the
+/// tables of `extra` after its own; each `{issuer}` in either names `issuer`.
 pub(crate) fn settings_trusting(
     issuer: &Issuer,
     secrets: &Secrets,
@@ -296,7 +296,7 @@ listen = "127.0.0.1:0"
 {issuer_tables}
 
 [[trust.issuer]]
-issuer = "{issuer}"
+issuer = "idp"
 clients = ["east-lab", "west-lab"]
 
 [[domain]]
@@ -325,7 +325,6 @@ enabled = true
 "#,
         issuer_tables = issuer_tables.replace("{issuer}", &issuer.server.uri()),
         extra = extra.replace("{issuer}", &issuer.server.uri()),
-        issuer = issuer.server.uri(),
     );
     Config::from_sources(Some(&text), &secrets.environment())
         .expect("the configuration reads")
@@ -564,9 +563,9 @@ async fn every_guarded_route_answers_a_token_without_its_scope_403_with_a_securi
         let label = format!("{} {}", route.method, route.path);
         assert_eq!(StatusCode::FORBIDDEN, answer.status, "{label}");
         assert_eq!(
-            Some("Bearer error=\"insufficient_scope\""),
+            Some("Bearer error=\"insufficient_scope\", error_description=\"scope-not-granted\""),
             answer.challenge.as_deref(),
-            "{label}: RFC 6750 §3.1"
+            "{label}: RFC 6750 §3 and §3.1, the reason code as the description"
         );
         answer.refused_as(route, "security", Kind::NotPermitted, NOT_PERMITTED);
     }

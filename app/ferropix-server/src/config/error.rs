@@ -114,7 +114,7 @@ pub enum Error {
     /// a person's credential never carries: a machine authenticates with the
     /// client credentials grant (RFC 6749 §4.4).
     #[error(
-        "basic_grants.{user} grants a system/ scope; a Basic user is a person, so move the machine to a client credentials token of an [[auth.issuer]]"
+        "basic_grants.{user} grants a system/ scope; a Basic user is a person, so move the machine to a client credentials token of an [auth.issuer.<name>] issuer"
     )]
     BasicSystemScope {
         /// The user-id.
@@ -130,7 +130,7 @@ pub enum Error {
     },
     /// A `[[domain]]` names a Source client no issuer admits.
     #[error(
-        "domain[{index}].source_client_id names {client:?}, which no [[auth.issuer]] lists in its clients"
+        "domain[{index}].source_client_id names {client:?}, which no [[trust.issuer]] lists in its clients"
     )]
     ClientNotAdmitted {
         /// The position of the entry in the seed, from 0.

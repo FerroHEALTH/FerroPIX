@@ -22,17 +22,19 @@ config:
     listen: "0.0.0.0:8080"
   auth:
     issuer:
-      - issuer: "http://localhost:8180/ferropix"
+      dev:
+        issuer: "http://localhost:8180/ferropix"
         kind: persons
-        profile: rfc9068
+        preset: rfc9068
         audience: ["http://localhost:8080/fhir", "ferropix-console"]
-        token_types: ["JWT"]
-        required_claims: ["iss", "exp", "aud", "sub"]
-        client_claims: ["client_id", "azp"]
-        first_party_clients: ["ferropix-console"]
+        profile:
+          token_types: ["JWT"]
+          required_claims: ["iss", "exp", "aud", "sub"]
+          client_claims: ["client_id", "azp"]
+          first_party_clients: ["ferropix-console"]
   trust:
     issuer:
-      - issuer: "http://localhost:8180/ferropix"
+      - issuer: dev
         clients: ["quickstart-source"]
   domain:
     - system: "urn:oid:2.999.1.1"

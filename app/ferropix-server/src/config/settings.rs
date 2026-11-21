@@ -20,6 +20,7 @@ use crate::config::section::public;
 use crate::config::section::xcpd::XcpdSettings;
 use crate::config::section::{is_loopback_address, operator::Operator};
 use crate::config::{Config, Profile};
+use crate::mount;
 
 /// Every section, resolved.
 #[derive(Debug)]
@@ -91,11 +92,19 @@ impl Config {
         }
         let public_base_url = public::resolve(&self.public_base_url, self.profile)?;
         let db = self.db.resolve(self.profile)?;
+        // NOTE: RFC 9068 §4, the audience is the resource server; FerroPIX's is
+        // its FHIR base, `{public_base_url}/fhir`.
+        let fhir_base = format!(
+            "{}{}",
+            public_base_url.as_str().trim_end_matches('/'),
+            mount::FHIR
+        );
         let auth = self.auth.resolve(
             self.profile,
             &self.trust,
             &self.basic_grants,
             &self.operator.admin_scope,
+            &fhir_base,
         )?;
         // NOTE: no specification governs this: our own design; a Basic user sends a
         // reusable password, so it rides only with the [dev] table's loopback rule.

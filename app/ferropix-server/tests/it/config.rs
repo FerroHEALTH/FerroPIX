@@ -98,7 +98,8 @@ fn an_unknown_key_is_refused_in_every_table_and_named() {
         ("[telemetry]", "[telemetry]\n"),
         ("[db]", "[db]\n"),
         ("[auth]", "[auth]\n"),
-        ("[[auth.issuer]]", "[[auth.issuer]]\n"),
+        ("[auth.issuer.idp]", "[auth.issuer.idp]\n"),
+        ("[auth.issuer.idp.profile]", "[auth.issuer.idp.profile]\n"),
         ("[[trust.issuer]]", "[[trust.issuer]]\n"),
         ("[[domain]]", "[[domain]]\n"),
         ("[matching]", "[matching]\n"),
@@ -263,13 +264,12 @@ public_base_url = "http://localhost:8080"
 [server]
 listen = "127.0.0.1:8080"
 
-[[auth.issuer]]
+[auth.issuer.dev]
 issuer = "http://127.0.0.1:8180/dev"
 kind = "machines"
-audience = ["http://localhost:8080/fhir"]
 
 [[trust.issuer]]
-issuer = "http://127.0.0.1:8180/dev"
+issuer = "dev"
 clients = ["dev-source"]
 
 [[auth.basic.users]]
@@ -454,7 +454,7 @@ fn load(text: &str, sets: &[(&str, &str)]) -> Result<(), Error> {
 
 #[test]
 fn every_key_v0_0_24_renamed_fails_as_an_unknown_key() {
-    let issuer = "[[auth.issuer]]\nissuer = \"https://idp.example.org/realms/pix\"\n";
+    let issuer = "[auth.issuer.idp]\nissuer = \"https://idp.example.org/realms/pix\"\n";
     for (key, text, sets) in [
         (
             "outbox.retention_days",
@@ -516,7 +516,7 @@ fn every_key_v0_0_24_renamed_fails_as_an_unknown_key() {
         (
             "client_certificate_file",
             format!(
-                "{issuer}\n[auth.issuer.introspection.client]\nclient_certificate_file = \"/run/client.pem\"\n"
+                "{issuer}\n[auth.issuer.idp.introspection.client]\nclient_certificate_file = \"/run/client.pem\"\n"
             ),
             &[],
         ),
@@ -569,7 +569,7 @@ fn the_old_issuer_shapes_fail_at_boot_naming_their_key() {
     let secrets = Secrets::new();
     let issuer = "issuer = \"https://idp.example.org/realms/pix\"\n";
     let table = FULL
-        .find("[[auth.issuer]]")
+        .find("[auth.issuer.idp]\n")
         .zip(FULL.find("[[trust.issuer]]"))
         .and_then(|(from, to)| FULL.get(from..to))
         .expect("the full configuration has an issuer table");
@@ -583,11 +583,32 @@ fn the_old_issuer_shapes_fail_at_boot_naming_their_key() {
         (
             "token_profile on an issuer",
             FULL.replacen(
-                &format!("[[auth.issuer]]\n{issuer}"),
-                &format!("[[auth.issuer]]\n{issuer}token_profile = \"jwt\"\n"),
+                &format!("[auth.issuer.idp]\n{issuer}"),
+                &format!("[auth.issuer.idp]\n{issuer}token_profile = \"jwt\"\n"),
                 1,
             ),
             "token_profile",
+        ),
+        (
+            "an issuer array",
+            FULL.replacen("[auth.issuer.idp]\n", "[[auth.issuer]]\n", 1)
+                .replacen("[auth.issuer.idp.profile]\n", "", 1),
+            "auth.issuer",
+        ),
+        (
+            "a profile named as a string",
+            FULL.replacen("preset = \"rfc9068\"\n", "profile = \"rfc9068\"\n", 1)
+                .replacen("[auth.issuer.idp.profile]\n", "", 1),
+            "profile",
+        ),
+        (
+            "a profile key on the issuer table",
+            FULL.replacen(
+                &format!("[auth.issuer.idp]\n{issuer}"),
+                &format!("[auth.issuer.idp]\n{issuer}token_types = [\"JWT\"]\n"),
+                1,
+            ),
+            "token_types",
         ),
         (
             "a string scopeless subject",

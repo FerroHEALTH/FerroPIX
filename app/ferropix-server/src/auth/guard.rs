@@ -23,7 +23,7 @@ use axum::extract::{MatchedPath, Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 use ferrohealth_smart::guard::{AuthLayer, Classify, Render, Requirement, Target};
-use ferrohealth_smart::refusal::Refusal;
+use ferrohealth_smart::refusal::{Denied, Refusal};
 use ferrohealth_smart::resource::{Access, Compartment};
 use ferrohealth_telemetry::request_log::fields::{LineFields, Token};
 use http::request::Parts;
@@ -120,8 +120,10 @@ pub struct Outcome {
 }
 
 impl Outcome {
-    /// Returns the response of `refusal`.
-    fn respond(&self, refusal: &Refusal) -> Response {
+    /// Returns the response of `denied`, whose challenge carries the
+    /// reason code as `error_description` (RFC 6750 §3).
+    fn respond(&self, denied: &Denied) -> Response {
+        let refusal = denied.refusal();
         let (code, diagnostics) = match refusal {
             Refusal::Unavailable => (IssueType::Transient, AUTHORIZATION_UNAVAILABLE),
             Refusal::Forbidden | Refusal::Unclassified => (IssueType::Security, NOT_PERMITTED),
@@ -131,16 +133,16 @@ impl Outcome {
             refusal.status(),
             code,
             diagnostics,
-            refusal.challenge(self.realm.as_deref()).as_deref(),
+            denied.challenge(self.realm.as_deref()).as_deref(),
         )
     }
 }
 
 impl Outcome {
-    /// Returns the problem of `refusal`, at the status the gate chose.
-    fn problem(&self, refusal: &Refusal) -> Response {
-        let challenge = refusal.challenge(self.realm.as_deref());
-        let problem = match refusal.status() {
+    /// Returns the problem of `denied`, at the status the gate chose.
+    fn problem(&self, denied: &Denied) -> Response {
+        let challenge = denied.challenge(self.realm.as_deref());
+        let problem = match denied.refusal().status() {
             StatusCode::UNAUTHORIZED => Kind::Unauthenticated.problem(UNAUTHENTICATED),
             StatusCode::FORBIDDEN => Kind::NotPermitted.problem(NOT_PERMITTED),
             StatusCode::SERVICE_UNAVAILABLE => {
@@ -153,11 +155,11 @@ impl Outcome {
 }
 
 impl Render for Outcome {
-    fn render(&self, refusal: &Refusal, parts: &Parts) -> Response {
+    fn render(&self, denied: &Denied, parts: &Parts) -> Response {
         if problem::is_fhir_or_ihe(&self.base, parts.uri.path()) {
-            self.respond(refusal)
+            self.respond(denied)
         } else {
-            self.problem(refusal)
+            self.problem(denied)
         }
     }
 }
@@ -294,7 +296,7 @@ fn check(confine: &Confine, access: &Access, request: &Request) -> Checked {
                 realm: confine.smart.gate().realm().map(str::to_owned),
                 base: confine.base.clone(),
             }
-            .respond(&Refusal::Forbidden),
+            .respond(&Denied::from(Refusal::Forbidden)),
         );
     }
     let sources = confine.smart.sources();

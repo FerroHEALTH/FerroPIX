@@ -242,7 +242,7 @@ pub(super) async fn add_version(
 }
 
 /// Inserts the identifiers version `version` of `record` carries, each
-/// sealed in a sensitive domain and plain in another.
+/// sealed in a sensitive domain and plain in another, in one statement.
 pub(super) async fn insert_carried(
     connection: &mut PgConnection,
     keys: &Sealer,
@@ -250,29 +250,43 @@ pub(super) async fn insert_carried(
     version: i32,
     carried: &[Carried],
 ) -> Result<(), StoreError> {
+    if carried.is_empty() {
+        return Ok(());
+    }
+    let mut domains = Vec::with_capacity(carried.len());
+    let mut hmacs = Vec::with_capacity(carried.len());
+    let mut sealed = Vec::with_capacity(carried.len());
+    let mut plain = Vec::with_capacity(carried.len());
     for identifier in carried {
         let domain = identifier.domain.uuid();
-        let (sealed, plain) = if identifier.sensitive {
-            (Some(keys.seal(domain, &identifier.value)?), None)
+        domains.push(domain);
+        hmacs.push(identifier.hmac.as_slice());
+        if identifier.sensitive {
+            sealed.push(Some(keys.seal(domain, &identifier.value)?));
+            plain.push(None);
         } else {
-            (None, Some(identifier.value.expose()))
-        };
-        sqlx::query(
-            "INSERT INTO pix.carried_identifier
-                 (record_id, version, domain_id, identifier_hmac, identifier_sealed,
-                  identifier_value, key_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
-        )
-        .bind(record.uuid())
-        .bind(version)
-        .bind(domain)
-        .bind(identifier.hmac.as_slice())
-        .bind(sealed)
-        .bind(plain)
-        .bind(keys.key_id().as_bytes().as_slice())
-        .execute(&mut *connection)
-        .await?;
+            sealed.push(None);
+            plain.push(Some(identifier.value.expose()));
+        }
     }
+    sqlx::query(
+        "INSERT INTO pix.carried_identifier
+             (record_id, version, domain_id, identifier_hmac, identifier_sealed,
+              identifier_value, key_id)
+         SELECT $1, $2, c.domain_id, c.hmac, c.sealed, c.plain, $7
+         FROM unnest($3::uuid[], $4::bytea[], $5::bytea[], $6::text[])
+              WITH ORDINALITY AS c (domain_id, hmac, sealed, plain, ord)
+         ORDER BY c.ord",
+    )
+    .bind(record.uuid())
+    .bind(version)
+    .bind(domains)
+    .bind(hmacs)
+    .bind(sealed)
+    .bind(plain)
+    .bind(keys.key_id().as_bytes().as_slice())
+    .execute(&mut *connection)
+    .await?;
     Ok(())
 }
 

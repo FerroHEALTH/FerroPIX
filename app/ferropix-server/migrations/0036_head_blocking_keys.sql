@@ -42,3 +42,14 @@ CREATE INDEX source_record_block_postal_idx
 ALTER TABLE pix.source_record_version
     DROP COLUMN block_phonetic,
     DROP COLUMN block_postal;
+
+-- The unique key the replaced_by foreign key names leads with id, so the
+-- only index that leads with domain_id is the identifier's own and a lookup
+-- by (domain_id, identifier_hmac) cannot be planned over every record of
+-- the domain, analyzed or not.
+ALTER TABLE pix.source_record
+    DROP CONSTRAINT source_record_replaced_by_fkey,
+    DROP CONSTRAINT source_record_domain_id_key,
+    ADD CONSTRAINT source_record_domain_id_key UNIQUE (id, domain_id),
+    ADD CONSTRAINT source_record_replaced_by_fkey FOREIGN KEY (domain_id, replaced_by)
+        REFERENCES pix.source_record (domain_id, id);

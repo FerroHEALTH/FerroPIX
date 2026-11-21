@@ -12,55 +12,58 @@
 //! reads every record of an unretired domain. No specification governs the
 //! blocking: our own design.
 
-/// The records in another person than `$3`, other than `$2`, whose head
-/// has the phonetic key `$1`: id, head version, person, demographics.
-pub const FEED_BY_PHONETIC: &str = "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-     FROM pix.source_record r
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     CROSS JOIN LATERAL (
-         SELECT h.demographics FROM pix.source_record_version h
-         WHERE h.record_id = r.id AND h.version = r.head_version
-     ) AS v
-     WHERE r.block_phonetic = $1 AND r.id <> $2 AND l.person_id <> $3
-       AND r.active AND r.removed_at IS NULL";
+/// The feed's read of the heads whose key `$column` is `$1`, in another
+/// person than `$3` and other than `$2`: id, head version, person,
+/// demographics.
+macro_rules! feed_read {
+    ($column:literal) => {
+        concat!(
+            "SELECT r.id, r.head_version, l.person_id, v.demographics::text
+             FROM pix.source_record r
+             JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+             CROSS JOIN LATERAL (
+                 SELECT h.demographics FROM pix.source_record_version h
+                 WHERE h.record_id = r.id AND h.version = r.head_version
+             ) AS v
+             WHERE r.",
+            $column,
+            " = $1 AND r.id <> $2 AND l.person_id <> $3
+               AND r.active AND r.removed_at IS NULL"
+        )
+    };
+}
 
-/// The records in another person than `$3`, other than `$2`, whose head
-/// has the postal key `$1`: id, head version, person, demographics.
-pub const FEED_BY_POSTAL: &str = "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-     FROM pix.source_record r
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     CROSS JOIN LATERAL (
-         SELECT h.demographics FROM pix.source_record_version h
-         WHERE h.record_id = r.id AND h.version = r.head_version
-     ) AS v
-     WHERE r.block_postal = $1 AND r.id <> $2 AND l.person_id <> $3
-       AND r.active AND r.removed_at IS NULL";
+/// ITI-119's read of the heads of unretired domains whose key `$column` is
+/// `$1`: id, person, demographics.
+macro_rules! match_read {
+    ($column:literal) => {
+        concat!(
+            "SELECT r.id, l.person_id, v.demographics::text
+             FROM pix.source_record r
+             JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+             JOIN pix.identifier_domain d ON d.id = r.domain_id
+             CROSS JOIN LATERAL (
+                 SELECT h.demographics FROM pix.source_record_version h
+                 WHERE h.record_id = r.id AND h.version = r.head_version
+             ) AS v
+             WHERE r.",
+            $column,
+            " = $1 AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL"
+        )
+    };
+}
 
-/// The records of unretired domains whose head has the phonetic key `$1`:
-/// id, person, demographics.
-pub const MATCH_BY_PHONETIC: &str = "SELECT r.id, l.person_id, v.demographics::text
-     FROM pix.source_record r
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     JOIN pix.identifier_domain d ON d.id = r.domain_id
-     CROSS JOIN LATERAL (
-         SELECT h.demographics FROM pix.source_record_version h
-         WHERE h.record_id = r.id AND h.version = r.head_version
-     ) AS v
-     WHERE r.block_phonetic = $1
-       AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL";
+/// The feed's read by the phonetic key.
+pub const FEED_BY_PHONETIC: &str = feed_read!("block_phonetic");
 
-/// The records of unretired domains whose head has the postal key `$1`:
-/// id, person, demographics.
-pub const MATCH_BY_POSTAL: &str = "SELECT r.id, l.person_id, v.demographics::text
-     FROM pix.source_record r
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     JOIN pix.identifier_domain d ON d.id = r.domain_id
-     CROSS JOIN LATERAL (
-         SELECT h.demographics FROM pix.source_record_version h
-         WHERE h.record_id = r.id AND h.version = r.head_version
-     ) AS v
-     WHERE r.block_postal = $1
-       AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL";
+/// The feed's read by the postal key.
+pub const FEED_BY_POSTAL: &str = feed_read!("block_postal");
+
+/// ITI-119's read by the phonetic key.
+pub const MATCH_BY_PHONETIC: &str = match_read!("block_phonetic");
+
+/// ITI-119's read by the postal key.
+pub const MATCH_BY_POSTAL: &str = match_read!("block_postal");
 
 #[cfg(test)]
 mod e2e;

@@ -11,59 +11,25 @@
 
 use std::collections::BTreeSet;
 
-use base64::Engine as _;
-use ferrohealth_secret::secret_url::SecretUrl;
-use ferropix_testkit::containers::{Postgres, e2e_enabled, postgres};
+use ferropix_testkit::containers::{e2e_enabled, postgres};
 use ferropix_testkit::synthetic::{
     FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN,
 };
-use ihe_iti::pixm::server::feed::{Feed, Merge, Removal, Revision};
-use ihe_iti::server::format::Format;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::oracle::{self, FeedRow, MatchRow};
 use super::{FEED_BY_PHONETIC, FEED_BY_POSTAL, MATCH_BY_PHONETIC, MATCH_BY_POSTAL};
-use crate::config::section::db::{DbSettings, SealingKey};
-use crate::config::section::domain::{DomainKind, DomainSeed};
-use crate::config::section::matching::Matching;
-use crate::feed::merging::{self, MergeRequest};
-use crate::feed::{Context, Feeder};
-use crate::store::record::{Channel, PersonId};
 use crate::store::schema::migrator;
-use crate::store::{Job, Store};
-
-/// The BSN naming system.
-const BSN: &str = "http://fhir.nl/fhir/NamingSystem/bsn";
-
-/// The client every seeded domain names as its Source.
-const SOURCE: &str = "synthetic-source";
+use crate::testing::{
+    Fed, SOURCE, Started, app_url, bsn, context, feed, identifiers, merge, retire, revert, start,
+};
 
 /// The migration that moves the keys to the head.
 const MOVE: &str = "head blocking keys";
 
 /// The postal codes the corpora draw from, few so blocks are shared.
 const POSTALS: [&str; 4] = ["1000AA", "1011AB", "2500CD", "9999ZZ"];
-
-/// Creates the application role and returns its URL.
-async fn app_url(postgres: &Postgres) -> String {
-    let admin = PgPool::connect(postgres.url())
-        .await
-        .expect("the superuser connects");
-    for statement in [
-        "CREATE ROLE pix_app LOGIN PASSWORD 'pix_app'",
-        "GRANT CREATE ON DATABASE ferropix TO pix_app",
-    ] {
-        sqlx::query(statement)
-            .execute(&admin)
-            .await
-            .expect("the role is made");
-    }
-    admin.close().await;
-    postgres
-        .url()
-        .replacen("pix_super:pix_super@", "pix_app:pix_app@", 1)
-}
 
 /// The `Patient` demographics of the given parts, without an identifier.
 fn demographics(family: &str, given: &str, birth: Option<&str>, postal: Option<&str>) -> String {
@@ -340,70 +306,6 @@ async fn the_migration_fills_every_head_and_the_reads_find_what_the_reads_over_e
     oracle::assert_heads_hold_their_keys(&pool).await;
 }
 
-/// A store over its own PostgreSQL, with a feeder.
-struct Started {
-    _postgres: Postgres,
-    store: Store,
-    feeder: Feeder,
-}
-
-/// Starts PostgreSQL and the store with the BSN and three local domains.
-async fn start() -> Started {
-    let postgres = postgres().await.expect("PostgreSQL starts");
-    let url = app_url(&postgres).await;
-    let mut bytes = [0_u8; 32];
-    aws_lc_rs::rand::fill(&mut bytes).expect("random bytes");
-    let key = SealingKey::from_base64(&base64::engine::general_purpose::STANDARD.encode(bytes))
-        .expect("a generated key reads");
-    let settings = DbSettings {
-        url: SecretUrl::new(&url),
-        pool_size: 4,
-        migrate: true,
-        data_key: key,
-    };
-    let seed = |system: &str, kind: DomainKind, sensitive: bool| DomainSeed {
-        system: system.to_owned(),
-        name: system.to_owned(),
-        kind,
-        source_client_id: SOURCE.to_owned(),
-        sensitive,
-    };
-    let seeds = vec![
-        seed(BSN, DomainKind::Authoritative, true),
-        seed(HOSPITAL_DOMAIN, DomainKind::Local, false),
-        seed(LABORATORY_DOMAIN, DomainKind::Local, false),
-        seed(PRACTICE_DOMAIN, DomainKind::Local, false),
-    ];
-    let store = Store::start(&settings, &seeds, Job::Migrate)
-        .await
-        .expect("the store starts");
-    let feeder = Feeder::new(
-        store.clone(),
-        &Matching::default().resolve().expect("the defaults resolve"),
-    );
-    Started {
-        _postgres: postgres,
-        store,
-        feeder,
-    }
-}
-
-/// The Source's context.
-fn context() -> Context {
-    Context {
-        actor: SOURCE.to_owned(),
-        channel: Channel::Fhir,
-        request_id: Some(String::from("e2e")),
-    }
-}
-
-/// The conditional update query naming `value` in `system`.
-fn condition(system: &str, value: &str) -> String {
-    let token: String =
-        url::form_urlencoded::byte_serialize(format!("{system}|{value}").as_bytes()).collect();
-    format!("identifier={}", token.replace('+', "%20"))
-}
-
 /// One patient as a Source sends it.
 #[derive(Debug, Clone)]
 struct Patient {
@@ -421,12 +323,7 @@ impl Patient {
     /// `turn` states it.
     fn at(index: usize, turn: usize) -> Self {
         let at = index + turn * 7;
-        let bsn = index.is_multiple_of(10).then(|| {
-            ferropix_testkit::synthetic::bsn(index.div_euclid(20))
-                .expect("a synthetic BSN")
-                .digits()
-                .clone()
-        });
+        let bsn = index.is_multiple_of(10).then(|| bsn(index.div_euclid(20)));
         Self {
             system: [HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN][index % 3],
             value: format!("L-{index:04}"),
@@ -441,13 +338,6 @@ impl Patient {
 
     /// The `Patient` body, with `link` when it is a resolved duplicate.
     fn body(&self, link: Option<&str>) -> String {
-        let mut identifiers = vec![format!(
-            r#"{{"system":"{}","value":"{}"}}"#,
-            self.system, self.value
-        )];
-        if let Some(bsn) = &self.bsn {
-            identifiers.push(format!(r#"{{"system":"{BSN}","value":"{bsn}"}}"#));
-        }
         let text = demographics(
             &self.family,
             &self.given,
@@ -459,106 +349,24 @@ impl Patient {
             .expect("the demographics open with the type");
         let link = link.map_or_else(String::new, |link| format!(r#""link":[{link}],"#));
         format!(
-            r#"{{"resourceType":"Patient","identifier":[{}],{link}{rest}"#,
-            identifiers.join(",")
+            r#"{{"resourceType":"Patient",{},{link}{rest}"#,
+            identifiers(self.system, &self.value, self.bsn.as_deref())
         )
     }
+}
 
-    /// The Add or Revise Patient message.
-    fn revision(&self) -> Revision {
-        match Feed::from_update(
-            &condition(self.system, &self.value),
-            Format::Json,
-            self.body(None).as_bytes(),
-        ) {
-            Ok(Feed::Revise(revision)) => revision,
-            other => panic!("an add or revise message: {other:?}"),
-        }
+impl Fed for Patient {
+    fn system(&self) -> &str {
+        self.system
     }
 
-    /// The Resolve Duplicate Patient message subsuming this into `survivor`.
-    fn subsumed_by(&self, survivor: &str) -> Merge {
-        let link = format!(
-            r#"{{"other":{{"identifier":{{"system":"{}","value":"{survivor}"}}}},"type":"replaced-by"}}"#,
-            self.system
-        );
-        match Feed::from_update(
-            &condition(self.system, &self.value),
-            Format::Json,
-            self.body(Some(&link)).as_bytes(),
-        ) {
-            Ok(Feed::ResolveDuplicate(merge)) => merge,
-            other => panic!("a resolve duplicate message: {other:?}"),
-        }
+    fn value(&self) -> &str {
+        &self.value
     }
 
-    /// The Remove Patient message.
-    fn removal(&self) -> Removal {
-        Removal::from_delete(&condition(self.system, &self.value)).expect("a remove message")
+    fn body(&self, link: Option<&str>) -> String {
+        self.body(link)
     }
-}
-
-/// Feeds `patient` and returns the person it is linked to.
-async fn feed(started: &Started, patient: &Patient) -> PersonId {
-    started
-        .feeder
-        .revise(&patient.revision(), &context())
-        .await
-        .expect("the feed applies")
-        .person
-        .expect("a fed record has a person")
-}
-
-/// Merges `merged` into `survivor` as a steward and returns the merge.
-async fn merge(started: &Started, survivor: PersonId, merged: PersonId) -> Uuid {
-    let mut connection = started.store.pool().acquire().await.expect("a connection");
-    let survivor_version = merging::version(&mut connection, survivor)
-        .await
-        .expect("the version reads")
-        .expect("the survivor exists");
-    let merged_version = merging::version(&mut connection, merged)
-        .await
-        .expect("the version reads")
-        .expect("the merged person exists");
-    drop(connection);
-    let request = MergeRequest {
-        survivor,
-        survivor_version,
-        merged,
-        merged_version,
-        reason: String::from("one patient"),
-    };
-    let (transaction, change) = merging::merge(&started.store, &request, &context())
-        .await
-        .expect("merged");
-    transaction.commit().await.expect("the merge commits");
-    change.merge
-}
-
-/// Reverts the merge `merge` of `survivor`.
-async fn revert(started: &Started, merge: Uuid, survivor: PersonId) {
-    let mut connection = started.store.pool().acquire().await.expect("a connection");
-    let read = merging::version(&mut connection, survivor)
-        .await
-        .expect("the version reads")
-        .expect("the survivor exists");
-    drop(connection);
-    let (transaction, _change) = merging::revert(&started.store, merge, &read, "two", &context())
-        .await
-        .expect("reverted");
-    transaction.commit().await.expect("the revert commits");
-}
-
-/// Sets the retirement of the domain `system`.
-async fn retire(started: &Started, system: &str, retired: bool) {
-    sqlx::query(
-        "UPDATE pix.identifier_domain SET retired_at = CASE WHEN $2 THEN now() END WHERE system = $1",
-    )
-    .bind(system)
-    .bind(retired)
-    .execute(started.store.pool())
-    .await
-    .expect("the domain is updated");
 }
 
 /// Asserts that every head holds its version's keys and that, for every key
@@ -755,4 +563,39 @@ async fn every_writer_of_a_head_sets_the_keys_of_its_version() {
         "a subsumed record inserted by its message"
     );
     oracle::assert_heads_hold_their_keys(started.store.pool()).await;
+}
+
+#[tokio::test]
+async fn a_record_is_looked_up_by_its_identifier_key_in_an_unanalyzed_store() {
+    if !e2e_enabled() {
+        return;
+    }
+    let started = start().await;
+    for index in (0..90).step_by(3) {
+        feed(&started, &Patient::at(index, 0)).await;
+    }
+    let (domain, hmac): (Uuid, Vec<u8>) =
+        sqlx::query_as("SELECT domain_id, identifier_hmac FROM pix.source_record LIMIT 1")
+            .fetch_one(started.store.pool())
+            .await
+            .expect("a record reads");
+    for statement in [
+        "SELECT id FROM pix.source_record WHERE domain_id = $1 AND identifier_hmac = $2",
+        "SELECT id, head_version, active, removed_at IS NOT NULL FROM pix.source_record
+         WHERE domain_id = $1 AND identifier_hmac = $2 FOR UPDATE",
+    ] {
+        let plan: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "EXPLAIN (COSTS OFF) {statement}"
+        )))
+        .bind(domain)
+        .bind(&hmac)
+        .fetch_all(started.store.pool())
+        .await
+        .expect("the plan reads");
+        let plan = plan.join("\n");
+        assert!(
+            plan.contains("source_record_identifier_key") && !plan.contains("Filter"),
+            "the lookup leaves the identifier's key:\n{plan}"
+        );
+    }
 }

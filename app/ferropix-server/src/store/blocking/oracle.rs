@@ -15,41 +15,52 @@ use crate::matching::blocking::text_key;
 use crate::matching::subject::Subject;
 use crate::store::demographics;
 
-/// The feed's phonetic read before the keys moved to the head, verbatim.
-pub(super) const OLD_FEED_BY_PHONETIC: &str =
-    "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-     FROM pix.source_record_version v
-     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     WHERE v.block_phonetic = $1 AND r.id <> $2 AND l.person_id <> $3
-       AND r.active AND r.removed_at IS NULL";
+/// The feed's read by the version column `$column` before the keys moved
+/// to the head, verbatim.
+macro_rules! old_feed_read {
+    ($column:literal) => {
+        concat!(
+            "SELECT r.id, r.head_version, l.person_id, v.demographics::text
+             FROM pix.source_record_version v
+             JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
+             JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+             WHERE v.",
+            $column,
+            " = $1 AND r.id <> $2 AND l.person_id <> $3
+               AND r.active AND r.removed_at IS NULL"
+        )
+    };
+}
 
-/// The feed's postal read before the keys moved to the head, verbatim.
-pub(super) const OLD_FEED_BY_POSTAL: &str =
-    "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-     FROM pix.source_record_version v
-     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     WHERE v.block_postal = $1 AND r.id <> $2 AND l.person_id <> $3
-       AND r.active AND r.removed_at IS NULL";
+/// ITI-119's read by the version column `$column` before the keys moved to
+/// the head, verbatim.
+macro_rules! old_match_read {
+    ($column:literal) => {
+        concat!(
+            "SELECT r.id, l.person_id, v.demographics::text
+             FROM pix.source_record_version v
+             JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
+             JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+             JOIN pix.identifier_domain d ON d.id = r.domain_id
+             WHERE v.",
+            $column,
+            " = $1
+               AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL"
+        )
+    };
+}
 
-/// ITI-119's phonetic read before the keys moved to the head, verbatim.
-pub(super) const OLD_MATCH_BY_PHONETIC: &str = "SELECT r.id, l.person_id, v.demographics::text
-     FROM pix.source_record_version v
-     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     JOIN pix.identifier_domain d ON d.id = r.domain_id
-     WHERE v.block_phonetic = $1
-       AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL";
+/// The feed's old phonetic read.
+pub(super) const OLD_FEED_BY_PHONETIC: &str = old_feed_read!("block_phonetic");
 
-/// ITI-119's postal read before the keys moved to the head, verbatim.
-pub(super) const OLD_MATCH_BY_POSTAL: &str = "SELECT r.id, l.person_id, v.demographics::text
-     FROM pix.source_record_version v
-     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-     JOIN pix.identifier_domain d ON d.id = r.domain_id
-     WHERE v.block_postal = $1
-       AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL";
+/// The feed's old postal read.
+pub(super) const OLD_FEED_BY_POSTAL: &str = old_feed_read!("block_postal");
+
+/// ITI-119's old phonetic read.
+pub(super) const OLD_MATCH_BY_PHONETIC: &str = old_match_read!("block_phonetic");
+
+/// ITI-119's old postal read.
+pub(super) const OLD_MATCH_BY_POSTAL: &str = old_match_read!("block_postal");
 
 /// A row of the feed's read: record, head version, person, demographics.
 pub(super) type FeedRow = (Uuid, i32, Uuid, String);

@@ -7,34 +7,21 @@
 //! keys as from the oracle, and after each change that moves what a person
 //! serves, a search right after the commit sees it.
 
-use base64::Engine as _;
-use ferrohealth_secret::secret_url::SecretUrl;
-use ferropix_testkit::containers::{Postgres, e2e_enabled, postgres};
+use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::{
     FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN,
 };
 use ihe_iti::pdqm::server::search::PatientSearch;
-use ihe_iti::pixm::server::feed::{Feed, Merge, Removal, Revision};
-use ihe_iti::server::format::Format;
 use uuid::Uuid;
 
 use super::{Page, Window, oracle, run};
-use crate::config::section::db::{DbSettings, SealingKey};
-use crate::config::section::domain::{DomainKind, DomainSeed};
-use crate::config::section::matching::Matching;
-use crate::feed::merging::{self, MergeRequest};
-use crate::feed::{Context, Feeder};
-use crate::store::record::{Channel, PersonId};
-use crate::store::{Job, Store};
-
-/// The BSN naming system.
-const BSN: &str = "http://fhir.nl/fhir/NamingSystem/bsn";
+use crate::store::record::PersonId;
+use crate::testing::{
+    BSN, Fed, Started, bsn, condition, context, feed, identifiers, merge, retire, revert, start,
+};
 
 /// The master domain's system, which no seeded domain is.
 const MASTER: &str = "urn:oid:2.999.9.9";
-
-/// The client every seeded domain names as its Source.
-const SOURCE: &str = "synthetic-source";
 
 /// The persons the corpus feeds.
 const CORPUS: usize = 1000;
@@ -46,85 +33,6 @@ const MARKED: [&str; 4] = [
     "Van der Voorbeeldt",
     "ÉÉN-Verzinga",
 ];
-
-/// A store over its own PostgreSQL, with a feeder.
-struct Started {
-    _postgres: Postgres,
-    store: Store,
-    feeder: Feeder,
-}
-
-/// Starts PostgreSQL and the store with the BSN and three local domains.
-async fn start() -> Started {
-    let postgres = postgres().await.expect("PostgreSQL starts");
-    let admin = sqlx::PgPool::connect(postgres.url())
-        .await
-        .expect("the superuser connects");
-    for statement in [
-        "CREATE ROLE pix_app LOGIN PASSWORD 'pix_app'",
-        "GRANT CREATE ON DATABASE ferropix TO pix_app",
-    ] {
-        sqlx::query(statement)
-            .execute(&admin)
-            .await
-            .expect("the role is made");
-    }
-    admin.close().await;
-    let url = postgres
-        .url()
-        .replacen("pix_super:pix_super@", "pix_app:pix_app@", 1);
-    let mut bytes = [0_u8; 32];
-    aws_lc_rs::rand::fill(&mut bytes).expect("random bytes");
-    let key = SealingKey::from_base64(&base64::engine::general_purpose::STANDARD.encode(bytes))
-        .expect("a generated key reads");
-    let settings = DbSettings {
-        url: SecretUrl::new(&url),
-        pool_size: 4,
-        migrate: true,
-        data_key: key,
-    };
-    let seed = |system: &str, kind: DomainKind, sensitive: bool| DomainSeed {
-        system: system.to_owned(),
-        name: system.to_owned(),
-        kind,
-        source_client_id: SOURCE.to_owned(),
-        sensitive,
-    };
-    let seeds = vec![
-        seed(BSN, DomainKind::Authoritative, true),
-        seed(HOSPITAL_DOMAIN, DomainKind::Local, false),
-        seed(LABORATORY_DOMAIN, DomainKind::Local, false),
-        seed(PRACTICE_DOMAIN, DomainKind::Local, false),
-    ];
-    let store = Store::start(&settings, &seeds, Job::Migrate)
-        .await
-        .expect("the store starts");
-    let feeder = Feeder::new(
-        store.clone(),
-        &Matching::default().resolve().expect("the defaults resolve"),
-    );
-    Started {
-        _postgres: postgres,
-        store,
-        feeder,
-    }
-}
-
-/// The Source's context.
-fn context() -> Context {
-    Context {
-        actor: SOURCE.to_owned(),
-        channel: Channel::Fhir,
-        request_id: Some(String::from("e2e")),
-    }
-}
-
-/// The conditional update query naming `value` in `system`.
-fn condition(system: &str, value: &str) -> String {
-    let token: String =
-        url::form_urlencoded::byte_serialize(format!("{system}|{value}").as_bytes()).collect();
-    format!("identifier={}", token.replace('+', "%20"))
-}
 
 /// One patient of the corpus.
 #[derive(Debug, Clone)]
@@ -207,16 +115,9 @@ impl Patient {
 
     /// The `Patient` body.
     fn body(&self, link: Option<&str>) -> String {
-        let mut identifiers = vec![format!(
-            r#"{{"system":"{}","value":"{}"}}"#,
-            self.system, self.value
-        )];
-        if let Some(bsn) = &self.bsn {
-            identifiers.push(format!(r#"{{"system":"{BSN}","value":"{bsn}"}}"#));
-        }
         let given: Vec<String> = self.given.iter().map(|g| format!(r#""{g}""#)).collect();
         let mut members = vec![
-            format!(r#""identifier":[{}]"#, identifiers.join(",")),
+            identifiers(self.system, &self.value, self.bsn.as_deref()),
             String::from(r#""active":true"#),
             format!(
                 r#""name":[{{"family":"{}","given":[{}]}}]"#,
@@ -247,84 +148,20 @@ impl Patient {
         }
         format!(r#"{{"resourceType":"Patient",{}}}"#, members.join(","))
     }
-
-    /// The Add or Revise Patient message.
-    fn revision(&self) -> Revision {
-        match Feed::from_update(
-            &condition(self.system, &self.value),
-            Format::Json,
-            self.body(None).as_bytes(),
-        ) {
-            Ok(Feed::Revise(revision)) => revision,
-            other => panic!("an add or revise message: {other:?}"),
-        }
-    }
-
-    /// The Resolve Duplicate Patient message subsuming this into `survivor`.
-    fn subsumed_by(&self, survivor: &str) -> Merge {
-        let link = format!(
-            r#"{{"other":{{"identifier":{{"system":"{}","value":"{survivor}"}}}},"type":"replaced-by"}}"#,
-            self.system
-        );
-        match Feed::from_update(
-            &condition(self.system, &self.value),
-            Format::Json,
-            self.body(Some(&link)).as_bytes(),
-        ) {
-            Ok(Feed::ResolveDuplicate(merge)) => merge,
-            other => panic!("a resolve duplicate message: {other:?}"),
-        }
-    }
-
-    /// The Remove Patient message.
-    fn removal(&self) -> Removal {
-        Removal::from_delete(&condition(self.system, &self.value)).expect("a remove message")
-    }
 }
 
-/// Feeds `patient` and returns the person it is linked to.
-async fn feed(started: &Started, patient: &Patient) -> PersonId {
-    started
-        .feeder
-        .revise(&patient.revision(), &context())
-        .await
-        .expect("the feed applies")
-        .person
-        .expect("a fed record has a person")
-}
+impl Fed for Patient {
+    fn system(&self) -> &str {
+        self.system
+    }
 
-/// Returns the synthetic BSN at `index`.
-fn bsn(index: usize) -> String {
-    ferropix_testkit::synthetic::bsn(index)
-        .expect("a synthetic BSN")
-        .digits()
-        .clone()
-}
+    fn value(&self) -> &str {
+        &self.value
+    }
 
-/// Merges `merged` into `survivor` as a steward and returns the merge.
-async fn merge(started: &Started, survivor: PersonId, merged: PersonId) -> Uuid {
-    let mut connection = started.store.pool().acquire().await.expect("a connection");
-    let survivor_version = merging::version(&mut connection, survivor)
-        .await
-        .expect("the version reads")
-        .expect("the survivor exists");
-    let merged_version = merging::version(&mut connection, merged)
-        .await
-        .expect("the version reads")
-        .expect("the merged person exists");
-    drop(connection);
-    let request = MergeRequest {
-        survivor,
-        survivor_version,
-        merged,
-        merged_version,
-        reason: String::from("one patient"),
-    };
-    let (transaction, change) = merging::merge(&started.store, &request, &context())
-        .await
-        .expect("merged");
-    transaction.commit().await.expect("the merge commits");
-    change.merge
+    fn body(&self, link: Option<&str>) -> String {
+        self.body(link)
+    }
 }
 
 /// Whether every one of `persons` is active.
@@ -338,32 +175,6 @@ async fn active(started: &Started, persons: &[PersonId]) -> bool {
     .await
     .expect("the persons read");
     inactive == 0
-}
-
-/// Reverts the merge `merge` of `survivor`.
-async fn revert(started: &Started, merge: Uuid, survivor: PersonId) {
-    let mut connection = started.store.pool().acquire().await.expect("a connection");
-    let read = merging::version(&mut connection, survivor)
-        .await
-        .expect("the version reads")
-        .expect("the survivor exists");
-    drop(connection);
-    let (transaction, _change) = merging::revert(&started.store, merge, &read, "two", &context())
-        .await
-        .expect("reverted");
-    transaction.commit().await.expect("the revert commits");
-}
-
-/// Sets the retirement of the domain `system`.
-async fn retire(started: &Started, system: &str, retired: bool) {
-    sqlx::query(
-        "UPDATE pix.identifier_domain SET retired_at = CASE WHEN $2 THEN now() END WHERE system = $1",
-    )
-    .bind(system)
-    .bind(retired)
-    .execute(started.store.pool())
-    .await
-    .expect("the domain is updated");
 }
 
 /// Runs `query` through the keys and through the oracle, page by page, and

@@ -58,30 +58,6 @@ pub struct Resolved {
     pub minted: bool,
 }
 
-/// Reads every pseudonymisation domain, by namespace.
-///
-/// # Errors
-/// Returns [`StoreError::Query`] when the statement fails.
-pub async fn domains(connection: &mut PgConnection) -> Result<Vec<PseudonymDomain>, StoreError> {
-    let rows: Vec<(Uuid, String, Option<String>, bool)> = sqlx::query_as(
-        "SELECT id, namespace, consumer_client_id, retired_at IS NOT NULL
-         FROM pix.pseudonym_domain ORDER BY namespace",
-    )
-    .fetch_all(&mut *connection)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(
-            |(id, namespace, consumer_client_id, retired)| PseudonymDomain {
-                id,
-                namespace,
-                consumer_client_id,
-                retired,
-            },
-        )
-        .collect())
-}
-
 /// Returns the pseudonym of the active person `person` in the domain
 /// `domain`, minting one when it has none and `mint` holds; `None` when it
 /// has none and `mint` does not hold.
@@ -123,27 +99,6 @@ pub async fn resolve(
         value,
         minted: false,
     }))
-}
-
-/// Returns every pseudonym the active person `person` holds in an unretired
-/// domain, as `(namespace, value)`, by namespace.
-///
-/// # Errors
-/// Returns [`StoreError::Query`] when the statement fails.
-pub async fn held(
-    connection: &mut PgConnection,
-    person: PersonId,
-) -> Result<Vec<(String, Uuid)>, StoreError> {
-    let rows: Vec<(String, Uuid)> = sqlx::query_as(
-        "SELECT d.namespace, p.value FROM pix.pseudonym p
-         JOIN pix.pseudonym_domain d ON d.id = p.domain_id
-         WHERE p.person_id = $1 AND d.retired_at IS NULL
-         ORDER BY d.namespace",
-    )
-    .bind(person.uuid())
-    .fetch_all(&mut *connection)
-    .await?;
-    Ok(rows)
 }
 
 /// Returns the active person the pseudonym `value` of the domain

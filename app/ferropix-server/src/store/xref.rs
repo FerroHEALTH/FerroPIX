@@ -98,23 +98,23 @@ macro_rules! identified_cte {
         "identified (domain_id, system, sealed, plain, part, rid, hmac) AS (
              SELECT r.domain_id, d.system, r.identifier_sealed, r.identifier_value,
                     0, r.id, NULL::bytea
-             FROM pick
-             JOIN pix.link l ON l.person_id = pick.id AND upper_inf(l.valid)
+             FROM pix.link l
              JOIN pix.source_record r ON r.id = l.record_id
              JOIN pix.identifier_domain d ON d.id = r.domain_id
-             WHERE r.active AND r.removed_at IS NULL AND d.retired_at IS NULL
+             WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
+               AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL
              UNION ALL
              SELECT * FROM (
                  SELECT DISTINCT ON (d.system, c.identifier_hmac)
                         c.domain_id, d.system, c.identifier_sealed, c.identifier_value,
                         1, NULL::uuid, c.identifier_hmac
-                 FROM pick
-                 JOIN pix.link l ON l.person_id = pick.id AND upper_inf(l.valid)
+                 FROM pix.link l
                  JOIN pix.source_record r ON r.id = l.record_id
                  JOIN pix.carried_identifier c
                    ON c.record_id = r.id AND c.version = r.head_version
                  JOIN pix.identifier_domain d ON d.id = c.domain_id
-                 WHERE r.active AND r.removed_at IS NULL
+                 WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
+                   AND r.active AND r.removed_at IS NULL
                    AND d.kind = 'authoritative' AND d.retired_at IS NULL
                    AND NOT EXISTS (
                        SELECT 1 FROM pix.source_record o

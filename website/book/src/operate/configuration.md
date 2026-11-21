@@ -198,7 +198,7 @@ Without a `[telemetry.otlp]` table nothing is exported.
 |---|---|---|
 | `db.url` | none | The PostgreSQL URL, `postgres://` or `postgresql://`. Development only; under production use `db.url_file`. |
 | `db.url_file` | none | The file holding the PostgreSQL URL. One of `db.url` and `db.url_file` is required. |
-| `db.pool_size` | `10` | The most connections the pool holds. |
+| `db.pool_size` | `10` | The most connections the pool holds. A connection idle for a second or more is pinged before a request gets it; a busy one is handed out without a ping. |
 | `db.migrate` | `true` | Whether `serve` applies the pending migrations at start. With `false`, run `ferropix db migrate` before `serve`. |
 | `db.data_key_file` | none, required | The file holding the sealing key: the base64 of 32 random bytes, which `openssl rand -base64 32` makes. Any other content is refused. |
 

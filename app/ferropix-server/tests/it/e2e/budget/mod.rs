@@ -177,9 +177,11 @@ impl Meter {
         .await
         .expect("pg_stat_statements reads");
         let wal: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "/* {OWN} */ SELECT coalesce(sum(combined_size), 0)::bigint
-             FROM pg_get_wal_stats($1::pg_lsn, pg_current_wal_flush_lsn())
-             WHERE \"resource_manager/record_type\" NOT IN ('XLOG', 'Standby')"
+            "/* {OWN} */ SELECT CASE WHEN pg_current_wal_flush_lsn() > $1::pg_lsn THEN (
+                 SELECT coalesce(sum(combined_size), 0)::bigint
+                 FROM pg_get_wal_stats($1::pg_lsn, pg_current_wal_flush_lsn())
+                 WHERE \"resource_manager/record_type\" NOT IN ('XLOG', 'Standby')
+             ) ELSE 0 END"
         )))
         .bind(&self.start)
         .fetch_one(&self.admin)
@@ -310,7 +312,7 @@ async fn populate(harness: &Harness) {
             "identifier": [{"system": HOSPITAL_DOMAIN, "value": value}],
             "name": [{
                 "family": FAMILY_NAMES[index % FAMILY_NAMES.len()],
-                "given": [GIVEN_NAMES[(index / FAMILY_NAMES.len()) % GIVEN_NAMES.len()]],
+                "given": [GIVEN_NAMES[(index * 7) % GIVEN_NAMES.len()]],
             }],
             "gender": if index % 2 == 0 { "female" } else { "male" },
             "birthDate": format!("19{:02}-0{}-1{}", 30 + index % 60, 1 + index % 9, index % 10),

@@ -90,9 +90,10 @@ pub(super) fn person_key(person: PersonId) -> i64 {
     i64::from_be_bytes(tail)
 }
 
-/// Takes the transaction's advisory lock on each of `keys`, in ascending
-/// order and in one statement, so two transactions that need the same keys
-/// never deadlock.
+/// Takes the transaction's advisory lock on each of `keys` in one statement.
+///
+/// The locks are taken in ascending order, so two transactions that need the
+/// same keys never deadlock.
 pub(super) async fn advisory(
     connection: &mut PgConnection,
     mut keys: Vec<i64>,
@@ -104,12 +105,10 @@ pub(super) async fn advisory(
     }
     // NOTE: no specification governs this: our own design; the keys arrive sorted, and a
     // volatile output column is computed after ORDER BY, so the locks are taken in key order.
-    sqlx::query(
-        "SELECT pg_advisory_xact_lock(key) FROM unnest($1::bigint[]) AS key ORDER BY key",
-    )
-    .bind(&keys)
-    .execute(&mut *connection)
-    .await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(key) FROM unnest($1::bigint[]) AS key ORDER BY key")
+        .bind(&keys)
+        .execute(&mut *connection)
+        .await?;
     Ok(())
 }
 

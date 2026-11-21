@@ -317,7 +317,7 @@ async fn populate(harness: &Harness, patients: std::ops::Range<usize>) {
             "resourceType": "Patient",
             "identifier": [{"system": HOSPITAL_DOMAIN, "value": value}],
             "name": [{
-                "family": FAMILY_NAMES[index % FAMILY_NAMES.len()],
+                "family": family(index),
                 "given": [GIVEN_NAMES[(index * 7) % GIVEN_NAMES.len()]],
             }],
             "gender": if index % 2 == 0 { "female" } else { "male" },
@@ -326,6 +326,17 @@ async fn populate(harness: &Harness, patients: std::ops::Range<usize>) {
         .expect("a document");
         let fed = harness.feed(HOSPITAL_DOMAIN, &value, &patient).await;
         assert_eq!(StatusCode::CREATED, fed.status, "{}", fed.body);
+    }
+}
+
+/// The family name of the synthetic patient `index`: the testkit's names in
+/// turn, and past [`POPULATION`] none the ITI-78 case searches, so a larger
+/// store adds persons the search must pass over and none it finds.
+fn family(index: usize) -> &'static str {
+    if index < POPULATION {
+        FAMILY_NAMES[index % FAMILY_NAMES.len()]
+    } else {
+        FAMILY_NAMES[1 + index % (FAMILY_NAMES.len() - 1)]
     }
 }
 

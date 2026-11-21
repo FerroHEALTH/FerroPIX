@@ -135,9 +135,12 @@ http = "1.5.0"
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
 # 0.23 sends the FHIR Feed through the product's own client
-# (`atna::feed::FeedClient`) and depends on no `ferrohealth-smart` (#680).
-# Verified against crates.io on 2026-11-17 (0.23.0).
-ihe-atna = { version = "=0.23.0", default-features = false }
+# (`atna::feed::FeedClient`) and depends on no `ferrohealth-smart` (#680);
+# 0.24 stores a spool batch as one segment flushed once and sends the
+# records waiting as one batch Bundle, its client answering a `FeedAnswer`
+# (FerroHEALTH/FerroAUDIT#254). Verified against crates.io on 2026-11-21
+# (0.24.0).
+ihe-atna = { version = "=0.24.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.62.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

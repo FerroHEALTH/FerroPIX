@@ -439,18 +439,9 @@ pub(crate) fn same_in_xml(json: &Answered, xml: &Answered, label: &str) {
 
 /// Returns the records the spool at `directory` holds, by file name.
 pub(crate) fn records(directory: &Path) -> Vec<Value> {
-    let Ok(entries) = std::fs::read_dir(directory) else {
-        return Vec::new();
-    };
-    let mut paths: Vec<PathBuf> = entries
-        .map(|entry| entry.expect("an entry").path())
-        .filter(|path| path.is_file())
-        .collect();
-    paths.sort();
-    paths
+    ferropix_testkit::spool::records(directory)
         .iter()
-        .filter_map(|path| std::fs::read(path).ok())
-        .filter_map(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .filter_map(|bytes| serde_json::from_slice::<Value>(bytes).ok())
         .filter(|record| record["resourceType"] == "AuditEvent")
         .collect()
 }

@@ -592,11 +592,9 @@ async fn the_feed_writes_its_balp_record_after_the_commit() {
     )
     .await
     .unwrap();
-    let records: Vec<serde_json::Value> = std::fs::read_dir(&directory)
-        .unwrap()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().extension().is_some_and(|e| e == "msg"))
-        .map(|entry| serde_json::from_slice(&std::fs::read(entry.path()).unwrap()).unwrap())
+    let records: Vec<serde_json::Value> = ferropix_testkit::spool::records(&directory)
+        .iter()
+        .map(|record| serde_json::from_slice(record).unwrap())
         .collect();
     assert_eq!(1, records.len(), "one record in the spool");
     assert_eq!(

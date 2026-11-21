@@ -13,6 +13,19 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.39] - 2026-11-21
+
+### Changed
+
+- The console moves to FerroUI 0.6.11, and `ihe-iti` and `nl-generic-functions` 0.17.1 require `fhir-types` and `fhir-search` 0.1.131; the tests read `jsonschema` 0.62.0. No caller changes anything (#704).
+- FerroPIX runs on PostgreSQL 19 and every store job (`serve`, `db
+  migrate`) refuses an older server, naming the `server_version_num` it
+  found and the 190000 it needs. The quickstart, the testkit and the
+  chart's cluster check run `postgres:19.0`. PostgreSQL 18 is no longer
+  supported and there is no upgrade path: a quickstart volume holding an 18
+  cluster is removed and created again (#707).
+- FerroPIX moves to `ferrohealth-smart` 0.33, `ferrohealth-session` 0.28 and `ferrohealth-server` 0.12, with `ferrobridge-term` 0.17 and `ferrobridge-hl7v2` 0.25. `ihe-iti` carries smart types in its public API, so it moves to 0.18.0 requiring `ferrohealth-smart` 0.33, and `nl-generic-functions` to 0.18.0 on it; a dependant moves smart to 0.33 with them. The server takes `[server] request_decompression`, off by default, which decodes a request body sent in gzip or Brotli under `body_limit` (#709).
+
 ## [0.0.38] - 2026-11-21
 
 ### Changed

@@ -372,6 +372,7 @@ async fn agree(started: &Started, query: &str, omit_merged: bool) -> Vec<Uuid> {
     let search = PatientSearch::from_query(query).expect("the search reads");
     let mut after = None;
     let mut found = Vec::new();
+    let mut page = 0_u32;
     loop {
         let window = Window {
             size: 7,
@@ -398,15 +399,28 @@ async fn agree(started: &Started, query: &str, omit_merged: bool) -> Vec<Uuid> {
         .await
         .expect("the oracle runs");
         assert_eq!(
-            read, keyed,
-            "{query} (omit merged {omit_merged}) after {after:?}"
+            read,
+            keyed,
+            "{} (omit merged {omit_merged}), page {page}",
+            parameters(query)
         );
+        page += 1;
         found.extend(keyed.persons.iter().copied());
         if !keyed.more {
             return found;
         }
         after = keyed.persons.last().copied();
     }
+}
+
+/// The parameter names of `query`, with no value, as a failure names a
+/// search.
+fn parameters(query: &str) -> String {
+    query
+        .split('&')
+        .map(|pair| pair.split('=').next().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 /// The searches of the matrix.

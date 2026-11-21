@@ -138,6 +138,30 @@ disk syncs in time fails at once, whatever its CPU model. The job summary
 names each attempt's CPU model, its verdict, the runner's samples and why a
 retry ran.
 
+## The budget of each transaction
+
+The gate compares the head with its base under load. The budget holds each
+hot transaction to fixed ceilings, so a change that adds work fails in CI's
+`e2e` job without a load run
+([#713](https://github.com/FerroHEALTH/FerroPIX/issues/713)). The cases
+under `app/ferropix-server/tests/it/e2e/budget/` send 20 requests of each
+of ITI-104 (a revision of a known patient), ITI-83 by `GET` and by `POST`,
+ITI-78, ITI-119 and ITI-8 over MLLP, over a store of about 200 persons.
+For each request they count:
+
+- the statements the server sends, `BEGIN` and `COMMIT` included, each a
+  round trip, and the statements PostgreSQL runs nested in them, from
+  `pg_stat_statements`;
+- the shared buffers those statements touch, which grows with the store
+  when a statement reads more than it needs;
+- the bytes of write-ahead log, from `pg_walinspect`, with no full-page
+  images;
+- the bytes of audit record the spool takes, and the bytes of the answer;
+- for ITI-8, the translations it asks the terminology server for.
+
+Each ceiling is the measured value. A change that lowers a figure lowers
+its ceiling in the same pull request, and no ceiling is raised.
+
 ## Changing the plan or the tolerances
 
 The plan is the head's: a change to `perf/plan.toml` is measured on both

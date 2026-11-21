@@ -51,6 +51,14 @@ use crate::store::seal::{KeyId, SealError, Sealer};
 /// server's sessions in `pg_stat_activity`.
 const APPLICATION_NAME: &str = "ferropix";
 
+/// How long a pooled connection sits unused before its next checkout pings it.
+///
+/// A loaded server sends no ping, and a quiet one pays one round trip for a
+/// connection idle that long, so a session the database cut while nobody
+/// used it is replaced before a request gets it. No specification governs
+/// connection handling: our own design.
+pub const IDLE_PROBE: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// A pool of connections to the store, with the keys of its sealing.
 #[derive(Debug, Clone)]
 pub struct Store {
@@ -134,12 +142,12 @@ impl Store {
         Self::over(pool.connect_lazy_with(options), db)
     }
 
-    /// Returns the connection options and the pool options `db` names.
+    /// Returns the connection options `db` names and the pool it sizes.
     fn options(db: &DbSettings) -> Result<(PgConnectOptions, PgPoolOptions), StoreError> {
         let options = PgConnectOptions::from_str(db.url.expose())
             .map_err(|source| StoreError::Url(DbFailure(source)))?
             .application_name(APPLICATION_NAME);
-        Ok((options, PgPoolOptions::new().max_connections(db.pool_size)))
+        Ok((options, pool_options(db)))
     }
 
     /// Returns the store over `pool`, sealing under the keys `db`'s data key
@@ -396,4 +404,21 @@ impl Error for DbFailure {
         }
         Some(&self.0)
     }
+}
+
+/// The pool `db` sizes, pinging only a connection idle for [`IDLE_PROBE`].
+fn pool_options(db: &DbSettings) -> PgPoolOptions {
+    PgPoolOptions::new()
+        .max_connections(db.pool_size)
+        // NOTE: sqlx 0.9 `PoolOptions::test_before_acquire` pings every checkout, one round
+        // trip per request; only a connection idle past IDLE_PROBE is pinged here.
+        .test_before_acquire(false)
+        .before_acquire(|connection, meta| {
+            Box::pin(async move {
+                if meta.idle_for < IDLE_PROBE {
+                    return Ok(true);
+                }
+                Ok(sqlx::Connection::ping(connection).await.is_ok())
+            })
+        })
 }

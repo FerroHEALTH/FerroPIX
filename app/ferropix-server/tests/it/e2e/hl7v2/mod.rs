@@ -55,9 +55,9 @@ const FRAME_TIMEOUT: ferrohealth_config::units::Duration =
     ferrohealth_config::units::Duration::from_millis(400);
 
 /// A running face beside the FHIR router, on one store.
-struct V2 {
+pub(crate) struct V2 {
     /// The FHIR router and its store.
-    pix: Harness,
+    pub(crate) pix: Harness,
     /// The listener's address.
     address: SocketAddr,
     /// The readiness indicator.
@@ -67,15 +67,15 @@ struct V2 {
     /// The listener's task.
     served: Option<JoinHandle<std::io::Result<()>>>,
     /// The face's audit spool's parent directory.
-    spool: tempfile::TempDir,
+    pub(crate) spool: tempfile::TempDir,
     /// The terminology stub the face translates on.
-    terminology: (wiremock::MockServer, Translations),
+    pub(crate) terminology: (wiremock::MockServer, Translations),
 }
 
 impl V2 {
     /// Starts PostgreSQL, the router and the face, its pointers kept in
     /// `cursors`.
-    async fn start(cursors: Cursors) -> Self {
+    pub(crate) async fn start(cursors: Cursors) -> Self {
         let pix = Harness::start(synthetic_seeds()).await;
         let section = Hl7v2 {
             enabled: true,
@@ -147,7 +147,7 @@ impl V2 {
     }
 
     /// Sends `message` and returns the answer.
-    async fn send(&self, message: &str) -> String {
+    pub(crate) async fn send(&self, message: &str) -> String {
         mllp::send(self.address, message)
             .await
             .expect("the face answers")
@@ -195,7 +195,7 @@ fn msh(application: &str, facility: &str, kind: &str, control: &str) -> String {
 
 /// An ADT message of `event` from the hospital, its PID-3 `pid3`, the
 /// synthetic name at `index`, born on `born`.
-fn adt(event: &str, control: &str, pid3: &str, index: usize, born: &str) -> String {
+pub(crate) fn adt(event: &str, control: &str, pid3: &str, index: usize, born: &str) -> String {
     let structure = if event == "A40" { "ADT_A39" } else { "ADT_A01" };
     format!(
         "{}\rEVN||20261025100000\rPID|1||{pid3}||{}^{}^^^^^L||{born}|F\rPV1|1|O\r",
@@ -226,7 +226,7 @@ fn segments(answer: &str) -> Vec<&str> {
 }
 
 /// MSA-1 of `answer`.
-fn code(answer: &str) -> String {
+pub(crate) fn code(answer: &str) -> String {
     segments(answer)
         .iter()
         .find(|segment| segment.starts_with("MSA|"))

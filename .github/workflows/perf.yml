@@ -48,7 +48,7 @@ on:
 permissions: {}
 
 env:
-  FERROHEALTH_PERF_VERSION: 0.5.2
+  FERROHEALTH_PERF_VERSION: 0.15.0
   FERROPIX__USAGE_REPORT__ENABLED: "false"
 
 jobs:

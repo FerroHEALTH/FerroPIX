@@ -125,6 +125,7 @@ way.
 | `server.max_concurrent_requests` | `256` | How many requests the server serves at once, always bounded; past it a request waits for a slot in the queue below and is answered `503` with `Retry-After` when the queue is full or the wait expires. The health routes are never refused or queued. |
 | `server.max_waiting_requests` | `256` | How many requests past `max_concurrent_requests` may wait for a slot at once, first come first served; `0` keeps no queue. |
 | `server.admission_wait` | 100 milliseconds | How long a request past `max_concurrent_requests` waits for a slot before it is refused, written with the `ms` or `s` unit; `"0s"` keeps no queue. |
+| `server.request_decompression` | `false` | Whether a request body sent with `Content-Encoding: gzip` or `br` is decoded before it is read. On, `server.body_limit` holds the decoded bytes too, any other coding is refused `415`, and a body that does not decode is refused `400`. |
 | `server.retry_after` | `"1s"` | How long a request refused for load is told to wait, a whole number of seconds. |
 | `server.trusted_proxies` | `[]` | The reverse proxies whose forwarded client address is believed, each an address or a CIDR block such as `10.0.0.0/8`; empty, every request is named by its peer. |
 | `server.forwarded_header` | `"forwarded"` | The header a trusted proxy names the client in: `"forwarded"` (RFC 7239) or `"x-forwarded-for"`. |

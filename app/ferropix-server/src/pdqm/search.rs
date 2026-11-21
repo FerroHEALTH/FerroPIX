@@ -39,6 +39,8 @@ use crate::store::record::{self, Domain};
 use crate::store::seal::Sealer;
 
 #[cfg(test)]
+mod e2e;
+#[cfg(test)]
 mod oracle;
 
 /// One page of a search's result set.

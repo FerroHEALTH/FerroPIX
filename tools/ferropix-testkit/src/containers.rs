@@ -246,23 +246,7 @@ fn postgres_request() -> ContainerRequest<GenericImage> {
         .with_env_var("POSTGRES_USER", POSTGRES_ROLE)
         .with_env_var("POSTGRES_PASSWORD", POSTGRES_ROLE)
         .with_env_var("POSTGRES_DB", POSTGRES_DB)
-        .with_cmd(POSTGRES_SETTINGS)
 }
-
-/// The server settings the statement budget reads by (#713): the
-/// statements each request runs, nested ones included, counted by
-/// `pg_stat_statements`, and the write-ahead log of each without full-page
-/// images, so a checkpoint during a measurement adds nothing to a request's
-/// bytes. Data checksums stay on, as `initdb` sets them. No specification
-/// governs this: our own design.
-const POSTGRES_SETTINGS: [&str; 6] = [
-    "-c",
-    "shared_preload_libraries=pg_stat_statements",
-    "-c",
-    "pg_stat_statements.track=all",
-    "-c",
-    "full_page_writes=off",
-];
 
 /// Returns the health check that answers when PostgreSQL accepts TCP
 /// connections.

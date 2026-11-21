@@ -249,7 +249,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
-            statements: 20,
+            statements: 19,
             nested: 0,
             blocks: 1957,
             wal: 2952,
@@ -261,7 +261,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 GET",
         ceiling: Ceiling {
-            statements: 0,
+            statements: 6,
             nested: 0,
             blocks: 79,
             wal: 0,

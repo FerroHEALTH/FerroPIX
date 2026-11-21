@@ -242,13 +242,14 @@ struct Case {
 }
 
 /// The ceilings of the FHIR face's hot requests: the statements as
-/// measured, and the shared buffers, the WAL and the bytes 2% above the
-/// values measured on 2026-11-21 (#713).
+/// measured once a feed took its advisory locks in one statement (#716),
+/// and the shared buffers, the WAL and the bytes 2% above the values
+/// measured on 2026-11-21 (#713).
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
-            statements: 22,
+            statements: 20,
             nested: 0,
             blocks: 1957,
             wal: 2952,
@@ -260,7 +261,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 GET",
         ceiling: Ceiling {
-            statements: 7,
+            statements: 6,
             nested: 0,
             blocks: 79,
             wal: 0,
@@ -272,7 +273,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 POST",
         ceiling: Ceiling {
-            statements: 7,
+            statements: 6,
             nested: 0,
             blocks: 79,
             wal: 0,
@@ -284,7 +285,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-78 search",
         ceiling: Ceiling {
-            statements: 9,
+            statements: 8,
             nested: 202,
             blocks: 1433,
             wal: 0,
@@ -296,7 +297,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-119 match",
         ceiling: Ceiling {
-            statements: 10,
+            statements: 9,
             nested: 0,
             blocks: 1674,
             wal: 0,

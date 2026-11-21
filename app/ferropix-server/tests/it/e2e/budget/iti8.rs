@@ -18,7 +18,7 @@ use crate::e2e::hl7v2::{V2, adt, code};
 /// shared buffers, the WAL and the bytes 2% above the values measured on
 /// 2026-11-21 (#713).
 const CEILING: Ceiling = Ceiling {
-    statements: 18,
+    statements: 0,
     nested: 0,
     blocks: 98,
     wal: 1964,

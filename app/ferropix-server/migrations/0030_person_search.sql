@@ -54,36 +54,52 @@ CREATE UNIQUE INDEX person_search_key_idx
 CREATE INDEX person_search_key_value_idx ON pix.person_search_key (field, value);
 CREATE INDEX person_search_key_folded_idx ON pix.person_search_key USING spgist (folded);
 
--- Every value of a demographics object a search matches, with its field.
+-- Every value of a demographics object a search matches, with its field: the
+-- values pix.elements and pix.texts yield, read in place so the planner
+-- inlines this function into the statement that calls it (no SET clause and
+-- no function it cannot inline), and no call is made per person.
 CREATE FUNCTION pix.search_keys(jsonb) RETURNS TABLE (field "char", value text, system text)
     LANGUAGE sql STABLE PARALLEL SAFE
-    SET search_path = pg_catalog
 AS $$
     SELECT k.field, k.value, k.system FROM (
-        SELECT 'f'::"char", n->>'family', NULL::text FROM pix.elements($1->'name') n
+        SELECT 'f'::"char", n->>'family', NULL::text FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'name') = 'array' THEN $1->'name' ELSE '[]' END) n
         UNION ALL
-        SELECT 'g', g, NULL FROM pix.elements($1->'name') n, pix.texts(n->'given') g
+        SELECT 'g', g, NULL FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'name') = 'array' THEN $1->'name' ELSE '[]' END) n,
+            jsonb_array_elements_text(
+                CASE WHEN jsonb_typeof(n->'given') = 'array' THEN n->'given' ELSE '[]' END
+            ) g
         UNION ALL
-        SELECT 'a', part, NULL FROM pix.elements($1->'address') a,
+        SELECT 'a', part, NULL FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'address') = 'array' THEN $1->'address' ELSE '[]' END) a,
             LATERAL (SELECT a->>'text' UNION ALL SELECT a->>'city'
                      UNION ALL SELECT a->>'district' UNION ALL SELECT a->>'state'
                      UNION ALL SELECT a->>'postalCode' UNION ALL SELECT a->>'country'
-                     UNION ALL SELECT pix.texts(a->'line')) AS parts(part)
+                     UNION ALL SELECT jsonb_array_elements_text(
+                         CASE WHEN jsonb_typeof(a->'line') = 'array' THEN a->'line' ELSE '[]' END
+                     )) AS lines(part)
         UNION ALL
-        SELECT 'c', a->>'city', NULL FROM pix.elements($1->'address') a
+        SELECT 'c', a->>'city', NULL FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'address') = 'array' THEN $1->'address' ELSE '[]' END) a
         UNION ALL
-        SELECT 'n', a->>'country', NULL FROM pix.elements($1->'address') a
+        SELECT 'n', a->>'country', NULL FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'address') = 'array' THEN $1->'address' ELSE '[]' END) a
         UNION ALL
-        SELECT 'p', a->>'postalCode', NULL FROM pix.elements($1->'address') a
+        SELECT 'p', a->>'postalCode', NULL FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'address') = 'array' THEN $1->'address' ELSE '[]' END) a
         UNION ALL
-        SELECT 's', a->>'state', NULL FROM pix.elements($1->'address') a
+        SELECT 's', a->>'state', NULL FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'address') = 'array' THEN $1->'address' ELSE '[]' END) a
         UNION ALL
-        SELECT 'x', e->>'valueString', e->>'url' FROM pix.elements($1->'extension') e
+        SELECT 'x', e->>'valueString', e->>'url' FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'extension') = 'array' THEN $1->'extension' ELSE '[]' END) e
         UNION ALL
-        SELECT 't', t->>'value', t->>'system' FROM pix.elements($1->'telecom') t
+        SELECT 't', t->>'value', t->>'system' FROM jsonb_array_elements(CASE WHEN jsonb_typeof($1->'telecom') = 'array' THEN $1->'telecom' ELSE '[]' END) t
     ) AS k (field, value, system)
     WHERE k.value IS NOT NULL
 $$;
+
+-- The part of a demographics object the served row and the search keys are
+-- made of: two objects with equal parts serve and search alike.
+CREATE FUNCTION pix.searched(jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    RETURN jsonb_build_object(
+        'name', $1->'name', 'address', $1->'address', 'telecom', $1->'telecom',
+        'extension', $1->'extension', 'gender', $1->'gender', 'birthDate', $1->'birthDate'
+    );
 
 -- The key a folded value is searched by: the field and the folded value.
 CREATE FUNCTION pix.folded_key("char", text) RETURNS text
@@ -171,20 +187,39 @@ END
 $$;
 
 -- The persons of the open links of the records a statement gave another
--- head version, activity or removal.
+-- head version, activity or removal, unless the record already served its
+-- person, stays active and unremoved, and its new head carries the same
+-- searched part as the old: a revision that changes nothing a search or the
+-- served row reads recomputes nothing, in one statement.
 CREATE FUNCTION pix.serve_records_changed() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path = pg_catalog
 AS $$
+DECLARE
+    persons uuid[];
 BEGIN
-    PERFORM pix.serve(ARRAY(
+    SELECT ARRAY(
         SELECT DISTINCT l.person_id
         FROM after_change n
         JOIN before_change o ON o.id = n.id
         JOIN pix.link l ON l.record_id = n.id AND upper_inf(l.valid)
+        LEFT JOIN pix.person_served s ON s.person_id = l.person_id
+        LEFT JOIN pix.source_record_version ov
+            ON ov.record_id = o.id AND ov.version = o.head_version
+        LEFT JOIN pix.source_record_version nv
+            ON nv.record_id = n.id AND nv.version = n.head_version
         WHERE (o.head_version, o.active, o.removed_at)
               IS DISTINCT FROM (n.head_version, n.active, n.removed_at)
-    ));
+          AND NOT coalesce(
+              s.record_id = n.id
+              AND o.active = n.active AND o.removed_at IS NOT DISTINCT FROM n.removed_at
+              AND pix.searched(ov.demographics) = pix.searched(nv.demographics),
+              false
+          )
+    ) INTO persons;
+    IF cardinality(persons) > 0 THEN
+        PERFORM pix.serve(persons);
+    END IF;
     RETURN NULL;
 END
 $$;

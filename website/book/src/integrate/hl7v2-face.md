@@ -107,8 +107,9 @@ ITI-21 answer, through the structure maps of the HL7 v2-to-FHIR 1.0.0 guide
 name type by 0200, the address type by 0190, the telecommunication use and
 equipment type by 0201 and 0202) is a code of a terminology, so the face
 translates each one by `ConceptMap/$translate` on the FHIR R4 terminology
-server `[terminology]` names, and holds no copy of a table. FerroTERM is
-the family's terminology server.
+server `[terminology]` names, and holds no copy of a table. A message's
+translations go in one FHIR `batch` request, so the server must accept a
+`batch` Bundle at its base. FerroTERM is the family's terminology server.
 
 Load three FHIR packages into it, as FerroBRIDGE's book says for its own
 HL7 v2 face: HL7 Terminology (`hl7.terminology`, which holds the v2 tables'

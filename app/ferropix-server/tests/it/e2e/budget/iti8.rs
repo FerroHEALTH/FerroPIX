@@ -26,9 +26,9 @@ const CEILING: Ceiling = Ceiling {
     answer: 106,
 };
 
-/// The translations one ITI-8 revision asks the terminology server for, one
-/// call each (#713).
-const TRANSLATIONS: u64 = 2;
+/// The terminology requests one ITI-8 revision sends: its translations go
+/// in one `batch` (#734).
+const TRANSLATIONS: u64 = 1;
 
 /// Sends the revision with control id `control` and returns the bytes of
 /// its acknowledgment.
@@ -78,7 +78,7 @@ async fn an_iti_8_revision_stays_within_its_budget() {
     let each = calls.div_ceil(REQUESTS);
     writeln!(
         report,
-        "  translations per message: {each} (ceiling {TRANSLATIONS})"
+        "  terminology requests per message: {each} (ceiling {TRANSLATIONS})"
     )
     .expect("a String takes it");
     over |= each > TRANSLATIONS;

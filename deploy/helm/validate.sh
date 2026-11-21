@@ -127,7 +127,7 @@ check() {
     faults=1
   fi
   local defaults="$here/ci/default-values.yaml"
-  if helm template ferropix "$target" -f "$defaults" --set-json 'config.auth.issuer=[]' > /dev/null 2>&1; then
+  if helm template ferropix "$target" -f "$defaults" --set-json 'config.auth.issuer=null' > /dev/null 2>&1; then
     echo "validate: the chart renders without an issuer"
     faults=1
   fi

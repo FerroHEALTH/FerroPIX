@@ -33,10 +33,10 @@ const PERSON: &str = "pairwise-subject-1";
 /// The steward's scope of the permission table.
 const STEWARD: &str = "__ferropix.steward";
 
-/// The `[[auth.issuer]]` table of the FerroSMART issuer.
+/// The `[auth.issuer.idp]` table of the FerroSMART issuer.
 fn tables() -> String {
     format!(
-        "[[auth.issuer]]\nissuer = \"{{issuer}}\"\nkind = \"persons\"\nprofile = \"ferrosmart\"\naudience = [\"{AUDIENCE}\"]\ndelegates = [{{ client = \"{APP}\" }}]\n"
+        "[auth.issuer.idp]\nissuer = \"{{issuer}}\"\nkind = \"persons\"\npreset = \"ferrosmart\"\naudience = [\"{AUDIENCE}\"]\n\n[auth.issuer.idp.profile]\ndelegates = [{{ client = \"{APP}\" }}]\n"
     )
 }
 

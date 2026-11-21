@@ -11,7 +11,7 @@ out of logs, errors and URLs, and what the audit trail records.
 ## Who may call the server
 
 Every request to `{base}/fhir` and `{base}/operator` carries a bearer access
-token that one of the `[[auth.issuer]]` entries signed. At start, `serve`
+token that one of the `[auth.issuer.<name>]` issuers signed. At start, `serve`
 reads each issuer's RFC 8414 metadata and key set, and refuses to start
 when one cannot be read. A token is checked for its signature, issuer,
 audience and lifetime under RFC 9068. The scopes each caller needs:
@@ -80,7 +80,7 @@ Basic users are for a run on your own machine: they need
 a steward or an administrator, and never a Source or another machine: a
 `[basic_grants]` table granting a `system/` scope refuses the start, naming
 the user, and a machine signs in with a client credentials token (RFC 6749 §4.4) of an
-`[[auth.issuer]]`.
+`[auth.issuer.<name>]` issuer.
 
 ## No identifying data where it was not sent
 

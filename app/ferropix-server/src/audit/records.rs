@@ -107,7 +107,7 @@ pub struct Call {
 }
 
 /// Returns `user` with what its token states under its issuer's
-/// `[[auth.attributes]]` table, as BALP 1.1.4 §3:5.7.5.4 maps the IHE IUA
+/// `[auth.issuer.<name>.attributes]` table, as BALP 1.1.4 §3:5.7.5.4 maps the IHE IUA
 /// claims: `subject_name` as the user's display, `subject_role` as its role,
 /// `purpose_of_use` as its purpose of use, `national_provider_identifier` as
 /// its provider id, and `subject_organization_id` as its organisation.
@@ -151,7 +151,7 @@ impl Call {
     /// A token whose subject is its own client is a backend service acting
     /// for itself, recorded with no user (BALP's `NoUser` examples); any
     /// other names its user from the token and the attributes its issuer's
-    /// `[[auth.attributes]]` table reads (BALP 1.1.4 §3:5.7.5.4). The
+    /// `[auth.issuer.<name>.attributes]` table reads (BALP 1.1.4 §3:5.7.5.4). The
     /// client's address is its IP address, or the FHIR base's host when the
     /// listener did not see one (BALP 1.1.4 §1:52.4.1.5, best effort; our
     /// own design).

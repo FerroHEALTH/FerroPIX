@@ -66,25 +66,26 @@ translates every v2 table value on; the server refuses to start without it
 ## Declaring a domain and its Source
 
 An identifier domain and the one client that feeds it are values under
-`config`. Each `config.auth.issuer` entry is one `[[auth.issuer]]` table of
-the server: its `issuer`, its `kind` (`persons` for people signing in,
-`machines` for clients with the client credentials grant) and its own
-`audience`, the values a token's `aud` must contain one of
-(https://ferropix.eu/docs/operate/configuration.html#auth). The issuer that signs the client's tokens lists the client in the
-`clients` of its `trust.issuer` entry, and the domain names it as its
-`source_client_id`:
+`config`. Each `config.auth.issuer` entry is one `[auth.issuer.<name>]`
+table of the server, by its name: its `issuer` and its `kind` (`persons` for
+people signing in, `machines` for clients with the client credentials
+grant); a token's `aud` must contain `{public_base_url}/fhir` unless the
+entry sets its own `audience`
+(https://ferropix.eu/docs/operate/configuration.html#auth). The `trust.issuer`
+entry naming that issuer lists the client in its `clients`, and the domain
+names it as its `source_client_id`:
 
 ```yaml
 config:
   public_base_url: "https://pix.example.org"
   auth:
     issuer:
-      - issuer: "https://idp.example.org/realms/care"
+      care:
+        issuer: "https://idp.example.org/realms/care"
         kind: machines
-        audience: ["https://pix.example.org/fhir"]
   trust:
     issuer:
-      - issuer: "https://idp.example.org/realms/care"
+      - issuer: care
         clients: ["ferroehr"]
   domain:
     - system: "urn:oid:2.999.1.1"

@@ -135,7 +135,7 @@ names by default.
   `http://localhost:8180/ferropix`. It signs any client credentials
   request, and its login form signs in any user name you type as a data
   steward: a development issuer, never for real data. For a deployment,
-  name your own `https` issuer in `[[auth.issuer]]`.
+  name your own `https` issuer in an `[auth.issuer.<name>]` table.
 - **The console.** The `console` profile runs the operator console beside
   the server on `http://localhost:3000/`, in the same network namespace,
   signed in through the development issuer; it needs a fifth secret,
@@ -191,20 +191,21 @@ README lists the addresses and shows how a domain and its Source client are
 declared.
 
 The server needs at least one issuer, so the chart refuses to render
-without a `config.auth.issuer` entry. Each entry is one `[[auth.issuer]]`
-table ([`[auth]`](configuration.md#auth)) with its `kind` and its own
-`audience`:
+without a `config.auth.issuer` entry. Each entry is one
+`[auth.issuer.<name>]` table ([`[auth]`](configuration.md#auth)) by its
+name, with its `issuer` and its `kind`:
 
 ```yaml
 config:
   auth:
     issuer:
-      - issuer: "https://idp.example.org/realms/care"
+      care:
+        issuer: "https://idp.example.org/realms/care"
         kind: machines
-        audience: ["https://pix.example.org/fhir"]
 ```
 
-The server reads the audience of each issuer from its entry. CI renders the chart over every
+A token's audience is the FHIR base, `{public_base_url}/fhir`, unless the
+entry sets its own `audience`. CI renders the chart over every
 value set under `deploy/helm/ci`, the defaults among them, and runs each
 image's `config check` over the configuration it renders
 (`deploy/helm/config-check.sh`); the release does the same with the images

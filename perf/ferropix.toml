@@ -25,17 +25,19 @@ listen = "127.0.0.1:8080"
 # The development provider signs any client credentials request with the
 # client as `sub` and `client_id` (compose.yaml, the issuer service), so
 # every token it signs is a machine's.
-[[auth.issuer]]
+[auth.issuer.dev]
 issuer = "http://localhost:8180/ferropix"
 kind = "machines"
-profile = "rfc9068"
+preset = "rfc9068"
 audience = ["http://localhost:8080/fhir"]
+
+[auth.issuer.dev.profile]
 token_types = ["JWT"]
 required_claims = ["iss", "exp", "aud", "sub"]
 client_claims = ["client_id", "azp"]
 
 [[trust.issuer]]
-issuer = "http://localhost:8180/ferropix"
+issuer = "dev"
 clients = ["perf-source"]
 
 # Identifier domains under the OID arc 2.999, reserved for examples (ITU-T

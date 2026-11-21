@@ -51,6 +51,8 @@ fn walk(table: &toml::Table, prefix: &str, keys: &mut BTreeSet<String>) {
     for (name, value) in table {
         let key = if prefix == "matching.fields" {
             format!("{prefix}.<field>")
+        } else if prefix == "auth.issuer" {
+            format!("{prefix}.<name>")
         } else if prefix == "basic_grants" {
             format!("{prefix}.<user-id>")
         } else if prefix.is_empty() {

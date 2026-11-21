@@ -5,8 +5,8 @@
 //! the `[trust]` section beside it.
 //!
 //! `[auth]` names the issuers whose tokens the server accepts, each an
-//! `[[auth.issuer]]` table with its `kind`, its profile and its own token
-//! rules, verified against the issuer's key set or by its RFC 7662
+//! `[auth.issuer.<name>]` table with its `kind`, its preset, its profile
+//! and its own token rules, its audience the public base URL unless set, verified against the issuer's key set or by its RFC 7662
 //! introspection endpoint, the trust roots and the Basic users of the
 //! development profile, each granted its scopes by `[basic_grants]`;
 //! `ferrohealth-smart` resolves it, with the issuer URL
@@ -18,8 +18,9 @@
 //! admin_scope`. Both take an extension form of SMART App Launch 2.2.0,
 //! Scopes and Launch Context, §Extensibility.
 //!
-//! `[[trust.issuer]]` lists, for each issuer, the client ids a token of that
-//! issuer may carry to feed a domain (PIXm 3.1.0 §2:3.104.5). The binding of
+//! `[[trust.issuer]]` lists, for each issuer by the name of its
+//! `[auth.issuer.<name>]` table, the client ids a token of that issuer may
+//! carry to feed a domain (PIXm 3.1.0 §2:3.104.5). The binding of
 //! a client to its issuer is FerroPIX's own design: two authorization
 //! servers may each mint a token for a client of the same name.
 
@@ -54,7 +55,7 @@ pub struct Trust {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TrustedIssuer {
-    /// The issuer, as `[auth]` names it.
+    /// The issuer, by the name of its `[auth.issuer.<name>]` table.
     pub issuer: String,
     /// The client ids this issuer may vouch for as a Patient Identity Source.
     pub clients: Vec<String>,
@@ -70,7 +71,7 @@ pub struct AuthSettings {
     pub steward_scope: String,
     /// The scope of an administrator.
     pub admin_scope: String,
-    /// The Source clients each issuer may vouch for, by issuer.
+    /// The Source clients each issuer may vouch for, by issuer identifier.
     pub clients: BTreeMap<String, BTreeSet<String>>,
 }
 
@@ -87,22 +88,24 @@ impl AuthSettings {
 
 impl Auth {
     /// Resolves the section under `profile`, with `trust`, the Basic users'
-    /// `grants` and the administrator scope `admin_scope`.
+    /// `grants`, the administrator scope `admin_scope` and `base`, the public
+    /// base URL, the audience of every issuer whose table names none.
     ///
     /// # Errors
     /// Returns [`Error::Value`] for `enabled = false`, an `[auth.dpop]`,
-    /// `[[auth.party]]` or `[auth.idp]` table, a Basic user's granted `roles` or
-    /// an issuer's `role_claims`,
+    /// `[auth.issuer.<name>.party]` or `[auth.idp]` table, a Basic user's
+    /// granted `roles` or an issuer's `role_claims`,
     /// which FerroPIX would never apply, a
     /// product scope in no
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
-    /// names an issuer `[auth]` does not or one named twice, or a client id
+    /// names no `[auth.issuer.<name>]` table or one named twice, or a client id
     /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
     /// users under production; [`Error::BasicSystemScope`] for a Basic user
     /// granted a `system/` scope; [`Error::BasicGrants`] for a grant naming a
     /// user `[[auth.basic.users]]` does not list; and [`Error::Auth`] for every rule
     /// `ferrohealth-smart` checks: no issuer and no Basic
-    /// user, an issuer without `kind`, no audience, an issuer outside the URL
+    /// user, an issuer name outside the name form, an issuer without `kind`
+    /// under a preset that names none, an issuer outside the URL
     /// rule, a symmetric algorithm, a skew over the bound, a profile refused,
     /// an `[auth.issuer.introspection]` that breaks a rule, an `[auth.tls]` that
     /// is no PEM of certificates, and a Basic user it refuses.
@@ -112,6 +115,7 @@ impl Auth {
         trust: &Trust,
         grants: &BasicGrants,
         admin_scope: &str,
+        base: &str,
     ) -> Result<AuthSettings, Error> {
         let section = &self.0;
         // NOTE: no specification governs this: our own design; every route but
@@ -153,7 +157,7 @@ impl Auth {
             ));
         }
         let mut resolved = section
-            .resolve_with_tls(&ferrohealth_smart::config::ServerTls)
+            .resolve_with_tls(&ferrohealth_smart::config::ServerTls, &[base])
             .map_err(|source| Error::Auth { source })?;
         resolved.basic = granted(resolved.basic.take(), grants)?;
         let clients = clients(section, trust)?;
@@ -172,13 +176,13 @@ impl Auth {
 /// `[auth.dpop]` sets the `DPoP` proof check (RFC 9449) a product builds with
 /// its own replay store, and FerroPIX builds none: its callers are backend
 /// services and persons holding bearer tokens, and no IHE profile it serves
-/// asks for `DPoP`. `[[auth.party]]` binds a person's login to a party, and
-/// `[auth.idp]` holds the identity provider adapters only that binding
-/// reads; FerroPIX keeps no party. A Basic user's granted `roles` and an issuer's
-/// `role_claims` are refused too, since the permission table reads scopes. `[[auth.federation]]` and
-/// `[[auth.attributes]]` are applied: the first classifies the tokens of a
-/// `federation` issuer, the second states the professional's attributes the
-/// audit record carries ([`crate::audit::records::Call::of`]).
+/// asks for `DPoP`. `[auth.issuer.<name>.party]` binds a person's login to a
+/// party, and `[auth.idp]` holds the identity provider adapters only that
+/// binding reads; FerroPIX keeps no party. A Basic user's granted `roles` and
+/// an issuer's `role_claims` are refused too, since the permission table reads
+/// scopes. An issuer's `federation` and `attributes` tables are applied: the
+/// first classifies the tokens of a `federation` issuer, the second states the
+/// professional's attributes the audit record carries ([`crate::audit::records::Call::of`]).
 fn unapplied(section: &AuthSection, grants: &BasicGrants) -> Result<(), Error> {
     // NOTE: no specification governs this: our own design; a key that would be read and
     // never applied is refused, so an operator never believes it is in force.
@@ -187,11 +191,6 @@ fn unapplied(section: &AuthSection, grants: &BasicGrants) -> Result<(), Error> {
             section.dpop.is_some(),
             "auth.dpop",
             "FerroPIX checks no DPoP proof (RFC 9449), so the table would never apply",
-        ),
-        (
-            !section.party.is_empty(),
-            "auth.party",
-            "FerroPIX binds no login to a party, so the table would never apply",
         ),
         (
             section.idp != IdpSection::default(),
@@ -213,15 +212,19 @@ fn unapplied(section: &AuthSection, grants: &BasicGrants) -> Result<(), Error> {
             "FerroPIX's permission table reads scopes, so a role would never apply",
         ));
     }
-    if let Some(index) = section
-        .issuers()
-        .iter()
-        .position(|entry| entry.role_claims.is_some())
-    {
-        return Err(value(
-            &format!("auth.issuer[{index}].role_claims"),
-            "FerroPIX's permission table reads scopes, so a role would never apply",
-        ));
+    for (name, entry) in section.issuers() {
+        if entry.party.is_some() {
+            return Err(value(
+                &format!("auth.issuer.{name}.party"),
+                "FerroPIX binds no login to a party, so the table would never apply",
+            ));
+        }
+        if entry.role_claims.is_some() {
+            return Err(value(
+                &format!("auth.issuer.{name}.role_claims"),
+                "FerroPIX's permission table reads scopes, so a role would never apply",
+            ));
+        }
     }
     Ok(())
 }
@@ -267,26 +270,25 @@ fn granted(
         .map_err(|source| Error::BasicGrants { source })
 }
 
-/// Returns the Source clients of each `[[trust.issuer]]`, by issuer, each
-/// an issuer `section` names.
+/// Returns the Source clients of each `[[trust.issuer]]`, by the identifier
+/// of the issuer it names, each the name of an `[auth.issuer.<name>]` table
+/// of `section`.
 fn clients(
     section: &AuthSection,
     trust: &Trust,
 ) -> Result<BTreeMap<String, BTreeSet<String>>, Error> {
-    let named: BTreeSet<String> = section
-        .issuers()
-        .iter()
-        .map(|entry| entry.issuer.expose().to_owned())
-        .filter(|issuer| !issuer.is_empty())
-        .collect();
     let mut clients = BTreeMap::new();
     for (index, entry) in trust.issuer.iter().enumerate() {
-        if !named.contains(&entry.issuer) {
+        let Some(identifier) = section
+            .issuer
+            .get(&entry.issuer)
+            .map(|issuer| issuer.issuer.expose().to_owned())
+        else {
             return Err(value(
                 &format!("trust.issuer[{index}].issuer"),
-                "an issuer [auth] names",
+                "the name of an [auth.issuer.<name>] table",
             ));
-        }
+        };
         if !entry.clients.iter().all(|client| is_client_id(client)) {
             return Err(value(
                 &format!("trust.issuer[{index}].clients"),
@@ -294,7 +296,7 @@ fn clients(
             ));
         }
         let listed: BTreeSet<String> = entry.clients.iter().cloned().collect();
-        if clients.insert(entry.issuer.clone(), listed).is_some() {
+        if clients.insert(identifier, listed).is_some() {
             return Err(value(
                 &format!("trust.issuer[{index}].issuer"),
                 "an earlier entry names this issuer",
@@ -336,19 +338,36 @@ mod tests {
 
     const ADMIN: &str = "__ferropix.admin";
 
+    const BASE: &str = "https://pix.example.org/fhir";
+
+    /// Returns the section with one machines issuer per URL of `issuers`,
+    /// the first named `idp`, the next `idp1`, `idp2` and so on.
     fn auth(issuers: &[&str]) -> Auth {
         Auth(AuthSection {
             issuer: issuers
                 .iter()
-                .map(|issuer| IssuerEntry {
-                    issuer: SecretUrl::new(*issuer),
-                    kind: Some(IssuerKind::Machines),
-                    audience: vec![String::from("https://pix.example.org/fhir")],
-                    ..IssuerEntry::default()
+                .enumerate()
+                .map(|(index, issuer)| {
+                    (
+                        name(index),
+                        IssuerEntry {
+                            issuer: SecretUrl::new(*issuer),
+                            kind: Some(IssuerKind::Machines),
+                            ..IssuerEntry::default()
+                        },
+                    )
                 })
                 .collect(),
             ..AuthSection::default()
         })
+    }
+
+    fn name(index: usize) -> String {
+        if index == 0 {
+            String::from("idp")
+        } else {
+            format!("idp{index}")
+        }
     }
 
     fn basic(user: &str) -> BasicSection {
@@ -395,9 +414,10 @@ mod tests {
         let resolved = auth(&[url])
             .resolve(
                 Profile::Production,
-                &trust(&[(url, &["lab-source"])]),
+                &trust(&[("idp", &["lab-source"])]),
                 &BasicGrants::default(),
                 ADMIN,
+                BASE,
             )
             .expect("one issuer resolves");
         assert_eq!(1, resolved.resolved.issuers.len());
@@ -415,6 +435,7 @@ mod tests {
                 &Trust::default(),
                 &BasicGrants::default(),
                 ADMIN,
+                BASE,
             )
             .expect_err("a surface that admits no credential fails closed");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
@@ -426,6 +447,7 @@ mod tests {
                 &Trust::default(),
                 &BasicGrants::default(),
                 ADMIN,
+                BASE,
             )
             .expect_err("FerroPIX is never open");
         assert!(
@@ -442,6 +464,7 @@ mod tests {
                 &Trust::default(),
                 &BasicGrants::default(),
                 ADMIN,
+                BASE,
             )
             .expect_err("RFC 8414 §2 wants https off loopback");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");
@@ -451,15 +474,22 @@ mod tests {
     fn a_trust_entry_of_an_unknown_issuer_named_twice_or_with_a_bad_client_id_is_refused() {
         let url = "https://idp.example.org";
         for (bad, key) in [
+            (trust(&[("other", &[])]), "trust.issuer[0].issuer"),
+            (trust(&[(url, &[])]), "trust.issuer[0].issuer"),
             (
-                trust(&[("https://other.example.org", &[])]),
-                "trust.issuer[0].issuer",
+                trust(&[("idp", &[]), ("idp", &[])]),
+                "trust.issuer[1].issuer",
             ),
-            (trust(&[(url, &[]), (url, &[])]), "trust.issuer[1].issuer"),
-            (trust(&[(url, &["caf\u{e9}"])]), "trust.issuer[0].clients"),
+            (trust(&[("idp", &["caf\u{e9}"])]), "trust.issuer[0].clients"),
         ] {
             let error = auth(&[url])
-                .resolve(Profile::Production, &bad, &BasicGrants::default(), ADMIN)
+                .resolve(
+                    Profile::Production,
+                    &bad,
+                    &BasicGrants::default(),
+                    ADMIN,
+                    BASE,
+                )
                 .expect_err("refused");
             assert!(
                 matches!(&error, Error::Value { key: named, .. } if named == key),
@@ -477,7 +507,7 @@ mod tests {
         let mut bad = auth(&[url]);
         bad.0.product_scope = String::from("steward");
         assert!(matches!(
-            bad.0.resolve(),
+            bad.0.resolve(&[BASE]),
             Err(ConfigError::ProductScope { .. })
         ));
         assert!(matches!(
@@ -485,7 +515,8 @@ mod tests {
                 Profile::Production,
                 &Trust::default(),
                 &BasicGrants::default(),
-                "admin"
+                "admin",
+                BASE
             ),
             Err(Error::Value { .. })
         ));
@@ -494,7 +525,8 @@ mod tests {
                 Profile::Production,
                 &Trust::default(),
                 &BasicGrants::default(),
-                STEWARD_SCOPE
+                STEWARD_SCOPE,
+                BASE
             ),
             Err(Error::Value { .. })
         ));
@@ -506,6 +538,7 @@ mod tests {
                 &Trust::default(),
                 &BasicGrants::default(),
                 ADMIN,
+                BASE,
             )
             .expect("a full URI is an extension scope");
         assert_eq!(
@@ -520,14 +553,14 @@ mod tests {
         person.0.basic = Some(basic("dev-steward"));
         let steward = grants("dev-steward", &[STEWARD_SCOPE], &[]);
         let error = person
-            .resolve(Profile::Production, &Trust::default(), &steward, ADMIN)
+            .resolve(Profile::Production, &Trust::default(), &steward, ADMIN, BASE)
             .expect_err("Basic is a development credential");
         assert!(
             matches!(&error, Error::DevelopmentOnly { key, .. } if key == "auth.basic"),
             "{error:?}"
         );
         let resolved = person
-            .resolve(Profile::Development, &Trust::default(), &steward, ADMIN)
+            .resolve(Profile::Development, &Trust::default(), &steward, ADMIN, BASE)
             .expect("development admits a Basic person");
         assert!(
             !resolved.admits("dev-steward"),
@@ -550,6 +583,7 @@ mod tests {
                     &Trust::default(),
                     &grants("east-lab", scopes, &[]),
                     ADMIN,
+                    BASE,
                 )
                 .expect_err("a Basic credential is never a machine's");
             assert!(
@@ -573,6 +607,7 @@ mod tests {
                     &Trust::default(),
                     &grants("dev-stewart", &[STEWARD_SCOPE], &[]),
                     ADMIN,
+                    BASE,
                 )
                 .expect_err("a misspelt user-id never grants");
             assert!(
@@ -593,24 +628,26 @@ mod tests {
         let mut dpop = auth(&[url]);
         dpop.0.dpop = Some(DpopSection::default());
         let mut party = auth(&[url]);
-        party.0.party = vec![PartySection {
-            issuer: SecretUrl::new(url),
-            ..PartySection::default()
-        }];
+        if let Some(entry) = party.0.issuer.get_mut("idp") {
+            entry.kind = Some(IssuerKind::Persons);
+            entry.party = Some(PartySection::default());
+        }
         let mut roles = auth(&[url]);
         roles.0.basic = Some(basic("dev-steward"));
         let steward = grants("dev-steward", &[STEWARD_SCOPE], &["steward"]);
         let mut role_claims = auth(&[url, "https://idp.example.org/second"]);
-        role_claims.0.issuer[1].role_claims = Some(vec![String::from("groups")]);
+        if let Some(entry) = role_claims.0.issuer.get_mut("idp1") {
+            entry.role_claims = Some(vec![String::from("groups")]);
+        }
         let none = BasicGrants::default();
         for (section, granted, key) in [
             (dpop, &none, "auth.dpop"),
-            (party, &none, "auth.party"),
+            (party, &none, "auth.issuer.idp.party"),
             (roles, &steward, "basic_grants.dev-steward.roles"),
-            (role_claims, &none, "auth.issuer[1].role_claims"),
+            (role_claims, &none, "auth.issuer.idp1.role_claims"),
         ] {
             let error = section
-                .resolve(Profile::Production, &Trust::default(), granted, ADMIN)
+                .resolve(Profile::Production, &Trust::default(), granted, ADMIN, BASE)
                 .expect_err("a table read and never applied is refused");
             assert!(
                 matches!(&error, Error::Value { key: named, .. } if named == key),
@@ -623,7 +660,7 @@ mod tests {
     #[test]
     fn an_issuer_without_its_kind_is_refused() {
         let mut kindless = auth(&["https://idp.example.org"]);
-        for entry in &mut kindless.0.issuer {
+        for entry in kindless.0.issuer.values_mut() {
             entry.kind = None;
         }
         let error = kindless
@@ -632,6 +669,7 @@ mod tests {
                 &Trust::default(),
                 &BasicGrants::default(),
                 ADMIN,
+                BASE,
             )
             .expect_err("kind has no default");
         assert!(matches!(error, Error::Auth { .. }), "{error:?}");

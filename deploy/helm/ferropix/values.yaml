@@ -25,12 +25,13 @@ config:
   public_base_url: "https://pix.example.org"
   server:
     listen: "0.0.0.0:8080"
-  # The issuers whose tokens the server accepts, one `[[auth.issuer]]` entry
-  # each with its `issuer`, its `kind` (`persons` or `machines`) and its own
-  # `audience`; the chart refuses to render with none
+  # The issuers whose tokens the server accepts, by name, each an
+  # `[auth.issuer.<name>]` table with its `issuer` and its `kind` (`persons`
+  # or `machines`); its audience is `{public_base_url}/fhir` unless it sets
+  # `audience`. The chart refuses to render with none
   # (https://ferropix.eu/docs/operate/configuration.html#auth).
   auth:
-    issuer: []
+    issuer: {}
   domain: []
   hl7v2:
     enabled: false

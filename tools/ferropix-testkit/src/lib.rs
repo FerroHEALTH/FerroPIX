@@ -17,7 +17,8 @@
 //! [`mllp`] is the MLLP sender the HL7 v2 face is driven with, and
 //! [`consumer`] the stub HL7 v2 consumer the ITI-10 notifications go to;
 //! [`book`] reads the book's fenced blocks, so a suite holds each
-//! configuration sample to its loader.
+//! configuration sample to its loader; [`spool`] reads the records an audit
+//! spool holds on disk.
 //!
 //! No specification governs the test topology: our own design, after
 //! FerroFED's and FerroBRIDGE's testkits.
@@ -32,5 +33,6 @@ pub mod mllp;
 pub mod oidc;
 pub mod otlp;
 pub mod pins;
+pub mod spool;
 pub mod synthetic;
 pub mod terminology;

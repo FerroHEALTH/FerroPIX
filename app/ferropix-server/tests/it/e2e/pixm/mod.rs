@@ -211,21 +211,15 @@ impl Harness {
 
     /// The text of every record the spool holds.
     pub(crate) fn audit_texts(&self) -> Vec<String> {
-        std::fs::read_dir(self.spool.path().join("spool"))
-            .expect("the spool reads")
-            .filter_map(Result::ok)
-            .filter(|entry| entry.path().is_file())
-            .map(|entry| std::fs::read_to_string(entry.path()).expect("a record reads"))
+        ferropix_testkit::spool::records(&self.spool.path().join("spool"))
+            .into_iter()
+            .map(|record| String::from_utf8(record).expect("a record is UTF-8"))
             .collect()
     }
 
     /// The records the spool holds.
     pub(crate) fn records(&self) -> usize {
-        std::fs::read_dir(self.spool.path().join("spool"))
-            .expect("the spool reads")
-            .filter_map(Result::ok)
-            .filter(|entry| entry.path().is_file())
-            .count()
+        ferropix_testkit::spool::records(&self.spool.path().join("spool")).len()
     }
 
     /// Sends one request and reads the answer.

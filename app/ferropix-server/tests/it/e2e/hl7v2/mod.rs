@@ -155,14 +155,9 @@ impl V2 {
 
     /// The face's audit records.
     fn records(&self) -> Vec<Value> {
-        std::fs::read_dir(self.spool.path().join("spool"))
-            .expect("the spool reads")
-            .filter_map(Result::ok)
-            .filter(|entry| entry.path().is_file())
-            .map(|entry| {
-                serde_json::from_str(&std::fs::read_to_string(entry.path()).expect("a record"))
-                    .expect("a record is JSON")
-            })
+        ferropix_testkit::spool::records(&self.spool.path().join("spool"))
+            .into_iter()
+            .map(|record| serde_json::from_slice(&record).expect("a record is JSON"))
             .collect()
     }
 

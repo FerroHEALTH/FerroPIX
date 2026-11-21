@@ -15,7 +15,9 @@
 //! `pg_walinspect` (the server writes no full-page images, so a checkpoint
 //! adds nothing), the bytes of the audit records the spool takes, and the
 //! bytes of the answer. Each container serves one case, so the counts are
-//! the case's alone; the test's own reads carry [`OWN`] and are left out.
+//! the case's alone; the test's own reads carry [`OWN`] and are left out,
+//! and so are the reads of the WAL position, whose comment the server does
+//! not keep.
 //! Every ceiling is the measured value; a change that lowers one lowers its
 //! ceiling in the same pull request. No specification governs a request's
 //! cost: our own design.
@@ -171,6 +173,7 @@ impl Meter {
              FROM pg_stat_statements
              WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
                AND query NOT LIKE '%{OWN}%' AND query NOT LIKE '%pg_stat_statements%'
+               AND query NOT LIKE '%pg_current_wal%' AND query NOT LIKE '%pg_get_wal_stats%'
              ORDER BY toplevel DESC, calls DESC, query"
         )))
         .fetch_all(&self.admin)

@@ -352,9 +352,9 @@ async fn the_audit_record_is_the_only_place_an_identifier_reaches_the_disk_or_th
         holding,
         "only the spooled record holds the BSN"
     );
-    let record: Value =
-        serde_json::from_slice(&std::fs::read(&holding[0]).expect("the record reads"))
-            .expect("JSON");
+    let records = ferropix_testkit::spool::records(&directory);
+    assert_eq!(1, records.len(), "one record is spooled");
+    let record: Value = serde_json::from_slice(&records[0]).expect("JSON");
     assert_eq!("AuditEvent", record["resourceType"]);
     let mode = std::fs::metadata(&holding[0])
         .expect("metadata")

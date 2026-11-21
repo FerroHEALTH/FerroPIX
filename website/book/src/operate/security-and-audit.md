@@ -159,11 +159,17 @@ the FHIR face answers `503` with a `transient` issue when they cannot be
 stored, the HL7 v2 face `AR`, and the XCPD gateway Case 5. The audit record is the only place outside the store where the
 server writes a patient identifier.
 
-The records wait in a spool under `audit.spool_dir`, one file readable by
-the server's user alone per record in a directory only that user may enter,
-and are sent to `audit.endpoint.url` over the FHIR Feed. A delivered record is
-removed; one the repository refuses is moved to the `quarantine`
-subdirectory for you to inspect. Before a transaction runs, the server
+The records wait in a spool under `audit.spool_dir`, in files readable by
+the server's user alone in a directory only that user may enter. The
+records that arrive together are written as one segment file and reach the
+disk with one flush, and each transaction answers only once its record is
+on the disk. They are sent to `audit.endpoint.url` over the FHIR Feed,
+several at once as one batch Bundle, each judged by its entry of the
+answer. A delivered record is removed; one the repository refuses is moved
+to the `quarantine` subdirectory for you to inspect. A spool directory an
+older FerroPIX wrote holds one `.msg` file per record, which this server
+refuses at start: let the older server deliver them, or move them out,
+before you upgrade. Before a transaction runs, the server
 takes its record's place in the spool: when the spool is full, the request
 is refused with `503` and a `transient` issue before it changes anything.
 `GET {base}/health/readiness` reports `audit_spool` down when less than a

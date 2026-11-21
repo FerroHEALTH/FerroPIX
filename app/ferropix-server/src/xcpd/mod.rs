@@ -340,14 +340,14 @@ impl Gateway {
         let mut snapshot = self.snapshot().await?;
         let mut persons: BTreeSet<Uuid> = BTreeSet::new();
         for identifier in &received.parameters.ids {
-            let found = xref::lookup(
-                &mut snapshot,
-                self.store.sealer(),
-                &identifier.authority().urn(),
-                identifier.value().expose_secret(),
-            )
-            .await?;
-            match found {
+            let system = identifier.authority().urn();
+            let ask = xref::Ask {
+                system: &system,
+                value: identifier.value().expose_secret(),
+                targets: &[],
+                pseudonyms: false,
+            };
+            match xref::query(&mut snapshot, &self.store, &ask).await?.lookup {
                 Lookup::Found(reference) => {
                     persons.insert(reference.person.uuid());
                 }

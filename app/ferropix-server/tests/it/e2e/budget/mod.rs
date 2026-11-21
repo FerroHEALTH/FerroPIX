@@ -271,7 +271,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 GET",
         ceiling: Ceiling {
-            statements: 6,
+            statements: 1,
             nested: 0,
             blocks: 79,
             wal: 0,
@@ -283,7 +283,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-83 POST",
         ceiling: Ceiling {
-            statements: 6,
+            statements: 1,
             nested: 0,
             blocks: 79,
             wal: 0,
@@ -295,7 +295,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-78 search",
         ceiling: Ceiling {
-            statements: 8,
+            statements: 7,
             nested: 0,
             blocks: 104,
             wal: 0,
@@ -307,7 +307,7 @@ const CASES: [Case; 5] = [
     Case {
         name: "ITI-119 match",
         ceiling: Ceiling {
-            statements: 9,
+            statements: 8,
             nested: 0,
             blocks: 599,
             wal: 0,

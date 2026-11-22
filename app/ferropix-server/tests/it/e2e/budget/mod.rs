@@ -290,7 +290,10 @@ struct Case {
 /// own transaction (#742) costs it one statement (19 to 20) and raises its
 /// WAL from 2277 to 3200 bytes, the record compressed and sealed in
 /// `pix.audit_outbox`, in exchange for the spool's 2,036 bytes and their
-/// flush, which it no longer writes.
+/// flush, which it no longer writes. The cases run over a store pool of one
+/// connection (#749): the pages a table fills depend on how many backends
+/// insert into it, which the pool's rotation decided at a timing of the
+/// host's, so the reads now measure 76, 75, 76 and 117 buffers.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
@@ -309,7 +312,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 1,
             nested: 0,
-            blocks: 79,
+            blocks: 78,
             wal: 0,
             audit: 2188,
             answer: 263,
@@ -321,7 +324,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 1,
             nested: 0,
-            blocks: 79,
+            blocks: 77,
             wal: 0,
             audit: 2433,
             answer: 361,
@@ -333,7 +336,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 7,
             nested: 0,
-            blocks: 86,
+            blocks: 78,
             wal: 0,
             audit: 2057,
             answer: 1084,
@@ -345,7 +348,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 121,
+            blocks: 120,
             wal: 0,
             audit: 2728,
             answer: 1067,
@@ -440,7 +443,7 @@ async fn each_fhir_transaction_stays_within_its_budget() {
     if !e2e_enabled() {
         return;
     }
-    let harness = Harness::start(synthetic_seeds()).await;
+    let harness = Harness::start_on_one_connection(synthetic_seeds()).await;
     hold_statistics(&harness).await;
     let (hospital, _bsn) = feed_both(&harness).await;
     populate(&harness, 0..POPULATION).await;

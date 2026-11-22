@@ -115,15 +115,32 @@ impl Harness {
         seeds: Vec<DomainSeed>,
         tweak: impl FnOnce(&mut ferropix_server::config::settings::Settings),
     ) -> Self {
+        Self::start_on(seeds, None, tweak).await
+    }
+
+    /// Starts as [`Harness::start`] does over a store pool of one
+    /// connection, so every statement runs in one backend and fills the
+    /// same pages in every run: the budget's measurements (#749).
+    pub(crate) async fn start_on_one_connection(seeds: Vec<DomainSeed>) -> Self {
+        Self::start_on(seeds, Some(1), |_settings| {}).await
+    }
+
+    /// Starts with the settings `tweak` changes, over a store pool of
+    /// `pool` connections or the default.
+    async fn start_on(
+        seeds: Vec<DomainSeed>,
+        pool: Option<u32>,
+        tweak: impl FnOnce(&mut ferropix_server::config::settings::Settings),
+    ) -> Self {
         let postgres = postgres().await.expect("PostgreSQL starts");
         let url = app_role(&postgres).await;
-        let store = Store::start(
-            &super::settings(&url, &fresh_key(), true),
-            &seeds,
-            Job::Migrate,
-        )
-        .await
-        .expect("the store starts");
+        let mut db = super::settings(&url, &fresh_key(), true);
+        if let Some(pool) = pool {
+            db.pool_size = pool;
+        }
+        let store = Store::start(&db, &seeds, Job::Migrate)
+            .await
+            .expect("the store starts");
         let issuer = Issuer::start().await;
         let secrets = Secrets::new();
         let mut settings = crate::auth::settings(&issuer, &secrets);

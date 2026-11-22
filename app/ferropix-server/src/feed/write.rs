@@ -15,7 +15,7 @@ use crate::config::section::domain::DomainKind;
 use crate::feed::{Context, FeedError};
 use crate::store::StoreError;
 use crate::store::identifier::Rule;
-use crate::store::record::{Demographics, Domain, DomainId, PersonId, RecordId};
+use crate::store::record::{self, Blocks, Demographics, Domain, DomainId, PersonId, RecordId};
 use crate::store::seal::{IdentifierValue, Sealer};
 
 /// One identifier a version carries, in a domain the store knows.
@@ -168,44 +168,14 @@ pub(super) async fn lock_or_insert(
     if let Some(locked) = lock(connection, domain.id, &hmac).await? {
         return Ok(locked);
     }
-    let (sealed, plain) = if domain.sensitive {
-        (Some(keys.seal(domain_id, value)?), None)
-    } else {
-        (None, Some(value.expose()))
-    };
-    let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO pix.source_record
-             (domain_id, identifier_hmac, identifier_sealed, identifier_value, key_id,
-              block_phonetic, block_postal)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id",
-    )
-    .bind(domain_id)
-    .bind(hmac.as_slice())
-    .bind(sealed)
-    .bind(plain)
-    .bind(keys.key_id().as_bytes().as_slice())
-    .bind(blocks.phonetic.as_deref())
-    .bind(blocks.postal.as_deref())
-    .fetch_one(&mut *connection)
-    .await?;
+    let id = record::insert(connection, keys, domain, value, blocks).await?;
     Ok(Locked {
-        id: RecordId::from_uuid(id),
+        id,
         created: true,
         head: 0,
         active: true,
         removed: false,
     })
-}
-
-/// The text blocking keys of a version, kept on its record while it is the
-/// head (`docs/architecture.md` §5.2).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(super) struct Blocks {
-    /// `(birth year, phonetic key of the family name)`.
-    pub phonetic: Option<String>,
-    /// `(postal code, birth date)`.
-    pub postal: Option<String>,
 }
 
 /// Inserts the next version of `record` and makes it the head with its
@@ -239,9 +209,12 @@ pub(super) async fn add_version(
     .await?;
     if !record.created {
         sqlx::query(
-            "UPDATE pix.source_record
-             SET head_version = $2, removed_at = NULL, block_phonetic = $3, block_postal = $4
-             WHERE id = $1",
+            "WITH block AS (
+                 UPDATE pix.record_block SET block_phonetic = $3, block_postal = $4
+                 WHERE record_id = $1
+                   AND (block_phonetic, block_postal) IS DISTINCT FROM ($3, $4)
+             )
+             UPDATE pix.source_record SET head_version = $2, removed_at = NULL WHERE id = $1",
         )
         .bind(record.id.uuid())
         .bind(version)

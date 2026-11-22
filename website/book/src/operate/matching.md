@@ -141,8 +141,8 @@ table:
 - `postal_code_birth_date`: the postal code and the full birth date;
 - `shared_identifier`: an identifier both records carry.
 
-Each record keeps the two text keys of its current version, so a blocking
-read touches only the current records that carry the key. A record revised
+The store keeps the two text keys of each record's current version, so a
+blocking read touches only the current records that carry the key. A record revised
 many times costs a blocking read no more than a record fed once.
 
 ## Evidence

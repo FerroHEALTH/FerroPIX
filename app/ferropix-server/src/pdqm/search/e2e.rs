@@ -112,7 +112,9 @@ impl Patient {
             maiden,
         }
     }
+}
 
+impl Fed for Patient {
     /// The `Patient` body.
     fn body(&self, link: Option<&str>) -> String {
         let given: Vec<String> = self.given.iter().map(|g| format!(r#""{g}""#)).collect();
@@ -148,19 +150,13 @@ impl Patient {
         }
         format!(r#"{{"resourceType":"Patient",{}}}"#, members.join(","))
     }
-}
 
-impl Fed for Patient {
     fn system(&self) -> &str {
         self.system
     }
 
     fn value(&self) -> &str {
         &self.value
-    }
-
-    fn body(&self, link: Option<&str>) -> String {
-        self.body(link)
     }
 }
 

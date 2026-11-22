@@ -52,13 +52,13 @@ use crate::feed::attempt::{
     Resolving, Revising, announced, condition, current, identity_keys, local_keys, me,
 };
 use crate::feed::link::MergeKind;
-use crate::feed::write::{Blocks, Carried, Subjects};
+use crate::feed::write::{Carried, Subjects};
 use crate::matching::blocking;
 use crate::matching::scorer::Scorer;
 use crate::matching::subject::Subject;
 use crate::store::demographics::{self, DemographicsError};
 use crate::store::identifier::Refused;
-use crate::store::record::{self, Channel, PersonId, RecordId};
+use crate::store::record::{self, Blocks, Channel, PersonId, RecordId};
 use crate::store::{Store, StoreError};
 
 /// The times a transaction is tried when a concurrent one moved what it

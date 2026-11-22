@@ -257,16 +257,17 @@ struct Case {
 /// revision now spends on the trigger that keeps the keys. Dropping the hot
 /// tables' unread keys (#730) lowered an ITI-104 revision's WAL from 2898 to
 /// 2439 bytes, and with the domains read once (#715) an ITI-78 search reads
-/// 84 buffers. The blocking keys on the record head (#724) lowered ITI-104
-/// from 1113 to 218 buffers and ITI-119 from 588 to 115 buffers.
+/// 84 buffers. The blocking keys kept beside the record head (#724) lowered
+/// ITI-104 from 1106 to 194 buffers and from 2443 to 2277 WAL bytes, and
+/// ITI-119 from 588 to 118 buffers.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
             statements: 19,
             nested: 1,
-            blocks: 223,
-            wal: 2488,
+            blocks: 198,
+            wal: 2323,
             audit: 2036,
             answer: 173,
         },
@@ -313,7 +314,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 118,
+            blocks: 121,
             wal: 0,
             audit: 2728,
             answer: 1067,

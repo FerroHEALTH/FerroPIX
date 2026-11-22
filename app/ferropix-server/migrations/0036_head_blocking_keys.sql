@@ -5,15 +5,22 @@
 -- record's head (#724). A blocking read asks for the current versions that
 -- carry a key, and an index over every version ever written made it read
 -- and drop each historic version that once carried it, so its cost grew
--- with history. The keys of the head version are written on the record by
--- the statement that moves head_version, so a head never names a version
--- whose keys differ; the version rows keep no copy. The heads are filled a
--- thousand records at a time, so no statement reads the whole store at
--- once. No specification governs the blocking: our own design.
+-- with history. pix.record_block holds one row per record with the keys of
+-- its head version, written by the statement that moves head_version (the
+-- insert of a new record, the update of a revision), so a head never names
+-- a version whose keys differ; the version rows keep no copy. The keys sit
+-- beside the record rather than on it, so the record row every lookup reads
+-- stays as narrow as it was. The row names its record by id with no foreign
+-- key, since only the statement that writes the record writes it (a record
+-- is never deleted). The heads are filled a thousand records at a time, so
+-- no statement reads the whole store at once. No specification governs the
+-- blocking: our own design.
 
-ALTER TABLE pix.source_record
-    ADD COLUMN block_phonetic text,
-    ADD COLUMN block_postal text;
+CREATE TABLE pix.record_block (
+    record_id uuid PRIMARY KEY,
+    block_phonetic text,
+    block_postal text
+);
 
 DO $$
 DECLARE
@@ -24,32 +31,26 @@ BEGIN
         SELECT array_agg(id ORDER BY id) INTO batch
         FROM (SELECT id FROM pix.source_record WHERE id > after ORDER BY id LIMIT 1000) AS page;
         EXIT WHEN batch IS NULL;
-        UPDATE pix.source_record r
-        SET block_phonetic = v.block_phonetic, block_postal = v.block_postal
-        FROM pix.source_record_version v
-        WHERE r.id = ANY(batch) AND v.record_id = r.id AND v.version = r.head_version
-          AND (v.block_phonetic IS NOT NULL OR v.block_postal IS NOT NULL);
+        INSERT INTO pix.record_block (record_id, block_phonetic, block_postal)
+        SELECT r.id, v.block_phonetic, v.block_postal
+        FROM pix.source_record r
+        JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version
+        WHERE r.id = ANY(batch);
         after := batch[array_upper(batch, 1)];
     END LOOP;
 END
 $$;
 
-CREATE INDEX source_record_block_phonetic_idx
-    ON pix.source_record (block_phonetic) WHERE block_phonetic IS NOT NULL;
-CREATE INDEX source_record_block_postal_idx
-    ON pix.source_record (block_postal) WHERE block_postal IS NOT NULL;
+CREATE INDEX record_block_phonetic_idx
+    ON pix.record_block (block_phonetic) WHERE block_phonetic IS NOT NULL;
+CREATE INDEX record_block_postal_idx
+    ON pix.record_block (block_postal) WHERE block_postal IS NOT NULL;
+
+CREATE TRIGGER record_block_kept BEFORE DELETE ON pix.record_block
+    FOR EACH ROW EXECUTE FUNCTION pix.refuse_change();
+CREATE TRIGGER record_block_no_truncate BEFORE TRUNCATE ON pix.record_block
+    FOR EACH STATEMENT EXECUTE FUNCTION pix.refuse_change();
 
 ALTER TABLE pix.source_record_version
     DROP COLUMN block_phonetic,
     DROP COLUMN block_postal;
-
--- The unique key the replaced_by foreign key names leads with id, so the
--- only index that leads with domain_id is the identifier's own and a lookup
--- by (domain_id, identifier_hmac) cannot be planned over every record of
--- the domain, analyzed or not.
-ALTER TABLE pix.source_record
-    DROP CONSTRAINT source_record_replaced_by_fkey,
-    DROP CONSTRAINT source_record_domain_id_key,
-    ADD CONSTRAINT source_record_domain_id_key UNIQUE (id, domain_id),
-    ADD CONSTRAINT source_record_replaced_by_fkey FOREIGN KEY (domain_id, replaced_by)
-        REFERENCES pix.source_record (domain_id, id);

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! The blocking reads over the keys on the head against what they replaced
+//! The blocking reads over the keys of the head against what they replaced
 //! (#724), behind `FERROPIX_E2E`: the migration fills every head so the new
 //! reads find what the reads over every version found, every writer of a
 //! head sets the keys of its version, and over a long history of feeds,
@@ -335,7 +335,9 @@ impl Patient {
             postal: (!at.is_multiple_of(5)).then(|| POSTALS[at % POSTALS.len()].to_owned()),
         }
     }
+}
 
+impl Fed for Patient {
     /// The `Patient` body, with `link` when it is a resolved duplicate.
     fn body(&self, link: Option<&str>) -> String {
         let text = demographics(
@@ -353,19 +355,13 @@ impl Patient {
             identifiers(self.system, &self.value, self.bsn.as_deref())
         )
     }
-}
 
-impl Fed for Patient {
     fn system(&self) -> &str {
         self.system
     }
 
     fn value(&self) -> &str {
         &self.value
-    }
-
-    fn body(&self, link: Option<&str>) -> String {
-        self.body(link)
     }
 }
 
@@ -478,8 +474,9 @@ async fn over_a_long_history_the_reads_find_exactly_the_heads_that_give_the_key(
 /// The keys the record of `patient` holds: phonetic, postal.
 async fn held(started: &Started, patient: &Patient) -> (Option<String>, Option<String>) {
     sqlx::query_as(
-        "SELECT r.block_phonetic, r.block_postal
+        "SELECT b.block_phonetic, b.block_postal
          FROM pix.source_record r
+         JOIN pix.record_block b ON b.record_id = r.id
          JOIN pix.identifier_domain d ON d.id = r.domain_id
          WHERE d.system = $1 AND r.identifier_value = $2",
     )

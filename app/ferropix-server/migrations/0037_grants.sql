@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: BUSL-1.1
 
 -- The grants again, last in the set (0029_grants.sql says why), after the
--- blocking keys of 0036 moved to the record head.
+-- blocking keys of 0036 moved beside the record head.
 
 DO $$
 BEGIN

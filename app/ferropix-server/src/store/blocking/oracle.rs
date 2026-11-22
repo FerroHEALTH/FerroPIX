@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! What a blocking read must find, for the tests: the reads over every
-//! version that the keys on the head replaced (#724), and the definition
+//! version that the keys of the head replaced (#724), and the definition
 //! of a block, each current head whose demographics give the key.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -156,8 +156,9 @@ pub(super) fn matched(heads: &[Head], phonetic: bool, value: &str) -> Vec<MatchR
 /// version's demographics give.
 pub(super) async fn assert_heads_hold_their_keys(pool: &PgPool) {
     let rows: Vec<(Uuid, Option<String>, Option<String>, String)> = sqlx::query_as(
-        "SELECT r.id, r.block_phonetic, r.block_postal, v.demographics::text
+        "SELECT r.id, b.block_phonetic, b.block_postal, v.demographics::text
          FROM pix.source_record r
+         LEFT JOIN pix.record_block b ON b.record_id = r.id
          JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version",
     )
     .fetch_all(pool)

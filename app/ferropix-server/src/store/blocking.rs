@@ -3,9 +3,9 @@
 
 //! The blocking reads: the current records that carry a text blocking key.
 //!
-//! The two text keys of `docs/architecture.md` §5.2 live on the record,
-//! written by the statement that moves its head, so each read is one probe
-//! of the key's index on `source_record` and touches only the heads that
+//! The two text keys of `docs/architecture.md` §5.2 live in `record_block`,
+//! one row per record written by the statement that moves its head, so each
+//! read is one probe of the key's index and touches only the heads that
 //! carry the key, whatever the history behind them. The head version's
 //! demographics are read through its `(record_id, version)` key. The feed
 //! weighs a version against records in other persons; an ITI-119 match
@@ -14,41 +14,59 @@
 
 /// The feed's read of the heads whose key `$column` is `$1`, in another
 /// person than `$3` and other than `$2`: id, head version, person,
-/// demographics.
+/// demographics. Each record the key's index finds is read through its own
+/// keys, the head version through `(record_id, version)`, at most one row
+/// each (one record, one open link, one head).
 macro_rules! feed_read {
     ($column:literal) => {
         concat!(
-            "SELECT r.id, r.head_version, l.person_id, v.demographics::text
-             FROM pix.source_record r
-             JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+            "SELECT f.id, f.head_version, f.person_id, f.demographics
+             FROM pix.record_block b
              CROSS JOIN LATERAL (
-                 SELECT h.demographics FROM pix.source_record_version h
-                 WHERE h.record_id = r.id AND h.version = r.head_version
-             ) AS v
-             WHERE r.",
+                 SELECT r.id, r.head_version, l.person_id, v.demographics::text AS demographics
+                 FROM pix.source_record r
+                 JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+                 CROSS JOIN LATERAL (
+                     SELECT h.demographics FROM pix.source_record_version h
+                     WHERE h.record_id = r.id AND h.version = r.head_version
+                     LIMIT 1
+                 ) AS v
+                 WHERE r.id = b.record_id AND l.person_id <> $3
+                   AND r.active AND r.removed_at IS NULL
+                 LIMIT 1
+             ) AS f
+             WHERE b.",
             $column,
-            " = $1 AND r.id <> $2 AND l.person_id <> $3
-               AND r.active AND r.removed_at IS NULL"
+            " = $1 AND b.record_id <> $2"
         )
     };
 }
 
 /// ITI-119's read of the heads of unretired domains whose key `$column` is
-/// `$1`: id, person, demographics.
+/// `$1`: id, person, demographics, each record read as the feed's read
+/// reads it.
 macro_rules! match_read {
     ($column:literal) => {
         concat!(
-            "SELECT r.id, l.person_id, v.demographics::text
-             FROM pix.source_record r
-             JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-             JOIN pix.identifier_domain d ON d.id = r.domain_id
+            "SELECT f.id, f.person_id, f.demographics
+             FROM pix.record_block b
              CROSS JOIN LATERAL (
-                 SELECT h.demographics FROM pix.source_record_version h
-                 WHERE h.record_id = r.id AND h.version = r.head_version
-             ) AS v
-             WHERE r.",
+                 SELECT r.id, l.person_id, v.demographics::text AS demographics
+                 FROM pix.source_record r
+                 JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
+                 JOIN pix.identifier_domain d ON d.id = r.domain_id
+                 CROSS JOIN LATERAL (
+                     SELECT h.demographics FROM pix.source_record_version h
+                     WHERE h.record_id = r.id AND h.version = r.head_version
+                     LIMIT 1
+                 ) AS v
+                 WHERE r.id = b.record_id
+                   AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL
+                 LIMIT 1
+             ) AS f
+             WHERE b.",
             $column,
-            " = $1 AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL"
+            " = $1"
         )
     };
 }

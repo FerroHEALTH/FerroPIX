@@ -62,7 +62,7 @@ async fn hold_json(harness: &Harness, candidates: &[(Uuid, Evidence)], links: &[
     let owner = admin(harness.postgres()).await;
     for statement in [
         "ALTER TABLE pix.link DROP CONSTRAINT link_evidence_packed",
-        "ALTER TABLE pix.candidate ALTER COLUMN evidence DROP NOT NULL, ADD COLUMN evidence_json jsonb",
+        "ALTER TABLE pix.candidate DROP CONSTRAINT candidate_evidence_packed, ADD COLUMN evidence_json jsonb",
         "DELETE FROM pix._sqlx_migrations WHERE version >= 45",
     ] {
         sqlx::query(statement)
@@ -90,6 +90,13 @@ async fn hold_json(harness: &Harness, candidates: &[(Uuid, Evidence)], links: &[
             .await
             .expect("the link holds JSON bytes again");
     }
+    sqlx::query(
+        "ALTER TABLE pix.candidate
+             ADD CONSTRAINT candidate_evidence_packed CHECK (evidence IS NOT NULL) NOT VALID",
+    )
+    .execute(&owner)
+    .await
+    .expect("the constraint of 0044 holds the rows written from now on");
 }
 
 #[tokio::test]

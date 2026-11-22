@@ -15,6 +15,14 @@ ALTER TABLE pix.candidate
     ALTER COLUMN evidence_json DROP NOT NULL,
     ADD COLUMN evidence bytea;
 
+-- Every candidate written from now on holds packed evidence, and the
+-- server packs every row that held JSON before 0045 drops it. Validating
+-- the constraint would read the whole table in one statement (51 s on the
+-- 13M candidates of the capacity store), so it stays NOT VALID, which
+-- PostgreSQL still enforces on every row written.
+ALTER TABLE pix.candidate
+    ADD CONSTRAINT candidate_evidence_packed CHECK (evidence IS NOT NULL) NOT VALID;
+
 -- A link's evidence changes type where it stands, its JSON kept as the
 -- bytes of its text until the server packs it. pix.link is small beside
 -- pix.candidate, so its rewrite is short, and it keeps its width, which

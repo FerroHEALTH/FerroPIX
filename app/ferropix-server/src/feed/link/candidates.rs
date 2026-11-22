@@ -5,24 +5,32 @@
 //! its authoritative identifiers, and those sharing a blocking key with
 //! it in another person.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
 use crate::feed::{FeedError, Feeder};
 use crate::matching::features;
 use crate::matching::subject::IdentifierKey;
-use crate::store::blocking::{FEED_BY_PHONETIC, FEED_BY_POSTAL};
+use crate::store::blocking::{
+    FEED_BY_IDENTIFIER, FEED_BY_PHONETIC, FEED_BY_POSTAL, FEED_BY_SHARED, carried_keys,
+};
 use crate::store::record::{PersonId, RecordId};
 
 use super::{Me, Other, store};
 
 /// A row of another record: id, current version, person, scoring features
-/// and their version.
-pub(super) type OtherRow = (Uuid, i32, Uuid, Option<String>, Option<i16>);
+/// and their version, and its local identifiers' keys.
+pub(super) type OtherRow = (
+    Uuid,
+    i32,
+    Uuid,
+    Option<String>,
+    Option<i16>,
+    Option<Vec<u8>>,
+);
 
 /// Returns the records whose current version carries one of `me`'s
 /// authoritative identifiers.
@@ -34,23 +42,14 @@ pub(super) async fn deterministic(
         return Ok(Vec::new());
     }
     let (domains, hmacs) = split(&me.authoritative);
-    let rows: Vec<OtherRow> = sqlx::query_as(
-        "SELECT DISTINCT r.id, r.head_version, l.person_id, b.features, b.features_version
-         FROM pix.carried_identifier i
-         JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-         JOIN pix.record_block b ON b.record_id = r.id
-         JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-         WHERE (i.domain_id, i.identifier_hmac) IN (SELECT * FROM unnest($1::uuid[], $2::bytea[]))
-           AND r.id <> $3 AND r.active AND r.removed_at IS NULL
-         ORDER BY r.id",
-    )
-    .bind(&domains)
-    .bind(&hmacs)
-    .bind(me.record.uuid())
-    .fetch_all(&mut *connection)
-    .await
-    .map_err(store)?;
-    others(connection, rows).await
+    let rows: Vec<OtherRow> = sqlx::query_as(FEED_BY_IDENTIFIER)
+        .bind(&domains)
+        .bind(&hmacs)
+        .bind(me.record.uuid())
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(store)?;
+    others(rows)
 }
 
 /// Returns the records in another person than `survivor` that share one of
@@ -86,66 +85,30 @@ pub(super) async fn blocked(
                     continue;
                 }
                 let (domains, hmacs) = split(&me.local);
-                sqlx::query_as(
-                    "SELECT DISTINCT r.id, r.head_version, l.person_id, b.features, b.features_version
-                     FROM pix.carried_identifier i
-                     JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-                     JOIN pix.record_block b ON b.record_id = r.id
-                     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-                     WHERE (i.domain_id, i.identifier_hmac)
-                               IN (SELECT * FROM unnest($1::uuid[], $2::bytea[]))
-                       AND r.id <> $3 AND l.person_id <> $4
-                       AND r.active AND r.removed_at IS NULL",
-                )
-                .bind(&domains)
-                .bind(&hmacs)
-                .bind(me.record.uuid())
-                .bind(survivor.uuid())
-                .fetch_all(&mut *connection)
-                .await
-                .map_err(store)?
+                sqlx::query_as(FEED_BY_SHARED)
+                    .bind(&domains)
+                    .bind(&hmacs)
+                    .bind(me.record.uuid())
+                    .bind(survivor.uuid())
+                    .fetch_all(&mut *connection)
+                    .await
+                    .map_err(store)?
             }
         };
         for row in found {
             rows.entry(row.0).or_insert(row);
         }
     }
-    others(connection, rows.into_values().collect()).await
+    others(rows.into_values().collect())
 }
 
 /// Reads each row's scoring features and the identifiers its version
 /// carries in `local` domains into an [`Other`].
-pub(super) async fn others(
-    connection: &mut PgConnection,
-    rows: Vec<OtherRow>,
-) -> Result<Vec<Other>, FeedError> {
-    let ids: Vec<Uuid> = rows.iter().map(|row| row.0).collect();
-    let local: Vec<(Uuid, Uuid, Vec<u8>)> = sqlx::query_as(
-        "SELECT i.record_id, i.domain_id, i.identifier_hmac
-         FROM pix.carried_identifier i
-         JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-         JOIN pix.identifier_domain d ON d.id = i.domain_id
-         WHERE i.record_id = ANY($1) AND d.kind = $2",
-    )
-    .bind(&ids)
-    .bind(crate::store::seed::kind_name(DomainKind::Local))
-    .fetch_all(&mut *connection)
-    .await
-    .map_err(store)?;
-    let mut keys: BTreeMap<Uuid, BTreeSet<IdentifierKey>> = BTreeMap::new();
-    for (record, domain, hmac) in local {
-        let hmac: [u8; 32] = hmac.try_into().map_err(|_short| {
-            FeedError::Store(crate::store::StoreError::Seal(
-                crate::store::seal::SealError::Malformed,
-            ))
-        })?;
-        keys.entry(record)
-            .or_default()
-            .insert(IdentifierKey::new(domain, hmac));
-    }
+pub(super) fn others(rows: Vec<OtherRow>) -> Result<Vec<Other>, FeedError> {
     rows.into_iter()
-        .map(|(record, version, person, stored, stored_version)| {
-            let local = keys.remove(&record).unwrap_or_default();
+        .map(|(record, version, person, stored, stored_version, keys)| {
+            let local = carried_keys(keys.as_deref())
+                .map_err(|error| FeedError::Store(crate::store::StoreError::Seal(error)))?;
             let subject = features::decode(stored.as_deref(), stored_version, local)
                 .map_err(|error| FeedError::Store(error.into()))?;
             Ok(Other {

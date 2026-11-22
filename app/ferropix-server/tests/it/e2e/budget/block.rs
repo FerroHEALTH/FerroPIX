@@ -43,18 +43,20 @@ const MATES: usize = 282;
 /// 2540 buffers, 4799 WAL bytes and 22,897 allocations. The graded pairs'
 /// masters read once and their candidates and steward actions written in
 /// one statement (#752) leave 22 statements, 2358 buffers, 4802 WAL bytes
-/// and 21,886 allocations.
+/// and 21,886 allocations. Reading the local identifiers in the blocking
+/// read (#752) leaves 20 statements, 2041 buffers and 21,785 allocations,
+/// and each ceiling fell by the drop.
 const CASE: Case = Case {
     name: "ITI-104 revise",
     ceiling: Ceiling {
-        statements: 22,
+        statements: 20,
         nested: 1,
-        blocks: 2406,
+        blocks: 2089,
         wal: 4895,
         audit: 0,
         answer: 173,
-        allocations: 22_324,
-        allocated: 2_621_408,
+        allocations: 22_223,
+        allocated: 2_592_993,
     },
     expected: StatusCode::OK,
 };

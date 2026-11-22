@@ -28,10 +28,10 @@ use crate::matching::scorer::{Grade, Scored, Scorer};
 use crate::matching::subject::{IdentifierKey, Subject};
 use crate::pdqm::PdqError;
 use crate::store::StoreError;
-use crate::store::blocking::{MATCH_BY_PHONETIC, MATCH_BY_POSTAL};
+use crate::store::blocking::{MATCH_BY_PHONETIC, MATCH_BY_POSTAL, MATCH_BY_SHARED, carried_keys};
 use crate::store::identifier::Rule;
 use crate::store::record;
-use crate::store::seal::{SealError, Sealer};
+use crate::store::seal::Sealer;
 
 /// The fewest of the scorer's fields an input states before the answer
 /// warns that the match rests on too little (PDQm 3.2.0 §2:3.119.4.1.3,
@@ -68,8 +68,9 @@ pub struct Matched {
     pub few_fields: bool,
 }
 
-/// A candidate record: id, person, scoring features and their version.
-type CandidateRow = (Uuid, Uuid, Option<String>, Option<i16>);
+/// A candidate record: id, person, scoring features and their version, and
+/// its local identifiers' keys.
+type CandidateRow = (Uuid, Uuid, Option<String>, Option<i16>, Option<Vec<u8>>);
 
 /// Matches `input` against the store with `scorer`, over the blocking keys
 /// `keys`, with `sealer` giving the HMAC of the input's identifiers.
@@ -113,33 +114,21 @@ pub async fn run(
                     .iter()
                     .map(|key| (key.domain(), key.hmac().to_vec()))
                     .unzip();
-                sqlx::query_as(
-                    "SELECT DISTINCT r.id, l.person_id, b.features, b.features_version
-                     FROM pix.carried_identifier i
-                     JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-                     JOIN pix.record_block b ON b.record_id = r.id
-                     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-                     JOIN pix.identifier_domain d ON d.id = r.domain_id
-                     WHERE (i.domain_id, i.identifier_hmac)
-                               IN (SELECT * FROM unnest($1::uuid[], $2::bytea[]))
-                       AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL",
-                )
-                .bind(&domains)
-                .bind(&hmacs)
-                .fetch_all(&mut *connection)
-                .await
-                .map_err(store)?
+                sqlx::query_as(MATCH_BY_SHARED)
+                    .bind(&domains)
+                    .bind(&hmacs)
+                    .fetch_all(&mut *connection)
+                    .await
+                    .map_err(store)?
             }
         };
         for row in rows {
             candidates.entry(row.0).or_insert((row, *key));
         }
     }
-    let records: Vec<Uuid> = candidates.keys().copied().collect();
-    let mut carried = carried_local(&mut *connection, &records).await?;
     let mut best = Best::default();
-    for (record, ((_, person, stored, version), key)) in candidates {
-        let local = carried.remove(&record).unwrap_or_default();
+    for ((_, person, stored, version, keys), key) in candidates.into_values() {
+        let local = carried_keys(keys.as_deref()).map_err(StoreError::Seal)?;
         let other =
             features::decode(stored.as_deref(), version, local).map_err(StoreError::from)?;
         best.keep(person, &scorer.score(&subject, &other, Some(key)));
@@ -215,35 +204,6 @@ async fn local_keys(
                 sealer.hmac(domain.id.uuid(), &normalised),
             ));
         }
-    }
-    Ok(keys)
-}
-
-/// Returns, by record, the keys of the identifiers each record's current
-/// version carries in `local` domains.
-async fn carried_local(
-    connection: &mut PgConnection,
-    records: &[Uuid],
-) -> Result<BTreeMap<Uuid, BTreeSet<IdentifierKey>>, PdqError> {
-    let rows: Vec<(Uuid, Uuid, Vec<u8>)> = sqlx::query_as(
-        "SELECT i.record_id, i.domain_id, i.identifier_hmac
-         FROM pix.carried_identifier i
-         JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-         JOIN pix.identifier_domain d ON d.id = i.domain_id
-         WHERE i.record_id = ANY($1) AND d.kind = 'local'",
-    )
-    .bind(records)
-    .fetch_all(&mut *connection)
-    .await
-    .map_err(store)?;
-    let mut keys: BTreeMap<Uuid, BTreeSet<IdentifierKey>> = BTreeMap::new();
-    for (record, domain, hmac) in rows {
-        let hmac: [u8; 32] = hmac
-            .try_into()
-            .map_err(|_short: Vec<u8>| StoreError::Seal(SealError::Malformed))?;
-        keys.entry(record)
-            .or_default()
-            .insert(IdentifierKey::new(domain, hmac));
     }
     Ok(keys)
 }

@@ -26,16 +26,19 @@ use crate::e2e::hl7v2::{V2, adt, code};
 /// record's heap and index pages, and the spool takes none of its 1,444
 /// bytes. The allocations and the bytes allocated are 2% above the values
 /// of three macOS runs (#721), which CI's Linux runner stays under, and
-/// count the test's own MLLP client beside the face.
+/// count the test's own MLLP client beside the face. Reading the local
+/// identifiers in the blocking read (#752) cost one statement, a buffer,
+/// 14 allocations and 1,873 bytes allocated less, and each ceiling fell by
+/// as much.
 const CEILING: Ceiling = Ceiling {
-    statements: 19,
+    statements: 18,
     nested: 1,
-    blocks: 117,
+    blocks: 116,
     wal: 2307,
     audit: 0,
     answer: 106,
-    allocations: 4124,
-    allocated: 806_074,
+    allocations: 4110,
+    allocated: 804_201,
 };
 
 /// The terminology requests one ITI-8 revision sends: its translations go

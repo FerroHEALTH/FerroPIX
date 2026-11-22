@@ -76,7 +76,20 @@ impl V2 {
     /// Starts PostgreSQL, the router and the face, its pointers kept in
     /// `cursors`.
     pub(crate) async fn start(cursors: Cursors) -> Self {
-        let pix = Harness::start(synthetic_seeds()).await;
+        Self::beside(Harness::start(synthetic_seeds()).await, cursors).await
+    }
+
+    /// Starts as [`V2::start`] does over a store pool of one connection,
+    /// so every statement runs in one backend and fills the same pages in
+    /// every run: the budget's measurements.
+    pub(crate) async fn start_on_one_connection(cursors: Cursors) -> Self {
+        let pix = Harness::start_on_one_connection(synthetic_seeds()).await;
+        Self::beside(pix, cursors).await
+    }
+
+    /// Starts the face beside the router and store of `pix`, its pointers
+    /// kept in `cursors`.
+    async fn beside(pix: Harness, cursors: Cursors) -> Self {
         let section = Hl7v2 {
             enabled: true,
             listen: String::from("127.0.0.1:0"),

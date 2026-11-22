@@ -286,14 +286,15 @@ struct Case {
 /// 2439 bytes, and with the domains read once (#715) an ITI-78 search reads
 /// 84 buffers. The blocking keys kept beside the record head (#724) lowered
 /// ITI-104 from 1106 to 194 buffers and from 2443 to 2277 WAL bytes, and
-/// ITI-119 from 588 to 118 buffers.
+/// ITI-119 from 588 to 118 buffers. The scoring features kept beside the
+/// head (#747) lowered ITI-104 to 190 buffers and ITI-119 to 114.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
             statements: 19,
             nested: 1,
-            blocks: 198,
+            blocks: 194,
             wal: 2323,
             audit: 2036,
             answer: 173,
@@ -341,7 +342,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 121,
+            blocks: 117,
             wal: 0,
             audit: 2728,
             answer: 1067,

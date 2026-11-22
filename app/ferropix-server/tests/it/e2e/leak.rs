@@ -9,7 +9,8 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use ferrohealth_server::run::chain;
-use ferropix_server::store::record::{self, Channel, Demographics};
+use ferropix_server::matching::subject::Subject;
+use ferropix_server::store::record::{self, Blocks, Channel, Demographics};
 use ferropix_server::store::reseal;
 use ferropix_server::store::seal::Sealer;
 use ferropix_server::store::{Job, Store, StoreError};
@@ -83,6 +84,7 @@ async fn no_identifier_or_name_reaches_a_log_a_debug_rendering_or_an_error() {
         &bsn_domain,
         &value,
         &demographics(0),
+        &super::blocks(&demographics(0)),
         Channel::Fhir,
         None,
     )
@@ -105,6 +107,7 @@ async fn no_identifier_or_name_reaches_a_log_a_debug_rendering_or_an_error() {
         &bsn_domain,
         &bsn(1),
         &Demographics::from_json(names).unwrap(),
+        &Blocks::of(&Subject::default()).unwrap(),
         Channel::V2,
         None,
     )

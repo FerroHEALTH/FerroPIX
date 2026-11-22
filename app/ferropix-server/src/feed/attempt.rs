@@ -10,13 +10,13 @@ use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
 use crate::feed::link::Me;
 use crate::feed::write::Carried;
-use crate::feed::{FeedError, announce, master, store, write};
+use crate::feed::{FeedError, announce, master, store};
 use crate::matching::blocking;
 use crate::matching::subject::{IdentifierKey, Subject};
 use crate::store::StoreError;
 use crate::store::demographics;
 use crate::store::identifier::Rule;
-use crate::store::record::{Domain, PersonId, RecordId};
+use crate::store::record::{self, Domain, PersonId, RecordId};
 use sqlx::PgConnection;
 use std::collections::BTreeSet;
 use uuid::Uuid;
@@ -87,12 +87,12 @@ pub(super) fn condition<'d>(
 /// Returns the advisory keys of the record's own identifier and of every
 /// authoritative identifier it carries.
 pub(super) fn identity_keys(own: &[u8; 32], carried: &[Carried]) -> Vec<i64> {
-    std::iter::once(write::identity_key(own))
+    std::iter::once(record::identity_key(own))
         .chain(
             carried
                 .iter()
                 .filter(|c| c.kind == DomainKind::Authoritative)
-                .map(|c| write::identity_key(&c.hmac)),
+                .map(|c| record::identity_key(&c.hmac)),
         )
         .collect()
 }

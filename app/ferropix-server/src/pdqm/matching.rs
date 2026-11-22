@@ -23,12 +23,12 @@ use uuid::Uuid;
 use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
 use crate::matching::blocking;
-use crate::matching::scorer::{Grade, Scorer};
+use crate::matching::features;
+use crate::matching::scorer::{Grade, Scored, Scorer};
 use crate::matching::subject::{IdentifierKey, Subject};
 use crate::pdqm::PdqError;
 use crate::store::StoreError;
 use crate::store::blocking::{MATCH_BY_PHONETIC, MATCH_BY_POSTAL};
-use crate::store::demographics;
 use crate::store::identifier::Rule;
 use crate::store::record;
 use crate::store::seal::{SealError, Sealer};
@@ -68,15 +68,15 @@ pub struct Matched {
     pub few_fields: bool,
 }
 
-/// A candidate record: id, person, demographics.
-type CandidateRow = (Uuid, Uuid, String);
+/// A candidate record: id, person, scoring features and their version.
+type CandidateRow = (Uuid, Uuid, Option<String>, Option<i16>);
 
 /// Matches `input` against the store with `scorer`, over the blocking keys
 /// `keys`, with `sealer` giving the HMAC of the input's identifiers.
 ///
 /// # Errors
-/// Returns [`PdqError::Store`] when a statement fails and
-/// [`PdqError::Demographics`] when stored demographics are no `Patient`.
+/// Returns [`PdqError::Store`] when a statement fails or a candidate's
+/// scoring features are stale or do not read.
 pub async fn run(
     connection: &mut PgConnection,
     sealer: &Sealer,
@@ -114,11 +114,10 @@ pub async fn run(
                     .map(|key| (key.domain(), key.hmac().to_vec()))
                     .unzip();
                 sqlx::query_as(
-                    "SELECT DISTINCT r.id, l.person_id, v.demographics::text
+                    "SELECT DISTINCT r.id, l.person_id, b.features, b.features_version
                      FROM pix.carried_identifier i
                      JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-                     JOIN pix.source_record_version v
-                          ON v.record_id = r.id AND v.version = r.head_version
+                     JOIN pix.record_block b ON b.record_id = r.id
                      JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
                      JOIN pix.identifier_domain d ON d.id = r.domain_id
                      WHERE (i.domain_id, i.identifier_hmac)
@@ -138,32 +137,53 @@ pub async fn run(
     }
     let records: Vec<Uuid> = candidates.keys().copied().collect();
     let mut carried = carried_local(&mut *connection, &records).await?;
-    let mut best: BTreeMap<Uuid, (f64, Grade)> = BTreeMap::new();
-    for (record, ((_, person, text), key)) in candidates {
-        let patient = demographics::patient(&text)?;
-        let other = Subject::from_patient(&patient, carried.remove(&record).unwrap_or_default());
-        let pair = scorer.score(&subject, &other, Some(key));
-        let entry = best.entry(person).or_insert((pair.score, pair.grade));
+    let mut best = Best::default();
+    for (record, ((_, person, stored, version), key)) in candidates {
+        let local = carried.remove(&record).unwrap_or_default();
+        let other =
+            features::decode(stored.as_deref(), version, local).map_err(StoreError::from)?;
+        best.keep(person, &scorer.score(&subject, &other, Some(key)));
+    }
+    let found = best.found();
+    Ok(Matched { found, few_fields })
+}
+
+/// The best score and grade of each person's records, scored in record
+/// order, the first of equal scores kept.
+#[derive(Debug, Default)]
+pub(crate) struct Best(BTreeMap<Uuid, (f64, Grade)>);
+
+impl Best {
+    /// Keeps `pair`, a record of `person`, when it outscores the person's
+    /// best so far.
+    pub(crate) fn keep(&mut self, person: Uuid, pair: &Scored) {
+        let entry = self.0.entry(person).or_insert((pair.score, pair.grade));
         if pair.score > entry.0 {
             *entry = (pair.score, pair.grade);
         }
     }
-    let mut found: Vec<Found> = best
-        .into_iter()
-        .filter(|(_, (_, grade))| *grade != Grade::CertainlyNot)
-        .map(|(person, (score, grade))| Found {
-            person,
-            score,
-            grade,
-        })
-        .collect();
-    found.sort_by(|left, right| {
-        right
-            .score
-            .total_cmp(&left.score)
-            .then(left.person.cmp(&right.person))
-    });
-    Ok(Matched { found, few_fields })
+
+    /// Returns the persons whose best grades above `certainly-not`, from the
+    /// highest score to the lowest, ties by id.
+    pub(crate) fn found(self) -> Vec<Found> {
+        let mut found: Vec<Found> = self
+            .0
+            .into_iter()
+            .filter(|(_, (_, grade))| *grade != Grade::CertainlyNot)
+            .map(|(person, (score, grade))| Found {
+                person,
+                score,
+                grade,
+            })
+            .collect();
+        found.sort_by(|left, right| {
+            right
+                .score
+                .total_cmp(&left.score)
+                .then(left.person.cmp(&right.person))
+        });
+        found
+    }
 }
 
 /// Returns the keys of the input's identifiers in `local` domains the store

@@ -145,6 +145,13 @@ The store keeps the two text keys of each record's current version, so a
 blocking read touches only the current records that carry the key. A record revised
 many times costs a blocking read no more than a record fed once.
 
+Beside the keys, the store keeps the fields the scorer compares for each
+record's current version, already normalised, so scoring a candidate reads
+none of its stored demographics. When a new FerroPIX version changes the
+normalisation, `ferropix db migrate` (and `serve`, unless
+`db.migrate = false`) rewrites those fields and the keys for every record,
+a thousand at a time, before the server takes traffic.
+
 ## Evidence
 
 Every score keeps its evidence: one entry per field with the comparator,

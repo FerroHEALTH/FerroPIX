@@ -18,6 +18,7 @@ use std::fmt;
 use fhir_types::r4::extension::ExtensionValue;
 use fhir_types::r4::human_name::HumanName;
 use fhir_types::r4::patient::Patient;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::matching::normalise;
@@ -68,11 +69,14 @@ impl fmt::Debug for IdentifierKey {
 }
 
 /// A birth date, to the precision the record states it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Birth {
     /// The year.
+    #[serde(rename = "y")]
     pub year: u16,
     /// The month and the day, when the date is stated to the day.
+    #[serde(rename = "d", default, skip_serializing_if = "Option::is_none")]
     pub day: Option<(u8, u8)>,
 }
 
@@ -103,11 +107,14 @@ impl Birth {
 /// One name: the family name and the given names, normalised.
 ///
 /// `Debug` shows which parts are present, never a value.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct Name {
     /// The family name.
+    #[serde(rename = "f", skip_serializing_if = "Option::is_none")]
     pub family: Option<String>,
     /// The given names, in order.
+    #[serde(rename = "g", skip_serializing_if = "Vec::is_empty")]
     pub given: Vec<String>,
 }
 
@@ -122,26 +129,39 @@ impl fmt::Debug for Name {
 
 /// The demographics of one record version, normalised for the scorer.
 ///
-/// `Debug` shows which fields are present, never a value.
-#[derive(Clone, PartialEq, Eq, Default)]
+/// `Debug` shows which fields are present, never a value. The serde form is
+/// the scoring features a head keeps (`crate::matching::features`), without
+/// the local identifiers, which are read from the identifiers a version
+/// carries.
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct Subject {
     /// The names, the official and usual ones first.
+    #[serde(rename = "n", skip_serializing_if = "Vec::is_empty")]
     pub names: Vec<Name>,
     /// The birth date.
+    #[serde(rename = "b", skip_serializing_if = "Option::is_none")]
     pub birth: Option<Birth>,
     /// The administrative gender, `unknown` read as absent.
+    #[serde(rename = "s", skip_serializing_if = "Option::is_none")]
     pub gender: Option<String>,
     /// The postal codes, the home address first.
+    #[serde(rename = "p", skip_serializing_if = "Vec::is_empty")]
     pub postal_codes: Vec<String>,
     /// The words of each address's lines and city.
+    #[serde(rename = "a", skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<BTreeSet<String>>,
     /// The telephone numbers.
+    #[serde(rename = "t", skip_serializing_if = "Vec::is_empty")]
     pub telephones: Vec<String>,
     /// The email addresses.
+    #[serde(rename = "e", skip_serializing_if = "Vec::is_empty")]
     pub emails: Vec<String>,
     /// The mother's maiden name.
+    #[serde(rename = "m", skip_serializing_if = "Option::is_none")]
     pub mothers_maiden_name: Option<String>,
     /// The identifiers the version carries in `local` domains.
+    #[serde(skip)]
     pub local_identifiers: BTreeSet<IdentifierKey>,
 }
 

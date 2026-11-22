@@ -13,15 +13,16 @@ use uuid::Uuid;
 use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::BlockingKey;
 use crate::feed::{FeedError, Feeder};
-use crate::matching::subject::{IdentifierKey, Subject};
+use crate::matching::features;
+use crate::matching::subject::IdentifierKey;
 use crate::store::blocking::{FEED_BY_PHONETIC, FEED_BY_POSTAL};
-use crate::store::demographics;
 use crate::store::record::{PersonId, RecordId};
 
 use super::{Me, Other, store};
 
-/// A row of another record: id, current version, person, demographics.
-pub(super) type OtherRow = (Uuid, i32, Uuid, String);
+/// A row of another record: id, current version, person, scoring features
+/// and their version.
+pub(super) type OtherRow = (Uuid, i32, Uuid, Option<String>, Option<i16>);
 
 /// Returns the records whose current version carries one of `me`'s
 /// authoritative identifiers.
@@ -34,10 +35,10 @@ pub(super) async fn deterministic(
     }
     let (domains, hmacs) = split(&me.authoritative);
     let rows: Vec<OtherRow> = sqlx::query_as(
-        "SELECT DISTINCT r.id, r.head_version, l.person_id, v.demographics::text
+        "SELECT DISTINCT r.id, r.head_version, l.person_id, b.features, b.features_version
          FROM pix.carried_identifier i
          JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-         JOIN pix.source_record_version v ON v.record_id = r.id AND v.version = r.head_version
+         JOIN pix.record_block b ON b.record_id = r.id
          JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
          WHERE (i.domain_id, i.identifier_hmac) IN (SELECT * FROM unnest($1::uuid[], $2::bytea[]))
            AND r.id <> $3 AND r.active AND r.removed_at IS NULL
@@ -86,11 +87,10 @@ pub(super) async fn blocked(
                 }
                 let (domains, hmacs) = split(&me.local);
                 sqlx::query_as(
-                    "SELECT DISTINCT r.id, r.head_version, l.person_id, v.demographics::text
+                    "SELECT DISTINCT r.id, r.head_version, l.person_id, b.features, b.features_version
                      FROM pix.carried_identifier i
                      JOIN pix.source_record r ON r.id = i.record_id AND i.version = r.head_version
-                     JOIN pix.source_record_version v
-                          ON v.record_id = r.id AND v.version = r.head_version
+                     JOIN pix.record_block b ON b.record_id = r.id
                      JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
                      WHERE (i.domain_id, i.identifier_hmac)
                                IN (SELECT * FROM unnest($1::uuid[], $2::bytea[]))
@@ -113,8 +113,8 @@ pub(super) async fn blocked(
     others(connection, rows.into_values().collect()).await
 }
 
-/// Reads each row's demographics and the identifiers its version carries in
-/// `local` domains into an [`Other`].
+/// Reads each row's scoring features and the identifiers its version
+/// carries in `local` domains into an [`Other`].
 pub(super) async fn others(
     connection: &mut PgConnection,
     rows: Vec<OtherRow>,
@@ -144,14 +144,15 @@ pub(super) async fn others(
             .insert(IdentifierKey::new(domain, hmac));
     }
     rows.into_iter()
-        .map(|(record, version, person, text)| {
-            let patient = demographics::patient(&text)?;
+        .map(|(record, version, person, stored, stored_version)| {
             let local = keys.remove(&record).unwrap_or_default();
+            let subject = features::decode(stored.as_deref(), stored_version, local)
+                .map_err(|error| FeedError::Store(error.into()))?;
             Ok(Other {
                 record: RecordId::from_uuid(record),
                 version,
                 person: PersonId::from_uuid(person),
-                subject: Subject::from_patient(&patient, local),
+                subject,
             })
         })
         .collect()

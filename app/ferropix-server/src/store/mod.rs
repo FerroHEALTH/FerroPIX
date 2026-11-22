@@ -22,6 +22,7 @@
 pub mod blocking;
 pub mod demographics;
 pub mod estimate;
+pub mod features;
 pub mod gate;
 pub mod identifier;
 pub mod indicator;
@@ -46,6 +47,7 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 
 use crate::config::section::db::DbSettings;
 use crate::config::section::domain::DomainSeed;
+use crate::matching::features::FeaturesError;
 use crate::store::seal::{KeyId, SealError, Sealer};
 
 /// The `application_name` every connection reports, so an operator finds the
@@ -79,11 +81,13 @@ pub struct Store {
 /// The job a store is started for, which decides the steps it runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Job {
-    /// `serve`: the boot gate, then the migrations unless `[db] migrate =
-    /// false`, the key check and the seed.
+    /// `serve`: the boot gate, then the migrations and the features' refill
+    /// unless `[db] migrate = false`, which checks the features instead, the
+    /// key check and the seed.
     Serve,
-    /// `db migrate`: the migrations, the key check and the seed, as the role
-    /// the migrations run under, which the boot gate does not hold to `pix`.
+    /// `db migrate`: the migrations, the features' refill, the key check and
+    /// the seed, as the role the migrations run under, which the boot gate
+    /// does not hold to `pix`.
     Migrate,
 }
 
@@ -93,7 +97,8 @@ impl Store {
     /// # Errors
     /// Returns [`StoreError::Url`] for a URL the driver refuses,
     /// [`StoreError::Connect`] when no connection opens, every refusal of
-    /// [`server_version::check`], [`gate::check`], [`schema::apply`], [`key::verify`] and
+    /// [`server_version::check`], [`gate::check`], [`schema::apply`],
+    /// [`features::refill`], [`features::check`], [`key::verify`] and
     /// [`seed::apply`], and [`StoreError::Seal`] when the keys cannot be
     /// derived.
     pub async fn start(
@@ -108,6 +113,9 @@ impl Store {
         }
         if job == Job::Migrate || db.migrate {
             schema::apply(&store).await?;
+            features::refill(store.pool(), features::BATCH).await?;
+        } else {
+            features::check(store.pool()).await?;
         }
         key::verify(&store).await?;
         seed::apply(&store, domains).await?;
@@ -326,6 +334,13 @@ pub enum StoreError {
     /// A record holds the most versions a version number counts.
     #[error("the record holds the most versions a version number counts")]
     VersionOverflow,
+    /// A record head's scoring features cannot be written, are stale or do
+    /// not read.
+    #[error("a record head's scoring features cannot be used")]
+    Features(#[from] FeaturesError),
+    /// A head's stored demographics are no `Patient`.
+    #[error("a record head's demographics cannot be read")]
+    Demographics(#[from] demographics::DemographicsError),
 }
 
 impl StoreError {

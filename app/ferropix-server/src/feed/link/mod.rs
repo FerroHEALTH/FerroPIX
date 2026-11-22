@@ -15,7 +15,7 @@
 //! the pair grades `certain`. PIXm leaves the cross-referencing to the
 //! Manager (PIXm 3.1.0 §2:3.104.4.1.3): the rules are our own design.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -32,7 +32,7 @@ mod candidates;
 pub(in crate::feed) mod merge;
 
 use self::candidates::{blocked, deterministic};
-use self::merge::{Moved, Recording, candidate, merge_moving};
+use self::merge::{Moved, Recording, candidates, merge_moving};
 
 /// The kinds of link the feed opens, as the schema spells them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,6 +106,9 @@ pub(super) struct Me<'a> {
     pub phonetic: Option<String>,
     /// Its `(postal code, birth date)` blocking key.
     pub postal: Option<String>,
+    /// Whether the version states the demographics of the head before it,
+    /// so a pair it scores as its open candidate holds is left as it is.
+    pub unchanged: bool,
 }
 
 /// What the cross-referencing did.
@@ -247,15 +250,20 @@ async fn join(
         .iter()
         .filter(|other| held.contains(&other.person))
         .map(|other| (other, vec![Conflict::MasterIdentities]));
-    for (other, found) in conflicting.into_iter().chain(masters) {
-        let mut scored = score_pair(feeder, me, other);
-        scored.evidence.conflicts = found;
-        scored.grade = scored.grade.max(Grade::Possible);
-        scored.evidence.grade = scored.grade;
-        if let Some(id) = candidate(connection, me, other, &scored, context).await? {
-            linked.candidates.push(id);
-        }
-    }
+    let held_apart: Vec<(&Other, Scored)> = conflicting
+        .into_iter()
+        .chain(masters)
+        .map(|(other, found)| {
+            let mut scored = score_pair(feeder, me, other);
+            scored.evidence.conflicts = found;
+            scored.grade = scored.grade.max(Grade::Possible);
+            scored.evidence.grade = scored.grade;
+            (other, scored)
+        })
+        .collect();
+    linked
+        .candidates
+        .extend(candidates(connection, me, &held_apart, context).await?);
     Ok(survivor)
 }
 
@@ -263,6 +271,11 @@ async fn join(
 /// person that shares a blocking key with it, records each pair graded
 /// `possible` or better as a candidate, or with `auto_link` merges the
 /// persons of a `certain` pair, and returns the person `me` is in.
+///
+/// Whether each person is a master identity is read once for every person
+/// a graded pair names, and the candidates are written together, before
+/// each merge and at the end, so a revision spends a statement on each
+/// and not four on every graded pair.
 async fn probabilistic(
     connection: &mut PgConnection,
     feeder: &Feeder,
@@ -273,27 +286,63 @@ async fn probabilistic(
 ) -> Result<PersonId, FeedError> {
     let mut survivor = survivor;
     let mut merged_away: BTreeSet<PersonId> = BTreeSet::new();
-    for other in &blocked(connection, feeder, me, survivor).await? {
+    let others = blocked(connection, feeder, me, survivor).await?;
+    let scored: Vec<(&Other, Scored)> = others
+        .iter()
+        .map(|other| {
+            let mut scored = score_pair(feeder, me, other);
+            scored.evidence.blocking_key = other_key(feeder, me, other);
+            (other, scored)
+        })
+        .collect();
+    let mut graded: Vec<PersonId> = scored
+        .iter()
+        .filter(|(other, scored)| scored.grade != Grade::CertainlyNot && other.person != survivor)
+        .map(|(other, _)| other.person)
+        .collect();
+    let mut masters: Option<BTreeMap<PersonId, bool>> = None;
+    if !graded.is_empty() {
+        graded.push(survivor);
+        graded.sort_unstable();
+        graded.dedup();
+        masters = Some(
+            by_survival(connection, &graded)
+                .await?
+                .into_iter()
+                .collect(),
+        );
+    }
+    let mut pending: Vec<(&Other, Scored)> = Vec::new();
+    for (other, mut scored) in scored {
         if other.person == survivor || merged_away.contains(&other.person) {
             continue;
         }
-        let mut scored = score_pair(feeder, me, other);
-        scored.evidence.blocking_key = other_key(feeder, me, other);
         linked.scored = linked.scored.saturating_add(1);
         if scored.grade == Grade::CertainlyNot {
             continue;
         }
         let mut pair = [other.person, survivor];
         pair.sort_unstable();
-        let ranked = by_survival(connection, &pair).await?;
-        if ranked.iter().all(|(_, master)| *master) {
+        let both_masters = match &masters {
+            Some(known) => pair
+                .iter()
+                .filter_map(|person| known.get(person))
+                .all(|master| *master),
+            None => by_survival(connection, &pair)
+                .await?
+                .iter()
+                .all(|(_, master)| *master),
+        };
+        if both_masters {
             scored.evidence.conflicts = vec![Conflict::MasterIdentities];
-            if let Some(id) = candidate(connection, me, other, &scored, context).await? {
-                linked.candidates.push(id);
-            }
+            pending.push((other, scored));
             continue;
         }
         if scored.grade == Grade::Certain && feeder.auto_link {
+            linked
+                .candidates
+                .extend(candidates(connection, me, &pending, context).await?);
+            pending.clear();
             lock_persons(connection, &pair).await?;
             let ranked = by_survival(connection, &pair).await?;
             let (Some((older, _)), Some((younger, _))) =
@@ -318,12 +367,16 @@ async fn probabilistic(
             linked.merged.push(younger);
             merged_away.insert(younger);
             survivor = older;
+            // A merge moves records between persons, so whether a person
+            // holds a master record is read again for each pair after it.
+            masters = None;
             continue;
         }
-        if let Some(id) = candidate(connection, me, other, &scored, context).await? {
-            linked.candidates.push(id);
-        }
+        pending.push((other, scored));
     }
+    linked
+        .candidates
+        .extend(candidates(connection, me, &pending, context).await?);
     Ok(survivor)
 }
 

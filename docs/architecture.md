@@ -374,8 +374,10 @@ boundaries: our own design.
   because the audit trail must still say what was held and when.
 - **A steward link, not-a-match or deferral** (section 5.3): lock the
   candidate; refuse `409` when it is no longer `open` or when either
-  record's head version moved past the version the candidate was computed
-  on; a link of two records that sit in two persons is a merge of the
+  record's head states other demographics than the version the candidate
+  was computed on (a revision that states the same demographics leaves an
+  open candidate it scores the same as it is, and writes no steward action
+  for it, #752); a link of two records that sit in two persons is a merge of the
   persons, the older surviving, and takes the merge path below; a link of
   two records already in one person settles the candidate; record the
   action with the steward's reason; commit. A `not-a-match` holds while

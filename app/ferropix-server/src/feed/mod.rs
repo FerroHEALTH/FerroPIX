@@ -412,7 +412,7 @@ impl Feeder {
         {
             return Err(FeedError::Subsumed);
         }
-        let version = self
+        let (version, unchanged) = self
             .write_version(&mut *transaction, &locked, &fed, context)
             .await?;
         write::recorded(
@@ -434,6 +434,7 @@ impl Feeder {
             domain.kind == DomainKind::Master,
         );
         me.identity = revising.master.map(|master| master.identity);
+        me.unchanged = unchanged;
         let linked = link::cross_reference(&mut *transaction, self, &me, context).await?;
         let created = revising.master.is_some_and(|master| !master.known) && locked.created;
         let changes = announced(linked.person, &linked.merged, created);
@@ -554,19 +555,21 @@ impl Feeder {
     }
 
     /// Writes the next version of `locked` from `fed`, with its blocking
-    /// keys and the identifiers it carries, and returns its number.
+    /// keys and the identifiers it carries, and returns its number and
+    /// whether it states the demographics of the head before it.
     async fn write_version(
         &self,
         connection: &mut PgConnection,
         locked: &write::Locked,
         fed: &Fed<'_>,
         context: &Context,
-    ) -> Result<i32, FeedError> {
+    ) -> Result<(i32, bool), FeedError> {
         let stored = demographics::stored(fed.patient)?;
-        let version = write::add_version(connection, locked, &stored, &fed.blocks, context).await?;
+        let (version, unchanged) =
+            write::add_version(connection, locked, &stored, &fed.blocks, context).await?;
         let sealer = self.store.sealer();
         write::insert_carried(connection, sealer, locked.id, version, fed.carried).await?;
-        Ok(version)
+        Ok((version, unchanged))
     }
 }
 

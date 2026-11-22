@@ -132,6 +132,7 @@ pub(super) fn me<'s>(
         local: keys(DomainKind::Local),
         phonetic: blocking::text_key(BlockingKey::BirthYearFamilyPhonetic, subject),
         postal: blocking::text_key(BlockingKey::PostalCodeBirthDate, subject),
+        unchanged: false,
     }
 }
 

@@ -43,9 +43,12 @@ You decide in the bar at the foot of the page, always with a reason:
 
 Previous and Next lead to the neighbouring pairs. After a decision the next
 pair opens. If another steward decided the
-pair first, or a source changed a record after you opened it, the server
-refuses with `409` and nothing is written: the bar says so and offers the
-next pair or a reload.
+pair first, or a source changed a record's demographics after you opened
+it, the server refuses with `409` and nothing is written: the bar says so
+and offers the next pair or a reload. A feed that changes only a record's
+identifiers or other fields the matcher does not compare leaves your
+decision standing, and leaves the pair's score, evidence and versions as
+they were.
 
 ## Merge
 

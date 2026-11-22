@@ -5,8 +5,8 @@
 //! (`docs/architecture.md` §4.3 and §5.3).
 //!
 //! The candidate is locked, and the decision is refused as stale when it is
-//! no longer waiting or when either record moved past the version the
-//! steward read. A link of two records in two persons merges the persons,
+//! no longer waiting or when either record's head states other
+//! demographics than the version the steward read. A link of two records in two persons merges the persons,
 //! the older surviving; not a match and a deferral settle the candidate.
 //! Each decision is one steward action with its reason, and nothing is
 //! deleted. No specification governs the decisions: our own design.
@@ -93,7 +93,7 @@ impl From<sqlx::Error> for DecideError {
 }
 
 /// The candidate's row as the decision reads it.
-type CandidateRow = (Uuid, Uuid, i32, i32, String, i32, i32);
+type CandidateRow = (Uuid, Uuid, i32, i32, String, bool, bool);
 
 /// Makes `decision` as `context`'s actor in one transaction on `store`,
 /// and returns the transaction open, so the caller writes the audit record
@@ -102,8 +102,8 @@ type CandidateRow = (Uuid, Uuid, i32, i32, String, i32, i32);
 /// # Errors
 ///
 /// Returns [`DecideError::NotFound`] for an unknown candidate,
-/// [`DecideError::Stale`] when it was decided or either record moved since
-/// the versions the decision carries, and [`DecideError::Feed`] when the
+/// [`DecideError::Stale`] when it was decided or either record's head
+/// states other demographics than the versions the decision carries, and [`DecideError::Feed`] when the
 /// store refuses a statement.
 pub async fn decide(
     store: &Store,
@@ -134,22 +134,27 @@ async fn settle(
 ) -> Result<Decided, DecideError> {
     let row: Option<CandidateRow> = sqlx::query_as(
         "SELECT c.record_a, c.record_b, c.a_version, c.b_version, c.status,
-                ra.head_version, rb.head_version
+                ra.head_version = c.a_version OR ha.demographics = va.demographics,
+                rb.head_version = c.b_version OR hb.demographics = vb.demographics
          FROM pix.candidate c
          JOIN pix.source_record ra ON ra.id = c.record_a
          JOIN pix.source_record rb ON rb.id = c.record_b
+         JOIN pix.source_record_version va ON va.record_id = c.record_a AND va.version = c.a_version
+         JOIN pix.source_record_version vb ON vb.record_id = c.record_b AND vb.version = c.b_version
+         JOIN pix.source_record_version ha ON ha.record_id = ra.id AND ha.version = ra.head_version
+         JOIN pix.source_record_version hb ON hb.record_id = rb.id AND hb.version = rb.head_version
          WHERE c.id = $1
          FOR UPDATE OF c",
     )
     .bind(decision.candidate)
     .fetch_optional(&mut *connection)
     .await?;
-    let Some((a, b, a_version, b_version, status, a_head, b_head)) = row else {
+    let Some((a, b, a_version, b_version, status, a_current, b_current)) = row else {
         return Err(DecideError::NotFound);
     };
     let waiting = status == "open" || status == "deferred";
     let read = decision.a_version == a_version && decision.b_version == b_version;
-    let current = a_head == a_version && b_head == b_version;
+    let current = a_current && b_current;
     if !(waiting && read && current) {
         return Err(DecideError::Stale);
     }

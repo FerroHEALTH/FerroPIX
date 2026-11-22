@@ -1,0 +1,1 @@
+- A feed writes the candidates of every pair it grades, with their steward actions and the steward's earlier not-a-match decisions checked, in one statement, and reads whether each graded pair's persons are master identities in one more, where it sent four statements for each pair; a revision over a block of 27 graded pairs sends 22 statements where it sent 101.

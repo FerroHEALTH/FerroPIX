@@ -174,7 +174,9 @@ pub(super) async fn lock_or_insert(
 
 /// Inserts the next version of `record` and makes it the head with its
 /// blocking keys and scoring features `blocks`, a removed record coming back with it; returns the
-/// version's number.
+/// version's number and whether it states the demographics of the head
+/// before it, the equivalence a steward's decision is held to
+/// (`docs/architecture.md` §5.3).
 ///
 /// A record [`lock_or_insert`] created already holds `blocks` and names
 /// version 1 as its head.
@@ -184,22 +186,25 @@ pub(super) async fn add_version(
     demographics: &Demographics,
     blocks: &Blocks,
     context: &Context,
-) -> Result<i32, StoreError> {
+) -> Result<(i32, bool), StoreError> {
     let version = record
         .head
         .checked_add(1)
         .ok_or(StoreError::VersionOverflow)?;
-    sqlx::query(
+    let unchanged: Option<bool> = sqlx::query_scalar(
         "INSERT INTO pix.source_record_version
              (record_id, version, demographics, channel, request_id)
-         VALUES ($1, $2, $3::jsonb, $4, $5)",
+         VALUES ($1, $2, $3::jsonb, $4, $5)
+         RETURNING (SELECT p.demographics = $3::jsonb FROM pix.source_record_version p
+                    WHERE p.record_id = $1 AND p.version = $6)",
     )
     .bind(record.id.uuid())
     .bind(version)
     .bind(demographics.expose())
     .bind(context.channel.as_str())
     .bind(context.request_id.as_deref())
-    .execute(&mut *connection)
+    .bind(record.head)
+    .fetch_one(&mut *connection)
     .await?;
     if !record.created {
         sqlx::query(
@@ -221,7 +226,8 @@ pub(super) async fn add_version(
         .execute(&mut *connection)
         .await?;
     }
-    Ok(version)
+    // A created record has no head before it, so its demographics are new.
+    Ok((version, unchanged.unwrap_or(false)))
 }
 
 /// Inserts the identifiers version `version` of `record` carries, each

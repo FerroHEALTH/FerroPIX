@@ -102,7 +102,8 @@ UUID is answered the same way.
 
 A candidate decision, a merge or a revert names versions of the records or
 persons that are no longer current: someone else decided the candidate, a
-feed changed a record, or a merge moved a person since you read it. Nothing
+feed changed a record's demographics, or a merge moved a person since you
+read it. Nothing
 was changed. Read the candidate or the preview again and decide on what it
 says now.
 

@@ -185,10 +185,21 @@ async fn person_of(harness: &Harness, value: &str) -> Uuid {
     .expect("the record's person")
 }
 
-/// The records of the audit spool that name a minted pseudonym.
-fn mint_records(harness: &Harness) -> usize {
+/// The records of the audit trail that disclose a pseudonym's person.
+async fn disclosure_records(harness: &Harness) -> usize {
     harness
         .audit_texts()
+        .await
+        .iter()
+        .filter(|text| text.contains("PrivacyDisclosure") && text.contains("pseudonym-resolution"))
+        .count()
+}
+
+/// The records of the audit trail that name a minted pseudonym.
+async fn mint_records(harness: &Harness) -> usize {
+    harness
+        .audit_texts()
+        .await
         .iter()
         .filter(|text| text.contains("IHE.BasicAudit.Create") && text.contains("\"pseudonym\""))
         .count()
@@ -204,7 +215,11 @@ async fn the_consumer_mints_on_the_first_ask_and_reads_the_same_value_after() {
     let first = pseudonyms(&ask(&harness, EHR, "H-701", &[NAMESPACE]).await);
     assert_eq!(1, first.len(), "the pseudonym is answered");
     assert!(Uuid::parse_str(&first[0]).is_ok(), "a UUID");
-    assert_eq!(1, mint_records(&harness), "the mint is its own record");
+    assert_eq!(
+        1,
+        mint_records(&harness).await,
+        "the mint is its own record"
+    );
     assert_eq!(
         first,
         pseudonyms(&ask_posted(&harness, EHR, "H-701", &[NAMESPACE]).await),
@@ -215,7 +230,7 @@ async fn the_consumer_mints_on_the_first_ask_and_reads_the_same_value_after() {
         pseudonyms(&ask(&harness, EHR, "H-701", &[NAMESPACE]).await)
     );
     assert_eq!(1, minted(&harness).await);
-    assert_eq!(1, mint_records(&harness), "no mint, no record");
+    assert_eq!(1, mint_records(&harness).await, "no mint, no record");
     assert_eq!(
         first,
         pseudonyms(&ask(&harness, EHR, "H-701", &[]).await),
@@ -335,7 +350,7 @@ async fn a_retired_domain_is_no_target_and_parallel_first_asks_mint_one() {
         .collect();
     assert_eq!(1, values.len(), "one value for every ask: {values:?}");
     assert_eq!(1, minted(&harness).await, "one pseudonym");
-    assert_eq!(1, mint_records(&harness), "one mint, one record");
+    assert_eq!(1, mint_records(&harness).await, "one mint, one record");
 
     sqlx::query("UPDATE pix.pseudonym_domain SET retired_at = now()")
         .execute(harness.store.pool())
@@ -438,12 +453,11 @@ async fn a_pseudonym_resolves_to_the_survivor_while_merged_and_back_after_the_re
     .await
     .expect("the actions count");
     assert_eq!(2, actions, "each resolution is a steward action");
-    let disclosures = harness
-        .audit_texts()
-        .iter()
-        .filter(|text| text.contains("PrivacyDisclosure") && text.contains("pseudonym-resolution"))
-        .count();
-    assert_eq!(2, disclosures, "and a disclosure record");
+    assert_eq!(
+        2,
+        disclosure_records(&harness).await,
+        "and a disclosure record"
+    );
     let logs = capture.text();
     for value in kept.iter().chain(&own) {
         assert!(

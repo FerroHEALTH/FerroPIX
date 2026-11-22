@@ -97,6 +97,8 @@ pub(crate) struct Harness {
     pub public_base_url: url::Url,
     /// The `[audit]` section the router records under.
     pub audit_settings: ferropix_server::config::section::audit::AuditSettings,
+    /// The audit trail the router records to.
+    pub audit: Audit,
     postgres: Postgres,
     _secrets: Secrets,
 }
@@ -104,29 +106,46 @@ pub(crate) struct Harness {
 impl Harness {
     /// Starts PostgreSQL, the store with `seeds`, and the router.
     pub(crate) async fn start(seeds: Vec<DomainSeed>) -> Self {
-        Self::start_with(seeds, |_matching| {}).await
+        Self::start_with(seeds, |_settings| {}).await
     }
 
-    /// Starts as [`Harness::start`] does, with the `[matching]` section
-    /// `tweak` changes.
+    /// Starts as [`Harness::start`] does, with the settings `tweak`
+    /// changes.
     pub(crate) async fn start_with(
         seeds: Vec<DomainSeed>,
-        tweak: impl FnOnce(&mut ferropix_server::config::section::matching::Matching),
+        tweak: impl FnOnce(&mut ferropix_server::config::settings::Settings),
+    ) -> Self {
+        Self::start_on(seeds, None, tweak).await
+    }
+
+    /// Starts as [`Harness::start`] does over a store pool of one
+    /// connection, so every statement runs in one backend and fills the
+    /// same pages in every run: the budget's measurements (#749).
+    pub(crate) async fn start_on_one_connection(seeds: Vec<DomainSeed>) -> Self {
+        Self::start_on(seeds, Some(1), |_settings| {}).await
+    }
+
+    /// Starts with the settings `tweak` changes, over a store pool of
+    /// `pool` connections or the default.
+    async fn start_on(
+        seeds: Vec<DomainSeed>,
+        pool: Option<u32>,
+        tweak: impl FnOnce(&mut ferropix_server::config::settings::Settings),
     ) -> Self {
         let postgres = postgres().await.expect("PostgreSQL starts");
         let url = app_role(&postgres).await;
-        let store = Store::start(
-            &super::settings(&url, &fresh_key(), true),
-            &seeds,
-            Job::Migrate,
-        )
-        .await
-        .expect("the store starts");
+        let mut db = super::settings(&url, &fresh_key(), true);
+        if let Some(pool) = pool {
+            db.pool_size = pool;
+        }
+        let store = Store::start(&db, &seeds, Job::Migrate)
+            .await
+            .expect("the store starts");
         let issuer = Issuer::start().await;
         let secrets = Secrets::new();
         let mut settings = crate::auth::settings(&issuer, &secrets);
         settings.domains = seeds;
-        tweak(&mut settings.matching);
+        tweak(&mut settings);
         let smart = Arc::new(
             Smart::discover(settings.auth, &settings.domains)
                 .await
@@ -135,8 +154,9 @@ impl Harness {
         let spool = tempfile::tempdir().expect("a temporary directory");
         let mut audit_settings = settings.audit.clone();
         audit_settings.spool_dir = spool.path().join("spool");
-        let audit =
-            Audit::open(&audit_settings, &settings.public_base_url).expect("the audit spool opens");
+        let audit = Audit::open(&audit_settings, &settings.public_base_url)
+            .and_then(|audit| audit.with_store(&store))
+            .expect("the audit trail opens");
         let health = Registry::default();
         let lifecycle = crate::support::serving();
         let routes = fhir::routes(
@@ -180,6 +200,7 @@ impl Harness {
             deprecated: settings.pdqm.deprecated,
             public_base_url: settings.public_base_url.clone(),
             audit_settings: settings.audit.clone(),
+            audit,
             postgres,
             _secrets: secrets,
         }
@@ -210,17 +231,20 @@ impl Harness {
         bearer(&self.issuer.token(SOURCE, "system/Patient.cud"))
     }
 
-    /// The text of every record the spool holds.
-    pub(crate) fn audit_texts(&self) -> Vec<String> {
-        ferropix_testkit::spool::records(&self.spool.path().join("spool"))
+    /// The text of every record the spool holds, the reads', then of every
+    /// record the audit outbox holds, the writes'.
+    pub(crate) async fn audit_texts(&self) -> Vec<String> {
+        let mut records = ferropix_testkit::spool::records(&self.spool.path().join("spool"));
+        records.extend(super::outbox_records(&self.audit).await);
+        records
             .into_iter()
             .map(|record| String::from_utf8(record).expect("a record is UTF-8"))
             .collect()
     }
 
-    /// The records the spool holds.
-    pub(crate) fn records(&self) -> usize {
-        ferropix_testkit::spool::records(&self.spool.path().join("spool")).len()
+    /// The records the spool and the audit outbox hold.
+    pub(crate) async fn records(&self) -> usize {
+        self.audit_texts().await.len()
     }
 
     /// Sends one request and reads the answer.

@@ -138,7 +138,7 @@ pub(super) async fn query(
         &persons,
         outcome,
     );
-    if let Err(error) = place.record(&exchange).await {
+    if let Err(error) = place.record(std::slice::from_ref(&exchange)).await {
         tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-21 answer is withheld: its audit record could not be stored");
         return answer(
             header,

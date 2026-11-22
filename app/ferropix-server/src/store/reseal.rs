@@ -11,14 +11,17 @@
 //! walking each relation once by its key with a cursor: a run interrupted
 //! keeps every batch it committed, and a resumed run walks again from the
 //! first row, passing over each already under the new key.
-//! The payloads waiting in the outbox are sealed the same way and are
-//! rewritten after the identifiers.
+//! The payloads waiting in the outbox, and the BALP records in the audit
+//! outbox and its quarantine, are sealed the same way and are rewritten
+//! after the identifiers.
 //! When no row is left under the old key it records the new key as the
 //! store's and drops the pending mark; the old key opens nothing afterwards.
 //! No specification governs the rotation: our own design.
 
+use secrecy::ExposeSecret as _;
 use uuid::Uuid;
 
+use crate::audit::outbox::AUDIT_RECORD;
 use crate::store::key::{self, StoredKey};
 use crate::store::seal::{IdentifierValue, KeyId, SealError, Sealer};
 use crate::store::{Store, StoreError};
@@ -58,11 +61,33 @@ type CarriedRow = (
 type CarriedKey = (Uuid, i32, Uuid, Vec<u8>);
 
 /// The statements that find a row left under another key than the store's.
-const LEFT: [&str; 3] = [
+const LEFT: [&str; 5] = [
     "SELECT key_id FROM pix.source_record WHERE key_id <> $1 LIMIT 1",
     "SELECT key_id FROM pix.carried_identifier WHERE key_id <> $1 LIMIT 1",
     "SELECT key_id FROM pix.outbox WHERE key_id <> $1 LIMIT 1",
+    "SELECT key_id FROM pix.audit_outbox WHERE key_id <> $1 LIMIT 1",
+    "SELECT key_id FROM pix.audit_quarantine WHERE key_id <> $1 LIMIT 1",
 ];
+
+/// The tables of BALP records sealed under the store's key (#742).
+const AUDIT_TABLES: [AuditTable; 2] = [
+    AuditTable {
+        select: "SELECT id, record_sealed FROM pix.audit_outbox WHERE key_id = $1 ORDER BY id LIMIT $2 FOR UPDATE",
+        update: "UPDATE pix.audit_outbox SET record_sealed = $2, key_id = $3 WHERE id = $1",
+    },
+    AuditTable {
+        select: "SELECT id, record_sealed FROM pix.audit_quarantine WHERE key_id = $1 ORDER BY id LIMIT $2 FOR UPDATE",
+        update: "UPDATE pix.audit_quarantine SET record_sealed = $2, key_id = $3 WHERE id = $1",
+    },
+];
+
+/// The statements that reseal one table of BALP records.
+struct AuditTable {
+    /// Reads a batch of records under the old key.
+    select: &'static str,
+    /// Writes one record under the new key.
+    update: &'static str,
+}
 
 /// Rewrites every record written under `old` under `new`, the key the store
 /// holds.
@@ -109,6 +134,15 @@ pub async fn run(store: &Store, old: &Sealer, batch: i64) -> Result<ResealReport
             break;
         }
         tracing::info!(rewritten, "outbox payloads resealed in a batch");
+    }
+    for table in &AUDIT_TABLES {
+        loop {
+            let rewritten = reseal_audit_batch(store, old, new, batch, table).await?;
+            if rewritten == 0 {
+                break;
+            }
+            tracing::info!(rewritten, "audit records resealed in a batch");
+        }
     }
     finish(store, to).await?;
     tracing::info!(from = %from, to = %to, records, "the store is resealed");
@@ -321,6 +355,36 @@ async fn reseal_outbox_batch(
         sqlx::query("UPDATE pix.outbox SET payload_sealed = $2, key_id = $3 WHERE id = $1")
             .bind(id)
             .bind(new.seal(id, &payload)?)
+            .bind(new.key_id().as_bytes().as_slice())
+            .execute(&mut *transaction)
+            .await?;
+        rewritten = rewritten.saturating_add(1);
+    }
+    transaction.commit().await?;
+    Ok(rewritten)
+}
+
+/// Reseals one batch of BALP records of `table` written under `old`, and
+/// returns how many it rewrote.
+async fn reseal_audit_batch(
+    store: &Store,
+    old: &Sealer,
+    new: &Sealer,
+    batch: i64,
+    table: &AuditTable,
+) -> Result<u64, StoreError> {
+    let mut transaction = store.pool().begin().await?;
+    let rows: Vec<(i64, Vec<u8>)> = sqlx::query_as(sqlx::AssertSqlSafe(table.select))
+        .bind(old.key_id().as_bytes().as_slice())
+        .bind(batch)
+        .fetch_all(&mut *transaction)
+        .await?;
+    let mut rewritten: u64 = 0;
+    for (id, sealed) in rows {
+        let record = old.open_bytes(AUDIT_RECORD, &sealed)?;
+        sqlx::query(sqlx::AssertSqlSafe(table.update))
+            .bind(id)
+            .bind(new.seal(AUDIT_RECORD, record.expose_secret())?)
             .bind(new.key_id().as_bytes().as_slice())
             .execute(&mut *transaction)
             .await?;

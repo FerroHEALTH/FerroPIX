@@ -108,56 +108,40 @@ async fn create(face: Arc<Face>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let call = Call::of_request(&parts, &face.fhir_base);
     let format = answer_format(&parts);
+    let record = |id: Option<&str>, outcome| {
+        records::subscription(&call, SubscriptionAction::Create, id, outcome)
+    };
     let requested = match requested(&face, &parts, body).await {
         Ok(requested) => requested,
         Err(answer) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Create,
-                None,
-                Outcome::MinorFailure,
-            );
-            return send(&face, &parts, exchange, answer.as_ref(), format, None).await;
+            return kept(
+                &face.audit,
+                record(None, Outcome::MinorFailure),
+                answer.as_ref(),
+                format,
+            )
+            .await;
         }
     };
-    match subscription::create(&face.store, &requested).await {
+    let mut transaction = match begin(&face, record(None, Outcome::SeriousFailure), format).await {
+        Ok(transaction) => transaction,
+        Err(refusal) => return *refusal,
+    };
+    match subscription::create(&mut transaction, &requested).await {
         Ok(created) => {
             let id = created.id.clone().unwrap_or_default();
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Create,
-                Some(&id),
-                Outcome::Success,
-            );
             let location = face.location(&id);
-            send(
-                &face,
-                &parts,
-                exchange,
-                &answer(StatusCode::CREATED, created),
-                format,
-                Some(&location),
-            )
-            .await
+            let committed = commit(&face, transaction, record(Some(&id), Outcome::Success)).await;
+            match committed {
+                Ok(()) => written(
+                    &answer(StatusCode::CREATED, created),
+                    format,
+                    Some(&location),
+                ),
+                Err(refusal) => written(&refused(refusal), format, None),
+            }
         }
-        Err(error) => {
-            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 subscription could not be stored");
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Create,
-                None,
-                Outcome::SeriousFailure,
-            );
-            send(
-                &face,
-                &parts,
-                exchange,
-                &refused(Refusal::Unavailable),
-                format,
-                None,
-            )
-            .await
-        }
+        Err(error) => unstored(&face, &error, record(None, Outcome::SeriousFailure), format).await,
     }
 }
 
@@ -235,45 +219,32 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let label = id.map(|id| id.to_string());
+    let record = |id: Option<&str>, outcome| {
+        records::subscription(&call, SubscriptionAction::Update, id, outcome)
+    };
     let requested = match requested(&face, &parts, body).await {
         Ok(requested) => requested,
         Err(answer) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Update,
-                label.as_deref(),
-                Outcome::MinorFailure,
-            );
-            return send(&face, &parts, exchange, answer.as_ref(), format, None).await;
+            let exchange = record(label.as_deref(), Outcome::MinorFailure);
+            return kept(&face.audit, exchange, answer.as_ref(), format).await;
         }
     };
     let Some(id) = id else {
-        let exchange = records::subscription(
-            &call,
-            SubscriptionAction::Update,
-            None,
-            Outcome::MinorFailure,
-        );
-        return send(
-            &face,
-            &parts,
-            exchange,
-            &refused(Refusal::NotFound),
-            format,
-            None,
-        )
-        .await;
+        let exchange = record(None, Outcome::MinorFailure);
+        return kept(&face.audit, exchange, &refused(Refusal::NotFound), format).await;
     };
-    let (outcome, refusal) = match subscription::update(&face.store, id, &requested).await {
+    let failed = record(label.as_deref(), Outcome::SeriousFailure);
+    let mut transaction = match begin(&face, failed, format).await {
+        Ok(transaction) => transaction,
+        Err(refusal) => return *refusal,
+    };
+    let (outcome, refusal) = match subscription::update(&mut transaction, id, &requested).await {
         Ok(Updated::Done(updated)) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Update,
-                label.as_deref(),
-                Outcome::Success,
-            );
-            let updated = answer(StatusCode::OK, *updated);
-            return send(&face, &parts, exchange, &updated, format, None).await;
+            let exchange = record(label.as_deref(), Outcome::Success);
+            return match commit(&face, transaction, exchange).await {
+                Ok(()) => written(&answer(StatusCode::OK, *updated), format, None),
+                Err(refusal) => written(&refused(refusal), format, None),
+            };
         }
         Ok(Updated::NotFound) => (Outcome::MinorFailure, refused(Refusal::NotFound)),
         Ok(Updated::Status) => (
@@ -290,9 +261,14 @@ async fn update(face: Arc<Face>, request: Request) -> Response {
             (Outcome::SeriousFailure, refused(Refusal::Unavailable))
         }
     };
-    let exchange =
-        records::subscription(&call, SubscriptionAction::Update, label.as_deref(), outcome);
-    send(&face, &parts, exchange, &refusal, format, None).await
+    drop(transaction);
+    kept(
+        &face.audit,
+        record(label.as_deref(), outcome),
+        &refusal,
+        format,
+    )
+    .await
 }
 
 /// `DELETE {base}/fhir/Subscription/{id}` (§2:3.94.4.5).
@@ -302,57 +278,108 @@ async fn delete(face: Arc<Face>, request: Request) -> Response {
     let format = answer_format(&parts);
     let id = id_of(&parts);
     let label = id.map(|id| id.to_string());
-    let deleted = match id {
-        Some(id) => subscription::delete(&face.store, id).await,
-        None => Ok(false),
+    let record = |outcome| {
+        records::subscription(&call, SubscriptionAction::Delete, label.as_deref(), outcome)
     };
-    match deleted {
-        Ok(true) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Delete,
-                label.as_deref(),
-                Outcome::Success,
-            );
-            match record(&face.audit, &parts, &exchange).await {
-                Ok(()) => StatusCode::NO_CONTENT.into_response(),
-                Err(()) => written(&refused(Refusal::Unaudited), format, None),
-            }
-        }
+    let Some(id) = id else {
+        return kept(
+            &face.audit,
+            record(Outcome::MinorFailure),
+            &refused(Refusal::NotFound),
+            format,
+        )
+        .await;
+    };
+    let mut transaction = match begin(&face, record(Outcome::SeriousFailure), format).await {
+        Ok(transaction) => transaction,
+        Err(refusal) => return *refusal,
+    };
+    match subscription::delete(&mut transaction, id).await {
+        Ok(true) => match commit(&face, transaction, record(Outcome::Success)).await {
+            Ok(()) => StatusCode::NO_CONTENT.into_response(),
+            Err(refusal) => written(&refused(refusal), format, None),
+        },
         Ok(false) => {
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Delete,
-                label.as_deref(),
-                Outcome::MinorFailure,
-            );
-            send(
-                &face,
-                &parts,
-                exchange,
+            drop(transaction);
+            kept(
+                &face.audit,
+                record(Outcome::MinorFailure),
                 &refused(Refusal::NotFound),
                 format,
-                None,
             )
             .await
         }
+        Err(error) => unstored(&face, &error, record(Outcome::SeriousFailure), format).await,
+    }
+}
+
+/// Inserts the record `exchange` of a subscription write in its
+/// `transaction` and commits both (#742), or returns the refusal: the
+/// record that could not be kept, or the store that could not commit.
+async fn commit(
+    face: &Face,
+    mut transaction: sqlx::Transaction<'static, sqlx::Postgres>,
+    exchange: ihe_atna::balp::Exchange,
+) -> Result<(), Refusal> {
+    if let Err(error) = face.audit.enlist(&mut transaction, &[exchange]).await {
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 write is refused: its audit record could not be kept");
+        return Err(Refusal::Unaudited);
+    }
+    if let Err(error) = transaction.commit().await {
+        tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 write could not be committed");
+        return Err(Refusal::Unavailable);
+    }
+    face.audit.committed();
+    Ok(())
+}
+
+/// Logs a store that could not take a subscription write, keeps its record
+/// `exchange` and answers `503`.
+async fn unstored(
+    face: &Face,
+    error: &crate::store::StoreError,
+    exchange: ihe_atna::balp::Exchange,
+    format: Format,
+) -> Response {
+    tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-94 subscription could not be stored");
+    kept(
+        &face.audit,
+        exchange,
+        &refused(Refusal::Unavailable),
+        format,
+    )
+    .await
+}
+
+/// Begins the transaction of a subscription write, or keeps its record
+/// `failed` and answers `503` when the store lends no connection.
+async fn begin(
+    face: &Face,
+    failed: ihe_atna::balp::Exchange,
+    format: Format,
+) -> Result<sqlx::Transaction<'static, sqlx::Postgres>, Box<Response>> {
+    match face.store.pool().begin().await {
+        Ok(transaction) => Ok(transaction),
+        Err(error) => Err(Box::new(
+            unstored(face, &error.into(), failed, format).await,
+        )),
+    }
+}
+
+/// Keeps the record `exchange` of a write that changed nothing in the
+/// audit outbox of `audit`, then sends `answer` in `format`; `503` when the
+/// record could not be kept.
+pub(super) async fn kept<T: Resource>(
+    audit: &Audit,
+    exchange: ihe_atna::balp::Exchange,
+    answer: &Answer<T>,
+    format: Format,
+) -> Response {
+    match audit.keep(&[exchange]).await {
+        Ok(()) => written(answer, format, None),
         Err(error) => {
-            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-94 subscription could not be deleted");
-            let exchange = records::subscription(
-                &call,
-                SubscriptionAction::Delete,
-                label.as_deref(),
-                Outcome::SeriousFailure,
-            );
-            send(
-                &face,
-                &parts,
-                exchange,
-                &refused(Refusal::Unavailable),
-                format,
-                None,
-            )
-            .await
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "a PMIR answer was withheld: its audit record could not be kept");
+            written(&refused(Refusal::Unaudited), format, None)
         }
     }
 }
@@ -463,8 +490,8 @@ pub(super) async fn record(
     exchange: &ihe_atna::balp::Exchange,
 ) -> Result<(), ()> {
     let stored = match parts.extensions.get::<Pending>() {
-        Some(pending) => pending.record(audit, exchange).await,
-        None => audit.record(vec![exchange.clone()]).await,
+        Some(pending) => pending.record(audit, std::slice::from_ref(exchange)).await,
+        None => audit.record(std::slice::from_ref(exchange)).await,
     };
     stored.map_err(|error| {
         tracing::error!(error = %ferrohealth_server::run::chain(&error), "a PMIR answer was withheld: its audit record could not be stored");

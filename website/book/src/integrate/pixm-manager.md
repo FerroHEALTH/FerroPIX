@@ -94,8 +94,9 @@ success, or one `error` issue:
   encoding over `Accept`; a request that accepts neither answers `406`
   with a `not-supported` issue, and a body in another media type `415`.
 - A store that cannot be reached answers `503` with a `transient` issue,
-  and so does a request whose audit record has no room in the spool, before
-  anything is read or changed.
+  and so does a query whose audit record has no room in the spool, before
+  anything is read, or a feed whose record cannot be kept, in which case
+  nothing is changed: a feed and its record commit together.
 - Every query and every feed writes its PIXm BALP record
   ([Security and audit](../operate/security-and-audit.md#the-servers-audit-trail)). The
   request log records the matched route and never the query, the body or

@@ -105,7 +105,7 @@ pub async fn serve_settings(
             .map_err(ServeError::Auth)?,
     );
     let mounts = fhir::Mounts::of(&pixm, &pdqm, &pmir, &operator);
-    let audit = audit::Audit::open(&audit, &public_base_url).map_err(ServeError::Audit)?;
+    let audit = audit_trail(&audit, &public_base_url, &store)?;
     let draining = audit.drain();
     let listening = hl7v2::Listening::default();
     let health = registry(&store, &audit, hl7v2.as_ref().map(|_| &listening));
@@ -395,8 +395,20 @@ fn backend(store: &store::Store, settings: &Settings) -> fhir::Backend {
     }
 }
 
+/// Opens the audit trail `settings` names, keeping the writes' records in
+/// the audit outbox of `store`.
+fn audit_trail(
+    settings: &config::section::audit::AuditSettings,
+    public_base_url: &url::Url,
+    store: &store::Store,
+) -> Result<audit::Audit, ServeError> {
+    audit::Audit::open(settings, public_base_url)
+        .and_then(|audit| audit.with_store(store))
+        .map_err(ServeError::Audit)
+}
+
 /// Returns the readiness registry: the database, the audit spool's
-/// headroom, the outbox sender's backlog and, when the HL7 v2 face runs, its
+/// headroom, the audit outbox's quarantine, the outbox sender's backlog and, when the HL7 v2 face runs, its
 /// listener.
 fn registry(
     store: &store::Store,
@@ -406,6 +418,7 @@ fn registry(
     let health = Registry::default()
         .and(Arc::new(store::indicator::Database::new(store.clone())))
         .and(Arc::new(audit::Headroom(audit.clone())))
+        .and(Arc::new(audit::Quarantine(audit.clone())))
         .and(Arc::new(outbox::Backlog::new(store.clone())));
     match listening {
         Some(listening) => health.and(Arc::new(listening.clone())),

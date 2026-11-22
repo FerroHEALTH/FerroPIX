@@ -559,7 +559,11 @@ async fn over_a_long_history_the_reads_find_exactly_the_heads_that_give_the_key(
     for index in (4..120).step_by(9) {
         started
             .feeder
-            .remove(&Patient::at(index, 0).removal(), &context())
+            .remove(
+                &Patient::at(index, 0).removal(),
+                &context(),
+                started.recording(),
+            )
             .await
             .expect("the removal applies");
     }
@@ -573,7 +577,11 @@ async fn over_a_long_history_the_reads_find_exactly_the_heads_that_give_the_key(
     for subsumed in [Patient::at(30, 5), Patient::at(9999, 2)] {
         started
             .feeder
-            .resolve_duplicate(&subsumed.subsumed_by(&survivor.value), &context())
+            .resolve_duplicate(
+                &subsumed.subsumed_by(&survivor.value),
+                &context(),
+                started.recording(),
+            )
             .await
             .expect("the duplicate resolves");
     }
@@ -677,7 +685,7 @@ async fn every_writer_of_a_head_sets_the_keys_and_the_features_of_its_version() 
 
     started
         .feeder
-        .remove(&patient.removal(), &context())
+        .remove(&patient.removal(), &context(), started.recording())
         .await
         .expect("the removal applies");
     assert_eq!(
@@ -701,7 +709,11 @@ async fn every_writer_of_a_head_sets_the_keys_and_the_features_of_its_version() 
     subsumed.postal = Some(String::from("1011AB"));
     started
         .feeder
-        .resolve_duplicate(&subsumed.subsumed_by(&patient.value), &context())
+        .resolve_duplicate(
+            &subsumed.subsumed_by(&patient.value),
+            &context(),
+            started.recording(),
+        )
         .await
         .expect("the duplicate resolves");
     assert_eq!(

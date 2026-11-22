@@ -141,7 +141,9 @@ fn access(parts: &Parts) -> Access {
         .unwrap_or(Access::Open)
 }
 
-/// Stores `exchanges`, the first in the request's reserved place.
+/// Stores the records of a read, `exchanges`, as one batch, the first in
+/// the request's reserved place, or the records of the read refused when
+/// they are late.
 ///
 /// # Errors
 ///
@@ -151,14 +153,35 @@ pub async fn record(
     parts: &Parts,
     exchanges: Vec<Exchange>,
 ) -> Result<(), Unrecorded> {
-    let mut exchanges = exchanges.into_iter();
-    if let Some(first) = exchanges.next() {
-        match parts.extensions.get::<Pending>() {
-            Some(pending) => pending.record(&operator.audit, &first).await?,
-            None => operator.audit.record(vec![first]).await?,
-        }
+    match parts.extensions.get::<Pending>() {
+        Some(pending) => pending.record(&operator.audit, &exchanges).await,
+        None => operator.audit.record(&exchanges).await,
     }
-    operator.audit.record(exchanges.collect()).await
+}
+
+/// Inserts the records of a write, `exchanges`, into the audit outbox in its
+/// `transaction` and commits both (#742), waking the forwarder.
+///
+/// # Errors
+///
+/// Returns the `503` of a record that could not be kept, the change rolled
+/// back with it, and the answer of a commit the store refused.
+pub async fn commit(
+    operator: &Operator,
+    mut transaction: sqlx::Transaction<'static, sqlx::Postgres>,
+    exchanges: &[Exchange],
+) -> Result<(), Box<Response>> {
+    operator
+        .audit
+        .enlist(&mut transaction, exchanges)
+        .await
+        .map_err(|error| Box::new(unaudited(&error)))?;
+    transaction
+        .commit()
+        .await
+        .map_err(|error| Box::new(failed(&error.into())))?;
+    operator.audit.committed();
+    Ok(())
 }
 
 /// Returns the uuid `text` names, or `None` for text that names none.

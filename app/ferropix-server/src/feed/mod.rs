@@ -21,8 +21,8 @@
 //! first, in key order, then the record rows, then the persons in key
 //! order, so two feeds never deadlock on each other and a feed that joins
 //! the persons another feed is joining waits for it. Every system action is
-//! a `steward_action` row. The BALP record is written after the commit by
-//! [`record()`]. PIXm leaves the cross-referencing to the Manager
+//! a `steward_action` row. The BALP record is inserted into the audit
+//! outbox in the same transaction, before it commits ([`Recording`]). PIXm leaves the cross-referencing to the Manager
 //! (§2:3.104.4.1.3): the rules are our own design.
 
 pub mod announce;
@@ -35,7 +35,7 @@ pub mod steward;
 mod write;
 
 use fhir_types::r4::patient::Patient;
-use ihe_atna::balp::Outcome;
+use ihe_atna::balp::{Exchange, Outcome};
 use ihe_iti::pixm::audit::{FeedAction, manager_feed};
 use ihe_iti::pixm::identifier::SourceIdentifier;
 use ihe_iti::pixm::server::feed::{Merge, Removal, Revision};
@@ -44,7 +44,6 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::audit::records::Call;
-use crate::audit::reserve::Pending;
 use crate::audit::{Audit, Unrecorded};
 use crate::config::section::domain::DomainKind;
 use crate::config::section::matching::{BlockingKey, Matching};
@@ -159,50 +158,38 @@ impl Feeder {
         }
     }
 
-    /// Applies an Add or Revise Patient message (PIXm 3.1.0 §2:3.104.4.1).
+    /// Applies an Add or Revise Patient message (PIXm 3.1.0 §2:3.104.4.1),
+    /// its records inserted in its transaction before it commits.
     ///
     /// # Errors
     /// Returns [`FeedError::UnknownDomain`] for a condition in a domain the
     /// store does not know or retired, [`FeedError::Identifier`] for a value
     /// its domain's rule refuses, [`FeedError::Subsumed`] for an identifier
     /// the Source subsumed, [`FeedError::Contention`] when concurrent
-    /// transactions moved what it read on every attempt, and
+    /// transactions moved what it read on every attempt,
+    /// [`FeedError::Unrecorded`] when its records cannot be kept, and
     /// [`FeedError::Store`] when a statement fails; nothing is committed.
     pub async fn revise(
         &self,
         revision: &Revision,
         context: &Context,
+        recording: Recording<'_>,
     ) -> Result<Applied, FeedError> {
         let revising = Revising {
             system: revision.identifier().system(),
             value: revision.identifier().value().expose_secret(),
             master: None,
         };
-        self.revising(&revising, revision.patient(), context).await
-    }
-
-    /// Applies the revision `revising` with `patient`, tried again after
-    /// contention.
-    async fn revising(
-        &self,
-        revising: &Revising<'_>,
-        patient: &Patient,
-        context: &Context,
-    ) -> Result<Applied, FeedError> {
-        let mut attempt = 0;
-        loop {
-            attempt += 1;
-            match self.revise_once(revising, patient, context).await {
-                Err(error) if error.retryable() && attempt < ATTEMPTS => {
-                    tracing::debug!(attempt, "a feed is tried again after contention");
-                }
-                outcome => return outcome,
-            }
-        }
+        self.apply(
+            Step::Revise(revising, revision.patient()),
+            context,
+            recording,
+        )
+        .await
     }
 
     /// Applies a Resolve Duplicate Patient message (PIXm 3.1.0
-    /// §2:3.104.4.2).
+    /// §2:3.104.4.2), its records inserted in its transaction.
     ///
     /// # Errors
     /// As [`Feeder::revise`], and [`FeedError::SurvivorNotFound`] when the
@@ -211,76 +198,152 @@ impl Feeder {
         &self,
         merge: &Merge,
         context: &Context,
+        recording: Recording<'_>,
     ) -> Result<Applied, FeedError> {
         let resolving = Resolving {
             system: merge.subsumed().system(),
             subsumed: merge.subsumed().value().expose_secret(),
             survivor: merge.survivor().value().expose_secret(),
         };
-        self.resolving(&resolving, merge.patient(), context).await
-    }
-
-    /// Applies the resolved duplicate `resolving` with `patient`, tried
-    /// again after contention.
-    async fn resolving(
-        &self,
-        resolving: &Resolving<'_>,
-        patient: &Patient,
-        context: &Context,
-    ) -> Result<Applied, FeedError> {
-        let mut attempt = 0;
-        loop {
-            attempt += 1;
-            match self.resolve_once(resolving, patient, context).await {
-                Err(error) if error.retryable() && attempt < ATTEMPTS => {
-                    tracing::debug!(attempt, "a feed is tried again after contention");
-                }
-                outcome => return outcome,
-            }
-        }
-    }
-
-    /// Applies a Remove Patient message (PIXm 3.1.0 §2:3.104.4.3).
-    ///
-    /// # Errors
-    /// Returns [`FeedError::UnknownDomain`] and [`FeedError::Identifier`] as
-    /// [`Feeder::revise`] does, [`FeedError::NotFound`] for an identifier
-    /// the store does not hold or removed already, and
-    /// [`FeedError::Store`] when a statement fails.
-    pub async fn remove(&self, removal: &Removal, context: &Context) -> Result<Applied, FeedError> {
-        let identifier = removal.identifier();
-        self.removing(
-            identifier.system(),
-            identifier.value().expose_secret(),
-            false,
+        self.apply(
+            Step::Resolve(resolving, merge.patient()),
             context,
+            recording,
         )
         .await
     }
 
-    /// Removes the identifier `value` of the domain `system`, announced as
-    /// the deletion of its person's master identity when `deleted`.
-    async fn removing(
+    /// Applies a Remove Patient message (PIXm 3.1.0 §2:3.104.4.3), its
+    /// records inserted in its transaction.
+    ///
+    /// # Errors
+    /// Returns [`FeedError::UnknownDomain`] and [`FeedError::Identifier`] as
+    /// [`Feeder::revise`] does, [`FeedError::NotFound`] for an identifier
+    /// the store does not hold or removed already, [`FeedError::Unrecorded`]
+    /// when its records cannot be kept, and [`FeedError::Store`] when a
+    /// statement fails.
+    pub async fn remove(
         &self,
+        removal: &Removal,
+        context: &Context,
+        recording: Recording<'_>,
+    ) -> Result<Applied, FeedError> {
+        let identifier = removal.identifier();
+        let step = Step::Remove {
+            system: identifier.system(),
+            value: identifier.value().expose_secret(),
+            deleted: false,
+        };
+        self.apply(step, context, recording).await
+    }
+
+    /// Applies `step` in one transaction that holds its records too, tried
+    /// again after contention. A step refused before it committed has its
+    /// records inserted in a statement of their own: it changed nothing.
+    async fn apply(
+        &self,
+        step: Step<'_>,
+        context: &Context,
+        recording: Recording<'_>,
+    ) -> Result<Applied, FeedError> {
+        let mut attempt = 0;
+        let outcome = loop {
+            attempt += 1;
+            match self.apply_once(step, context, recording).await {
+                Err(error) if error.retryable() && attempt < ATTEMPTS => {
+                    tracing::debug!(attempt, "a feed is tried again after contention");
+                }
+                outcome => break outcome,
+            }
+        };
+        match outcome {
+            Ok(applied) => {
+                self.store.announced();
+                recording.audit.committed();
+                tracing::info!(
+                    action = ?applied.action,
+                    record = %applied.record.uuid(),
+                    merged = applied.merged.len(),
+                    candidates = applied.candidates.len(),
+                    scored = applied.scored,
+                    "a feed is applied"
+                );
+                Ok(applied)
+            }
+            Err(error @ FeedError::Unrecorded(_)) => Err(error),
+            Err(error) => {
+                recording.refused(&error).await?;
+                Err(error)
+            }
+        }
+    }
+
+    /// One attempt at [`Feeder::apply`]: the step and its records, then the
+    /// commit.
+    async fn apply_once(
+        &self,
+        step: Step<'_>,
+        context: &Context,
+        recording: Recording<'_>,
+    ) -> Result<Applied, FeedError> {
+        let mut transaction = self.store.pool().begin().await.map_err(store)?;
+        let applied = self.step_in(&mut transaction, step, context).await?;
+        recording.enlist(&mut transaction, Ok(&applied)).await?;
+        transaction.commit().await.map_err(store)?;
+        Ok(applied)
+    }
+
+    /// Writes `step` in `transaction`, which the caller commits.
+    async fn step_in(
+        &self,
+        transaction: &mut PgConnection,
+        step: Step<'_>,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        match step {
+            Step::Revise(revising, patient) => {
+                self.revise_in(transaction, &revising, patient, context)
+                    .await
+            }
+            Step::Resolve(resolving, patient) => {
+                self.resolve_in(transaction, &resolving, patient, context)
+                    .await
+            }
+            Step::Remove {
+                system,
+                value,
+                deleted,
+            } => {
+                self.remove_in(transaction, system, value, deleted, context)
+                    .await
+            }
+        }
+    }
+
+    /// Removes the identifier `value` of the domain `system` in
+    /// `transaction`, announced as the deletion of its person's master
+    /// identity when `deleted`.
+    async fn remove_in(
+        &self,
+        transaction: &mut PgConnection,
         system: &str,
         value: &str,
         deleted: bool,
         context: &Context,
     ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
-        let mut transaction = self.store.pool().begin().await.map_err(store)?;
         let domains = record::domains(&mut *transaction).await?;
         let (domain, value) = condition(&domains, system, value)?;
         let hmac = keys.hmac(domain.id.uuid(), &value);
-        write::advisory(&mut transaction, vec![record::identity_key(&hmac)]).await?;
-        let Some(locked) = write::lock(&mut transaction, domain.id, &hmac).await? else {
+        write::advisory(&mut *transaction, vec![record::identity_key(&hmac)]).await?;
+        let Some(locked) = write::lock(&mut *transaction, domain.id, &hmac).await? else {
             return Err(FeedError::NotFound);
         };
         if locked.removed {
             return Err(FeedError::NotFound);
         }
         let action = write::recorded(
-            &mut transaction,
+            &mut *transaction,
             "remove",
             context,
             Subjects {
@@ -295,7 +358,7 @@ impl Feeder {
             .execute(&mut *transaction)
             .await
             .map_err(store)?;
-        let former = link::close_link(&mut transaction, locked.id, action).await?;
+        let former = link::close_link(&mut *transaction, locked.id, action).await?;
         let changes: Vec<announce::Change> = former
             .map(|person| {
                 if deleted {
@@ -306,10 +369,7 @@ impl Feeder {
             })
             .into_iter()
             .collect();
-        announce::announce(&mut transaction, &self.store, &changes).await?;
-        transaction.commit().await.map_err(store)?;
-        self.store.announced();
-        tracing::info!(record = %locked.id.uuid(), "an identifier is removed");
+        announce::announce(&mut *transaction, &self.store, &changes).await?;
         Ok(Applied {
             action: Action::Remove,
             record: locked.id,
@@ -320,41 +380,43 @@ impl Feeder {
         })
     }
 
-    /// One attempt at [`Feeder::revising`].
-    async fn revise_once(
+    /// Writes the revision `revising` with `patient` in `transaction`.
+    async fn revise_in(
         &self,
+        transaction: &mut PgConnection,
         revising: &Revising<'_>,
         patient: &Patient,
         context: &Context,
     ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
-        let mut transaction = self.store.pool().begin().await.map_err(store)?;
         let domains = record::domains(&mut *transaction).await?;
         let (domain, value) = condition(&domains, revising.system, revising.value)?;
         let carried = write::carried(patient, &domains, keys)?;
         let own = keys.hmac(domain.id.uuid(), &value);
-        write::advisory(&mut transaction, identity_keys(&own, &carried)).await?;
+        write::advisory(&mut *transaction, identity_keys(&own, &carried)).await?;
         let fed = Fed::new(patient, &carried)?;
         let locked = match revising.master {
-            Some(master) if master.known => write::lock(&mut transaction, domain.id, &own)
+            Some(master) if master.known => write::lock(&mut *transaction, domain.id, &own)
                 .await?
                 .filter(|locked| !locked.removed)
                 .ok_or(FeedError::NotFound)?,
-            _ => write::lock_or_insert(&mut transaction, keys, domain, &value, &fed.blocks).await?,
+            _ => {
+                write::lock_or_insert(&mut *transaction, keys, domain, &value, &fed.blocks).await?
+            }
         };
         if !locked.active {
             return Err(FeedError::Subsumed);
         }
         if let Some(master) = revising.master
-            && master::merged(&mut transaction, master.identity).await?
+            && master::merged(&mut *transaction, master.identity).await?
         {
             return Err(FeedError::Subsumed);
         }
         let version = self
-            .write_version(&mut transaction, &locked, &fed, context)
+            .write_version(&mut *transaction, &locked, &fed, context)
             .await?;
         write::recorded(
-            &mut transaction,
+            &mut *transaction,
             "feed",
             context,
             Subjects {
@@ -372,25 +434,15 @@ impl Feeder {
             domain.kind == DomainKind::Master,
         );
         me.identity = revising.master.map(|master| master.identity);
-        let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
+        let linked = link::cross_reference(&mut *transaction, self, &me, context).await?;
         let created = revising.master.is_some_and(|master| !master.known) && locked.created;
         let changes = announced(linked.person, &linked.merged, created);
-        announce::announce(&mut transaction, &self.store, &changes).await?;
-        transaction.commit().await.map_err(store)?;
-        self.store.announced();
+        announce::announce(&mut *transaction, &self.store, &changes).await?;
         let action = if locked.created {
             Action::Create
         } else {
             Action::Update
         };
-        tracing::info!(
-            record = %locked.id.uuid(),
-            created = locked.created,
-            merged = linked.merged.len(),
-            candidates = linked.candidates.len(),
-            scored = linked.scored,
-            "a feed is applied"
-        );
         Ok(Applied {
             action,
             record: locked.id,
@@ -401,15 +453,16 @@ impl Feeder {
         })
     }
 
-    /// One attempt at [`Feeder::resolving`].
-    async fn resolve_once(
+    /// Writes the resolved duplicate `resolving` with `patient` in
+    /// `transaction`.
+    async fn resolve_in(
         &self,
+        transaction: &mut PgConnection,
         resolving: &Resolving<'_>,
         patient: &Patient,
         context: &Context,
     ) -> Result<Applied, FeedError> {
         let keys = self.store.sealer();
-        let mut transaction = self.store.pool().begin().await.map_err(store)?;
         let domains = record::domains(&mut *transaction).await?;
         let (domain, subsumed) = condition(&domains, resolving.system, resolving.subsumed)?;
         let (_, survivor) = condition(&domains, resolving.system, resolving.survivor)?;
@@ -418,8 +471,8 @@ impl Feeder {
         let survivor_hmac = keys.hmac(domain.id.uuid(), &survivor);
         let mut identities = identity_keys(&subsumed_hmac, &carried);
         identities.push(record::identity_key(&survivor_hmac));
-        write::advisory(&mut transaction, identities).await?;
-        let Some(kept) = write::lock(&mut transaction, domain.id, &survivor_hmac).await? else {
+        write::advisory(&mut *transaction, identities).await?;
+        let Some(kept) = write::lock(&mut *transaction, domain.id, &survivor_hmac).await? else {
             return Err(FeedError::SurvivorNotFound);
         };
         if !kept.active || kept.removed {
@@ -427,11 +480,11 @@ impl Feeder {
         }
         let fed = Fed::new(patient, &carried)?;
         let locked =
-            write::lock_or_insert(&mut transaction, keys, domain, &subsumed, &fed.blocks).await?;
-        self.write_version(&mut transaction, &locked, &fed, context)
+            write::lock_or_insert(&mut *transaction, keys, domain, &subsumed, &fed.blocks).await?;
+        self.write_version(&mut *transaction, &locked, &fed, context)
             .await?;
         let action = write::recorded(
-            &mut transaction,
+            &mut *transaction,
             "resolve-duplicate",
             context,
             Subjects {
@@ -447,11 +500,11 @@ impl Feeder {
             .execute(&mut *transaction)
             .await
             .map_err(store)?;
-        let former = link::close_link(&mut transaction, locked.id, action).await?;
+        let former = link::close_link(&mut *transaction, locked.id, action).await?;
         let (subject, survivor_carried, version) =
-            current(&mut transaction, keys, kept.id, &domains).await?;
+            current(&mut *transaction, keys, kept.id, &domains).await?;
         write::advisory(
-            &mut transaction,
+            &mut *transaction,
             survivor_carried
                 .iter()
                 .filter(|c| c.kind == DomainKind::Authoritative)
@@ -472,11 +525,11 @@ impl Feeder {
             && former != held
         {
             write::advisory(
-                &mut transaction,
+                &mut *transaction,
                 vec![write::person_key(former), write::person_key(held)],
             )
             .await?;
-            link::merge::merge(&mut transaction, former, held, MergeKind::Source, context).await?;
+            link::merge::merge(&mut *transaction, former, held, MergeKind::Source, context).await?;
             merged.push(former);
         }
         let me = me(
@@ -486,18 +539,10 @@ impl Feeder {
             &survivor_carried,
             domain.kind == DomainKind::Master,
         );
-        let linked = link::cross_reference(&mut transaction, self, &me, context).await?;
+        let linked = link::cross_reference(&mut *transaction, self, &me, context).await?;
         merged.extend(linked.merged);
         let changes = announced(linked.person, &merged, false);
-        announce::announce(&mut transaction, &self.store, &changes).await?;
-        transaction.commit().await.map_err(store)?;
-        self.store.announced();
-        tracing::info!(
-            record = %locked.id.uuid(),
-            survivor = %kept.id.uuid(),
-            merged = merged.len(),
-            "a duplicate is resolved"
-        );
+        announce::announce(&mut *transaction, &self.store, &changes).await?;
         Ok(Applied {
             action: Action::ResolveDuplicate,
             record: locked.id,
@@ -549,26 +594,19 @@ impl<'a> Fed<'a> {
     }
 }
 
-/// Writes the BALP record of one ITI-104 message, after the transaction.
-///
-/// The record is the PIXm Feed Create, Update or Delete Manager audit
-/// profile (PIXm 3.1.0 §2:3.104.5.1.2) of `identifier`, the condition, with
-/// the person as the data and `outcome` as its outcome, in the request's
-/// place in the spool.
+/// Returns the BALP record of one ITI-104 message: the PIXm Feed Create,
+/// Update or Delete Manager audit profile (PIXm 3.1.0 §2:3.104.5.1.2) of
+/// `identifier`, the condition, with the person as the data.
 ///
 /// A message refused before it applied is recorded as an update or a
 /// delete that failed.
-///
-/// # Errors
-/// Returns [`Unrecorded`] when the record cannot be written or stored.
-pub async fn record(
-    audit: &Audit,
-    pending: Option<&Pending>,
+#[must_use]
+pub fn feed_record(
     call: &Call,
     identifier: &SourceIdentifier,
     removal: bool,
     outcome: Result<&Applied, &FeedError>,
-) -> Result<(), Unrecorded> {
+) -> Exchange {
     let (action, person, outcome) = match outcome {
         Ok(applied) => (
             applied.action.audited(),
@@ -578,17 +616,85 @@ pub async fn record(
         Err(_) if removal => (FeedAction::Delete, None, Outcome::MinorFailure),
         Err(_) => (FeedAction::Update, None, Outcome::MinorFailure),
     };
-    let exchange = manager_feed(
+    manager_feed(
         &call.received(),
         action,
         identifier,
         person.as_deref(),
         outcome,
-    );
-    match pending {
-        Some(pending) => pending.record(audit, &exchange).await,
-        None => audit.record(vec![exchange]).await,
+    )
+}
+
+/// How a feed records what it did (#742).
+///
+/// The records of its outcome are inserted into the audit outbox in its
+/// transaction before it commits, or, for a feed refused before it
+/// committed, in a statement of their own.
+#[derive(Clone, Copy)]
+pub struct Recording<'a> {
+    /// The audit trail.
+    audit: &'a Audit,
+    /// The records of an outcome.
+    records: &'a (dyn Fn(Result<&Applied, &FeedError>) -> Vec<Exchange> + Sync),
+}
+
+impl std::fmt::Debug for Recording<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Recording").finish_non_exhaustive()
     }
+}
+
+impl<'a> Recording<'a> {
+    /// Records each outcome as `records` writes it, on `audit`.
+    #[must_use]
+    pub fn new(
+        audit: &'a Audit,
+        records: &'a (dyn Fn(Result<&Applied, &FeedError>) -> Vec<Exchange> + Sync),
+    ) -> Self {
+        Self { audit, records }
+    }
+
+    /// Inserts the records of `outcome` through `connection`.
+    async fn enlist(
+        &self,
+        connection: &mut PgConnection,
+        outcome: Result<&Applied, &FeedError>,
+    ) -> Result<(), FeedError> {
+        let exchanges = (self.records)(outcome);
+        self.audit
+            .enlist(connection, &exchanges)
+            .await
+            .map_err(FeedError::Unrecorded)
+    }
+
+    /// Keeps the records of the refusal `error` in a statement of their
+    /// own: the feed changed nothing.
+    async fn refused(&self, error: &FeedError) -> Result<(), FeedError> {
+        let exchanges = (self.records)(Err(error));
+        self.audit
+            .keep(&exchanges)
+            .await
+            .map_err(FeedError::Unrecorded)
+    }
+}
+
+/// One change the feed transaction writes.
+#[derive(Debug, Clone, Copy)]
+enum Step<'a> {
+    /// An add or revise, of a feed or of an ITI-93 master identity.
+    Revise(Revising<'a>, &'a Patient),
+    /// A resolved duplicate, or an ITI-93 merge.
+    Resolve(Resolving<'a>, &'a Patient),
+    /// A removal, announced as the deletion of the person's master identity
+    /// when `deleted`.
+    Remove {
+        /// The domain's system.
+        system: &'a str,
+        /// The identifier's value.
+        value: &'a str,
+        /// Whether an ITI-93 delete removes it.
+        deleted: bool,
+    },
 }
 
 /// Why a message was not applied.
@@ -638,9 +744,28 @@ pub enum FeedError {
     /// A statement on the store failed.
     #[error("the store refused the feed")]
     Store(#[from] StoreError),
+    /// The feed's audit records could not be kept, so it was not committed.
+    #[error("the audit records of the feed could not be kept")]
+    Unrecorded(#[source] Unrecorded),
 }
 
 impl FeedError {
+    /// Returns whether the error refuses one change and leaves the store
+    /// able to take the next: an identifier or a domain the change cannot
+    /// name, or a record it cannot touch. Any other error ends the
+    /// transaction.
+    #[must_use]
+    pub fn refuses_change(&self) -> bool {
+        matches!(
+            self,
+            Self::UnknownDomain
+                | Self::Identifier { .. }
+                | Self::Subsumed
+                | Self::NotFound
+                | Self::SurvivorNotFound
+        )
+    }
+
     /// Returns whether another attempt may succeed: contention, a deadlock
     /// the database broke, or a serialization failure.
     #[must_use]

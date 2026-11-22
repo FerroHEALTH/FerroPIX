@@ -144,8 +144,9 @@ Nothing was changed. The readiness route names the store's state
 
 The BALP audit record of the request could not be stored, so the server did
 not process the request: a read is not answered and a change is not made
-when it cannot be audited. The readiness route names the audit spool's
-state ([Operations](operations.md)).
+when it cannot be audited. A write's record is kept in its own transaction,
+so a change whose record could not be kept was rolled back. The readiness
+route names the audit spool's state ([Operations](operations.md)).
 
 ### `authorization-unavailable`
 

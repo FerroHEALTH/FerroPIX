@@ -80,9 +80,9 @@ pub enum Case {
     /// Any audited route: the record could not be stored, so nothing was
     /// answered or changed. Our own design (`crate::audit`).
     Unaudited,
-    /// ITI-104: the change committed and its audit record could not be
-    /// stored. Our own design.
-    CommittedUnaudited,
+    /// ITI-93: the message holds more changes than one transaction applies
+    /// (`crate::fhir::registry::MAX_CHANGES`). Our own design.
+    MessageTooLarge,
     /// Any route: a fault of the server itself. Our own design.
     Internal,
 }
@@ -108,7 +108,7 @@ impl Case {
         Self::StoreUnavailable,
         Self::Contention,
         Self::Unaudited,
-        Self::CommittedUnaudited,
+        Self::MessageTooLarge,
         Self::Internal,
     ];
 
@@ -193,10 +193,10 @@ impl Case {
                 IssueType::Transient,
                 UNAUDITED,
             ),
-            Self::CommittedUnaudited => error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                IssueType::Exception,
-                "the change is committed and its audit record could not be stored",
+            Self::MessageTooLarge => error(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                IssueType::TooCostly,
+                "the message holds more changes than this server applies in one transaction",
             ),
             Self::Internal => error(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -352,11 +352,11 @@ mod tests {
             "the audit record of this request could not be stored, so the request was not processed",
         ),
         (
-            Case::CommittedUnaudited,
-            StatusCode::INTERNAL_SERVER_ERROR,
+            Case::MessageTooLarge,
+            StatusCode::PAYLOAD_TOO_LARGE,
             "error",
-            IssueType::Exception,
-            "the change is committed and its audit record could not be stored",
+            IssueType::TooCostly,
+            "the message holds more changes than this server applies in one transaction",
         ),
         (
             Case::Internal,

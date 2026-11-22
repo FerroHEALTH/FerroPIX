@@ -120,7 +120,11 @@ async fn a_fed_patient_is_answered_alike_by_get_and_post_in_json_and_xml() {
         every.identifiers(),
         "every identifier but the one asked (§2:3.83.4.2.2.1)"
     );
-    assert_eq!(7, harness.records(), "one BALP record per transaction");
+    assert_eq!(
+        7,
+        harness.records().await,
+        "one BALP record per transaction"
+    );
 }
 
 #[tokio::test]
@@ -130,7 +134,7 @@ async fn every_refusal_of_iti_83_is_the_one_the_table_names() {
     }
     let harness = Harness::start(synthetic_seeds()).await;
     let (hospital, _bsn) = feed_both(&harness).await;
-    let before = harness.records();
+    let before = harness.records().await;
     for (label, uri_targets, source, status, code, diagnostics) in [
         (
             "an unknown source domain",
@@ -172,7 +176,7 @@ async fn every_refusal_of_iti_83_is_the_one_the_table_names() {
     }
     assert_eq!(
         before + 6,
-        harness.records(),
+        harness.records().await,
         "each refused query is recorded"
     );
     let in_xml = harness

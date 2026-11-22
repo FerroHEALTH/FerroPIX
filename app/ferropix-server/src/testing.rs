@@ -10,15 +10,18 @@ use base64::Engine as _;
 use ferrohealth_secret::secret_url::SecretUrl;
 use ferropix_testkit::containers::{Postgres, postgres};
 use ferropix_testkit::synthetic::{HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN};
+use ihe_atna::balp::Exchange;
 use ihe_iti::pixm::server::feed::{Feed, Merge, Removal, Revision};
 use ihe_iti::server::format::Format;
 use uuid::Uuid;
 
+use crate::audit::Audit;
+use crate::config::section::audit::AuditSettings;
 use crate::config::section::db::{DbSettings, SealingKey};
 use crate::config::section::domain::{DomainKind, DomainSeed};
 use crate::config::section::matching::Matching;
 use crate::feed::merging::{self, MergeRequest};
-use crate::feed::{Context, Feeder};
+use crate::feed::{Applied, Context, FeedError, Feeder, Recording};
 use crate::store::record::{Channel, PersonId};
 use crate::store::{Job, Store};
 
@@ -33,6 +36,23 @@ pub(crate) struct Started {
     _postgres: Postgres,
     pub(crate) store: Store,
     pub(crate) feeder: Feeder,
+    /// The audit trail over the store's audit outbox, which a feed's
+    /// transaction keeps its records in.
+    pub(crate) audit: Audit,
+    _spool: tempfile::TempDir,
+}
+
+/// The records a feed of these suites keeps: none, which the audit suites
+/// assert apart.
+fn no_records(_outcome: Result<&Applied, &FeedError>) -> Vec<Exchange> {
+    Vec::new()
+}
+
+impl Started {
+    /// How a feed of these suites records what it did.
+    pub(crate) fn recording(&self) -> Recording<'_> {
+        Recording::new(&self.audit, &no_records)
+    }
 }
 
 /// Creates the application role on `postgres` and returns its URL.
@@ -89,10 +109,32 @@ pub(crate) async fn start() -> Started {
         store.clone(),
         &Matching::default().resolve().expect("the defaults resolve"),
     );
+    let spool = tempfile::tempdir().expect("a directory");
+    let directory = spool.path().join("spool");
+    std::fs::create_dir_all(&directory).expect("the spool directory");
+    std::fs::set_permissions(
+        &directory,
+        std::os::unix::fs::PermissionsExt::from_mode(0o700),
+    )
+    .expect("private");
+    let audit = Audit::open(
+        &AuditSettings {
+            repository: None,
+            spool_dir: directory,
+            spool_max_bytes: 1 << 20,
+            spool_max_events: 10,
+            spool_write_timeout: std::time::Duration::from_secs(2),
+        },
+        &url::Url::parse("https://pix.example.org").expect("a URL"),
+    )
+    .and_then(|audit| audit.with_store(&store))
+    .expect("the audit trail opens");
     Started {
         _postgres: postgres,
         store,
         feeder,
+        audit,
+        _spool: spool,
     }
 }
 
@@ -169,11 +211,29 @@ pub(crate) trait Fed {
     }
 }
 
+/// Resolves the duplicate `merge`.
+pub(crate) async fn resolve(started: &Started, merge: &Merge) {
+    started
+        .feeder
+        .resolve_duplicate(merge, &context(), started.recording())
+        .await
+        .expect("resolved");
+}
+
+/// Removes the identifier `removal` names.
+pub(crate) async fn remove(started: &Started, removal: &Removal) {
+    started
+        .feeder
+        .remove(removal, &context(), started.recording())
+        .await
+        .expect("removed");
+}
+
 /// Feeds `patient` and returns the person its record is linked to.
 pub(crate) async fn feed(started: &Started, patient: &impl Fed) -> PersonId {
     started
         .feeder
-        .revise(&patient.revision(), &context())
+        .revise(&patient.revision(), &context(), started.recording())
         .await
         .expect("the feed applies")
         .person

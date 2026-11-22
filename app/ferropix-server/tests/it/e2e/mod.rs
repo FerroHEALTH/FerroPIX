@@ -8,6 +8,7 @@
 //! when the gate is unset. Every identifier and name is synthetic, and every
 //! key is generated when the case runs.
 
+mod audit_outbox;
 mod autolink;
 mod blocking;
 mod budget;
@@ -63,6 +64,22 @@ pub(crate) const BSN_SYSTEM: &str = "http://fhir.nl/fhir/NamingSystem/bsn";
 /// The login role each case connects as: no superuser, `CREATE` on the
 /// database and nothing else.
 pub(crate) const APP_ROLE: &str = "pix_app";
+
+/// The records the audit outbox of `audit` holds, oldest first: the writes'.
+pub(crate) async fn outbox_records(audit: &ferropix_server::audit::Audit) -> Vec<Vec<u8>> {
+    use ihe_atna::atna::forwarder::Outbox as _;
+    use secrecy::ExposeSecret as _;
+    let Some(outbox) = audit.outbox() else {
+        return Vec::new();
+    };
+    outbox
+        .oldest_batch(usize::MAX)
+        .await
+        .expect("the audit outbox reads")
+        .into_iter()
+        .map(|stored| stored.message.expose_secret().to_vec())
+        .collect()
+}
 
 /// Returns a sealing key generated for this run.
 pub(crate) fn fresh_key() -> SealingKey {

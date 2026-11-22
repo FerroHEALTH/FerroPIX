@@ -17,7 +17,8 @@ use uuid::Uuid;
 use super::{Page, Window, oracle, run};
 use crate::store::record::PersonId;
 use crate::testing::{
-    BSN, Fed, Started, bsn, condition, context, feed, identifiers, merge, retire, revert, start,
+    BSN, Fed, Started, bsn, condition, feed, identifiers, merge, remove, resolve, retire, revert,
+    start,
 };
 
 /// The master domain's system, which no seeded domain is.
@@ -324,20 +325,12 @@ async fn every_search_of_the_matrix_answers_as_the_oracle_over_the_corpus() {
         feed(&started, &revised).await;
     }
     for index in (3..CORPUS).step_by(17) {
-        started
-            .feeder
-            .remove(&Patient::at(index).removal(), &context())
-            .await
-            .expect("removed");
+        remove(&started, &Patient::at(index).removal()).await;
     }
     for index in (7..CORPUS - 3).step_by(97) {
         let subsumed = Patient::at(index);
         let survivor = Patient::at(index + 3);
-        started
-            .feeder
-            .resolve_duplicate(&subsumed.subsumed_by(&survivor.value), &context())
-            .await
-            .expect("resolved");
+        resolve(&started, &subsumed.subsumed_by(&survivor.value)).await;
     }
     let mut made = Vec::new();
     for index in (13..CORPUS - 40).step_by(89) {
@@ -435,11 +428,7 @@ async fn a_search_right_after_each_change_sees_it() {
         "the unmerge"
     );
 
-    started
-        .feeder
-        .remove(&authority.removal(), &context())
-        .await
-        .expect("removed");
+    remove(&started, &authority.removal()).await;
     assert!(
         agree(&started, "family=gezag", false).await.is_empty(),
         "the removal"
@@ -449,11 +438,7 @@ async fn a_search_right_after_each_change_sees_it() {
     let mut duplicate = Patient::at(9);
     duplicate.family = String::from("Dubbeling");
     let duplicated = feed(&started, &duplicate).await;
-    started
-        .feeder
-        .resolve_duplicate(&duplicate.subsumed_by(&ada.value), &context())
-        .await
-        .expect("resolved");
+    resolve(&started, &duplicate.subsumed_by(&ada.value)).await;
     assert!(
         agree(&started, "family=dubbel", false).await.is_empty(),
         "the duplicate resolution"

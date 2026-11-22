@@ -403,7 +403,7 @@ async fn notify(channel: &MllpChannel, row: &Claimed) -> Result<(), String> {
         &identifiers,
         outcome,
     );
-    if let Err(error) = place.record(&exchange).await {
+    if let Err(error) = place.record_sent(&exchange).await {
         tracing::error!(consumer = %consumer.name, error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-10 notification could not be stored");
     }
     match answered {

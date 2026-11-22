@@ -117,14 +117,14 @@ async fn a_link_merges_the_two_persons_with_one_action_and_one_record() {
     assert!(read.merges, "the two records sit in two persons");
     assert_eq!(Status::Open, read.status);
     assert!(!read.evidence.fields.is_empty(), "the evidence is drawn");
-    let before = harness.records();
+    let before = harness.records().await;
     let decided: Decided = document(
         &decide(&harness, &id, &body("link", &read, "")).await,
         "link",
     );
     assert_eq!(Status::Linked, decided.status);
     assert!(decided.merge.is_some(), "the persons merged");
-    assert_eq!(before + 1, harness.records(), "one BALP record");
+    assert_eq!(before + 1, harness.records().await, "one BALP record");
     let answered = harness
         .pix_get(HOSPITAL_DOMAIN, "H-1", &[LABORATORY_DOMAIN])
         .await;

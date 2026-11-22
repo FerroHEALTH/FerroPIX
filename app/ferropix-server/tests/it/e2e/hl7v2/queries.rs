@@ -52,6 +52,7 @@ async fn a_pix_query_answers_what_iti_83_answers() {
     );
     let record = v2
         .records()
+        .await
         .into_iter()
         .find(|record| record["subtype"][0]["code"] == "ITI-9")
         .expect("the ITI-9 record");
@@ -213,6 +214,7 @@ async fn a_demographics_query_finds_the_persons_iti_78_finds() {
     );
     assert!(
         v2.records()
+            .await
             .iter()
             .any(|record| record["subtype"][0]["code"] == "ITI-21"),
         "the record of each query"
@@ -315,7 +317,7 @@ async fn a_demographics_and_visit_query_is_refused_as_unsupported() {
         return;
     }
     let v2 = Box::pin(V2::start(Cursors::default())).await;
-    let before = v2.records().len();
+    let before = v2.records().await.len();
     for (control, qpd3) in [
         ("Z-1", "@PID.5.1.1^Proefsma"),
         ("Z-2", "@PV1.3.2^389~@PV1.3.3^2"),
@@ -336,5 +338,9 @@ async fn a_demographics_and_visit_query_is_refused_as_unsupported() {
             "no patient is answered: {answer}"
         );
     }
-    assert_eq!(v2.records().len(), before, "a refused query is no query");
+    assert_eq!(
+        v2.records().await.len(),
+        before,
+        "a refused query is no query"
+    );
 }

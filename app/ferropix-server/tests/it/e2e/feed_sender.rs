@@ -123,9 +123,12 @@ async fn subscribe(store: &Store, criteria: &str, endpoint: &str) -> Uuid {
     let resource = request(criteria, endpoint, "requested");
     let requested = RequestedSubscription::read(Format::Json, resource.to_string().as_bytes())
         .expect("a PMIR Subscription");
-    let created = subscription::create(store, &requested)
-        .await
-        .expect("stored");
+    let created = subscription::create(
+        &mut store.pool().acquire().await.expect("a connection"),
+        &requested,
+    )
+    .await
+    .expect("stored");
     Uuid::parse_str(created.id.as_deref().expect("an id")).expect("a UUID")
 }
 
@@ -240,7 +243,7 @@ async fn each_matching_subscription_gets_its_messages_in_order_and_no_other() {
         &format!("{}/other", stub.uri()),
     )
     .await;
-    let feeder = Feeder::new(store.clone(), &harness.matching);
+    let feeder = super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), &store);
     feeder
         .master(
             MasterChange::Create,
@@ -310,7 +313,7 @@ async fn a_refusing_subscriber_is_set_to_error_and_an_enable_resumes_from_the_ne
         .await;
     let endpoint = format!("{}/pmir", stub.uri());
     let id = subscribe(&store, "Patient", &endpoint).await;
-    let feeder = Feeder::new(store.clone(), &harness.matching);
+    let feeder = super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), &store);
     feeder
         .master(
             MasterChange::Create,
@@ -359,7 +362,12 @@ async fn a_refusing_subscriber_is_set_to_error_and_an_enable_resumes_from_the_ne
     let requested = RequestedSubscription::read(Format::Json, enable.to_string().as_bytes())
         .expect("a PMIR Subscription");
     assert!(matches!(
-        subscription::update(&store, id, &requested).await,
+        subscription::update(
+            &mut store.pool().acquire().await.expect("a connection"),
+            id,
+            &requested
+        )
+        .await,
         Ok(Updated::Done(_))
     ));
     wake.now();
@@ -387,7 +395,7 @@ async fn no_identifier_or_name_of_a_message_reaches_the_log() {
         .mount(&stub)
         .await;
     subscribe(&store, "Patient", &format!("{}/pmir", stub.uri())).await;
-    let feeder = Feeder::new(store.clone(), &harness.matching);
+    let feeder = super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), &store);
     feeder
         .master(
             MasterChange::Create,
@@ -419,7 +427,7 @@ async fn a_steward_merge_and_its_revert_each_queue_one_message_per_matching_subs
     let harness = Harness::start(with_master()).await;
     let wake = Wake::default();
     let store = feeding(&harness, 3, &wake);
-    let feeder = Feeder::new(store.clone(), &harness.matching);
+    let feeder = super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), &store);
     for (id, given) in [(FIRST, "Anna"), (SECOND, "Bea")] {
         let mut fed = patient(id, given);
         fed.identifier.clear();
@@ -535,7 +543,7 @@ async fn a_merge_and_its_revert_state_every_patients_active_and_links() {
         .respond_with(ResponseTemplate::new(200))
         .mount(&stub)
         .await;
-    let feeder = Feeder::new(store.clone(), &harness.matching);
+    let feeder = super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), &store);
     for (id, given) in [(FIRST, "Anna"), (SECOND, "Bea")] {
         let mut fed = patient(id, given);
         fed.identifier.clear();

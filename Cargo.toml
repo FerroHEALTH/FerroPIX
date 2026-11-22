@@ -138,9 +138,11 @@ http = "1.5.0"
 # (`atna::feed::FeedClient`) and depends on no `ferrohealth-smart` (#680);
 # 0.24 stores a spool batch as one segment flushed once and sends the
 # records waiting as one batch Bundle, its client answering a `FeedAnswer`
-# (FerroHEALTH/FerroAUDIT#254). Verified against crates.io on 2026-11-21
-# (0.24.0).
-ihe-atna = { version = "=0.24.0", default-features = false }
+# (FerroHEALTH/FerroAUDIT#254); 0.24.1 withdraws a read's records still
+# queued at the write timeout and queues the records of its refusal in their
+# place (FerroHEALTH/FerroAUDIT#258, #260). Verified against crates.io on
+# 2026-11-22 (0.24.1).
+ihe-atna = { version = "=0.24.1", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.62.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
@@ -164,6 +166,9 @@ thiserror = "2.0.21"
 # frame codec, at the versions that crate resolves. Verified against
 # crates.io on 2026-10-27.
 bytes = "1.12.1"
+# The DEFLATE (RFC 1951) of a BALP record before it is sealed into the audit
+# outbox (#742), on the pure-Rust backend the lock already holds.
+flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
 tokio-util = { version = "0.7.20", default-features = false, features = ["codec"] }
 tokio = { version = "1.53.1", default-features = false }
 # Test-only: the OTLP trace service the testkit's in-process collector

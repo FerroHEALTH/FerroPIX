@@ -120,9 +120,13 @@ async fn merges_and_reverts_unwind_in_order_and_iti_83_follows_each_step() {
         seen.identifiers.len(),
         "the laboratory's identifier moves"
     );
-    let before = harness.records();
+    let before = harness.records().await;
     let first: Outcome = document(&merge(&harness, &seen).await, "the first merge");
-    assert_eq!(before + 1, harness.records(), "one BALP record per merge");
+    assert_eq!(
+        before + 1,
+        harness.records().await,
+        "one BALP record per merge"
+    );
     assert_eq!(1, first.moved);
     assert_eq!(
         vec![format!("{LABORATORY_DOMAIN}|L-1")],

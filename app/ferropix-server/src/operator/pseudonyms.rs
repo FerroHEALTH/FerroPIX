@@ -340,6 +340,7 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
         }
         Err(error) => return wire::failed(&error),
     };
+    let mut exchanges = Vec::new();
     if minted {
         let recorded = Recorded {
             kind: "pseudonym-mint",
@@ -368,12 +369,10 @@ pub async fn mint(operator: &Operator, request: Request) -> Response {
             &namespace,
             Outcome::Success,
         );
-        if let Err(error) = wire::record(operator, &parts, vec![exchange]).await {
-            return wire::unaudited(&error);
-        }
+        exchanges.push(exchange);
     }
-    if let Err(error) = transaction.commit().await {
-        return wire::failed(&error.into());
+    if let Err(refused) = wire::commit(operator, transaction, &exchanges).await {
+        return *refused;
     }
     outcome::body(
         StatusCode::OK,
@@ -465,11 +464,8 @@ pub async fn resolve(operator: &Operator, request: Request) -> Response {
         },
         Outcome::Success,
     );
-    if let Err(error) = wire::record(operator, &parts, vec![exchange]).await {
-        return wire::unaudited(&error);
-    }
-    if let Err(error) = transaction.commit().await {
-        return wire::failed(&error.into());
+    if let Err(refused) = wire::commit(operator, transaction, &[exchange]).await {
+        return *refused;
     }
     outcome::body(
         StatusCode::OK,

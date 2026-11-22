@@ -52,7 +52,9 @@ const MATES: usize = 282;
 /// read (#752) leaves 20 statements, 2041 buffers and 21,785 allocations,
 /// and each ceiling fell by the drop. Writing the evidence in the packed
 /// layout and not as JSON (#752) took 111 allocations and 211,887 bytes
-/// allocated more off, and the two ceilings fell by as much.
+/// allocated more off, and the two ceilings fell by as much. Sending one
+/// token for every request (#712) took 60 allocations and 1,855 bytes
+/// allocated off, and the two ceilings fell by as much.
 const CASE: Case = Case {
     name: "ITI-104 revise",
     ceiling: Ceiling {
@@ -62,10 +64,11 @@ const CASE: Case = Case {
         wal: 4895,
         audit: 0,
         answer: 173,
-        allocations: 22_112,
-        allocated: 2_381_106,
+        allocations: 22_052,
+        allocated: 2_379_251,
     },
     expected: StatusCode::OK,
+    minted: false,
 };
 
 /// The most bytes an open candidate's row and its evidence may hold on

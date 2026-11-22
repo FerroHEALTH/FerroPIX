@@ -321,6 +321,10 @@ struct Case {
     name: &'static str,
     ceiling: Ceiling,
     expected: StatusCode,
+    /// Whether every request carries a token signed for it, so the guard
+    /// verifies its signature each time, in place of the one token a client
+    /// sends until it expires, whose verdict the guard keeps.
+    minted: bool,
 }
 
 /// The ceilings of the FHIR face's hot requests: the statements as
@@ -359,7 +363,13 @@ struct Case {
 /// values on CI's Linux runner and of three macOS runs (#721): the counts
 /// were the same in each run, the bytes within 0.1%, and Linux counts 17 to
 /// 86 more allocations a request, most of them where a read writes the spool.
-const CASES: [Case; 5] = [
+/// Each case sends one token, as a client sends its token until it expires,
+/// so the guard verifies its signature once and keeps the verdict (#712):
+/// that took 60 allocations and 2,724 to 3,199 bytes allocated off every
+/// request of every case, and each ceiling fell by as much. The case with a
+/// token signed for each request keeps ITI-83 GET's ceilings from before,
+/// which held the guard's whole check.
+const CASES: [Case; 6] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
@@ -369,13 +379,29 @@ const CASES: [Case; 5] = [
             wal: 3264,
             audit: 0,
             answer: 173,
-            allocations: 1_644,
-            allocated: 563_040,
+            allocations: 1_584,
+            allocated: 559_956,
         },
         expected: StatusCode::OK,
+        minted: false,
     },
     Case {
         name: "ITI-83 GET",
+        ceiling: Ceiling {
+            statements: 1,
+            nested: 0,
+            blocks: 43,
+            wal: 0,
+            audit: 2188,
+            answer: 263,
+            allocations: 871,
+            allocated: 149_423,
+        },
+        expected: StatusCode::OK,
+        minted: false,
+    },
+    Case {
+        name: "ITI-83 GET, a token signed for it",
         ceiling: Ceiling {
             statements: 1,
             nested: 0,
@@ -387,6 +413,7 @@ const CASES: [Case; 5] = [
             allocated: 152_622,
         },
         expected: StatusCode::OK,
+        minted: true,
     },
     Case {
         name: "ITI-83 POST",
@@ -397,10 +424,11 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2433,
             answer: 361,
-            allocations: 1_755,
-            allocated: 177_384,
+            allocations: 1_695,
+            allocated: 174_185,
         },
         expected: StatusCode::OK,
+        minted: false,
     },
     Case {
         name: "ITI-78 search",
@@ -411,10 +439,11 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2057,
             answer: 1084,
-            allocations: 1_145,
-            allocated: 204_922,
+            allocations: 1_085,
+            allocated: 202_198,
         },
         expected: StatusCode::OK,
+        minted: false,
     },
     Case {
         name: "ITI-119 match",
@@ -425,10 +454,11 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2728,
             answer: 1067,
-            allocations: 2_469,
-            allocated: 276_987,
+            allocations: 2_409,
+            allocated: 274_165,
         },
         expected: StatusCode::OK,
+        minted: false,
     },
 ];
 
@@ -465,27 +495,27 @@ fn family(index: usize) -> &'static str {
 }
 
 /// One request of the case `name`.
-fn build(harness: &Harness, name: &str, hospital: &str) -> Request<Body> {
+fn build(name: &str, hospital: &str, credential: &str) -> Request<Body> {
     let json = [(header::CONTENT_TYPE, "application/fhir+json")];
     match name {
         "ITI-104 revise" => request(
             Method::PUT,
             &format!("/fhir/Patient?{}", condition(HOSPITAL_DOMAIN, hospital)),
-            Some(&harness.source()),
+            Some(credential),
             &json,
             Some(serde_json::to_string(&fixture(Fixture::FeedHospital)).expect("JSON")),
         ),
-        "ITI-83 GET" => request(
+        "ITI-83 GET" | "ITI-83 GET, a token signed for it" => request(
             Method::GET,
             &pix_uri(HOSPITAL_DOMAIN, hospital, &[BSN_SYSTEM]),
-            Some(&harness.consumer()),
+            Some(credential),
             &[],
             None,
         ),
         "ITI-83 POST" => request(
             Method::POST,
             "/fhir/Patient/$ihe-pix",
-            Some(&harness.consumer()),
+            Some(credential),
             &json,
             Some(pix_parameters(
                 HOSPITAL_DOMAIN,
@@ -496,7 +526,7 @@ fn build(harness: &Harness, name: &str, hospital: &str) -> Request<Body> {
         "ITI-78 search" => request(
             Method::GET,
             "/fhir/Patient?family=Proefsma&birthdate=1961-04-12",
-            Some(&harness.consumer()),
+            Some(credential),
             &[],
             None,
         ),
@@ -505,7 +535,7 @@ fn build(harness: &Harness, name: &str, hospital: &str) -> Request<Body> {
             request(
                 Method::POST,
                 "/fhir/Patient/$match",
-                Some(&harness.consumer()),
+                Some(credential),
                 &json,
                 Some(body.to_string()),
             )
@@ -514,9 +544,20 @@ fn build(harness: &Harness, name: &str, hospital: &str) -> Request<Body> {
     }
 }
 
+/// The credential the case `name` sends: the Source's for a feed, a
+/// Consumer's for every other.
+fn credential(harness: &Harness, name: &str) -> String {
+    if name.starts_with("ITI-104") {
+        harness.source()
+    } else {
+        harness.consumer()
+    }
+}
+
 /// Sends one request of the case `name`.
 async fn send(harness: &Harness, name: &str, hospital: &str) -> Answer {
-    harness.exchange(build(harness, name, hospital)).await
+    let credential = credential(harness, name);
+    harness.exchange(build(name, hospital, &credential)).await
 }
 
 /// Sends `requests` in turn, asserting each is answered `expected`, and
@@ -547,14 +588,24 @@ fn measure(
     hospital: &str,
     report: &mut String,
 ) -> bool {
+    // A client sends one token until it expires, so a case sends one token
+    // unless it measures a token signed for each request.
+    let reused = credential(harness, case.name);
+    let next = || {
+        if case.minted {
+            credential(harness, case.name)
+        } else {
+            reused.clone()
+        }
+    };
     let warm = (0..WARMUP)
-        .map(|_| build(harness, case.name, hospital))
+        .map(|_| build(case.name, hospital, &next()))
         .collect();
     runtime.block_on(exchange_all(harness, case.name, case.expected, warm));
     // The requests are built before the count, so the test's signing of
     // their tokens is not counted.
     let requests = (0..REQUESTS)
-        .map(|_| build(harness, case.name, hospital))
+        .map(|_| build(case.name, hospital, &next()))
         .collect();
     runtime.block_on(meter.start());
     let (bytes, allocations) = counted(

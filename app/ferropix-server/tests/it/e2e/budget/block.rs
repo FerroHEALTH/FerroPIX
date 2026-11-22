@@ -50,7 +50,7 @@ const CASE: Case = Case {
         statements: 22,
         nested: 1,
         blocks: 2406,
-        wal: 4899,
+        wal: 4895,
         audit: 0,
         answer: 173,
         allocations: 22_324,

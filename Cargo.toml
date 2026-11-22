@@ -107,8 +107,10 @@ ferrohealth-server = { version = "=0.12.0", default-features = false }
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition
 # and the panic hook, whose line names the request id. Pinned exactly, as a
 # product pins every family crate; 0.5 installs its own bridge from the `log`
-# crate beside the subscriber. Verified against crates.io on 2026-11-15.
-ferrohealth-telemetry = { version = "=0.5.0", default-features = false }
+# crate beside the subscriber; 0.5.1 renders no span fields in the JSON
+# console, which no line writes (FerroHEALTH/FerroSYS#416). Verified against
+# crates.io on 2026-11-22 (0.5.1).
+ferrohealth-telemetry = { version = "=0.5.1", default-features = false }
 # The health family of FerroHEALTH/FerroSYS: the readiness document, which
 # the operator console's browser half reads too, and with `registry` the
 # indicators and the lifecycle the server runs. Pinned exactly at the version
@@ -146,9 +148,11 @@ http = "1.5.0"
 # place (FerroHEALTH/FerroAUDIT#258, #260); 0.24.3 appends a spool's batches
 # to one segment from one writer thread, opens a backlog through segment
 # indexes and removes a delivered record from the active segment
-# (FerroHEALTH/FerroAUDIT#264, #263, #267). Verified against crates.io on
-# 2026-11-22 (0.24.3).
-ihe-atna = { version = "=0.24.3", default-features = false }
+# (FerroHEALTH/FerroAUDIT#264, #263, #267); 0.25 writes a record's bytes
+# straight from the typed resource and a late read's refusal only when it is
+# withdrawn (FerroHEALTH/FerroAUDIT#270, #272). Verified against crates.io on
+# 2026-11-22 (0.25.0).
+ihe-atna = { version = "=0.25.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.62.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

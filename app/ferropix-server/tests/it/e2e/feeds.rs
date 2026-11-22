@@ -4,13 +4,17 @@
 //! The ITI-104 messages the feed cases send, read by `ihe-iti` as the route
 //! will read them, and the store they run against.
 
+use ferropix_server::audit::Audit;
+use ferropix_server::config::section::audit::AuditSettings;
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
 use ferropix_server::config::section::matching::Matching;
-use ferropix_server::feed::{Context, Feeder};
-use ferropix_server::store::record::{Channel, RecordId};
+use ferropix_server::feed::master::{MasterChange, MasterStep, Outcomes};
+use ferropix_server::feed::{Applied, Context, FeedError, Feeder, Recording};
+use ferropix_server::store::record::{Channel, PersonId, RecordId};
 use ferropix_server::store::{Job, Store};
 use ferropix_testkit::containers::{Postgres, postgres};
 use ferropix_testkit::synthetic::{HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN};
+use ihe_atna::balp::Exchange;
 use ihe_iti::pixm::server::feed::{Feed, Merge, Removal, Revision};
 use ihe_iti::server::format::Format;
 use uuid::Uuid;
@@ -66,11 +70,152 @@ pub(crate) async fn start() -> Started {
 }
 
 /// The feed transaction over `store` with the default `[matching]`.
-pub(crate) fn feeder(store: &Store) -> Feeder {
-    Feeder::new(
-        store.clone(),
-        &Matching::default().resolve().expect("the defaults resolve"),
+pub(crate) fn feeder(store: &Store) -> Fed {
+    Fed::with(
+        Feeder::new(
+            store.clone(),
+            &Matching::default().resolve().expect("the defaults resolve"),
+        ),
+        store,
     )
+}
+
+/// The feed transaction with the audit trail over its store's audit outbox,
+/// for the cases that call it directly: each feed keeps no record, which the
+/// audit cases assert apart.
+pub(crate) struct Fed {
+    /// The feed transaction.
+    pub feeder: Feeder,
+    /// The audit trail.
+    pub audit: Audit,
+    /// The spool directory the audit trail opens.
+    _spool: tempfile::TempDir,
+}
+
+impl std::fmt::Debug for Fed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fed")
+            .field("feeder", &self.feeder)
+            .field("audit", &self.audit)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The records a direct feed keeps: none.
+fn no_records(_outcome: Result<&Applied, &FeedError>) -> Vec<Exchange> {
+    Vec::new()
+}
+
+/// The records a direct ITI-93 change keeps: none.
+fn no_message_records(_outcomes: &Outcomes) -> Vec<Exchange> {
+    Vec::new()
+}
+
+/// The outcome of the one change of a message.
+fn one(outcomes: Result<Outcomes, FeedError>) -> Result<Applied, FeedError> {
+    outcomes?
+        .pop()
+        .flatten()
+        .expect("the one change was written")
+}
+
+impl Fed {
+    /// Holds `feeder` with an audit trail over the audit outbox of `store`.
+    pub(crate) fn with(feeder: Feeder, store: &Store) -> Self {
+        let spool = tempfile::tempdir().expect("a directory");
+        let directory = spool.path().join("spool");
+        std::fs::create_dir_all(&directory).expect("the spool directory");
+        std::fs::set_permissions(
+            &directory,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .expect("private");
+        let audit = Audit::open(
+            &AuditSettings {
+                repository: None,
+                spool_dir: directory,
+                spool_max_bytes: 1 << 20,
+                spool_max_events: 10,
+                spool_write_timeout: std::time::Duration::from_secs(2),
+            },
+            &url::Url::parse("https://pix.example.org").expect("a URL"),
+        )
+        .and_then(|audit| audit.with_store(store))
+        .expect("the audit trail opens");
+        Self {
+            feeder,
+            audit,
+            _spool: spool,
+        }
+    }
+
+    /// An Add or Revise Patient message.
+    pub(crate) async fn revise(
+        &self,
+        revision: &Revision,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        let recording = Recording::new(&self.audit, &no_records);
+        self.feeder.revise(revision, context, recording).await
+    }
+
+    /// A Resolve Duplicate Patient message.
+    pub(crate) async fn resolve_duplicate(
+        &self,
+        merge: &Merge,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        let recording = Recording::new(&self.audit, &no_records);
+        self.feeder
+            .resolve_duplicate(merge, context, recording)
+            .await
+    }
+
+    /// A Remove Patient message.
+    pub(crate) async fn remove(
+        &self,
+        removal: &Removal,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        let recording = Recording::new(&self.audit, &no_records);
+        self.feeder.remove(removal, context, recording).await
+    }
+
+    /// An ITI-93 message of one create or update.
+    pub(crate) async fn master(
+        &self,
+        change: MasterChange,
+        system: &str,
+        id: PersonId,
+        patient: &fhir_types::r4::patient::Patient,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        let step = MasterStep::Write {
+            change,
+            id,
+            patient,
+        };
+        self.message(system, step, context).await
+    }
+
+    /// An ITI-93 message of the one change `step`.
+    async fn message(
+        &self,
+        system: &str,
+        step: MasterStep<'_>,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        one(self
+            .feeder
+            .message(
+                system,
+                &[Some(step)],
+                context,
+                &self.audit,
+                &no_message_records,
+            )
+            .await)
+    }
 }
 
 /// The context of a message from the synthetic Source.

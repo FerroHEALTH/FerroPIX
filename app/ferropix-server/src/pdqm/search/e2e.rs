@@ -19,13 +19,16 @@ use ihe_iti::server::format::Format;
 use uuid::Uuid;
 
 use super::{Page, Window, oracle, run};
+use crate::audit::Audit;
+use crate::config::section::audit::AuditSettings;
 use crate::config::section::db::{DbSettings, SealingKey};
 use crate::config::section::domain::{DomainKind, DomainSeed};
 use crate::config::section::matching::Matching;
 use crate::feed::merging::{self, MergeRequest};
-use crate::feed::{Context, Feeder};
+use crate::feed::{Applied, Context, FeedError, Feeder, Recording};
 use crate::store::record::{Channel, PersonId};
 use crate::store::{Job, Store};
+use ihe_atna::balp::Exchange;
 
 /// The BSN naming system.
 const BSN: &str = "http://fhir.nl/fhir/NamingSystem/bsn";
@@ -52,6 +55,8 @@ struct Started {
     _postgres: Postgres,
     store: Store,
     feeder: Feeder,
+    audit: Audit,
+    _spool: tempfile::TempDir,
 }
 
 /// Starts PostgreSQL and the store with the BSN and three local domains.
@@ -103,10 +108,45 @@ async fn start() -> Started {
         store.clone(),
         &Matching::default().resolve().expect("the defaults resolve"),
     );
+    let spool = tempfile::tempdir().expect("a directory");
+    let directory = spool.path().join("spool");
+    std::fs::create_dir_all(&directory).expect("the spool directory");
+    std::fs::set_permissions(
+        &directory,
+        std::os::unix::fs::PermissionsExt::from_mode(0o700),
+    )
+    .expect("private");
+    let audit = Audit::open(
+        &AuditSettings {
+            repository: None,
+            spool_dir: directory,
+            spool_max_bytes: 1 << 20,
+            spool_max_events: 10,
+            spool_write_timeout: std::time::Duration::from_secs(2),
+        },
+        &url::Url::parse("https://pix.example.org").expect("a URL"),
+    )
+    .and_then(|audit| audit.with_store(&store))
+    .expect("the audit trail opens");
     Started {
         _postgres: postgres,
         store,
         feeder,
+        audit,
+        _spool: spool,
+    }
+}
+
+/// The records a feed of the corpus keeps: none, which the audit cases
+/// assert apart.
+fn no_records(_outcome: Result<&Applied, &FeedError>) -> Vec<Exchange> {
+    Vec::new()
+}
+
+impl Started {
+    /// How a feed of the corpus records what it did.
+    fn recording(&self) -> Recording<'_> {
+        Recording::new(&self.audit, &no_records)
     }
 }
 
@@ -282,11 +322,29 @@ impl Patient {
     }
 }
 
+/// Resolves the duplicate `merge`.
+async fn resolve(started: &Started, merge: &Merge) {
+    started
+        .feeder
+        .resolve_duplicate(merge, &context(), started.recording())
+        .await
+        .expect("resolved");
+}
+
+/// Removes the identifier `removal` names.
+async fn remove(started: &Started, removal: &Removal) {
+    started
+        .feeder
+        .remove(removal, &context(), started.recording())
+        .await
+        .expect("removed");
+}
+
 /// Feeds `patient` and returns the person it is linked to.
 async fn feed(started: &Started, patient: &Patient) -> PersonId {
     started
         .feeder
-        .revise(&patient.revision(), &context())
+        .revise(&patient.revision(), &context(), started.recording())
         .await
         .expect("the feed applies")
         .person
@@ -519,18 +577,18 @@ async fn every_search_of_the_matrix_answers_as_the_oracle_over_the_corpus() {
     for index in (3..CORPUS).step_by(17) {
         started
             .feeder
-            .remove(&Patient::at(index).removal(), &context())
+            .remove(
+                &Patient::at(index).removal(),
+                &context(),
+                started.recording(),
+            )
             .await
             .expect("removed");
     }
     for index in (7..CORPUS - 3).step_by(97) {
         let subsumed = Patient::at(index);
         let survivor = Patient::at(index + 3);
-        started
-            .feeder
-            .resolve_duplicate(&subsumed.subsumed_by(&survivor.value), &context())
-            .await
-            .expect("resolved");
+        resolve(&started, &subsumed.subsumed_by(&survivor.value)).await;
     }
     let mut made = Vec::new();
     for index in (13..CORPUS - 40).step_by(89) {
@@ -628,11 +686,7 @@ async fn a_search_right_after_each_change_sees_it() {
         "the unmerge"
     );
 
-    started
-        .feeder
-        .remove(&authority.removal(), &context())
-        .await
-        .expect("removed");
+    remove(&started, &authority.removal()).await;
     assert!(
         agree(&started, "family=gezag", false).await.is_empty(),
         "the removal"
@@ -642,11 +696,7 @@ async fn a_search_right_after_each_change_sees_it() {
     let mut duplicate = Patient::at(9);
     duplicate.family = String::from("Dubbeling");
     let duplicated = feed(&started, &duplicate).await;
-    started
-        .feeder
-        .resolve_duplicate(&duplicate.subsumed_by(&ada.value), &context())
-        .await
-        .expect("resolved");
+    resolve(&started, &duplicate.subsumed_by(&ada.value)).await;
     assert!(
         agree(&started, "family=dubbel", false).await.is_empty(),
         "the duplicate resolution"

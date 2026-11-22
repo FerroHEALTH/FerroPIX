@@ -139,7 +139,7 @@ The build order is the milestones:
   the authorization over
   `ferrohealth-smart` with its one permission table and the Source rule
   (`src/auth/`), the FHIR face and the operator API routes behind it
-  (`src/fhir/`), the BALP audit trail over `ihe-atna` with its spool,
+  (`src/fhir/`), the BALP audit trail over `ihe-atna` with its spool for the reads and the audit outbox the writes insert their records into in their own transaction,
   its reservation layer and the record of each transaction
   (`src/audit/`), the readiness indicators over `ferrohealth-health`, the usage report to FerroPULSE over
   `ferrohealth-usage-report` with FerroPIX's status and route groups

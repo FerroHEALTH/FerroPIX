@@ -63,7 +63,7 @@ async fn a_reveal_answers_the_value_once_after_its_action_and_its_disclosure_rec
         .iter()
         .find(|row| row.domain.system == HOSPITAL_DOMAIN)
         .expect("the hospital identifier");
-    let before = fed.harness.records();
+    let before = fed.harness.records().await;
     let answer = post(
         &fed.harness,
         &format!("/operator/persons/{}/reveal", fed.person),
@@ -77,10 +77,15 @@ async fn a_reveal_answers_the_value_once_after_its_action_and_its_disclosure_rec
     assert_eq!(fed.hospital, revealed.value.0);
     assert_eq!(HOSPITAL_DOMAIN, revealed.system);
     assert_eq!(MAX_SECONDS, revealed.seconds, "capped");
-    assert_eq!(before + 1, fed.harness.records(), "one disclosure record");
+    assert_eq!(
+        before + 1,
+        fed.harness.records().await,
+        "one disclosure record"
+    );
     let disclosure = fed
         .harness
         .audit_texts()
+        .await
         .into_iter()
         .find(|text| text.contains(DISCLOSURE))
         .expect("the disclosure record");
@@ -142,7 +147,7 @@ async fn a_carried_bsn_is_revealed_and_a_handle_the_person_does_not_hold_is_not_
     );
     assert_eq!(fed.bsn, revealed.value.0);
     assert_eq!(15, revealed.seconds, "the default");
-    let before = fed.harness.records();
+    let before = fed.harness.records().await;
     for body in [
         r#"{"target":{"record":"00000000-0000-7000-8000-000000000000"},"reason":"x"}"#,
         r#"{"target":{"carried":"not-a-uuid"},"reason":"x"}"#,
@@ -176,7 +181,7 @@ async fn a_carried_bsn_is_revealed_and_a_handle_the_person_does_not_hold_is_not_
     }
     assert_eq!(
         before,
-        fed.harness.records(),
+        fed.harness.records().await,
         "a refused reveal discloses nothing"
     );
     let got = get(&fed.harness, &uri).await;

@@ -85,6 +85,8 @@ ferrobridge-hl7v2 = { workspace = true, features = ["map"] }
 # The terminology client the maps translate every table value through.
 ferrobridge-term.workspace = true
 hl7v2-types.workspace = true
+# The DEFLATE of a write's audit record before it is sealed.
+flate2.workspace = true
 http.workspace = true
 # The date the capability statement carries.
 jiff.workspace = true

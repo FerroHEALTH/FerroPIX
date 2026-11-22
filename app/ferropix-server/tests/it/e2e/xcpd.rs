@@ -342,7 +342,7 @@ async fn a_shared_identifier_from_the_initiating_client_is_case_one_and_audited(
     }
     let harness = Harness::start(synthetic_seeds()).await;
     seeded(&harness).await;
-    let before = harness.records();
+    let before = harness.records().await;
     let address = serve(gateway(&harness, &harness.matching)).await;
     let Ok(Discovery::Matched(matches)) = discover(address, INITIATING, "H-1").await else {
         panic!("Case 1");
@@ -359,7 +359,7 @@ async fn a_shared_identifier_from_the_initiating_client_is_case_one_and_audited(
         discover(address, INITIATING, "H-404").await,
         Ok(Discovery::NoMatch)
     ));
-    let records = harness.audit_texts();
+    let records = harness.audit_texts().await;
     assert_eq!(before + 2, records.len(), "one record per query");
     assert!(
         records
@@ -611,6 +611,7 @@ async fn an_asynchronous_query_is_accepted_and_its_answer_posted_to_its_reply_en
     assert!(
         harness
             .audit_texts()
+            .await
             .iter()
             .any(|record| record.contains("ITI-55") && record.contains(&reply_to)),
         "the record names the ReplyTo as the source"

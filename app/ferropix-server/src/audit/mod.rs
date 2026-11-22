@@ -3,16 +3,21 @@
 
 //! The BALP audit trail of the Manager and the Supplier, through `ihe-atna`.
 //!
-//! Every record waits in the ITI-20 store-and-forward spool `ihe-atna`
-//! provides (ITI TF-2 §3.20.4.1.1: one `0600` file per record in a `0700`
-//! directory) and is sent from there to the `[audit]` repository over the
-//! ATX: FHIR Feed (BALP 1.1.4 §1:52.1.1.1). A transaction takes its record's
-//! place in the spool before it runs ([`Audit::reserve`]), so a spool that
-//! is full, unwritable or stalled refuses the transaction with `503` before
-//! it changes anything, as FerroFED's does. [`records`] writes the
-//! `AuditEvent` each profile prescribes. The spool's bounds and the place a
-//! record reserves are our own design: no specification governs them.
+//! The records wait in one of two ITI-20 store-and-forward stores (ITI TF-2
+//! §3.20.4.1.1) and are sent from there to the `[audit]` repository over the
+//! ATX: FHIR Feed (BALP 1.1.4 §1:52.1.1.1). A write's record is inserted
+//! into the store's audit outbox in the write's own transaction
+//! ([`Audit::enlist`], [`outbox`]), so the change and its record commit
+//! together or not at all (#742). A read's record waits in the spool
+//! `ihe-atna` provides (segment files in a `0700` directory): a read takes
+//! its record's place before it runs ([`Audit::reserve`]), so a spool that is
+//! full refuses it with `503` before it reads anything, and a record the
+//! spool cannot store in time is withdrawn and the read recorded and
+//! answered as refused. [`records`] writes the `AuditEvent` each profile
+//! prescribes. The two stores, the spool's bounds and the place a record
+//! reserves are our own design: no specification governs them.
 
+pub mod outbox;
 pub mod records;
 pub mod reserve;
 
@@ -31,8 +36,11 @@ use ihe_atna::atna::forwarder::Forwarder;
 use ihe_atna::atna::spool::{Bounds, Content, Spool, SpoolError};
 use ihe_atna::balp::{Exchange, NetworkAddress, Observer, RecordError, SOURCE_APPLICATION_SERVER};
 use secrecy::SecretSlice;
+use sqlx::PgConnection;
 
+use crate::audit::outbox::{AuditOutbox, KeepError};
 use crate::config::section::audit::AuditSettings;
+use crate::store::Store;
 
 /// The place one record reserves before its transaction runs: room for the
 /// largest record a transaction writes, the raw request of a search
@@ -67,17 +75,27 @@ pub enum Unrecorded {
     /// The record could not be written as JSON.
     #[error("the audit record could not be written")]
     Record(#[source] RecordError),
+    /// The audit outbox could not take a write's record.
+    #[error("the audit outbox could not keep the record")]
+    Outbox(#[source] KeepError),
 }
 
-/// The audit trail: the spool, and the forwarder that drains it when a
-/// repository is configured.
+/// The audit trail: the spool and the audit outbox, and the forwarders that
+/// drain them when a repository is configured.
 #[derive(Debug, Clone)]
 pub struct Audit {
-    /// The spool every record waits in.
+    /// The spool every read's record waits in.
     spool: Spool,
-    /// The forwarder to the repository, when `[audit.endpoint] url` names
-    /// one.
+    /// The forwarder of the spool to the repository, when `[audit.endpoint]
+    /// url` names one.
     forwarder: Option<Arc<Forwarder>>,
+    /// The outbound client of the repository, when one is configured.
+    client: Option<OutboundClient>,
+    /// The audit outbox every write's record waits in, once
+    /// [`Audit::with_store`] named the store.
+    outbox: Option<AuditOutbox>,
+    /// The forwarder of the audit outbox, when a repository is configured.
+    outbox_forwarder: Option<Arc<Forwarder<AuditOutbox>>>,
     /// The repository's `AuditEvent` endpoint, without userinfo or query.
     endpoint: Option<String>,
     /// The recording system.
@@ -126,6 +144,9 @@ impl Audit {
         Ok(Self {
             spool,
             forwarder,
+            client: settings.repository.clone(),
+            outbox: None,
+            outbox_forwarder: None,
             endpoint,
             observer: Arc::new(observer(public_base_url)),
             directory: settings.spool_dir.clone(),
@@ -133,15 +154,112 @@ impl Audit {
         })
     }
 
-    /// Starts draining the spool to the repository, when one is configured.
+    /// Keeps the records of the writes in the audit outbox of `store`, and,
+    /// when a repository is configured, forwards them from there.
     ///
-    /// The task runs until it is aborted; a record in flight then stays in
-    /// the spool and is sent again by the next run.
+    /// # Errors
+    ///
+    /// Returns [`OpenError::Repository`] for an endpoint the FHIR Feed
+    /// refuses.
+    pub fn with_store(mut self, store: &Store) -> Result<Self, OpenError> {
+        let outbox = AuditOutbox::new(store.clone());
+        self.outbox_forwarder = match &self.client {
+            Some(client) => Some(Forwarder::fhir_feed_from(
+                outbox.clone(),
+                feed(client.clone())?,
+            )),
+            None => None,
+        };
+        self.outbox = Some(outbox);
+        Ok(self)
+    }
+
+    /// Starts draining the spool and the audit outbox to the repository,
+    /// when one is configured.
+    ///
+    /// The task runs until it is aborted; a record in flight then stays
+    /// where it waits and is sent again by the next run.
     #[must_use]
     pub fn drain(&self) -> Option<tokio::task::JoinHandle<()>> {
-        self.forwarder
-            .as_ref()
-            .map(|forwarder| tokio::spawn(Arc::clone(forwarder).run()))
+        let spool = self.forwarder.as_ref().map(Arc::clone);
+        let outbox = self.outbox_forwarder.as_ref().map(Arc::clone);
+        if spool.is_none() && outbox.is_none() {
+            return None;
+        }
+        Some(tokio::spawn(async move {
+            let spool = async move {
+                if let Some(forwarder) = spool {
+                    forwarder.run().await;
+                }
+            };
+            let outbox = async move {
+                if let Some(forwarder) = outbox {
+                    forwarder.run().await;
+                }
+            };
+            tokio::join!(spool, outbox);
+        }))
+    }
+
+    /// Inserts the records of `exchanges` into the audit outbox through
+    /// `connection`, sealed under the store's key: in the write's
+    /// transaction, before COMMIT, so the change and its records commit
+    /// together, or, for a write refused before it changed anything, in a
+    /// statement of its own.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Unrecorded::Record`] when a record cannot be written and
+    /// [`Unrecorded::Outbox`] when the outbox cannot take it, or when no
+    /// store was named.
+    pub async fn enlist(
+        &self,
+        connection: &mut PgConnection,
+        exchanges: &[Exchange],
+    ) -> Result<(), Unrecorded> {
+        let Some(outbox) = &self.outbox else {
+            return Err(Unrecorded::Outbox(KeepError::Unattached));
+        };
+        let mut records = Vec::with_capacity(exchanges.len());
+        for exchange in exchanges {
+            records.push(written(exchange, &self.observer)?);
+        }
+        outbox::insert(connection, outbox.sealer(), &records)
+            .await
+            .map_err(Unrecorded::Outbox)
+    }
+
+    /// Keeps the records of `exchanges`, of a write refused before it
+    /// changed anything, in the audit outbox in a statement of their own.
+    ///
+    /// # Errors
+    ///
+    /// As [`Audit::enlist`], and [`Unrecorded::Outbox`] when the store lends
+    /// no connection.
+    pub async fn keep(&self, exchanges: &[Exchange]) -> Result<(), Unrecorded> {
+        let Some(outbox) = &self.outbox else {
+            return Err(Unrecorded::Outbox(KeepError::Unattached));
+        };
+        let mut connection = outbox
+            .connection()
+            .await
+            .map_err(|error| Unrecorded::Outbox(KeepError::Store(error)))?;
+        self.enlist(&mut connection, exchanges).await?;
+        outbox.committed();
+        Ok(())
+    }
+
+    /// Wakes the audit outbox's forwarder once a write committed records.
+    pub fn committed(&self) {
+        if let Some(outbox) = &self.outbox {
+            outbox.committed();
+        }
+    }
+
+    /// Returns the audit outbox, once [`Audit::with_store`] named the store.
+    #[must_use]
+    pub fn outbox(&self) -> Option<&AuditOutbox> {
+        self.outbox.as_ref()
     }
 
     /// Takes the place of one record before its transaction runs.
@@ -156,16 +274,17 @@ impl Audit {
             .map_err(Unrecorded::Spool)
     }
 
-    /// Stores the records of `exchanges`, each in a place of its own.
+    /// Stores the records of a read's `exchanges` in the spool as one
+    /// batch, or the records of the read refused when they are late.
     ///
     /// # Errors
     ///
-    /// Returns [`Unrecorded`] when a record cannot be written or stored.
-    pub async fn record(&self, exchanges: Vec<Exchange>) -> Result<(), Unrecorded> {
-        for exchange in exchanges {
-            self.reserve()?.record(&exchange).await?;
+    /// Returns [`Unrecorded`] as [`reserve::Place::record`] does.
+    pub async fn record(&self, exchanges: &[Exchange]) -> Result<(), Unrecorded> {
+        if exchanges.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        self.reserve()?.record(exchanges).await
     }
 
     /// Returns the directory the records wait in.
@@ -178,16 +297,24 @@ impl Audit {
     /// when none is configured.
     #[must_use]
     pub fn upstream(&self) -> Option<Upstream> {
-        let forwarder = self.forwarder.as_ref()?;
-        let status = forwarder.status();
-        let last = (status.delivered > 0 || status.retries > 0).then(|| {
-            if status.reachable {
-                health::Outcome::up()
-            } else {
+        let spool = self.forwarder.as_ref()?.status();
+        let outbox = self
+            .outbox_forwarder
+            .as_ref()
+            .map(|forwarder| forwarder.status());
+        let tried =
+            |status: &ihe_atna::atna::forwarder::Status| status.delivered > 0 || status.retries > 0;
+        let unreachable =
+            |status: &ihe_atna::atna::forwarder::Status| tried(status) && !status.reachable;
+        let last = (tried(&spool) || outbox.as_ref().is_some_and(tried)).then(|| {
+            if unreachable(&spool) || outbox.as_ref().is_some_and(unreachable) {
                 health::Outcome::down(format!(
-                    "the last delivery failed; {} record(s) wait in the spool",
-                    status.depth.waiting()
+                    "the last delivery failed; {} record(s) wait in the spool and {} in the audit outbox",
+                    spool.depth.waiting(),
+                    outbox.as_ref().map_or(0, |status| status.depth.waiting())
                 ))
+            } else {
+                health::Outcome::up()
             }
         });
         Some(Upstream {
@@ -233,6 +360,37 @@ impl HealthIndicator for Headroom {
 
     fn check(&self) -> Check<'_> {
         let state = self.0.headroom();
+        Box::pin(async move { state })
+    }
+}
+
+/// The readiness indicator of the audit outbox's quarantine: down while it
+/// holds a record the repository refused, so an operator looks at it (no
+/// specification governs this: our own design).
+#[derive(Debug, Clone)]
+pub struct Quarantine(pub Audit);
+
+impl HealthIndicator for Quarantine {
+    fn name(&self) -> &'static str {
+        "audit_outbox"
+    }
+
+    fn check(&self) -> Check<'_> {
+        let depth = self
+            .0
+            .outbox
+            .as_ref()
+            .map(ihe_atna::atna::forwarder::Outbox::depth)
+            .unwrap_or_default();
+        let state = if depth.quarantined > 0 {
+            Outcome::down(format!(
+                "the audit outbox holds {} record(s) the repository refused, in pix.audit_quarantine, and {} waiting",
+                depth.quarantined,
+                depth.waiting()
+            ))
+        } else {
+            Outcome::up()
+        };
         Box::pin(async move { state })
     }
 }

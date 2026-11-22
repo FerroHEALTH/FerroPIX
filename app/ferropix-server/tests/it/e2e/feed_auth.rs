@@ -63,9 +63,12 @@ async fn subscribe(store: &Store, endpoint: &str) -> Uuid {
         Value::Array(vec![Value::String(format!("Authorization: {NAMED}"))]);
     let requested = RequestedSubscription::read(Format::Json, resource.to_string().as_bytes())
         .expect("a PMIR Subscription");
-    let created = subscription::create(store, &requested)
-        .await
-        .expect("stored");
+    let created = subscription::create(
+        &mut store.pool().acquire().await.expect("a connection"),
+        &requested,
+    )
+    .await
+    .expect("stored");
     Uuid::parse_str(created.id.as_deref().expect("an id")).expect("a UUID")
 }
 
@@ -148,7 +151,7 @@ fn sender(
 
 /// Creates the first person, which every subscription matches.
 async fn create(harness: &Harness, store: &Store) {
-    Feeder::new(store.clone(), &harness.matching)
+    super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), store)
         .master(
             MasterChange::Create,
             MASTER,

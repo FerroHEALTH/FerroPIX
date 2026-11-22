@@ -14,6 +14,7 @@
 
 use fhir_types::r4::subscription::Subscription;
 use ihe_iti::pmir::server::subscription::RequestedSubscription;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::store::{Store, StoreError};
@@ -36,7 +37,7 @@ pub enum Updated {
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails.
 pub async fn create(
-    store: &Store,
+    connection: &mut PgConnection,
     requested: &RequestedSubscription,
 ) -> Result<Subscription, StoreError> {
     let id = Uuid::new_v4();
@@ -49,7 +50,7 @@ pub async fn create(
     .bind(sqlx::types::Json(&resource))
     .bind(criteria(requested))
     .bind(requested.endpoint().as_str())
-    .execute(store.pool())
+    .execute(&mut *connection)
     .await?;
     Ok(resource)
 }
@@ -79,7 +80,7 @@ pub async fn read(store: &Store, id: Uuid) -> Result<Option<Subscription>, Store
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails.
 pub async fn update(
-    store: &Store,
+    connection: &mut PgConnection,
     id: Uuid,
     requested: &RequestedSubscription,
 ) -> Result<Updated, StoreError> {
@@ -99,7 +100,7 @@ pub async fn update(
     .bind(status)
     .bind(criteria(requested))
     .bind(requested.endpoint().as_str())
-    .execute(store.pool())
+    .execute(&mut *connection)
     .await?
     .rows_affected();
     Ok(if changed == 0 {
@@ -113,13 +114,13 @@ pub async fn update(
 ///
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails.
-pub async fn delete(store: &Store, id: Uuid) -> Result<bool, StoreError> {
+pub async fn delete(connection: &mut PgConnection, id: Uuid) -> Result<bool, StoreError> {
     let changed = sqlx::query(
         "UPDATE pix.subscription SET deleted_at = now(), status = 'off'
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(id)
-    .execute(store.pool())
+    .execute(&mut *connection)
     .await?
     .rows_affected();
     Ok(changed > 0)

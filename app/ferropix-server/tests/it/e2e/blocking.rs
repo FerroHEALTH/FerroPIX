@@ -245,14 +245,17 @@ async fn automatic_link_and_estimate(
     store: &Store,
     probe_record: ferropix_server::store::record::RecordId,
 ) {
-    let automatic = Feeder::new(
-        store.clone(),
-        &Matching {
-            auto_link: true,
-            ..Matching::default()
-        }
-        .resolve()
-        .unwrap(),
+    let automatic = super::feeds::Fed::with(
+        Feeder::new(
+            store.clone(),
+            &Matching {
+                auto_link: true,
+                ..Matching::default()
+            }
+            .resolve()
+            .unwrap(),
+        ),
+        store,
     );
     let (again, _) = probe(LABORATORY_DOMAIN, "L-90");
     let joined = automatic

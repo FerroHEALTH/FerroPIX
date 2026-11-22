@@ -108,7 +108,7 @@ async fn each_criteria_creates_a_subscription_and_anything_off_the_profile_is_re
         return;
     }
     let harness = Harness::start(synthetic_seeds()).await;
-    let before = harness.records();
+    let before = harness.records().await;
     for criteria in [
         "Patient",
         "Patient?_id=0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
@@ -144,10 +144,15 @@ async fn each_criteria_creates_a_subscription_and_anything_off_the_profile_is_re
     let refused = send(&harness, Method::POST, "/fhir/Subscription", Some(&plain)).await;
     assert_eq!(StatusCode::BAD_REQUEST, refused.status, "{}", refused.body);
     assert!(refused.body.contains("not https"), "{}", refused.body);
-    assert_eq!(before + 7, harness.records(), "one record per request");
+    assert_eq!(
+        before + 7,
+        harness.records().await,
+        "one record per request"
+    );
     assert!(
         harness
             .audit_texts()
+            .await
             .iter()
             .any(|text| text.contains("ITI-94")),
         "the records name ITI-94"

@@ -78,7 +78,7 @@ console are that open part, and they are FerroPIX's own design.
 | HL7 FHIR | R4 (4.0.1) | the resources, search and REST interactions the profiles constrain |
 | HL7 v2 | the version each transaction names in ITI TF-2 | the segments and fields of the v2 messages |
 | `hl7v2-types`, `ferrobridge-hl7v2` | FerroBRIDGE's published line, pinned exactly | the v2 tables, the MLLP codec, the parser, the acknowledgment and the message writer; FerroPIX writes no second parser and no second writer (`CLAUDE.md` §Scope) |
-| `ihe-atna` | the FerroAUDIT line, pinned exactly | the BALP `AuditEvent` builder and the audit spool |
+| `ihe-atna` | the FerroAUDIT line, pinned exactly | the BALP `AuditEvent` builder, the audit spool and the forwarder over the audit outbox |
 | `ferrohealth-smart` | the FerroSMART line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users; and the console's OpenID Connect relying-party client |
 | `ferrohealth-ui` | the FerroUI line, pinned exactly | every component the console draws (`.claude/memory/ferroui-lockstep.md`) |
 | PostgreSQL | 18 | the one store (section 4); `uuidv7()` for every database-minted id, `UNIQUE … WITHOUT OVERLAPS` for the temporal link table |
@@ -272,6 +272,8 @@ row reads in order without a sequence.
 | `steward_action` | `id`, `kind`, `actor`, `at`, `person_id`, `record_id`, `candidate_id`, `merge_id`, `reason`, `request_id` | the console's audit trail; every row also goes out as a BALP record (section 9) |
 | `subscription` | `id`, `resource` (jsonb), `status`, `criteria`, `endpoint`, `error`, `created_at` | ITI-94 |
 | `outbox` | `id`, `channel`, `destination`, `media_type`, `payload_sealed`, `key_id`, `attempts`, `max_attempts`, `next_at`, `delivered_at`, `abandoned_at`, `last_failure`, `subscription_id` | outbound messages written before their request is acknowledged: XCPD asynchronous answers, the ITI-93 messages to PMIR subscribers (each naming its subscription, delivered in order per subscription while it is active), and ITI-10's notifications next; the payload sealed under the store's key for its row id, claimed under a lease, retried, abandoned when spent, resealed by `db reseal` (D34) |
+| `audit_outbox` | `id` (identity), `record_sealed`, `key_id` | the BALP record of every write, inserted in the write's transaction and deleted once the repository took it (D41); the record DEFLATE-compressed and sealed under the store's key, resealed by `db reseal` |
+| `audit_quarantine` | `id`, `record_sealed`, `key_id`, `quarantined_at` | a record the repository refused, kept for an operator; the readiness indicator `audit_outbox` is down while it holds one |
 | `v2_receipt` | `control_id`, `sending_facility`, `received_at`, `ack_code` | the MSH-10 of each v2 message, so a resent message is acknowledged again and not applied twice (section 7) |
 | `seal_key` | `key_id`, `pending_key_id`, `set_at` | one row: the id of the key the identifier columns are written under, and the key an unfinished `db reseal` moves them to |
 
@@ -343,8 +345,10 @@ boundaries: our own design.
   feeds that join the same persons never deadlock; open or move the link;
   compute the probabilistic candidates (section 5.2) from the blocking keys
   and insert the open ones; insert the `steward_action` row the system
-  action produces; commit. The BALP record is written to the audit spool
-  after the commit, by the request handler, and the ITI-93 message to each
+  action produces; insert the BALP record into `audit_outbox`; commit. The
+  record commits with the change or not at all, so a crash between them
+  leaves neither (#742); a feed refused before it changed anything keeps
+  the record of its refusal in a statement of its own. The ITI-93 message to each
   matching subscription is inserted into the `outbox` inside the
   transaction, so a committed change is never unannounced (section 6.3).
 - **A Source's duplicate resolution** (ITI-104 with `replaced-by`,
@@ -1003,31 +1007,43 @@ only the audit record carries an identifier. Every steward action is a
 BALP record too: a decision is a RESTful activity on the person (BALP
 1.1.4 §3:5.7.3), and a reveal or a reverse pseudonym resolution is a
 disclosure with the steward as the agent and the reason in `purposeOfEvent`.
-The records go to the ATNA repository in `[audit]` through the ITI-20
-store-and-forward spool `ihe-atna` provides (one `0600` file per record in
-a `0700` directory, drained in order), and a transaction whose record
-cannot be spooled fails closed with `503`, as FerroFED's does. The console's
+The records go to the ATNA repository in `[audit]` from one of two ITI-20
+store-and-forward stores (ITI TF-2 §3.20.4.1.1). A write's record (ITI-104,
+ITI-93, ITI-94's writes, ITI-8, the ITI-83 mint, the operator writes) is
+inserted into `pix.audit_outbox` in the write's own transaction before it
+commits, compressed and sealed under the store's key (D7, D34), so the
+change and its record exist together or not at all (#742, D41). A read's
+record waits in the segment spool `ihe-atna` provides (`0600` files in a
+`0700` directory, drained in order), stored before the answer leaves. Both
+are drained by `ihe-atna`'s forwarder as batch Bundles (ITI TF-2
+§3.20.4.4), each delivered row deleted and a refused one moved to
+`pix.audit_quarantine`, at least once. A request whose record cannot be
+kept fails closed with `503`, as FerroFED's does. The console's
 audit trail view reads `steward_action`, the server's own copy, because the
 repository is the deployment's and may not be readable by the console.
 
 How the trail is built (`app/ferropix-server/src/audit/`), our own design
-where no specification governs it: a layer in front of every audited row of
-the permission table (every FHIR transaction and every steward action that
-reads or changes a person) takes the record's place in the spool, 16 KiB,
+where no specification governs it: a layer in front of every audited read
+of the permission table takes the record's place in the spool, 16 KiB,
 before the handler runs, so a full spool answers `503` with a `transient`
-issue before any change; the handler fills the place once it knows the
-outcome, and a place left unfilled is given back. A search writes one record
+issue before the read; the handler fills the place once it knows the
+outcome, and a place left unfilled is given back. The records of one read
+are queued together; still queued after `[audit] spool_write_timeout`, they
+are withdrawn and the records of the read refused (the outcome `8`) take
+their place, and the read answers `503`, so the trail says what the client
+got (#742). A write takes no place in the spool. A search writes one record
 per person found and one with no patient when none was (BALP 1.1.4
 §1:52.4.1.6 recommends one per patient); a steward's view is BALP Patient
 Read and a decision Patient Update. A token whose subject is its own client
 is recorded as the system acting for itself, any other with its user. With
-no `[audit.endpoint] url` the records stay in the spool until one is named. The
-readiness indicator `audit_spool` is down under a tenth of either bound.
+no `[audit.endpoint] url` the records stay where they wait until one is
+named. The readiness indicator `audit_spool` is down under a tenth of either
+bound, and `audit_outbox` while the quarantine holds a record.
 
 **Health.** The health routes are `ferrohealth-server`'s over the registry
 and lifecycle of `ferrohealth-health`: `GET {base}/health/liveness` checks
 nothing; `GET {base}/health/readiness` runs the indicators (the database,
-the audit spool's headroom, the MLLP listener's socket, the feed sender's
+the audit spool's headroom, the audit outbox's quarantine, the MLLP listener's socket, the feed sender's
 backlog) and answers `503` with the family's readiness document while one
 is down, while the server boots and from the moment it drains, naming each
 indicator and never its detail; `GET {base}/health` answers the state
@@ -1908,7 +1924,8 @@ The milestones carry the order; every issue cites the section it builds.
 | D34 | The outbound messages | one `outbox` table every sender shares (XCPD now, ITI-10 next), written before its request is acknowledged, the payload sealed under the store's key for its row id, claimed with `FOR UPDATE SKIP LOCKED` under a lease, retried with a doubling wait and abandoned with its failure when its attempts are spent; the sender finishes its message in flight on `SIGTERM` within the drain; `db reseal` rewrites the payloads; delivered and abandoned rows past `[outbox] retention` are pruned hourly through the `SECURITY DEFINER` function `pix.prune_outbox`, the server's role holding `EXECUTE` on it and no `DELETE` on the table | no specification governs it: our own design; an acknowledged message lost on a restart would be a silent failure, and a payload that names a patient is sealed as an identifier is (D7) |
 | D35 | A refused ITI-93 entry in the response | the response `MessageHeader.response.code` `fatal-error`, its `details` a contained `OperationOutcome` with one issue per refused entry: the history entry as `expression`, the correlated status (an unmerge's `405`) in `diagnostics` | PMIR 1.6.0 §2:3.93.4.1.3 asks for a "correlated entry.response.code" while §2:3.93.4.2.2 allows the response one `MessageHeader` entry; FHIR R4 `MessageHeader.response.details` references the outcome of a message; the gap is reported upstream (#250) |
 | D36 | Master identities in the cross-reference | an ITI-93 create carries a UUID `Patient.id` that becomes the person's id, a create of a known person applies as an update, a non-UUID id is refused per entry as `invalid` (D35); a master identity survives any other person, between two of one kind the earlier `person.created_at` survives and the smaller id breaks only a tie; matching never merges two master identities and holds them apart as a candidate with the `master_identities` conflict; only the Source's own merge (`replaced-by`) joins them | PMIR 1.6.0 §2:3.93.4.1.1 has the Registry assign `Patient.id` while §2:3.93.4.2.2's one-`MessageHeader` response cannot return it, so the Source owns the master identity and the Registry keeps it (reported upstream, #262); the survival order and the conflict no specification governs: our own design |
-| D37 | The changes of one ITI-93 message | applied in history order, each in its own transaction; a refused change leaves the changes before and after it applied, and the response names it; a store failure ends the message with `503` and the changes before it stay applied, so a resent message applies again (a create of a held identity is an update, a merge already made changes nothing) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry, which presumes each entry is applied or refused on its own; how the entries share transactions no specification governs: our own design |
+| D37 | The changes of one ITI-93 message | applied in history order in one transaction with the message's BALP record, each change under a savepoint; a refused change rolls back to its savepoint, the others apply, and the response names it; a store failure or contention rolls back the whole message, answered `5xx`, and contention tries the whole message again; a message of more than 100 changes is refused `413` before any runs (#742) | PMIR 1.6.0 §2:3.93.4.1.3 correlates a response code with each entry and §2:3.93.4.2.2 allows "an error code, 4xx or 5xx"; whether the entries commit together no specification governs: our own design |
 | D38 | Minting a pseudonym on the ITI-83 ask | a pseudonymisation domain is a `targetSystem` of ITI-83; the consumer's first ask mints the person's pseudonym and answers it, no other caller reads it (#339), a query naming no `targetSystem` mints nothing and carries the caller's own domains alone; one pseudonym per `(person, domain)` under concurrency; each mint its own BALP Create record; PIXm resolves no pseudonym back, which stays the steward's audited resolution | PIXm 3.1.0 §2:3.83.4.1.3 has the Manager use the `targetSystem` to determine the identifiers that match, and §2:3.83.4.1.2.2 selects the answer from the domains it names; the clinical record carries only the pseudonym, so it must exist on the clinical domain's first ask (FerroHEALTH/FerroEHR#3380); who may mint and read no specification governs: our own design, holding the domains apart (GDPR Art. 4(5), Art. 25(2)) |
 | D39 | What the top bar's search panel answers as the steward types | the console's pages, the identifier domains and the preferences whose names hold the words, the domains read from the operator API's domain list; never a person, so the panel writes no BALP record and no steward action; a patient search runs only on Enter or the panel's last row, posted, and records what D26 records | no specification governs it; BALP 1.1.4 §1:52.4.1.6 wants a Query record per patient search, and a search at every pause in typing would record searches the steward never submitted |
 | D40 | The error body outside the FHIR and IHE routes | RFC 9457 problem details, `application/problem+json`, through the `problem` module of `ferrohealth-server`: the operator API, the health and metrics routes and the stack's own `408`, `413`, `429`, `503` and panic `500` there; FerroPIX's types defined once in a `ProblemTypes` registry under `https://ferropix.eu/docs/operate/problems.html#`, each `type` a section of that book page; a status that says all there is to say is `about:blank`; a detail is a fixed sentence, never a value of the request; the FHIR face and the XCPD gateway keep the `OperationOutcome` and the SOAP answer | RFC 9457 §3.1 and §4 define the members and ask that a type URI resolve to its documentation, §5 that a problem carry no more than the client needs; FHIR R4 `http.html` §3.1.0.4.2 prescribes the `OperationOutcome` on a FHIR route; the family adopts RFC 9457 for every other error body (owner, 2026-10-28, #379) |
+| D41 | Where a write's audit record waits | inserted into `pix.audit_outbox` in the write's transaction, before COMMIT, DEFLATE-compressed and sealed under the store's key; delivered by `ihe-atna`'s forwarder, the delivered row deleted, a refused one moved to `pix.audit_quarantine`; a read's record stays on the segment spool, withdrawn and replaced by the record of the refusal when it is late (#742) | ITI TF-2 §3.20.4.1.1 asks a sender to store a record and send it when it can, and BALP 1.1.4 that the access be recorded; where the record waits no specification governs: our own design, so a committed change never lacks its record and a refused one never claims success |

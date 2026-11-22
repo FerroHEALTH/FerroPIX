@@ -125,7 +125,7 @@ async fn an_identifier_search_finds_the_person_by_its_own_or_a_carried_identifie
         return;
     }
     let fed = Fed::start().await;
-    let before = fed.harness.records();
+    let before = fed.harness.records().await;
     let answer = post(
         &fed.harness,
         "/operator/search/identifier",
@@ -144,7 +144,7 @@ async fn an_identifier_search_finds_the_person_by_its_own_or_a_carried_identifie
     assert!(found.persons[0].score.is_none());
     assert_eq!(
         before + 1,
-        fed.harness.records(),
+        fed.harness.records().await,
         "one Patient Query record"
     );
     let none: Results = document(
@@ -157,7 +157,7 @@ async fn an_identifier_search_finds_the_person_by_its_own_or_a_carried_identifie
         "search by an unknown identifier",
     );
     assert_eq!((0, 0), (none.total, none.persons.len()));
-    assert_eq!(before + 2, fed.harness.records(), "one Query record");
+    assert_eq!(before + 2, fed.harness.records().await, "one Query record");
     let unknown = post(
         &fed.harness,
         "/operator/search/identifier",
@@ -193,7 +193,7 @@ async fn the_person_shows_its_identifiers_masked_its_records_and_history_and_rec
         return;
     }
     let fed = Fed::start().await;
-    let before = fed.harness.records();
+    let before = fed.harness.records().await;
     let answer = get(&fed.harness, &format!("/operator/persons/{}", fed.person)).await;
     fed.holds_no_identifier(&answer.body, "the person");
     let person: Person = document(&answer, "person");
@@ -227,7 +227,11 @@ async fn the_person_shows_its_identifiers_masked_its_records_and_history_and_rec
             .and_then(|name| name.family.as_deref())
     );
     assert_ne!(0, person.history.len());
-    assert_eq!(before + 1, fed.harness.records(), "one Patient Read record");
+    assert_eq!(
+        before + 1,
+        fed.harness.records().await,
+        "one Patient Read record"
+    );
     let trail: Actions = document(
         &get(
             &fed.harness,
@@ -350,7 +354,7 @@ async fn the_trail_is_paged_and_its_export_is_csv_recorded_as_an_action() {
         "the next page",
     );
     assert_ne!(first.actions[0].id, second.actions[0].id);
-    let before = fed.harness.records();
+    let before = fed.harness.records().await;
     let export = post(&fed.harness, "/operator/actions/export", r#"{"limit":1}"#).await;
     assert_eq!(StatusCode::OK, export.status, "{}", export.body);
     assert_eq!(
@@ -364,7 +368,7 @@ async fn the_trail_is_paged_and_its_export_is_csv_recorded_as_an_action() {
     assert_eq!(2, export.body.lines().count(), "the header and one action");
     assert!(export.headers.contains_key(EXPORT_NEXT));
     fed.holds_no_identifier(&export.body, "the export");
-    assert_eq!(before + 1, fed.harness.records(), "one Export record");
+    assert_eq!(before + 1, fed.harness.records().await, "one Export record");
     let exports: Actions = document(
         &get(&fed.harness, "/operator/actions?kind=export").await,
         "the exports",

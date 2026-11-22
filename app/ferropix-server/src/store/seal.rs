@@ -19,7 +19,7 @@ use std::fmt;
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
 use aws_lc_rs::error::Unspecified;
 use aws_lc_rs::{hkdf, hmac, rand};
-use secrecy::{ExposeSecret, ExposeSecretMut as _, SecretBox};
+use secrecy::{ExposeSecret, ExposeSecretMut as _, SecretBox, SecretSlice};
 use uuid::Uuid;
 
 use crate::config::section::db::SealingKey;
@@ -127,6 +127,26 @@ impl fmt::Debug for IdentifierValue {
     }
 }
 
+/// What [`Sealer::seal`] seals: the bytes of a value at rest.
+pub trait Plaintext {
+    /// Returns the bytes to seal.
+    ///
+    /// Never log or format the result.
+    fn plaintext(&self) -> &[u8];
+}
+
+impl Plaintext for IdentifierValue {
+    fn plaintext(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl Plaintext for [u8] {
+    fn plaintext(&self) -> &[u8] {
+        self
+    }
+}
+
 /// The three keys one sealing key yields: the cipher key, the HMAC key and
 /// the key id.
 pub struct Sealer {
@@ -207,13 +227,18 @@ impl Sealer {
     /// # Errors
     /// Returns [`SealError::Crypto`] when no nonce can be drawn or the
     /// library refuses the encryption.
-    pub fn seal(&self, domain: Uuid, value: &IdentifierValue) -> Result<Vec<u8>, SealError> {
+    pub fn seal(
+        &self,
+        domain: Uuid,
+        value: &(impl Plaintext + ?Sized),
+    ) -> Result<Vec<u8>, SealError> {
         let mut nonce = [0_u8; NONCE_LEN];
         rand::fill(&mut nonce).map_err(SealError::Crypto)?;
-        let mut sealed = Vec::with_capacity(1 + NONCE_LEN + value.expose().len() + 16);
+        let plaintext = value.plaintext();
+        let mut sealed = Vec::with_capacity(1 + NONCE_LEN + plaintext.len() + 16);
         sealed.push(SEALED_FORMAT);
         sealed.extend_from_slice(&nonce);
-        let mut body = value.expose().as_bytes().to_vec();
+        let mut body = plaintext.to_vec();
         self.cipher
             .seal_in_place_append_tag(
                 Nonce::assume_unique_for_key(nonce),
@@ -233,6 +258,19 @@ impl Sealer {
     /// domain or under another key, and [`SealError::Utf8`] when the opened
     /// bytes are not UTF-8.
     pub fn open(&self, domain: Uuid, sealed: &[u8]) -> Result<IdentifierValue, SealError> {
+        let opened = self.open_bytes(domain, sealed)?;
+        let text = String::from_utf8(opened.expose_secret().to_vec())
+            .map_err(|error| SealError::Utf8(error.utf8_error()))?;
+        IdentifierValue::new(text).ok_or(SealError::Malformed)
+    }
+
+    /// Opens bytes [`Sealer::seal`] sealed for `domain` under this key.
+    ///
+    /// # Errors
+    /// Returns [`SealError::Malformed`] when `sealed` does not have the layout
+    /// of this module, and [`SealError::Open`] when it was sealed for another
+    /// domain or under another key.
+    pub fn open_bytes(&self, domain: Uuid, sealed: &[u8]) -> Result<SecretSlice<u8>, SealError> {
         let Some((&SEALED_FORMAT, rest)) = sealed.split_first() else {
             return Err(SealError::Malformed);
         };
@@ -244,9 +282,10 @@ impl Sealer {
         let opened = self
             .cipher
             .open_in_place(nonce, Aad::from(domain.as_bytes()), &mut body)
-            .map_err(SealError::Open)?;
-        let text = std::str::from_utf8(opened).map_err(SealError::Utf8)?;
-        IdentifierValue::new(text).ok_or(SealError::Malformed)
+            .map_err(SealError::Open)?
+            .len();
+        body.truncate(opened);
+        Ok(SecretSlice::from(body))
     }
 }
 

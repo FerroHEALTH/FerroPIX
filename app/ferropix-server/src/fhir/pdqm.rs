@@ -367,16 +367,13 @@ async fn failed(
     send(face, parts, exchanges, &answer, format).await
 }
 
-/// Stores `exchanges`, the first in the request's reserved place.
+/// Stores `exchanges` as one batch, the first in the request's reserved
+/// place, or the records of the search refused when they are late.
 async fn record(face: &Face, parts: &Parts, exchanges: Vec<Exchange>) -> Result<(), Unrecorded> {
-    let mut exchanges = exchanges.into_iter();
-    if let Some(first) = exchanges.next() {
-        match parts.extensions.get::<Pending>() {
-            Some(pending) => pending.record(&face.audit, &first).await?,
-            None => face.audit.record(vec![first]).await?,
-        }
+    match parts.extensions.get::<Pending>() {
+        Some(pending) => pending.record(&face.audit, &exchanges).await,
+        None => face.audit.record(&exchanges).await,
     }
-    face.audit.record(exchanges.collect()).await
 }
 
 /// Returns the raw request BALP records: the URL of `rest` under the FHIR

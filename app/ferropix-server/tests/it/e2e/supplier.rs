@@ -16,7 +16,6 @@ use axum::Router;
 use axum::body::Body;
 use ferropix_server::config::section::matching::Matching;
 use ferropix_server::config::section::profiles::Deprecated;
-use ferropix_server::feed::Feeder;
 use ferropix_server::store::Store;
 use ferropix_testkit::fixtures::Fixture;
 use ferropix_testkit::synthetic::{FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN};
@@ -116,7 +115,12 @@ impl Fed {
 }
 
 /// Feeds `body` for `value` in `system` and returns the person it is in.
-pub(crate) async fn feed(feeder: &Feeder, system: &str, value: &str, body: &str) -> Uuid {
+pub(crate) async fn feed(
+    feeder: &super::feeds::Fed,
+    system: &str,
+    value: &str,
+    body: &str,
+) -> Uuid {
     let Ok(Feed::Revise(revision)) =
         Feed::from_update(&condition(system, value), Format::Json, body.as_bytes())
     else {

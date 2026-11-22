@@ -5,9 +5,11 @@
 //! with a PMIR feed message (PMIR 1.6.0 §2:3.93.4.1).
 //!
 //! The guard admits only the Source of the master domain. The message is
-//! read by [`ihe_iti::pmir::server::feed`] in FHIR JSON or XML, and each
-//! change of its history is applied in order, each in its own transaction,
-//! to the master identity its Patient id names (§2:3.93.4.1.3):
+//! read by [`ihe_iti::pmir::server::feed`] in FHIR JSON or XML, and its
+//! changes are applied in order, in one transaction with the message's BALP
+//! record, to the master identity each Patient id names (§2:3.93.4.1.3;
+//! [`Feeder::message`]). A message of more than [`MAX_CHANGES`] changes is
+//! refused before any runs, so one transaction holds its locks briefly:
 //!
 //! - **Create:** the id is a UUID the person takes; a held identity is
 //!   revised.
@@ -20,8 +22,12 @@
 //! A change that would undo a merge is refused with the correlated `405`;
 //! an id that is no UUID with `invalid`; an identity the Registry does not
 //! hold with `404`. The response names each refused change in its
-//! `MessageHeader.response.details` (§2:3.93.4.2.2). One BALP record is
-//! written per message (§2:3.93.5.1) before the answer leaves.
+//! `MessageHeader.response.details` (§2:3.93.4.2.2), and the others are
+//! applied. A failure of the store rolls back every change of the message,
+//! answered with its `5xx` (§2:3.93.4.2.2 allows "an error code, 4xx or
+//! 5xx"). One BALP record is written per message (§2:3.93.5.1), inside the
+//! transaction, or for a message refused before any change ran, in a
+//! statement of its own (#742).
 
 use std::sync::Arc;
 
@@ -49,9 +55,9 @@ use crate::auth::guard::{NOT_THE_SOURCE, refusal};
 use crate::auth::source::Sources;
 use crate::auth::table::Route;
 use crate::config::section::matching::Matching;
-use crate::feed::master::MasterChange;
+use crate::feed::master::{MasterChange, MasterStep, Outcomes};
 use crate::feed::{Context, FeedError, Feeder};
-use crate::fhir::pmir::{Refusal, answer_format, record, refused, written};
+use crate::fhir::pmir::{Refusal, answer_format, kept, refused, written};
 use crate::fhir::status::Case;
 use crate::fhir::wire;
 use crate::store::Store;
@@ -99,6 +105,11 @@ const UNSUPPORTED: Applied = Applied::Refused {
     issue: IssueType::NotSupported,
     diagnostics: "this change is not supported by this Registry",
 };
+
+/// The most changes one message may carry: every change of a message runs in
+/// one transaction, and a larger message would hold its locks for longer (no
+/// specification governs the bound: our own design).
+pub const MAX_CHANGES: usize = 100;
 
 /// What the ITI-93 route reads.
 #[derive(Debug, Clone)]
@@ -176,11 +187,11 @@ async fn receive(registry: Arc<Registry>, request: Request) -> Response {
             IssueType::Forbidden,
             refused_with.unwrap_or(NOT_THE_SOURCE),
         );
-        return refuse(&registry, &parts, &call, &refusal, format).await;
+        return refuse(&registry, &call, &refusal, format).await;
     };
     let message = match read(&parts, body).await {
         Ok(message) => message,
-        Err(refusal) => return refuse(&registry, &parts, &call, refusal.as_ref(), format).await,
+        Err(refusal) => return refuse(&registry, &call, refusal.as_ref(), format).await,
     };
     let context = Context {
         actor: actor.to_owned(),
@@ -191,39 +202,83 @@ async fn receive(registry: Arc<Registry>, request: Request) -> Response {
             .map(RequestId::id)
             .map(str::to_owned),
     };
-    let mut applied = Vec::with_capacity(message.changes().len());
-    for change in message.changes() {
-        match apply(&registry, &system, change, &context).await {
-            Ok(outcome) => applied.push(outcome),
-            Err(case) => {
-                let committed = applied.contains(&Applied::Applied);
-                let exchange = exchange(&call, &message, Outcome::SeriousFailure);
-                return answer(
-                    &registry,
-                    &parts,
-                    &exchange,
-                    &case.answer(),
-                    format,
-                    committed,
-                )
-                .await;
-            }
+    if message.changes().len() > MAX_CHANGES {
+        return refuse(&registry, &call, &Case::MessageTooLarge.answer(), format).await;
+    }
+    let planned: Vec<Planned> = message
+        .changes()
+        .iter()
+        .map(|change| plan(&registry, change))
+        .collect();
+    let steps: Vec<Option<MasterStep<'_>>> = planned
+        .iter()
+        .map(|planned| match planned {
+            Planned::Step(step) => Some(*step),
+            Planned::Settled(_) => None,
+        })
+        .collect();
+    let records = |outcomes: &Outcomes| {
+        let applied = settled_all(&planned, outcomes);
+        vec![exchange(&call, &message, outcome_of(&applied))]
+    };
+    let committed = registry
+        .feeder
+        .message(&system, &steps, &context, &registry.audit, &records)
+        .await;
+    match committed {
+        Ok(outcomes) => {
+            let applied = settled_all(&planned, &outcomes);
+            let response = feed::response(
+                &message,
+                &Uuid::new_v4().to_string(),
+                registry.fhir_base.as_str(),
+                &applied,
+            );
+            written(&response, format, None)
+        }
+        Err(FeedError::Unrecorded(error)) => {
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-93 message is refused: its audit record could not be kept");
+            written(&refused(Refusal::Unaudited), format, None)
+        }
+        Err(error) => {
+            let case = failed(&error);
+            let exchange = exchange(&call, &message, Outcome::SeriousFailure);
+            kept(&registry.audit, exchange, &case.answer(), format).await
         }
     }
-    let committed = applied.contains(&Applied::Applied);
-    let outcome = if applied.iter().all(|outcome| *outcome == Applied::Applied) {
+}
+
+/// What the Registry made of one change before the store: a refusal it
+/// settles itself, or the write the store makes.
+enum Planned<'m> {
+    /// Settled without a write.
+    Settled(Applied),
+    /// The write.
+    Step(MasterStep<'m>),
+}
+
+/// Returns the outcome of the message: success when every change applied.
+fn outcome_of(applied: &[Applied]) -> Outcome {
+    if applied.iter().all(|outcome| *outcome == Applied::Applied) {
         Outcome::Success
     } else {
         Outcome::MinorFailure
-    };
-    let response = feed::response(
-        &message,
-        &Uuid::new_v4().to_string(),
-        registry.fhir_base.as_str(),
-        &applied,
-    );
-    let exchange = exchange(&call, &message, outcome);
-    answer(&registry, &parts, &exchange, &response, format, committed).await
+    }
+}
+
+/// Returns what became of each change: its own refusal, or the outcome the
+/// store gave its write.
+fn settled_all(planned: &[Planned<'_>], outcomes: &Outcomes) -> Vec<Applied> {
+    planned
+        .iter()
+        .zip(outcomes)
+        .map(|(planned, outcome)| match (planned, outcome) {
+            (Planned::Settled(applied), _) => *applied,
+            (Planned::Step(_), Some(Ok(_))) => Applied::Applied,
+            (Planned::Step(_), Some(Err(error))) => refused_change(error),
+            (Planned::Step(_), None) => UNSUPPORTED,
+        })
+        .collect()
 }
 
 /// Reads the feed message the request carries, or the answer that refuses
@@ -236,84 +291,78 @@ async fn read(parts: &Parts, body: Body) -> Result<FeedMessage, Box<Answer<Opera
     FeedMessage::read(format, &bytes).map_err(|error| Box::new(error.refusal()))
 }
 
-/// Applies `change` to the master domain `system`: what became of it, or
-/// the case that ends the whole message when the store fails.
-async fn apply(
-    registry: &Registry,
-    system: &str,
-    change: &Change,
-    context: &Context,
-) -> Result<Applied, Case> {
-    let feeder = &registry.feeder;
-    let result = match change {
-        Change::Create(patient) => {
+/// Returns what the Registry makes of `change`: the write the store makes,
+/// or the refusal of a change it cannot name.
+fn plan<'m>(registry: &Registry, change: &'m Change) -> Planned<'m> {
+    let step = match change {
+        Change::Create(patient) | Change::Update(patient) => {
             let Some(id) = identity(patient) else {
-                return Ok(NOT_A_UUID);
+                return Planned::Settled(NOT_A_UUID);
             };
-            feeder
-                .master(MasterChange::Create, system, id, patient, context)
-                .await
-        }
-        Change::Update(patient) => {
-            let Some(id) = identity(patient) else {
-                return Ok(NOT_A_UUID);
+            let change = if matches!(change, Change::Create(_)) {
+                MasterChange::Create
+            } else {
+                MasterChange::Update
             };
-            feeder
-                .master(MasterChange::Update, system, id, patient, context)
-                .await
+            MasterStep::Write {
+                change,
+                id,
+                patient,
+            }
         }
         Change::Merge {
             deprecated,
             surviving,
         } => {
             let Some(id) = identity(deprecated) else {
-                return Ok(NOT_A_UUID);
+                return Planned::Settled(NOT_A_UUID);
             };
             let survivor = match surviving_id(&registry.fhir_base, surviving) {
                 Surviving::Held(survivor) => survivor,
-                Surviving::NotAUuid => return Ok(NOT_A_UUID),
-                Surviving::Elsewhere => return Ok(NOT_HELD),
+                Surviving::NotAUuid => return Planned::Settled(NOT_A_UUID),
+                Surviving::Elsewhere => return Planned::Settled(NOT_HELD),
             };
             if survivor == id {
-                return Ok(SELF_MERGE);
+                return Planned::Settled(SELF_MERGE);
             }
-            feeder
-                .merge_master(system, id, survivor, deprecated, context)
-                .await
+            MasterStep::Merge {
+                deprecated: id,
+                survivor,
+                patient: deprecated,
+            }
         }
         Change::Delete { id, .. } => {
             let Some(id) = uuid_of(id) else {
-                return Ok(NOT_A_UUID);
+                return Planned::Settled(NOT_A_UUID);
             };
-            feeder.delete_master(system, id, context).await
+            MasterStep::Delete { id }
         }
-        _ => return Ok(UNSUPPORTED),
+        _ => return Planned::Settled(UNSUPPORTED),
     };
-    settled(result)
+    Planned::Step(step)
 }
 
-/// What became of a change the feed transaction ran.
-fn settled<T>(result: Result<T, FeedError>) -> Result<Applied, Case> {
-    match result {
-        Ok(_) => Ok(Applied::Applied),
-        Err(FeedError::Subsumed) => Ok(UNMERGE),
-        Err(FeedError::NotFound | FeedError::SurvivorNotFound | FeedError::UnknownDomain) => {
-            Ok(NOT_HELD)
+/// The correlated refusal of a change the store refused on its own
+/// ([`FeedError::refuses_change`]).
+fn refused_change(error: &FeedError) -> Applied {
+    match error {
+        FeedError::Subsumed => UNMERGE,
+        FeedError::Identifier { .. } => IDENTIFIER_REFUSED,
+        _ => NOT_HELD,
+    }
+}
+
+/// The case of a failure that ended the message's transaction.
+fn failed(error: &FeedError) -> Case {
+    match error {
+        FeedError::Contention => Case::Contention,
+        FeedError::Store(_) => {
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-93 message could not be stored");
+            Case::StoreUnavailable
         }
-        Err(FeedError::Identifier { .. }) => Ok(IDENTIFIER_REFUSED),
-        Err(FeedError::Contention) => Err(Case::Contention),
-        Err(error @ FeedError::Store(_)) => {
-            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-93 change could not be stored");
-            Err(Case::StoreUnavailable)
-        }
-        Err(
-            error @ (FeedError::Demographics(_)
-            | FeedError::Evidence
-            | FeedError::Notice
-            | FeedError::Notification(_)),
-        ) => {
-            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-93 change could not be written");
-            Err(Case::Internal)
+        _ => {
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-93 message could not be written");
+            Case::Internal
         }
     }
 }
@@ -389,31 +438,12 @@ fn exchange(call: &Call, message: &FeedMessage, outcome: Outcome) -> ihe_atna::b
 /// Records a message refused before any change ran, then sends `refusal`.
 async fn refuse(
     registry: &Registry,
-    parts: &Parts,
     call: &Call,
     refusal: &Answer<OperationOutcome>,
     format: Format,
 ) -> Response {
     let exchange = records::pmir_feed(call, Vec::new(), None, Outcome::MinorFailure);
-    answer(registry, parts, &exchange, refusal, format, false).await
-}
-
-/// Stores the record `exchange`, then sends `answer` in `format`. When the
-/// record cannot be stored the answer is withheld: `503` when nothing was
-/// committed, `500` when a change was.
-async fn answer<T: ihe_iti::server::answer::Resource>(
-    registry: &Registry,
-    parts: &Parts,
-    exchange: &ihe_atna::balp::Exchange,
-    answer: &Answer<T>,
-    format: Format,
-    committed: bool,
-) -> Response {
-    match record(&registry.audit, parts, exchange).await {
-        Ok(()) => written(answer, format, None),
-        Err(()) if committed => written(&Case::CommittedUnaudited.answer(), format, None),
-        Err(()) => written(&refused(Refusal::Unaudited), format, None),
-    }
+    kept(&registry.audit, exchange, refusal, format).await
 }
 
 #[cfg(test)]

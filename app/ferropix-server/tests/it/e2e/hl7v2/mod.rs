@@ -109,8 +109,9 @@ impl V2 {
         let spool = tempfile::tempdir().expect("a temporary directory");
         let mut audit_settings = pix.audit_settings.clone();
         audit_settings.spool_dir = spool.path().join("spool");
-        let audit =
-            Audit::open(&audit_settings, &pix.public_base_url).expect("the audit spool opens");
+        let audit = Audit::open(&audit_settings, &pix.public_base_url)
+            .and_then(|audit| audit.with_store(&pix.store))
+            .expect("the audit trail opens");
         let face = Face::new(
             &pix.store,
             &pix.matching,
@@ -153,9 +154,12 @@ impl V2 {
             .expect("the face answers")
     }
 
-    /// The face's audit records.
-    fn records(&self) -> Vec<Value> {
-        ferropix_testkit::spool::records(&self.spool.path().join("spool"))
+    /// The face's audit records: the reads' in the spool, then the writes'
+    /// in the audit outbox.
+    async fn records(&self) -> Vec<Value> {
+        let mut records = ferropix_testkit::spool::records(&self.spool.path().join("spool"));
+        records.extend(super::outbox_records(&self.pix.audit).await);
+        records
             .into_iter()
             .map(|record| serde_json::from_slice(&record).expect("a record is JSON"))
             .collect()
@@ -554,6 +558,7 @@ async fn an_a40_merges_as_the_replaced_by_feed_does() {
     );
     let actions: Vec<String> = v2
         .records()
+        .await
         .iter()
         .filter(|record| record["subtype"][0]["code"] == "ITI-8")
         .filter_map(|record| record["action"].as_str().map(str::to_owned))
@@ -607,7 +612,7 @@ async fn the_record_of_a_feed_names_the_patient_as_its_subject() {
         ),
         "AA"
     );
-    let records = v2.records();
+    let records = v2.records().await;
     let record = records
         .iter()
         .find(|record| record["subtype"][0]["code"] == "ITI-8")

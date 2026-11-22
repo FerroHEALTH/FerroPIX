@@ -20,8 +20,10 @@ other client is answered `403` with a `forbidden` issue, and with no master
 domain every client is.
 
 The Source sends `POST {base}/fhir` with a PMIR message Bundle in FHIR JSON
-or XML. FerroPIX applies each change of the history Bundle in order, each in
-its own transaction:
+or XML. FerroPIX applies the changes of the history Bundle in order, all in
+one transaction with the message's audit record. A message of more than 100
+changes is refused with `413` and a `too-costly` issue before any change
+runs:
 
 - **Create:** the Patient's id must be a UUID, written in lowercase with
   hyphens. FerroPIX creates the patient with that id, so the id the Source
@@ -46,10 +48,11 @@ change's history entry and its status:
 - `405` `not-supported` for an update of a merged patient, which would undo
   the merge. Unmerge goes through the operator console, not the feed.
 
-The changes before a refused one stay applied. When the store fails the
-answer is `503` and the Source sends the message again. Each message writes
-one BALP record, following PMIR's Feed audit profile, before its answer
-leaves.
+A refused change is rolled back on its own and the other changes apply.
+When the store fails, or concurrent feeds keep moving the same patients,
+the whole message is rolled back and answered `503`, and the Source sends it
+again; nothing of it was applied. Each message writes one BALP record,
+following PMIR's Feed audit profile, committed with its changes.
 
 ## The feed FerroPIX sends (ITI-93)
 

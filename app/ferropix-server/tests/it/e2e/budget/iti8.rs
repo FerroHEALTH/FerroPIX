@@ -19,13 +19,16 @@ use crate::e2e::hl7v2::{V2, adt, code};
 /// 2026-11-21 (#713). The search keys (#722) cost a revision one nested
 /// statement and 16 shared buffers, the trigger that compares what a search
 /// reads. Dropping the hot tables' unread keys (#730) lowered the WAL from
-/// 1925 to 1629 bytes.
+/// 1925 to 1629 bytes. Keeping the BALP record in the message's own
+/// transaction (#742) costs one statement (18 to 19), the WAL 1629 to 2343
+/// bytes and the buffers 111 to 115, the record's heap and index pages, and
+/// the spool takes none of its 1,444 bytes.
 const CEILING: Ceiling = Ceiling {
-    statements: 18,
+    statements: 19,
     nested: 1,
-    blocks: 111,
-    wal: 1662,
-    audit: 1444,
+    blocks: 115,
+    wal: 2390,
+    audit: 0,
     answer: 106,
 };
 

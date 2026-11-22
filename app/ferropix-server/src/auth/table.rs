@@ -466,10 +466,24 @@ const UNAUDITED_OPERATOR: [&str; 10] = [
     "operator-actions",
 ];
 
+/// The operator routes that write the store, and so keep their BALP record
+/// in the audit outbox with the change.
+const WRITING_OPERATOR: [&str; 10] = [
+    "operator-reveal",
+    "operator-decide",
+    "operator-merge",
+    "operator-unmerge",
+    "operator-domain-create",
+    "operator-domain-update",
+    "operator-pseudonym-domain-create",
+    "operator-pseudonym-domain-update",
+    "operator-pseudonym-mint",
+    "operator-pseudonym-resolve",
+];
+
 impl Route {
-    /// Returns whether a request to this route writes a BALP record, and so
-    /// takes its place in the audit spool before it runs: every transaction
-    /// of the FHIR face and every steward action.
+    /// Returns whether a request to this route writes a BALP record: every
+    /// transaction of the FHIR face and every steward action.
     #[must_use]
     pub fn audited(&self) -> bool {
         match self.need {
@@ -477,6 +491,24 @@ impl Route {
             Need::Fhir { .. } => true,
             Need::Steward | Need::Admin | Need::StewardOrAdmin => {
                 !UNAUDITED_OPERATOR.contains(&self.interaction)
+            }
+        }
+    }
+
+    /// Returns whether a request to this route writes the store, so its
+    /// record goes to the audit outbox in its transaction and it takes no
+    /// place in the audit spool (#742): ITI-104, ITI-93, ITI-94's writes and
+    /// the operator writes.
+    #[must_use]
+    pub fn writes(&self) -> bool {
+        match self.need {
+            Need::Public => false,
+            Need::Fhir { .. } => {
+                matches!(self.interaction, "ITI-104" | "ITI-93")
+                    || (self.interaction == "ITI-94" && self.method != Method::GET)
+            }
+            Need::Steward | Need::Admin | Need::StewardOrAdmin => {
+                WRITING_OPERATOR.contains(&self.interaction)
             }
         }
     }

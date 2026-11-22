@@ -30,9 +30,7 @@ use http::request::Parts;
 use http::{HeaderValue, Method, header};
 use ihe_atna::balp::Outcome;
 use ihe_iti::pixm::audit::manager_query;
-use ihe_iti::pixm::identifier::{
-    PatientReference, SourceIdentifier, TargetIdentifier, TargetSystem,
-};
+use ihe_iti::pixm::identifier::{PatientReference, TargetIdentifier, TargetSystem};
 use ihe_iti::pixm::server::answer;
 use ihe_iti::pixm::server::feed::{Feed, Removal};
 use ihe_iti::pixm::server::query::PixQuery;
@@ -45,7 +43,7 @@ use crate::audit::records::{self, Call};
 use crate::audit::reserve::Pending;
 use crate::auth::Smart;
 use crate::config::section::matching::Matching;
-use crate::feed::{self, Action, Applied, Context, FeedError, Feeder};
+use crate::feed::{self, Action, Applied, Context, FeedError, Feeder, Recording};
 use crate::fhir::status::Case;
 use crate::fhir::wire;
 use crate::store::Store;
@@ -53,13 +51,6 @@ use crate::store::pseudonym;
 use crate::store::record::Channel;
 use crate::store::xref::{self, Lookup};
 use ferrohealth_telemetry::request_log::RequestId;
-
-/// An ITI-83 answer with the pseudonyms it minted, as the person's
-/// `Patient/{id}` and the domain's namespace.
-type Looked = (
-    Answer<fhir_types::r4::parameters::Parameters>,
-    Vec<(String, String)>,
-);
 
 /// The PIXm Manager: the store it reads, the feed transaction it writes
 /// through, and the audit trail it records to.
@@ -156,26 +147,12 @@ impl Manager {
             .get::<Access>()
             .and_then(|access| access.caller())
             .and_then(|caller| caller.client_id().map(str::to_owned));
-        let answered = self.lookup(&pix, client.as_deref()).await;
+        let call = Call::of_request(&parts, &self.endpoint);
+        let answered = self.lookup(&pix, client.as_deref(), &call).await;
         let outcome = match &answered {
             Ok(_) => Outcome::Success,
             Err(case) => failure(*case),
         };
-        if let Ok((_, minted)) = &answered
-            && !minted.is_empty()
-        {
-            let call = Call::of_request(&parts, &self.endpoint);
-            let exchanges = minted
-                .iter()
-                .map(|(person, namespace)| {
-                    records::pseudonym_minted(&call, person, namespace, Outcome::Success)
-                })
-                .collect();
-            if let Err(error) = self.audit.record(exchanges).await {
-                tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-83 answer is withheld: the record of a minted pseudonym could not be stored");
-                return wire::send(&Case::CommittedUnaudited.answer(), format);
-            }
-        }
         let url = self.request_url(&parts);
         let raw = records::raw_request(
             &url,
@@ -194,14 +171,14 @@ impl Manager {
             return wire::send(&Case::Unaudited.answer(), format);
         }
         match answered {
-            Ok((found, _minted)) => wire::send(&found, format),
+            Ok(found) => wire::send(&found, format),
             Err(case) => wire::send(&case.answer(), format),
         }
     }
 
     /// Reads the cross-reference `pix` asks for, for the caller of client id
-    /// `client`, and returns it with each pseudonym it minted, as the
-    /// person's `Patient/{id}` and the domain's namespace.
+    /// `client`, minting the pseudonyms it asks for in one transaction with
+    /// the record of each mint, made by `call` (#742).
     ///
     /// Only a pseudonymisation domain's consumer reads its pseudonyms. A
     /// domain it names as `targetSystem` answers the person's pseudonym,
@@ -210,7 +187,12 @@ impl Manager {
     /// domains and mints none. Another Consumer gets no pseudonym (PIXm
     /// 3.1.0 §2:3.83.4.1.2.2 and §2:3.83.4.1.3 leave the selection to the
     /// Manager).
-    async fn lookup(&self, pix: &PixQuery, client: Option<&str>) -> Result<Looked, Case> {
+    async fn lookup(
+        &self,
+        pix: &PixQuery,
+        client: Option<&str>,
+        call: &Call,
+    ) -> Result<Answer<fhir_types::r4::parameters::Parameters>, Case> {
         let source = pix.source();
         let targets: Vec<&str> = pix.targets().iter().map(TargetSystem::as_str).collect();
         let mut connection = self.store.pool().acquire().await.map_err(unavailable)?;
@@ -258,32 +240,22 @@ impl Manager {
             .iter()
             .map(|(system, value)| (system.clone(), value.expose().to_owned()))
             .collect();
-        let mut minted = Vec::new();
         if targets.is_empty() {
             held.extend(own_pseudonyms(&answered.pseudonymised, client));
         }
-        for (domain, already) in asked.iter().filter(|(domain, _held)| domain.serves(client)) {
-            let resolved = match already {
-                Some(value) => Some(pseudonym::Resolved {
-                    value: *value,
-                    minted: false,
-                }),
-                None => pseudonym::resolve(&mut connection, person, domain.id, true)
-                    .await
-                    .map_err(|error| store_failure(&error))?,
-            };
-            if let Some(resolved) = resolved {
-                if resolved.minted {
-                    minted.push((
-                        format!("Patient/{}", person.uuid()),
-                        domain.namespace.clone(),
-                    ));
-                }
-                held.push((domain.namespace.clone(), resolved.value.to_string()));
+        let served: Vec<_> = asked
+            .iter()
+            .filter(|(domain, _held)| domain.serves(client))
+            .collect();
+        let mut minting = Vec::new();
+        for (domain, already) in &served {
+            match already {
+                Some(value) => held.push((domain.namespace.clone(), value.to_string())),
+                None => minting.push(domain),
             }
         }
-        if !minted.is_empty() {
-            tracing::info!(minted = minted.len(), "ITI-83 minted pseudonyms");
+        if !minting.is_empty() {
+            held.extend(self.mint(&mut connection, person, &minting, call).await?);
         }
         let mut identifiers = Vec::with_capacity(held.len());
         for (system, value) in held {
@@ -296,10 +268,50 @@ impl Manager {
             cross_reference.person.uuid()
         )))
         .map_err(|_invalid| internal("a person id is no Patient reference"))?;
-        Ok((
-            answer::cross_references(pix, &identifiers, &[patient]),
-            minted,
-        ))
+        Ok(answer::cross_references(pix, &identifiers, &[patient]))
+    }
+
+    /// Mints the pseudonym of `person` in each domain of `minting`, in one
+    /// transaction with the record of each mint, made by `call` (#742), and
+    /// returns each domain's namespace with the pseudonym.
+    async fn mint(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        person: crate::store::record::PersonId,
+        minting: &[&pseudonym::PseudonymDomain],
+        call: &Call,
+    ) -> Result<Vec<(String, String)>, Case> {
+        let mut transaction = sqlx::Acquire::begin(&mut *connection)
+            .await
+            .map_err(unavailable)?;
+        let mut held = Vec::with_capacity(minting.len());
+        let mut minted = Vec::new();
+        for domain in minting.iter().copied() {
+            let resolved = pseudonym::resolve(&mut transaction, person, domain.id, true)
+                .await
+                .map_err(|error| store_failure(&error))?;
+            if let Some(resolved) = resolved {
+                if resolved.minted {
+                    minted.push(records::pseudonym_minted(
+                        call,
+                        &format!("Patient/{}", person.uuid()),
+                        &domain.namespace,
+                        Outcome::Success,
+                    ));
+                }
+                held.push((domain.namespace.clone(), resolved.value.to_string()));
+            }
+        }
+        if let Err(error) = self.audit.enlist(&mut transaction, &minted).await {
+            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-83 answer is withheld: the record of a minted pseudonym could not be kept, so nothing was minted");
+            return Err(Case::Unaudited);
+        }
+        transaction.commit().await.map_err(unavailable)?;
+        if !minted.is_empty() {
+            self.audit.committed();
+            tracing::info!(minted = minted.len(), "ITI-83 minted pseudonyms");
+        }
+        Ok(held)
     }
 
     /// ITI-104's conditional update: Add or Revise Patient, or Resolve
@@ -327,19 +339,26 @@ impl Manager {
             }
         };
         let context = self.context(&parts);
-        let (condition, applied) = match &message {
-            Feed::Revise(revision) => (
-                revision.identifier(),
-                self.feeder.revise(revision, &context).await,
-            ),
-            Feed::ResolveDuplicate(merge) => (
-                merge.subsumed(),
-                self.feeder.resolve_duplicate(merge, &context).await,
-            ),
+        let call = Call::of_request(&parts, &self.endpoint);
+        let condition = match &message {
+            Feed::Revise(revision) => revision.identifier(),
+            Feed::ResolveDuplicate(merge) => merge.subsumed(),
             _ => return wire::send(&Case::Internal.answer(), format),
         };
-        self.answer_feed(&parts, condition, false, applied, format)
-            .await
+        let records = |outcome: Result<&Applied, &FeedError>| {
+            vec![feed::feed_record(&call, condition, false, outcome)]
+        };
+        let recording = Recording::new(&self.audit, &records);
+        let applied = match &message {
+            Feed::Revise(revision) => self.feeder.revise(revision, &context, recording).await,
+            Feed::ResolveDuplicate(merge) => {
+                self.feeder
+                    .resolve_duplicate(merge, &context, recording)
+                    .await
+            }
+            _ => return wire::send(&Case::Internal.answer(), format),
+        };
+        self.answer_feed(applied, false, format)
     }
 
     /// ITI-104's conditional delete: Remove Patient (§2:3.104.4.3).
@@ -357,44 +376,42 @@ impl Manager {
                 return wire::send(&error.refusal(), format);
             }
         };
-        let applied = self.feeder.remove(&removal, &self.context(&parts)).await;
-        self.answer_feed(&parts, removal.identifier(), true, applied, format)
-            .await
+        let call = Call::of_request(&parts, &self.endpoint);
+        let records = |outcome: Result<&Applied, &FeedError>| {
+            vec![feed::feed_record(
+                &call,
+                removal.identifier(),
+                true,
+                outcome,
+            )]
+        };
+        let applied = self
+            .feeder
+            .remove(
+                &removal,
+                &self.context(&parts),
+                Recording::new(&self.audit, &records),
+            )
+            .await;
+        self.answer_feed(applied, true, format)
     }
 
-    /// Records the feed of `condition` and answers its outcome.
-    async fn answer_feed(
+    /// Answers the outcome of a feed, whose record the feed transaction
+    /// kept with it.
+    fn answer_feed(
         &self,
-        parts: &Parts,
-        condition: &SourceIdentifier,
-        removal: bool,
         applied: Result<Applied, FeedError>,
+        removal: bool,
         format: Format,
     ) -> Response {
-        let pending = parts.extensions.get::<Pending>();
-        let recorded = feed::record(
-            &self.audit,
-            pending,
-            &Call::of_request(parts, &self.endpoint),
-            condition,
-            removal,
-            applied.as_ref(),
-        )
-        .await;
-        if let Err(error) = recorded {
-            tracing::error!(error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-104 message could not be stored");
-            let case = if applied.is_ok() {
-                Case::CommittedUnaudited
-            } else {
-                Case::Unaudited
-            };
-            return wire::send(&case.answer(), format);
-        }
         let applied = match applied {
             Ok(applied) => applied,
             Err(error) => {
                 let case = feed_case(&error, removal);
-                if matches!(case, Case::StoreUnavailable | Case::Internal) {
+                if matches!(
+                    case,
+                    Case::StoreUnavailable | Case::Internal | Case::Unaudited
+                ) {
                     tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-104 message could not be applied");
                 } else {
                     tracing::debug!(error = %ferrohealth_server::run::chain(&error), "an ITI-104 message is refused");
@@ -469,8 +486,8 @@ async fn record(
     exchange: &ihe_atna::balp::Exchange,
 ) -> Result<(), crate::audit::Unrecorded> {
     match parts.extensions.get::<Pending>() {
-        Some(pending) => pending.record(audit, exchange).await,
-        None => audit.record(vec![exchange.clone()]).await,
+        Some(pending) => pending.record(audit, std::slice::from_ref(exchange)).await,
+        None => audit.record(std::slice::from_ref(exchange)).await,
     }
 }
 
@@ -502,6 +519,7 @@ fn feed_case(error: &FeedError, removal: bool) -> Case {
         FeedError::NotFound | FeedError::SurvivorNotFound => Case::FeedSurvivorNotFound,
         FeedError::Contention => Case::Contention,
         FeedError::Store(_) => Case::StoreUnavailable,
+        FeedError::Unrecorded(_) => Case::Unaudited,
         FeedError::Demographics(_)
         | FeedError::Evidence
         | FeedError::Notice

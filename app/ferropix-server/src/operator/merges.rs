@@ -177,11 +177,8 @@ async fn finish(
         &format!("Patient/{}", person.uuid()),
         Outcome::Success,
     );
-    if let Err(error) = wire::record(operator, parts, vec![exchange]).await {
-        return wire::unaudited(&error);
-    }
-    if let Err(error) = transaction.commit().await {
-        return wire::failed(&error.into());
+    if let Err(refused) = wire::commit(operator, transaction, &[exchange]).await {
+        return *refused;
     }
     operator.store.announced();
     tracing::info!(

@@ -28,7 +28,7 @@ use secrecy::SecretString;
 
 use crate::audit::records::{self, Call, Identifier};
 use crate::config::section::hl7v2::Sender;
-use crate::feed::{Action, Applied, Context, FeedError};
+use crate::feed::{Action, Applied, Context, FeedError, Recording};
 use crate::hl7v2::{Answer, Face, acknowledge, receipt, sender_key};
 use crate::hl7v2::{fault, fault_at, location};
 use crate::store::record::Channel;
@@ -144,47 +144,22 @@ async fn apply(face: &Face, parsed: &Parsed, sender: &Sender, call: &Call, merge
         Ok(read) => read,
         Err(settled) => return *settled,
     };
-    let place = match face.audit.reserve() {
-        Ok(place) => place,
-        Err(error) => {
-            tracing::error!(error = %ferrohealth_server::run::chain(&error), "an ITI-8 message is refused: its audit record has no room");
-            return Settled::rejected(
-                "the audit record could not be stored, so the message was not applied",
-            );
-        }
-    };
     let context = Context {
         actor: sender_key(sender),
         channel: Channel::V2,
         request_id: message.control_id().map(str::to_owned),
     };
+    let audited = |outcome: Result<&Applied, &FeedError>| records(call, &read, outcome);
+    let recording = Recording::new(&face.audit, &audited);
     let applied = match &read.feed {
-        Feed::Revise(revision) => face.feeder.revise(revision, &context).await,
-        Feed::ResolveDuplicate(resolved) => face.feeder.resolve_duplicate(resolved, &context).await,
+        Feed::Revise(revision) => face.feeder.revise(revision, &context, recording).await,
+        Feed::ResolveDuplicate(resolved) => {
+            face.feeder
+                .resolve_duplicate(resolved, &context, recording)
+                .await
+        }
         _ => Err(FeedError::Evidence),
     };
-    let exchanges = records(call, &read, applied.as_ref());
-    let mut exchanges = exchanges.into_iter();
-    let recorded = match exchanges.next() {
-        Some(first) => match place.record(&first).await {
-            Ok(()) => face.audit.record(exchanges.collect()).await,
-            Err(error) => Err(error),
-        },
-        None => Ok(()),
-    };
-    if let Err(error) = recorded {
-        tracing::error!(error = %ferrohealth_server::run::chain(&error), "the audit record of an ITI-8 message could not be stored");
-        return if applied.is_ok() {
-            Settled::refused(fault(
-                ErrorCode::Application,
-                "the message was applied, and its audit record could not be stored",
-            ))
-        } else {
-            Settled::rejected(
-                "the audit record could not be stored, so the message was not applied",
-            )
-        };
-    }
     match applied {
         Ok(applied) => {
             tracing::info!(action = ?applied.action, "an ITI-8 message is applied");
@@ -395,6 +370,12 @@ fn refusal(error: &FeedError) -> Settled {
         )),
         FeedError::Contention => {
             Settled::rejected("concurrent messages moved the same persons; send the message again")
+        }
+        FeedError::Unrecorded(_) => {
+            tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 message is refused: its audit record could not be kept");
+            Settled::rejected(
+                "the audit record could not be stored, so the message was not applied",
+            )
         }
         _ => {
             tracing::error!(error = %ferrohealth_server::run::chain(error), "an ITI-8 message could not be applied");

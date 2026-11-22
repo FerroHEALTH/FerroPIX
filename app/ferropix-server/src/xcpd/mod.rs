@@ -220,7 +220,7 @@ impl Gateway {
         if received.priority == Priority::Deferred {
             // NOTE: ITI TF-2 §3.55.4.1.3: FerroPIX does not offer the Deferred Response Option.
             let exchange = record(&call, &received, &[], AuditOutcome::MinorFailure);
-            if place.record(&exchange).await.is_err() {
+            if place.record(std::slice::from_ref(&exchange)).await.is_err() {
                 tracing::error!(
                     "an ITI-55 answer is withheld: its audit record could not be stored"
                 );
@@ -282,7 +282,7 @@ impl Gateway {
             _ => AuditOutcome::Success,
         };
         let exchange = record(call, received, &patients, outcome);
-        if place.record(&exchange).await.is_err() {
+        if place.record(std::slice::from_ref(&exchange)).await.is_err() {
             tracing::error!("an ITI-55 answer is withheld: its audit record could not be stored");
             return answer::envelope(
                 received,

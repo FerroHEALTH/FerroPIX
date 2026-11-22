@@ -189,7 +189,7 @@ async fn the_vendored_bundles_are_answered_entry_by_entry_and_their_ids_refused_
     let harness = Harness::start(with_master()).await;
     for media_type in FORMATS {
         for (name, entries) in [("Create", 2), ("Update", 1), ("Merge", 1), ("Delete", 1)] {
-            let before = harness.records();
+            let before = harness.records().await;
             let answer = feed(&harness, &bundle(name, &[]), media_type).await;
             let label = format!("{name} in {media_type}");
             let expected: Vec<(String, String, String)> = (0..entries)
@@ -204,7 +204,7 @@ async fn the_vendored_bundles_are_answered_entry_by_entry_and_their_ids_refused_
                 })
                 .collect();
             assert_eq!(expected, refused(&answer), "{label}");
-            assert_eq!(before + 1, harness.records(), "{label}: one record");
+            assert_eq!(before + 1, harness.records().await, "{label}: one record");
         }
     }
     let persons: i64 = sqlx::query_scalar("SELECT count(*) FROM pix.person")
@@ -250,9 +250,13 @@ async fn create_both(harness: &Harness, media_type: &str) {
     );
     created["entry"][1]["resource"]["entry"][1]["resource"]["identifier"] =
         json!([{"system": BSN_SYSTEM, "value": BSN}]);
-    let before = harness.records();
+    let before = harness.records().await;
     applied(&feed(harness, &created, media_type).await);
-    assert_eq!(before + 1, harness.records(), "one record per message");
+    assert_eq!(
+        before + 1,
+        harness.records().await,
+        "one record per message"
+    );
     let read = read_patient(harness, FIRST).await;
     assert_eq!(StatusCode::OK, read.status, "{}", read.body);
     assert_eq!(
@@ -380,7 +384,7 @@ async fn a_feed_from_another_client_or_of_a_patient_the_registry_does_not_hold_i
         assert_eq!(StatusCode::FORBIDDEN, answer.status, "{}", answer.body);
         assert_eq!("forbidden", answer.issue().0);
 
-        let before = harness.records();
+        let before = harness.records().await;
         let answer = feed(&harness, &updated, media_type).await;
         assert_eq!(
             vec![(
@@ -391,7 +395,11 @@ async fn a_feed_from_another_client_or_of_a_patient_the_registry_does_not_hold_i
             refused(&answer),
             "{media_type}"
         );
-        assert_eq!(before + 1, harness.records(), "one record per message");
+        assert_eq!(
+            before + 1,
+            harness.records().await,
+            "one record per message"
+        );
     }
     let without = Harness::start(synthetic_seeds()).await;
     let answer = feed(&without, &updated, FHIR_JSON).await;

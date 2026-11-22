@@ -26,7 +26,7 @@ use ihe_iti::pixm::identifier::SourceIdentifier;
 use secrecy::{ExposeSecret as _, SecretString};
 use serde_json::Value;
 
-mod spool;
+pub(crate) mod spool;
 
 /// The canonical URL prefix of the BALP patterns.
 const BALP: &str = "https://profiles.ihe.net/ITI/BALP/StructureDefinition/";

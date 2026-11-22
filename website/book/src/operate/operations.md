@@ -27,8 +27,9 @@ open readiness route leaves out why an indicator is down; the dependency
 report gives the reason behind the steward scope.
 
 The `database` indicator is down while no statement reaches PostgreSQL,
-and the `audit_spool` indicator is down when less than a tenth of the
-spool's record or byte bound is left. The `outbox` indicator is down while
+the `audit_spool` indicator is down when less than a tenth of the spool's
+record or byte bound is left, and the `audit_outbox` indicator is down while
+`pix.audit_quarantine` holds a record the repository refused. The `outbox` indicator is down while
 a due outbound message, an XCPD answer, an ITI-93 message or an ITI-10
 notification, has waited past the sender's lease and two idle wakes, which
 a running sender never lets happen; a subscriber or consumer that refuses

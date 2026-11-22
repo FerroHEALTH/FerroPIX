@@ -159,22 +159,39 @@ the FHIR face answers `503` with a `transient` issue when they cannot be
 stored, the HL7 v2 face `AR`, and the XCPD gateway Case 5. The audit record is the only place outside the store where the
 server writes a patient identifier.
 
-The records wait in a spool under `audit.spool_dir`, in files readable by
-the server's user alone in a directory only that user may enter. The
+A write's record (an ITI-104, ITI-93, ITI-8 or ITI-94 write, a pseudonym
+minted on an ITI-83 ask, a steward's decision, merge, reveal or
+configuration change) is kept in PostgreSQL, in the table
+`pix.audit_outbox`, inserted in the same transaction as the change. The
+change and its record commit together or not at all: a crash before the
+commit leaves neither, and a committed change always has its record. The
+record is compressed and sealed under the store's key, like an identifier.
+A write refused before it changed anything keeps the record of its refusal
+there too.
+
+A read's record waits in a spool under `audit.spool_dir`, in files readable
+by the server's user alone in a directory only that user may enter. The
 records that arrive together are written as one segment file and reach the
-disk with one flush, and each transaction answers only once its record is
-on the disk. They are sent to `audit.endpoint.url` over the FHIR Feed,
-several at once as one batch Bundle, each judged by its entry of the
-answer. A delivered record is removed; one the repository refuses is moved
-to the `quarantine` subdirectory for you to inspect. A spool directory an
-older FerroPIX wrote holds one `.msg` file per record, which this server
-refuses at start: let the older server deliver them, or move them out,
-before you upgrade. Before a transaction runs, the server
-takes its record's place in the spool: when the spool is full, the request
-is refused with `503` and a `transient` issue before it changes anything.
-`GET {base}/health/readiness` reports `audit_spool` down when less than a
-tenth of either bound is left, and `GET {base}/operator/dependencies` shows
-whether the last delivery to the repository went through.
+disk with one flush, and each read answers only once its record is on the
+disk. Before a read runs, the server takes its record's place in the
+spool: when the spool is full, the request is refused with `503` and a
+`transient` issue. A record the spool does not store within
+`audit.spool_write_timeout` is withdrawn and the record of the read
+refused, with the outcome `8`, takes its place; the read answers `503`, so
+the trail says what the client got. A spool directory an older FerroPIX
+wrote holds one `.msg` file per record, which this server refuses at
+start: let the older server deliver them, or move them out, before you
+upgrade.
+
+Both are sent to `audit.endpoint.url` over the FHIR Feed, several at once
+as one batch Bundle, each judged by its entry of the answer. A delivered
+record is removed. One the repository refuses is moved aside for you to
+inspect: a spooled record to the `quarantine` subdirectory, a write's record
+to `pix.audit_quarantine`, logged by its id. `GET {base}/health/readiness`
+reports `audit_spool` down when less than a tenth of either bound is left
+and `audit_outbox` down while `pix.audit_quarantine` holds a record, and
+`GET {base}/operator/dependencies` shows whether the last delivery to the
+repository went through.
 
 ## The crates' audit trail
 

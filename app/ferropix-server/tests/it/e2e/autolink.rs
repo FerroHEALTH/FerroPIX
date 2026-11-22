@@ -67,8 +67,10 @@ async fn with_auto_link_on_the_same_feed_links_with_the_evidence_on_the_link() {
     if !e2e_enabled() {
         return;
     }
-    let harness =
-        Harness::start_with(synthetic_seeds(), |matching| matching.auto_link = true).await;
+    let harness = Harness::start_with(synthetic_seeds(), |settings| {
+        settings.matching.auto_link = true;
+    })
+    .await;
     twins(&harness).await;
     assert_eq!(0, queue(&harness, "").await.total, "no candidate");
     let links: Vec<(f64, String)> = sqlx::query_as(

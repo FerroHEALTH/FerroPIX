@@ -61,17 +61,17 @@ digest the release names.
 
 ## Disk latency
 
-Every audited request, a read included, answers only once its BALP record
-is on disk. The spool writes each record to a file, flushes it with
-`fsync`, renames it and flushes the directory, and it writes one record at
-a time. A request that changes the cross-reference also waits for
-PostgreSQL's commit to reach its disk. So the server's request latency
-follows the flush latency of two disks: the volume that holds the spool
-(`/var/lib/ferropix/audit`, `[audit] spool_dir`) and PostgreSQL's. A flush
-that takes 100 ms holds every request whose record is queued behind it,
-on every route at once, while the median stays where it was. A record not
-stored within `[audit] spool_write_timeout` (2 seconds) refuses its
-request with `503`.
+Every audited request answers only once its BALP record is on disk. A
+request that changes the cross-reference keeps its record in PostgreSQL,
+in its own transaction, so it waits for one flush: PostgreSQL's commit. A
+read keeps its record in the spool, which writes the records that arrive
+together to one segment file, flushes it with `fsync`, renames it and
+flushes the directory. So a write's latency follows PostgreSQL's disk and a
+read's the volume that holds the spool (`/var/lib/ferropix/audit`,
+`[audit] spool_dir`). A flush that takes 100 ms holds every read whose
+record is queued behind it, while the median stays where it was. A read
+whose record is not stored within `[audit] spool_write_timeout` (2 seconds)
+is recorded as refused and answers `503`.
 
 Put the spool on a disk whose flushes are short and steady, such as a local
 SSD. A network disk whose flush latency spikes shows up as a long tail on

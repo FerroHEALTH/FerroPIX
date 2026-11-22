@@ -49,7 +49,11 @@ use super::{BASE, BSN_SYSTEM, bsn, call};
 
 /// The `[audit]` settings of a spool under `directory`, delivering to
 /// `url` when given.
-fn audit_settings(directory: &Path, url: Option<&str>, max_events: usize) -> AuditSettings {
+pub(crate) fn audit_settings(
+    directory: &Path,
+    url: Option<&str>,
+    max_events: usize,
+) -> AuditSettings {
     let repository = url.map(|url| {
         let endpoint = EndpointSection {
             url: SecretUrl::new(url),
@@ -173,13 +177,13 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
     let ready = send(&app, Method::GET, "/health/readiness", None).await;
     assert_eq!(StatusCode::OK, ready.status, "{}", ready.body);
     audit
-        .record(vec![bsn_record(), bsn_record()])
+        .record(&[bsn_record(), bsn_record()])
         .await
         .expect("two records fill the spool");
     for (method, path) in [
         (Method::POST, "/fhir/Patient/$ihe-pix"),
         (Method::GET, "/fhir/Patient"),
-        (Method::POST, "/operator/persons/p-1/reveal"),
+        (Method::GET, "/operator/persons/p-1"),
     ] {
         let answer = send(&app, method, path, Some(&token)).await;
         assert_eq!(StatusCode::SERVICE_UNAVAILABLE, answer.status, "{path}");
@@ -198,6 +202,12 @@ async fn a_full_spool_refuses_every_audited_request_with_503_and_readiness_names
         assert_eq!("transient", outcome["issue"][0]["code"], "{path}");
         assert_eq!(UNAUDITED, outcome["issue"][0]["diagnostics"], "{path}");
     }
+    let write = send(&app, Method::PUT, "/fhir/Patient", Some(&token)).await;
+    assert_eq!(
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        write.status,
+        "a write takes no place in the spool: its record goes to the audit outbox (#742)"
+    );
     let dependencies = send(&app, Method::GET, "/operator/dependencies", Some(&token)).await;
     assert_eq!(
         StatusCode::OK,
@@ -272,7 +282,7 @@ async fn a_delivered_record_is_removed_and_a_refused_one_quarantined() {
         .await;
     let draining = audit.drain().expect("a repository is configured");
     audit
-        .record(vec![bsn_record()])
+        .record(&[bsn_record()])
         .await
         .expect("the record is stored");
     assert!(
@@ -296,7 +306,7 @@ async fn a_delivered_record_is_removed_and_a_refused_one_quarantined() {
         "the repository reads up once the delivery is counted"
     );
     audit
-        .record(vec![bsn_record()])
+        .record(&[bsn_record()])
         .await
         .expect("the record is stored");
     assert!(
@@ -338,7 +348,7 @@ async fn the_audit_record_is_the_only_place_an_identifier_reaches_the_disk_or_th
         "an exchange's Debug"
     );
     audit
-        .record(vec![exchange])
+        .record(&[exchange])
         .await
         .expect("the record is stored");
     let holding: Vec<PathBuf> = files(state.path())

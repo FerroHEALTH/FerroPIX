@@ -14,11 +14,20 @@
 //! an update of an identity that was merged would undo the merge, which
 //! [`FeedError::Subsumed`] refuses. A merge is the Source's own duplicate
 //! resolution in the master domain, and a delete removes the master record.
+//! Every change of one message runs in one transaction with the message's
+//! BALP record ([`Feeder::message`]): PMIR 1.6.0 §2:3.93.4.1.3 asks for a
+//! correlated outcome per entry and is silent on whether the entries commit
+//! together, so committing them together with their record is our own
+//! design (#742).
 
 use fhir_types::r4::patient::Patient;
-use sqlx::PgConnection;
+use ihe_atna::balp::Exchange;
+use sqlx::{Acquire as _, PgConnection};
 
-use crate::feed::{Applied, Context, FeedError, Feeder, Resolving, Revising};
+use crate::audit::Audit;
+use crate::feed::{
+    ATTEMPTS, Applied, Context, FeedError, Feeder, Resolving, Revising, Step, store,
+};
 use crate::store::record::PersonId;
 
 /// The master identity an ITI-93 create or update writes.
@@ -40,73 +49,170 @@ pub enum MasterChange {
     Update,
 }
 
-impl Feeder {
-    /// Applies an ITI-93 merge: the master identity `deprecated` is replaced
-    /// by `survivor` in the master domain `system`, `patient` the deprecated
-    /// Patient (§2:3.93.4.1.2.4).
-    ///
-    /// # Errors
-    /// As [`Feeder::resolve_duplicate`]; nothing is committed.
-    pub async fn merge_master(
-        &self,
-        system: &str,
-        deprecated: PersonId,
-        survivor: PersonId,
-        patient: &Patient,
-        context: &Context,
-    ) -> Result<Applied, FeedError> {
-        let subsumed = deprecated.uuid().to_string();
-        let kept = survivor.uuid().to_string();
-        let resolving = Resolving {
-            system,
-            subsumed: &subsumed,
-            survivor: &kept,
-        };
-        self.resolving(&resolving, patient, context).await
-    }
-
-    /// Applies an ITI-93 delete: the master record of `id` in the master
-    /// domain `system` is removed.
-    ///
-    /// # Errors
-    /// As [`Feeder::remove`]; nothing is committed.
-    pub async fn delete_master(
-        &self,
-        system: &str,
-        id: PersonId,
-        context: &Context,
-    ) -> Result<Applied, FeedError> {
-        self.removing(system, &id.uuid().to_string(), true, context)
-            .await
-    }
-
-    /// Applies the ITI-93 `change` of the master identity `id` in the master
-    /// domain `system`, with `patient` as its demographics.
-    ///
-    /// # Errors
-    /// Returns [`FeedError::NotFound`] when an update finds no such master
-    /// record or a removed one, [`FeedError::Subsumed`] when the identity was
-    /// merged, and the errors of [`Feeder::revise`] otherwise; nothing is
-    /// committed.
-    pub async fn master(
-        &self,
+/// One change of an ITI-93 message the store writes.
+#[derive(Debug, Clone, Copy)]
+pub enum MasterStep<'a> {
+    /// A create or an update of the master identity `id`, with `patient`
+    /// as its demographics.
+    Write {
+        /// A create or an update.
         change: MasterChange,
-        system: &str,
+        /// The master identity.
         id: PersonId,
-        patient: &Patient,
+        /// Its demographics.
+        patient: &'a Patient,
+    },
+    /// The master identity `deprecated` replaced by `survivor`, `patient`
+    /// the deprecated Patient (§2:3.93.4.1.2.4).
+    Merge {
+        /// The deprecated identity.
+        deprecated: PersonId,
+        /// The surviving identity.
+        survivor: PersonId,
+        /// The deprecated Patient.
+        patient: &'a Patient,
+    },
+    /// The master record of `id` removed.
+    Delete {
+        /// The master identity.
+        id: PersonId,
+    },
+}
+
+/// What became of each change of one message: `None` for a change that
+/// needed no write, the change's outcome otherwise.
+pub type Outcomes = Vec<Option<Result<Applied, FeedError>>>;
+
+/// The records of one message, written from the outcomes of its changes.
+pub type MessageRecords<'a> = &'a (dyn Fn(&Outcomes) -> Vec<Exchange> + Sync);
+
+impl Feeder {
+    /// Applies the changes of one ITI-93 message to the master domain
+    /// `system` in one transaction, which holds the message's records too,
+    /// written from the outcomes by `records`, and tries the whole message
+    /// again after contention.
+    ///
+    /// A change refused on its own ([`FeedError::refuses_change`]) is rolled
+    /// back to its savepoint and the others go on; any other failure rolls
+    /// back the whole message, so its changes commit together with their
+    /// record or not at all (#742).
+    ///
+    /// # Errors
+    /// Returns the [`FeedError`] that ended the transaction, a
+    /// [`FeedError::Contention`] on every attempt included, and
+    /// [`FeedError::Unrecorded`] when the records cannot be kept; nothing
+    /// is committed.
+    pub async fn message(
+        &self,
+        system: &str,
+        changes: &[Option<MasterStep<'_>>],
         context: &Context,
-    ) -> Result<Applied, FeedError> {
-        let known = matches!(change, MasterChange::Update);
-        let value = id.uuid().to_string();
-        let revising = Revising {
-            system,
-            value: &value,
-            master: Some(Identity {
-                identity: id,
-                known,
-            }),
-        };
-        self.revising(&revising, patient, context).await
+        audit: &Audit,
+        records: MessageRecords<'_>,
+    ) -> Result<Outcomes, FeedError> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            match self
+                .message_once(system, changes, context, audit, records)
+                .await
+            {
+                Err(error) if error.retryable() && attempt < ATTEMPTS => {
+                    tracing::debug!(attempt, "an ITI-93 message is tried again after contention");
+                }
+                Ok(outcomes) => {
+                    self.store.announced();
+                    audit.committed();
+                    return Ok(outcomes);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    /// One attempt at [`Feeder::message`].
+    async fn message_once(
+        &self,
+        system: &str,
+        changes: &[Option<MasterStep<'_>>],
+        context: &Context,
+        audit: &Audit,
+        records: MessageRecords<'_>,
+    ) -> Result<Outcomes, FeedError> {
+        let mut transaction = self.store.pool().begin().await.map_err(store)?;
+        let mut outcomes = Vec::with_capacity(changes.len());
+        for change in changes {
+            let Some(change) = change else {
+                outcomes.push(None);
+                continue;
+            };
+            let deprecated;
+            let kept;
+            let value;
+            let step = match *change {
+                MasterStep::Write {
+                    change,
+                    id,
+                    patient,
+                } => {
+                    value = id.uuid().to_string();
+                    Step::Revise(
+                        Revising {
+                            system,
+                            value: &value,
+                            master: Some(Identity {
+                                identity: id,
+                                known: matches!(change, MasterChange::Update),
+                            }),
+                        },
+                        patient,
+                    )
+                }
+                MasterStep::Merge {
+                    deprecated: from,
+                    survivor,
+                    patient,
+                } => {
+                    deprecated = from.uuid().to_string();
+                    kept = survivor.uuid().to_string();
+                    Step::Resolve(
+                        Resolving {
+                            system,
+                            subsumed: &deprecated,
+                            survivor: &kept,
+                        },
+                        patient,
+                    )
+                }
+                MasterStep::Delete { id } => {
+                    value = id.uuid().to_string();
+                    Step::Remove {
+                        system,
+                        value: &value,
+                        deleted: true,
+                    }
+                }
+            };
+            let mut savepoint = transaction.begin().await.map_err(store)?;
+            match self.step_in(&mut savepoint, step, context).await {
+                Ok(applied) => {
+                    savepoint.commit().await.map_err(store)?;
+                    outcomes.push(Some(Ok(applied)));
+                }
+                Err(error) if error.refuses_change() => {
+                    savepoint.rollback().await.map_err(store)?;
+                    outcomes.push(Some(Err(error)));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        let exchanges = records(&outcomes);
+        audit
+            .enlist(&mut transaction, &exchanges)
+            .await
+            .map_err(FeedError::Unrecorded)?;
+        transaction.commit().await.map_err(store)?;
+        Ok(outcomes)
     }
 }
 

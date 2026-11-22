@@ -257,16 +257,20 @@ struct Case {
 /// revision now spends on the trigger that keeps the keys. Dropping the hot
 /// tables' unread keys (#730) lowered an ITI-104 revision's WAL from 2898 to
 /// 2439 bytes, and with the domains read once (#715) an ITI-78 search reads
-/// 84 buffers.
+/// 84 buffers. Keeping a revision's BALP record in its own transaction
+/// (#742) costs it one statement (19 to 20) and raises its WAL from 2439 to
+/// 3362 bytes, the record compressed and sealed in `pix.audit_outbox`, in
+/// exchange for the spool's 2,036 bytes and their flush, which it no longer
+/// writes.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
-            statements: 19,
+            statements: 20,
             nested: 1,
             blocks: 1121,
-            wal: 2488,
-            audit: 2036,
+            wal: 3430,
+            audit: 0,
             answer: 173,
         },
         expected: StatusCode::OK,

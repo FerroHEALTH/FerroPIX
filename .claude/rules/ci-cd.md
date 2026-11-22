@@ -60,7 +60,10 @@ placeholder tree). The
   `scripts/gh/fields.sh new` when one is behind. A pull request that changes
   the lane, `ci.yml` or the pin matrix runs it as a dry run that files
   nothing. A new corpus row needs a reader there, or its vendor script in
-  `UNWATCHED_SCRIPTS` with the reason, or the self-test fails.
+  `UNWATCHED_SCRIPTS` with the reason, or the self-test fails. Its `family`
+  job (`--family`) reads every `ghcr.io/ferrohealth/*` image of another
+  product in `docs/VERSIONS.md` against that product's latest release and
+  image index digest, and opens or rewrites one issue per image behind.
 - `.github/workflows/ratchet-tighten.yml`: daily and on dispatch, from
   `main` only, runs the `--update` of the ratchet guards
   (`scripts/checks/duplication.sh` and `file-length.sh`) and opens, or

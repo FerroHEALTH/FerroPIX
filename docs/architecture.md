@@ -1189,7 +1189,7 @@ FerroPIX lacks these lanes, each added as its own issue (section 14):
 |---|---|---|
 | `sonar.yml` | SonarQube Cloud over the Rust tier and the shell, YAML and JSON the Rust gates never read; advisory, gates no merge | the second opinion the family runs; `sonar-project.properties` scopes it |
 | `fuzz.yml` | `cargo fuzz` for a bounded time, weekly and on a pull request that touches a target's input | the server parses untrusted input on every request: the `Parameters` and `Patient` bodies, the search parameters, the MLLP frame and the v2 message; a panic is a defect, an `Err` is the parser's job |
-| `pin-freshness.yml` | reads the newest upstream release of every pin no Dependabot ecosystem watches (the FHIR packages, the IHE pages' digests, the container images, the distroless digest, Chrome for Testing) and opens one issue when one is behind | the corpora and the images are pinned by digest and nothing else watches them |
+| `pin-freshness.yml` | reads the newest upstream release of every pin no Dependabot ecosystem watches (the FHIR packages, the IHE pages' digests, the container images, the distroless digest, Chrome for Testing) and opens one issue when one is behind; its `family` job reads each other product's `ghcr.io/ferrohealth/*` image against that product's latest release and index digest and opens one issue per image behind | the corpora and the images are pinned by digest and nothing else watches them |
 | `journeys` (in `ci.yml`) | the console's browser journeys and the painted-contrast battery behind `FERROPIX_JOURNEYS`, with FerroUI's script modules running and withheld | section 12.5 |
 
 ## 12. The operator console

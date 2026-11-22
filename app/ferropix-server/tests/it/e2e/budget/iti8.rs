@@ -80,7 +80,7 @@ fn an_iti_8_revision_stays_within_its_budget() {
     }
     let runtime = runtime();
     let (v2, meter, calls_before) = runtime.block_on(async {
-        let v2 = Box::pin(V2::start(Cursors::default())).await;
+        let v2 = Box::pin(V2::start_on_one_connection(Cursors::default())).await;
         hold_statistics(&v2.pix).await;
         let created = v2
             .send(&adt("A01", "B-0", "H-1^^^HOSP", 0, "19800229"))

@@ -147,8 +147,11 @@ FerroBRIDGE's `app/ferrobridge-server`).
 the configuration and exits; `healthcheck` asks `GET {base}/health/readiness`
 of the process beside it with a short timeout and exits 0 or 1, the
 container `HEALTHCHECK`; `db migrate` applies the pending migrations,
-checks the sealing key and applies the `[[domain]]` seed, and exits (`serve`
-does the same at start, the migrations unless `[db] migrate = false`); `db
+refills the scoring features of every record head written under another
+normalisation (section 5.2), checks the sealing key and applies the
+`[[domain]]` seed, and exits (`serve` does the same at start, the
+migrations and the refill unless `[db] migrate = false`, which instead
+refuses to start while a head holds stale features); `db
 reseal --old-key-file <path>` rotates the sealing key (section 4.2).
 
 **Configuration.** `ferrohealth-config`, the family loader, reads the
@@ -510,7 +513,16 @@ beside the record row, which every lookup reads, so that row stays narrow.
 A blocking read probes the key's index and reads each record it finds
 through its own keys, so it touches only the current records that carry
 the key, whatever their history, and a feed scores tens of pairs and not
-the table (#724).
+the table (#724). The same row holds the head's scoring features, the
+normalised fields the scorer compares as compact JSON without the local
+identifiers (a domain's kind can change, so those are read from the
+identifiers the version carries), with the version of the normalisation
+they were written under. A candidate is scored from them, so no
+candidate's demographics are read or parsed (#747). The server writes them,
+since the normalisation is its own: after the migrations it refills every
+head of another version, keys included, a thousand at a time under each
+record's feed lock, and a read that meets a stale head refuses instead of
+scoring it.
 
 **Evidence.** Every score is kept with its evidence: one entry per field
 with the comparator, the two values as compared (every value masked to its

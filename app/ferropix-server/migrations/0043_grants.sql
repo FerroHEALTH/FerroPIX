@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: BUSL-1.1
 
 -- The grants again, last in the set (0029_grants.sql says why), over the
--- audit outbox 0038 adds: the forwarder deletes each record it delivered or
+-- audit outbox 0042 adds: the forwarder deletes each record it delivered or
 -- moved to the quarantine.
 
 DO $$

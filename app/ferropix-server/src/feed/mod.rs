@@ -52,7 +52,6 @@ use crate::feed::attempt::{
 };
 use crate::feed::link::MergeKind;
 use crate::feed::write::{Carried, Subjects};
-use crate::matching::blocking;
 use crate::matching::scorer::Scorer;
 use crate::matching::subject::Subject;
 use crate::store::demographics::{self, DemographicsError};
@@ -336,7 +335,7 @@ impl Feeder {
         let domains = record::domains(&mut *transaction).await?;
         let (domain, value) = condition(&domains, system, value)?;
         let hmac = keys.hmac(domain.id.uuid(), &value);
-        write::advisory(&mut *transaction, vec![write::identity_key(&hmac)]).await?;
+        write::advisory(&mut *transaction, vec![record::identity_key(&hmac)]).await?;
         let Some(locked) = write::lock(&mut *transaction, domain.id, &hmac).await? else {
             return Err(FeedError::NotFound);
         };
@@ -395,7 +394,7 @@ impl Feeder {
         let carried = write::carried(patient, &domains, keys)?;
         let own = keys.hmac(domain.id.uuid(), &value);
         write::advisory(&mut *transaction, identity_keys(&own, &carried)).await?;
-        let fed = Fed::new(patient, &carried);
+        let fed = Fed::new(patient, &carried)?;
         let locked = match revising.master {
             Some(master) if master.known => write::lock(&mut *transaction, domain.id, &own)
                 .await?
@@ -471,7 +470,7 @@ impl Feeder {
         let subsumed_hmac = keys.hmac(domain.id.uuid(), &subsumed);
         let survivor_hmac = keys.hmac(domain.id.uuid(), &survivor);
         let mut identities = identity_keys(&subsumed_hmac, &carried);
-        identities.push(write::identity_key(&survivor_hmac));
+        identities.push(record::identity_key(&survivor_hmac));
         write::advisory(&mut *transaction, identities).await?;
         let Some(kept) = write::lock(&mut *transaction, domain.id, &survivor_hmac).await? else {
             return Err(FeedError::SurvivorNotFound);
@@ -479,7 +478,7 @@ impl Feeder {
         if !kept.active || kept.removed {
             return Err(FeedError::SurvivorNotFound);
         }
-        let fed = Fed::new(patient, &carried);
+        let fed = Fed::new(patient, &carried)?;
         let locked =
             write::lock_or_insert(&mut *transaction, keys, domain, &subsumed, &fed.blocks).await?;
         self.write_version(&mut *transaction, &locked, &fed, context)
@@ -509,7 +508,7 @@ impl Feeder {
             survivor_carried
                 .iter()
                 .filter(|c| c.kind == DomainKind::Authoritative)
-                .map(|c| write::identity_key(&c.hmac))
+                .map(|c| record::identity_key(&c.hmac))
                 .collect(),
         )
         .await?;
@@ -572,7 +571,8 @@ impl Feeder {
 }
 
 /// The `Patient` of a feed with the identifiers it carries, the subject the
-/// matching weighs, and the blocking keys its version takes.
+/// matching weighs, and the blocking keys and scoring features its version
+/// takes.
 struct Fed<'a> {
     patient: &'a Patient,
     carried: &'a [Carried],
@@ -582,18 +582,15 @@ struct Fed<'a> {
 
 impl<'a> Fed<'a> {
     /// Reads `patient` with the identifiers it carries.
-    fn new(patient: &'a Patient, carried: &'a [Carried]) -> Self {
+    fn new(patient: &'a Patient, carried: &'a [Carried]) -> Result<Self, StoreError> {
         let subject = Subject::from_patient(patient, local_keys(carried));
-        let blocks = Blocks {
-            phonetic: blocking::text_key(BlockingKey::BirthYearFamilyPhonetic, &subject),
-            postal: blocking::text_key(BlockingKey::PostalCodeBirthDate, &subject),
-        };
-        Self {
+        let blocks = Blocks::of(&subject)?;
+        Ok(Self {
             patient,
             carried,
             subject,
             blocks,
-        }
+        })
     }
 }
 

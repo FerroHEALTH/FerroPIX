@@ -286,21 +286,22 @@ struct Case {
 /// 2439 bytes, and with the domains read once (#715) an ITI-78 search reads
 /// 84 buffers. The blocking keys kept beside the record head (#724) lowered
 /// ITI-104 from 1106 to 194 buffers and from 2443 to 2277 WAL bytes, and
-/// ITI-119 from 588 to 118 buffers. Keeping a revision's BALP record in its
-/// own transaction (#742) costs it one statement (19 to 20) and raises its
-/// WAL from 2277 to 3200 bytes, the record compressed and sealed in
-/// `pix.audit_outbox`, in exchange for the spool's 2,036 bytes and their
-/// flush, which it no longer writes. The cases run over a store pool of one
-/// connection (#749): the pages a table fills depend on how many backends
-/// insert into it, which the pool's rotation decided at a timing of the
-/// host's, so the reads now measure 76, 75, 76 and 117 buffers.
+/// ITI-119 from 588 to 118 buffers. The scoring features kept beside the
+/// head (#747) lowered ITI-104 to 190 buffers and ITI-119 to 114. Keeping a
+/// revision's BALP record in its own transaction (#742) costs it one
+/// statement (19 to 20) and raises its WAL from 2277 to 3197 bytes, the
+/// record compressed and sealed in `pix.audit_outbox`, in exchange for the
+/// spool's 2,036 bytes and their flush, which it no longer writes. The cases
+/// run over a store pool of one connection (#749): the pages a table fills
+/// depend on how many backends insert into it, which the pool's rotation
+/// decided at a timing of the host's, so the reads now measure 76, 75, 76 and 113 buffers.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
             statements: 20,
             nested: 1,
-            blocks: 198,
+            blocks: 194,
             wal: 3264,
             audit: 0,
             answer: 173,
@@ -348,7 +349,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 120,
+            blocks: 116,
             wal: 0,
             audit: 2728,
             answer: 1067,

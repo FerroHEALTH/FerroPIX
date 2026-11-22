@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The blocking reads over the keys of the head against what they replaced
-//! (#724), behind `FERROPIX_E2E`: the migration fills every head so the new
-//! reads find what the reads over every version found, every writer of a
-//! head sets the keys of its version, and over a long history of feeds,
-//! revisions, removals, re-adds, resolved duplicates, merges, a revert and
-//! a retired domain the reads find exactly the heads whose demographics give
-//! the key.
+//! (#724), behind `FERROPIX_E2E`: the migration and the refill fill every
+//! head so the new reads find what the reads over every version found, with
+//! the scoring features their demographics give (#747), every writer of a
+//! head sets the keys and the features of its version, and over a long
+//! history of feeds, revisions, removals, re-adds, resolved duplicates,
+//! merges, a revert and a retired domain the reads find exactly the heads
+//! whose demographics give the key.
 
 use std::collections::BTreeSet;
 
@@ -18,9 +19,14 @@ use ferropix_testkit::synthetic::{
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::oracle::{self, FeedRow, MatchRow};
+use super::oracle::{self, FeedRow, MatchRow, StoredFeedRow, StoredMatchRow};
 use super::{FEED_BY_PHONETIC, FEED_BY_POSTAL, MATCH_BY_PHONETIC, MATCH_BY_POSTAL};
+use crate::config::section::matching::{BlockingKey, Matching};
+use crate::matching::features::FeaturesError;
+use crate::matching::scorer::Scorer;
+use crate::matching::subject::Subject;
 use crate::store::schema::migrator;
+use crate::store::{StoreError, features};
 use crate::testing::{
     Fed, SOURCE, Started, app_url, bsn, context, feed, identifiers, merge, retire, revert, start,
 };
@@ -211,12 +217,15 @@ fn exclusions(rows: &[FeedRow]) -> Vec<(Uuid, Uuid)> {
 }
 
 /// Runs the feed reads `feed` and the match reads `matched` (phonetic,
-/// postal) for every value of `values`.
+/// postal) for every value of `values`, each row's last column the scoring
+/// features: read over the head, or given by the demographics an `old`
+/// read answers.
 async fn answers(
     pool: &PgPool,
     values: &BTreeSet<(bool, String)>,
     feed: [&'static str; 2],
     matched: [&'static str; 2],
+    old: bool,
 ) -> Answers {
     let mut found = Answers {
         feed: Vec::new(),
@@ -224,17 +233,13 @@ async fn answers(
     };
     for (phonetic, value) in values {
         let at = usize::from(!*phonetic);
-        let all = feed_rows(pool, feed[at], value, Uuid::nil(), Uuid::nil()).await;
+        let all = feed_rows(pool, feed[at], value, Uuid::nil(), Uuid::nil(), old).await;
         for (record, person) in exclusions(&all) {
             found
                 .feed
-                .push(feed_rows(pool, feed[at], value, record, person).await);
+                .push(feed_rows(pool, feed[at], value, record, person, old).await);
         }
-        let mut rows: Vec<MatchRow> = sqlx::query_as(matched[at])
-            .bind(value)
-            .fetch_all(pool)
-            .await
-            .expect("the match read runs");
+        let mut rows = match_rows(pool, matched[at], value, old).await;
         rows.sort();
         found.matched.push(rows);
     }
@@ -242,21 +247,35 @@ async fn answers(
 }
 
 /// Runs the feed read `statement` for `value`, excluding `record` and
-/// `person`, sorted.
+/// `person`, sorted, with the features of each row (given by its
+/// demographics for an `old` read).
 async fn feed_rows(
     pool: &PgPool,
     statement: &'static str,
     value: &str,
     record: Uuid,
     person: Uuid,
+    old: bool,
 ) -> Vec<FeedRow> {
-    let mut rows: Vec<FeedRow> = sqlx::query_as(statement)
-        .bind(value)
-        .bind(record)
-        .bind(person)
-        .fetch_all(pool)
-        .await
-        .expect("the feed read runs");
+    let mut rows = if old {
+        let rows: Vec<FeedRow> = sqlx::query_as(statement)
+            .bind(value)
+            .bind(record)
+            .bind(person)
+            .fetch_all(pool)
+            .await
+            .expect("the old feed read runs");
+        oracle::old_feed_rows(rows)
+    } else {
+        let rows: Vec<StoredFeedRow> = sqlx::query_as(statement)
+            .bind(value)
+            .bind(record)
+            .bind(person)
+            .fetch_all(pool)
+            .await
+            .expect("the feed read runs");
+        oracle::current_feed_rows(rows)
+    };
     rows.sort();
     rows
 }
@@ -288,6 +307,7 @@ async fn the_migration_fills_every_head_and_the_reads_find_what_the_reads_over_e
         &values,
         [oracle::OLD_FEED_BY_PHONETIC, oracle::OLD_FEED_BY_POSTAL],
         [oracle::OLD_MATCH_BY_PHONETIC, oracle::OLD_MATCH_BY_POSTAL],
+        true,
     )
     .await;
     assert!(
@@ -295,11 +315,33 @@ async fn the_migration_fills_every_head_and_the_reads_find_what_the_reads_over_e
         "the corpus blocks"
     );
     set.run(&pool).await.expect("the rest of the set applies");
+    assert!(
+        matches!(
+            features::check(&pool).await,
+            Err(StoreError::Features(FeaturesError::Stale { found: None }))
+        ),
+        "a store whose heads hold no features refuses a server that does not migrate"
+    );
+    let heads: i64 = sqlx::query_scalar("SELECT count(*) FROM pix.record_block")
+        .fetch_one(&pool)
+        .await
+        .expect("the heads count");
+    assert_eq!(
+        u64::try_from(heads).unwrap(),
+        features::refill(&pool, 7).await.expect("the refill runs"),
+        "the refill writes every head, seven at a time"
+    );
+    assert_eq!(
+        0,
+        features::refill(&pool, 7).await.expect("the refill runs")
+    );
+    features::check(&pool).await.expect("every head is current");
     let new = answers(
         &pool,
         &values,
         [FEED_BY_PHONETIC, FEED_BY_POSTAL],
         [MATCH_BY_PHONETIC, MATCH_BY_POSTAL],
+        false,
     )
     .await;
     assert_eq!(old, new);
@@ -365,12 +407,87 @@ impl Fed for Patient {
     }
 }
 
+/// The ITI-119 inputs the matches are compared over: corpus patients as
+/// stated and with another given name, a birth date one digit off and no
+/// postal code, without identifiers.
+fn inputs() -> Vec<String> {
+    let mut inputs = Vec::new();
+    for index in (0..120).step_by(5) {
+        for turn in [0, 3] {
+            let patient = Patient::at(index, turn);
+            inputs.push(demographics(
+                &patient.family,
+                &patient.given,
+                patient.birth.as_deref(),
+                patient.postal.as_deref(),
+            ));
+            let off = patient.birth.as_deref().map(|birth| {
+                let (date, last) = birth.split_at(birth.len() - 1);
+                let digit: u32 = last.parse().expect("a digit");
+                format!("{date}{}", (digit + 1) % 4)
+            });
+            inputs.push(demographics(
+                &patient.family,
+                GIVEN_NAMES[(index + 1) % GIVEN_NAMES.len()],
+                off.as_deref(),
+                None,
+            ));
+        }
+    }
+    inputs
+}
+
+/// Asserts that ITI-119, scoring each candidate from its head's features,
+/// answers the persons, scores and grades the scorer gives each candidate
+/// read through its `Patient`, and that each pair's evidence is the same
+/// both ways; `step` names the point in the history.
+async fn assert_matches_agree(started: &Started, step: &str) {
+    let pool = started.store.pool();
+    let heads = oracle::scorable(pool).await;
+    let scorer = Scorer::new(&Matching::default());
+    let keys = [
+        BlockingKey::BirthYearFamilyPhonetic,
+        BlockingKey::PostalCodeBirthDate,
+    ];
+    let mut connection = pool.acquire().await.expect("a connection");
+    let mut found = 0_usize;
+    for text in inputs() {
+        let input = crate::store::demographics::patient(&text).expect("the input is a Patient");
+        let subject = Subject::from_patient(&input, BTreeSet::new());
+        for (head, key) in oracle::blocked(&heads, &keys, &subject) {
+            assert_eq!(
+                scorer.score(&subject, &head.given, Some(key)),
+                scorer.score(&subject, &head.kept, Some(key)),
+                "a pair's score, grade and evidence after {step}"
+            );
+        }
+        let matched = crate::pdqm::matching::run(
+            &mut connection,
+            started.store.sealer(),
+            &scorer,
+            &keys,
+            &input,
+        )
+        .await
+        .expect("the match runs");
+        found += matched.found.len();
+        assert_eq!(
+            oracle::matched_persons(&heads, &scorer, &keys, &subject),
+            matched,
+            "the match after {step}"
+        );
+    }
+    assert!(found > 0, "something matches after {step}");
+}
+
 /// Asserts that every head holds its version's keys and that, for every key
 /// value any version ever gave, the reads find exactly what the definition
-/// of a block finds; `step` names the point in the history.
+/// of a block finds, and ITI-119 what the scorer gives each candidate's
+/// demographics; `step` names the point in the history.
 async fn agree(started: &Started, step: &str) {
     let pool = started.store.pool();
     oracle::assert_heads_hold_their_keys(pool).await;
+    assert_matches_agree(started, step).await;
     let heads = oracle::heads(pool).await;
     let mut blocked = 0_usize;
     for (phonetic, value) in values(pool).await {
@@ -381,6 +498,7 @@ async fn agree(started: &Started, step: &str) {
             &value,
             Uuid::nil(),
             Uuid::nil(),
+            false,
         )
         .await;
         blocked += usize::from(!all.is_empty());
@@ -392,17 +510,20 @@ async fn agree(started: &Started, step: &str) {
                     [FEED_BY_PHONETIC, FEED_BY_POSTAL][at],
                     &value,
                     record,
-                    person
+                    person,
+                    false,
                 )
                 .await,
                 "the feed read after {step}"
             );
         }
-        let mut rows: Vec<MatchRow> = sqlx::query_as([MATCH_BY_PHONETIC, MATCH_BY_POSTAL][at])
-            .bind(&value)
-            .fetch_all(pool)
-            .await
-            .expect("the match read runs");
+        let mut rows = match_rows(
+            pool,
+            [MATCH_BY_PHONETIC, MATCH_BY_POSTAL][at],
+            &value,
+            false,
+        )
+        .await;
         rows.sort();
         assert_eq!(
             oracle::matched(&heads, phonetic, &value),
@@ -479,6 +600,31 @@ async fn over_a_long_history_the_reads_find_exactly_the_heads_that_give_the_key(
     agree(&started, "the restoration").await;
 }
 
+/// Runs the match read `statement` for `value`, with the features of each
+/// row (given by its demographics for an `old` read).
+async fn match_rows(
+    pool: &PgPool,
+    statement: &'static str,
+    value: &str,
+    old: bool,
+) -> Vec<MatchRow> {
+    if old {
+        let rows: Vec<MatchRow> = sqlx::query_as(statement)
+            .bind(value)
+            .fetch_all(pool)
+            .await
+            .expect("the old match read runs");
+        oracle::old_match_rows(rows)
+    } else {
+        let rows: Vec<StoredMatchRow> = sqlx::query_as(statement)
+            .bind(value)
+            .fetch_all(pool)
+            .await
+            .expect("the match read runs");
+        oracle::current_match_rows(rows)
+    }
+}
+
 /// The keys the record of `patient` holds: phonetic, postal.
 async fn held(started: &Started, patient: &Patient) -> (Option<String>, Option<String>) {
     sqlx::query_as(
@@ -506,7 +652,7 @@ fn given(patient: &Patient) -> (Option<String>, Option<String>) {
 }
 
 #[tokio::test]
-async fn every_writer_of_a_head_sets_the_keys_of_its_version() {
+async fn every_writer_of_a_head_sets_the_keys_and_the_features_of_its_version() {
     if !e2e_enabled() {
         return;
     }
@@ -517,6 +663,7 @@ async fn every_writer_of_a_head_sets_the_keys_of_its_version() {
     feed(&started, &patient).await;
     let created = held(&started, &patient).await;
     assert_eq!(given(&patient), created, "an added record");
+    oracle::assert_heads_hold_their_keys(started.store.pool()).await;
     assert!(created.0.is_some() && created.1.is_some());
 
     patient.postal = Some(String::from("2500CD"));
@@ -525,6 +672,7 @@ async fn every_writer_of_a_head_sets_the_keys_of_its_version() {
     assert_eq!(created.0, moved.0, "the phonetic key stays");
     assert_ne!(created.1, moved.1, "the postal key moves");
     assert_eq!(given(&patient), moved);
+    oracle::assert_heads_hold_their_keys(started.store.pool()).await;
 
     patient.postal = None;
     feed(&started, &patient).await;
@@ -533,6 +681,7 @@ async fn every_writer_of_a_head_sets_the_keys_of_its_version() {
         held(&started, &patient).await,
         "a key the version lacks is cleared"
     );
+    oracle::assert_heads_hold_their_keys(started.store.pool()).await;
 
     started
         .feeder
@@ -553,6 +702,7 @@ async fn every_writer_of_a_head_sets_the_keys_of_its_version() {
         held(&started, &patient).await,
         "a re-add sets its version's keys"
     );
+    oracle::assert_heads_hold_their_keys(started.store.pool()).await;
 
     let mut subsumed = Patient::at(4, 0);
     subsumed.birth = Some(String::from("1980-01-02"));

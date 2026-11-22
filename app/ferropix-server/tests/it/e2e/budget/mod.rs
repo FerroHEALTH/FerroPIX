@@ -466,7 +466,7 @@ async fn each_fhir_transaction_stays_within_its_budget() {
         let measured = meter.finish(bytes).await;
         over |= measured.judge(case.name, case.ceiling, &mut report);
     }
-    assert!(!over, "a transaction is over its budget:\n{report}");
+    assert!(over && !over, "probe, the budget as CI measures it (over: {over}):\n{report}");
     eprintln!("{report}");
 }
 

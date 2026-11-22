@@ -170,14 +170,15 @@ two phases of a pair at once, each server at the plan's rate, so a runner
 whose speed moves from one phase to the next no longer favours either side
 (FerroHEALTH/FerroSYS#287). 0.9.0 judges a pair steady by the head's drift
 over the base's and measures a spare pair in place of one it cannot judge,
-0.13.0 reports the generator's lag at p50 and its largest value, and 0.15.0
-builds on ferrohealth-server 0.12, the line the server runs on; the plan's
-keys are unchanged (#713). No specification governs the choice: our own
-design.
+0.13.0 reports the generator's lag at p50 and its largest value, 0.15.0
+builds on ferrohealth-server 0.12, the line the server runs on (#713), and
+0.16.0 draws per-arrival variables, which the capacity plans use to send
+each feed a patient of its own (#712); the gate's plan keeps its keys. No
+specification governs the choice: our own design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| ferrohealth-perf | `0.15.0` | `.github/workflows/perf.yml` |
+| ferrohealth-perf | `0.16.0` | `.github/workflows/perf.yml` |
 
 ## The duplication guard
 

@@ -18,11 +18,24 @@ warmup_secs = 15
 duration_secs = 60
 max_in_flight = 2048
 settle_secs = 2
+seed = 1
+
+# A seeded patient for each arrival, drawn at random from the rows
+# `capacity.sh patients N` writes from the seed's own generator, so each feed
+# revises a record of its own with the demographics it already holds and
+# feeds at rate measure the server, not one record's lock (#712). The seed
+# fixes the draws, so a step sends the same requests again; the script fills
+# {patients_file} with the data file. ferrohealth-perf fills each
+# {{patient.<field>}}.
+[vars.patient]
+kind = "file"
+path = "{patients_file}"
+order = "random"
 
 [[requests]]
 group = "pixm-feed"
 method = "PUT"
-path = "/fhir/Patient?identifier=urn%3Aoid%3A2.999.1.1%7CC-0500000"
+path = "/fhir/Patient?identifier=urn%3Aoid%3A2.999.1.1%7C{{patient.id}}"
 status = 200
-body = '{"resourceType":"Patient","identifier":[{"system":"urn:oid:2.999.1.1","value":"C-0500000"}],"active":true,"name":[{"use":"official","family":"Proefikink","given":["Xena"]}],"gender":"female","birthDate":"1987-04-10","address":[{"use":"home","line":["Synthetische straat 200"],"city":"Teststad","postalCode":"2070 CN","country":"NL"}]}'
+body = '{"resourceType":"Patient","identifier":[{"system":"urn:oid:2.999.1.1","value":"{{patient.id}}"}],"active":true,"name":[{"use":"official","family":"{{patient.family}}","given":["{{patient.given}}"]}],"gender":"{{patient.gender}}","birthDate":"{{patient.birthDate}}","address":[{"use":"home","line":["{{patient.line}}"],"city":"Teststad","postalCode":"{{patient.postalCode}}","country":"NL"}]}'
 headers = { authorization = "Bearer {source_token}", content-type = "application/fhir+json" }

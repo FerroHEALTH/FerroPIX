@@ -43,9 +43,8 @@ pub fn migrator() -> Migrator {
 ///
 /// Each migration runs in its own transaction under the migrator's
 /// advisory lock, so two servers starting together apply each file once.
-/// Between [`EVIDENCE_ROOM`] and [`EVIDENCE_DONE`] it packs the evidence
-/// stored as JSON, which SQL cannot, so the set ends with every row in the
-/// layout.
+/// Between migrations 0044 and 0045 it packs the evidence stored as JSON,
+/// which SQL cannot, so the set ends with every row in the layout.
 ///
 /// # Errors
 /// Returns [`StoreError::Migrate`] when a migration fails, when an applied

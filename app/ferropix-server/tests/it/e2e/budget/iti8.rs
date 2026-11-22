@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use ferropix_server::hl7v2::cursor::Cursors;
 use ferropix_testkit::containers::e2e_enabled;
 
-use super::{Ceiling, Meter, REQUESTS, WARMUP};
+use super::{Ceiling, Meter, REQUESTS, WARMUP, hold_statistics};
 use crate::e2e::hl7v2::{V2, adt, code};
 
 /// The ceiling of one ITI-8 revision: the statements as measured, and the
@@ -61,6 +61,7 @@ async fn an_iti_8_revision_stays_within_its_budget() {
         return;
     }
     let v2 = Box::pin(V2::start(Cursors::default())).await;
+    hold_statistics(&v2.pix).await;
     let created = v2
         .send(&adt("A01", "B-0", "H-1^^^HOSP", 0, "19800229"))
         .await;

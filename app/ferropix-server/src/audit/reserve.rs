@@ -24,7 +24,7 @@ use axum::response::Response;
 use http::StatusCode;
 use ihe_atna::atna::spool::reserve::Reservation;
 use ihe_atna::atna::spool::withdraw::Withdrawable;
-use ihe_atna::balp::{Exchange, Observer, Outcome};
+use ihe_atna::balp::{Exchange, Observer};
 use tokio::sync::Mutex;
 
 use crate::audit::{Audit, Unrecorded, written};
@@ -97,14 +97,10 @@ impl Place {
 }
 
 /// The record of `exchange` as `observer` records it, with the record of
-/// the exchange refused: the same record with the outcome serious failure.
+/// the exchange refused: the same record with the outcome serious failure,
+/// written only when the record is withdrawn (ihe-atna 0.25).
 fn withdrawable(exchange: &Exchange, observer: &Observer) -> Result<Withdrawable, Unrecorded> {
-    let mut refused = exchange.clone();
-    refused.outcome = Outcome::SeriousFailure;
-    Ok(Withdrawable {
-        message: written(exchange, observer)?,
-        refusal: written(&refused, observer)?,
-    })
+    exchange.withdrawable(observer).map_err(Unrecorded::Record)
 }
 
 /// The place of the request's record, which its handler fills.
@@ -232,9 +228,9 @@ mod tests {
         );
         assert!(matches!(exchange.direction, Direction::Received { .. }));
         let pair = withdrawable(&exchange, &observer).expect("both records write");
-        let message: Value = serde_json::from_slice(pair.message.expose_secret()).expect("JSON");
-        let mut refusal: Value =
-            serde_json::from_slice(pair.refusal.expose_secret()).expect("JSON");
+        let message: Value = serde_json::from_slice(pair.message().expose_secret()).expect("JSON");
+        let refusal = pair.into_refusal().expect("the refusal fits its place");
+        let mut refusal: Value = serde_json::from_slice(refusal.expose_secret()).expect("JSON");
         assert_eq!("0", message["outcome"]);
         assert_eq!("8", refusal["outcome"], "FHIR R4 audit-event-outcome 8");
         refusal["outcome"] = message["outcome"].clone();

@@ -54,6 +54,8 @@ const MATES: usize = 282;
 /// layout and not as JSON (#752) took 111 allocations and 211,887 bytes
 /// allocated more off, and the two ceilings fell by as much. Sending one
 /// token for every request (#712) took 60 allocations and 1,855 bytes
+/// allocated off, and the two ceilings fell by as much. ihe-atna 0.25 and
+/// ferrohealth-telemetry 0.5.1 (#766) took 170 allocations and 22,081 bytes
 /// allocated off, and the two ceilings fell by as much.
 const CASE: Case = Case {
     name: "ITI-104 revise",
@@ -64,8 +66,8 @@ const CASE: Case = Case {
         wal: 4895,
         audit: 0,
         answer: 173,
-        allocations: 22_052,
-        allocated: 2_379_251,
+        allocations: 21_882,
+        allocated: 2_357_170,
     },
     expected: StatusCode::OK,
     minted: false,

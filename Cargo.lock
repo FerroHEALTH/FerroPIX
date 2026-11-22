@@ -1407,9 +1407,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-telemetry"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1bef07d3744883e3a6bc48a1eb375146a2e731199160eaf452fecaae70d6b0d"
+checksum = "310273c87483166f7ce87517a0df9e2052a40031c0e29bdff99fef280a3284a2"
 dependencies = [
  "axum",
  "ferrohealth-config",
@@ -2391,9 +2391,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.24.3"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c00ce3cc0634201ddae3a3cdca3e36ed8cdd9730a24d005d3dc81030467f9cae"
+checksum = "efbb457b86f718a001d493df1e30e827d2e4b5e07307345dee13fea0d6bc67fc"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2415,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2964,7 +2964,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

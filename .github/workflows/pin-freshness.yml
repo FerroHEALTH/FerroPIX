@@ -14,7 +14,9 @@
 # at, and the container images the testkit starts. This workflow reads the
 # newest upstream release, commit, registry version, served bytes,
 # obsoleting RFC or registry tag of each and opens ONE issue when a pin is
-# behind.
+# behind. Its `family` job reads every image another FerroHEALTH product
+# publishes, pinned in docs/VERSIONS.md, against that product's latest
+# release and image index digest, and opens one issue per image behind.
 #
 # It opens an issue rather than failing: a weekly red job trains a maintainer
 # to ignore red jobs, and a newer lint release is not a broken build. A pull
@@ -109,3 +111,84 @@ jobs:
           # picks it up sets the three (.claude/rules/issue-workflow.md).
           bash scripts/gh/fields.sh new task low low \
             --title "$TITLE" --body-file body.md --label ci
+
+  # The product images of the family, each against the latest release of the
+  # product that publishes it. Its own job, so a tool pin that could not be
+  # read never hides a product pin that fell behind. One issue per image, kept
+  # open and rewritten while the pin stays behind, so each product release
+  # reaches the tracker under its own title.
+  family:
+    name: product image pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare every product image pin with the product's latest release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          status=0
+          bash scripts/checks/pin-freshness.sh --family > family.txt || status=$?
+          cat family.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update one issue per image behind its latest release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          awk '$1 == "STALE" { image = $2; sub(/:$/, "", image); print image }' family.txt | sort -u > behind.txt
+          while read -r image; do
+            if ! [[ "$image" =~ ^ghcr\.io/ferrohealth/[a-z0-9-]+$ ]]; then
+              echo "not a product image: $image" >&2
+              exit 1
+            fi
+            title="Pin behind the product's latest release: $image"
+            {
+              echo "\`scripts/checks/pin-freshness.sh --family\` found \`$image\` pinned behind the latest release of the product that publishes it."
+              echo
+              echo '```text'
+              grep -F "STALE      $image: " family.txt
+              echo '```'
+              echo
+              echo "Read the configuration changes the line names, move the pin in \`docs/VERSIONS.md\` and in every file"
+              echo "that repeats it to the release's tag and index digest, with the configuration that release reads,"
+              echo "and re-run the gates."
+              echo
+              echo "Reported by [this run]($RUN_URL)."
+            } > body.md
+            number="$(gh issue list --state open --limit 500 --json number,title \
+              --jq "[.[] | select(.title == \"$title\")][0].number // empty")"
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --body-file body.md
+              echo "updated #$number for $image"
+            else
+              # fields.sh files the issue as a Task at Medium priority and Low
+              # effort; this job's default token may not read the
+              # organisation's issue types, and then the issue lands with its
+              # label alone (.claude/rules/issue-workflow.md).
+              bash scripts/gh/fields.sh new task medium low \
+                --title "$title" --body-file body.md --label chore
+            fi
+          done < behind.txt
+
+      # 2 means an image or a release could not be read: the comparison is
+      # incomplete, so the job fails after filing what it could compare.
+      - name: Every product image pin was compared
+        env:
+          STATUS: ${{ steps.check.outputs.status }}
+        run: |
+          if [ "$STATUS" -eq 2 ]; then
+            echo "an image or a release could not be read; the comparison is incomplete" >&2
+            exit 1
+          fi

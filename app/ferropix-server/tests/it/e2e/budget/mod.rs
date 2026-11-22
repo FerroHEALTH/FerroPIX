@@ -527,8 +527,8 @@ async fn analyzed(harness: &Harness) -> Vec<(String, f32)> {
     rows
 }
 
-/// The shared buffers `REQUESTS` ITI-78 searches touch.
-async fn search_buffers(harness: &Harness, meter: &mut Meter, hospital: &str) -> u64 {
+/// The shared buffers `REQUESTS` ITI-78 searches touch, with their ledger.
+async fn search_buffers(harness: &Harness, meter: &mut Meter, hospital: &str) -> (u64, String) {
     for _ in 0..WARMUP {
         send(harness, "ITI-78 search", hospital).await;
     }
@@ -537,33 +537,69 @@ async fn search_buffers(harness: &Harness, meter: &mut Meter, hospital: &str) ->
         let answer = send(harness, "ITI-78 search", hospital).await;
         assert_eq!(StatusCode::OK, answer.status, "{}", answer.body);
     }
-    meter.finish(0).await.blocks
+    let measured = meter.finish(0).await;
+    (measured.blocks, measured.ledger)
+}
+
+/// The pages of the tables a search that scanned every person would read.
+async fn scanned_pages(harness: &Harness) -> u64 {
+    let admin = admin(harness.postgres()).await;
+    let pages: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "/* {OWN} */ SELECT (sum(pg_relation_size(c.oid)) / current_setting('block_size')::bigint)::bigint
+         FROM pg_catalog.pg_class c
+         WHERE c.relnamespace = 'pix'::regnamespace AND c.relkind = 'r'
+           AND c.relname IN ('person', 'person_served', 'person_search_key', 'source_record',
+                             'carried_identifier', 'source_record_version')"
+    )))
+    .fetch_one(&admin)
+    .await
+    .expect("the table sizes read");
+    admin.close().await;
+    count(pages)
 }
 
 /// An ITI-78 search reads its persons through indexes (#722): over four
-/// times the persons, each request reads at most a few more buffers, the
-/// deeper levels of the indexes it descends, where a scan of every person
-/// would read about four times as many.
+/// times the persons, each request reads at most a level more in each index
+/// it descends, where a scan of every person would read every page the
+/// grown tables added.
 #[tokio::test]
 async fn an_iti_78_search_reads_no_more_over_four_times_the_persons() {
     if !e2e_enabled() {
         return;
     }
-    let harness = Harness::start(synthetic_seeds()).await;
+    let harness = Harness::start_on_one_connection(synthetic_seeds()).await;
     hold_statistics(&harness).await;
     let (hospital, _bsn) = feed_both(&harness).await;
     populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
-    let before = search_buffers(&harness, &mut meter, &hospital).await;
+    let pages_before = scanned_pages(&harness).await;
+    let (before, small) = search_buffers(&harness, &mut meter, &hospital).await;
     populate(&harness, POPULATION..POPULATION * 4).await;
-    let after = search_buffers(&harness, &mut meter, &hospital).await;
-    assert!(
-        after <= before.saturating_add(REQUESTS.saturating_mul(DEEPER)),
-        "{REQUESTS} ITI-78 searches over {} persons touch {after} buffers, over {POPULATION} {before}",
+    let pages_after = scanned_pages(&harness).await;
+    let (after, large) = search_buffers(&harness, &mut meter, &hospital).await;
+    let report = format!(
+        "{REQUESTS} ITI-78 searches over {} persons touch {after} buffers, over {POPULATION} {before}\n  over {POPULATION}:\n{small}  over {}:\n{large}",
+        POPULATION * 4,
         POPULATION * 4
     );
+    assert!(
+        after <= before.saturating_add(REQUESTS.saturating_mul(DESCENTS * PER_DESCENT)),
+        "at most a level more in each index the plan descends: {report}"
+    );
+    let grown = pages_after.saturating_sub(pages_before);
+    assert!(
+        after.saturating_sub(before).saturating_mul(3) < REQUESTS.saturating_mul(grown),
+        "a request reads under a third of the {grown} pages a scan of the grown tables would add: {report}"
+    );
+    eprintln!("{report}");
 }
 
-/// The buffers one request may read more once the store holds four times
-/// the persons: a level more in each of the indexes it descends.
-const DEEPER: u64 = 8;
+/// The index descents an ITI-78 search makes for each person it answers.
+// NOTE: no specification governs this: our own design; the plan descends person_search_key
+// (matched), person_served, source_record and carried_identifier (identified), and person (chain).
+const DESCENTS: u64 = 5;
+
+/// The buffers a descent may read more once the store holds four times the
+/// persons: one level more of its index, and the leaf a split moved its
+/// entries to.
+const PER_DESCENT: u64 = 3;

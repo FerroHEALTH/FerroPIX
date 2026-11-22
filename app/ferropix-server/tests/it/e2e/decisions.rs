@@ -235,6 +235,115 @@ async fn a_not_a_match_stays_out_of_the_queue_until_a_record_s_demographics_chan
     );
 }
 
+/// The steward actions of `kind` that name the candidate `id`.
+async fn actions(harness: &Harness, kind: &str, id: &str) -> i64 {
+    count(
+        harness,
+        &format!(
+            "SELECT count(*) FROM pix.steward_action WHERE kind = '{kind}' AND candidate_id = '{id}'"
+        ),
+    )
+    .await
+}
+
+/// The steward actions of `kind`.
+async fn all_actions(harness: &Harness, kind: &str) -> i64 {
+    count(
+        harness,
+        &format!("SELECT count(*) FROM pix.steward_action WHERE kind = '{kind}'"),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn a_revision_with_the_same_scored_fields_leaves_its_open_candidate_as_it_is() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(synthetic_seeds()).await;
+    pair(&harness, 7, "Ommerdinga").await;
+    let id = queue(&harness, "").await.rows[0].id.clone();
+    let read = candidate(&harness, &id).await;
+    let recorded = actions(&harness, "candidate", &id).await;
+    let feeds = all_actions(&harness, "feed").await;
+    fed(
+        &harness,
+        LABORATORY_DOMAIN,
+        "L-7",
+        &patient(LABORATORY_DOMAIN, "L-7", "Ommerdinga", "Ada", "1971-03-08"),
+    )
+    .await;
+    let again = candidate(&harness, &id).await;
+    assert_eq!(
+        (read.a.version, read.b.version),
+        (again.a.version, again.b.version),
+        "the candidate keeps the versions it was scored on"
+    );
+    assert_eq!(Status::Open, again.status);
+    assert!(
+        (read.score - again.score).abs() < f64::EPSILON,
+        "the same score"
+    );
+    assert_eq!(
+        recorded,
+        actions(&harness, "candidate", &id).await,
+        "no steward action records the same evaluation again"
+    );
+    assert_eq!(
+        feeds + 1,
+        all_actions(&harness, "feed").await,
+        "the feed is recorded"
+    );
+    assert_eq!(1, queue(&harness, "").await.total, "one candidate");
+    let answer = decide(&harness, &id, &body("link", &read, "")).await;
+    assert_eq!(
+        StatusCode::OK,
+        answer.status,
+        "a decision on the scored versions stands: {}",
+        answer.body
+    );
+}
+
+#[tokio::test]
+async fn a_revision_that_changes_a_scored_field_rescores_and_records_its_candidate() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(synthetic_seeds()).await;
+    pair(&harness, 8, "Wildervanck").await;
+    let id = queue(&harness, "").await.rows[0].id.clone();
+    let read = candidate(&harness, &id).await;
+    let recorded = actions(&harness, "candidate", &id).await;
+    fed(
+        &harness,
+        LABORATORY_DOMAIN,
+        "L-8",
+        &patient(
+            LABORATORY_DOMAIN,
+            "L-8",
+            "Wildervanck",
+            "Adah",
+            "1971-03-09",
+        ),
+    )
+    .await;
+    let again = candidate(&harness, &id).await;
+    assert_eq!(
+        read.a.version.max(read.b.version) + 1,
+        again.a.version.max(again.b.version),
+        "the candidate names the new version"
+    );
+    assert_eq!(
+        recorded + 1,
+        actions(&harness, "candidate", &id).await,
+        "the new evaluation is recorded"
+    );
+    assert_ne!(
+        read.evidence, again.evidence,
+        "the evidence compares the new given name"
+    );
+}
+
 #[tokio::test]
 async fn a_deferral_leaves_the_queue_until_its_day_and_a_malformed_decision_is_400() {
     if !e2e_enabled() {

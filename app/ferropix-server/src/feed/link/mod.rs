@@ -106,6 +106,9 @@ pub(super) struct Me<'a> {
     pub phonetic: Option<String>,
     /// Its `(postal code, birth date)` blocking key.
     pub postal: Option<String>,
+    /// Whether the version states the demographics of the head before it,
+    /// so a pair it scores as its open candidate holds is left as it is.
+    pub unchanged: bool,
 }
 
 /// What the cross-referencing did.

@@ -213,9 +213,10 @@ pub(super) async fn close_candidates(
 
 /// Records the pair of `me` and `other` as an open candidate, or refreshes
 /// the open candidate of the pair, and records the system action; a pair
-/// a steward deferred is left as it is, and a pair a steward held to be
-/// two patients is not queued again while both records state what they
-/// stated then.
+/// a steward deferred is left as it is, a pair a steward held to be two
+/// patients is not queued again while both records state what they stated
+/// then, and an open candidate a version of unchanged demographics scores
+/// to the same score, grade and evidence is not written or recorded again.
 pub(super) async fn candidate(
     connection: &mut PgConnection,
     me: &Me<'_>,
@@ -239,6 +240,9 @@ pub(super) async fn candidate(
          DO UPDATE SET a_version = EXCLUDED.a_version, b_version = EXCLUDED.b_version,
                        score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence
          WHERE pix.candidate.status = 'open'
+           AND NOT ($8 AND pix.candidate.score = EXCLUDED.score
+                    AND pix.candidate.grade = EXCLUDED.grade
+                    AND pix.candidate.evidence = EXCLUDED.evidence)
          RETURNING id",
     )
     .bind(a.uuid())
@@ -248,6 +252,7 @@ pub(super) async fn candidate(
     .bind(scored.score)
     .bind(scored.grade.code())
     .bind(evidence)
+    .bind(me.unchanged)
     .fetch_optional(&mut *connection)
     .await
     .map_err(store)?;

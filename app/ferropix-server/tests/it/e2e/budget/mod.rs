@@ -342,6 +342,10 @@ struct Case {
 /// run over a store pool of one connection (#749): the pages a table fills
 /// depend on how many backends insert into it, which the pool's rotation
 /// decided at a timing of the host's, so the reads now measure 76, 75, 76 and 113 buffers.
+/// Leaving an open candidate unchanged when a revision states the
+/// demographics of its head before (#752) reads that head's demographics,
+/// which raised an ITI-104 revision from 194 to 196 buffers, a price the
+/// orchestrator accepted for the block case's drop from 3412 to 2540.
 /// The allocations and the bytes allocated are 2% above the higher of the
 /// values on CI's Linux runner and of three macOS runs (#721): the counts
 /// were the same in each run, the bytes within 0.1%, and Linux counts 17 to
@@ -352,7 +356,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 20,
             nested: 1,
-            blocks: 194,
+            blocks: 198,
             wal: 3264,
             audit: 0,
             answer: 173,

@@ -99,8 +99,8 @@ impl Store {
     /// Returns [`StoreError::Url`] for a URL the driver refuses,
     /// [`StoreError::Connect`] when no connection opens, every refusal of
     /// [`server_version::check`], [`gate::check`], [`schema::apply`],
-    /// [`features::refill`], [`features::check`], [`evidence::refill`],
-    /// [`evidence::check`], [`key::verify`] and
+    /// [`schema::check`], [`features::refill`], [`features::check`],
+    /// [`key::verify`] and
     /// [`seed::apply`], and [`StoreError::Seal`] when the keys cannot be
     /// derived.
     pub async fn start(
@@ -116,10 +116,9 @@ impl Store {
         if job == Job::Migrate || db.migrate {
             schema::apply(&store).await?;
             features::refill(store.pool(), features::BATCH).await?;
-            evidence::refill(store.pool(), evidence::BATCH).await?;
         } else {
+            schema::check(&store).await?;
             features::check(store.pool()).await?;
-            evidence::check(store.pool()).await?;
         }
         key::verify(&store).await?;
         seed::apply(&store, domains).await?;
@@ -259,6 +258,13 @@ pub enum StoreError {
     /// The migration set cannot be applied.
     #[error("the migrations cannot be applied")]
     Migrate(#[source] sqlx::migrate::MigrateError),
+    /// A server that does not migrate meets a store some migrations of its
+    /// set have not been applied to.
+    #[error("{missing} of the store's migrations are not applied; run ferropix db migrate")]
+    MigrationsPending {
+        /// The migrations of the set the store has not applied.
+        missing: usize,
+    },
     /// A statement on the store failed.
     #[error("a statement on the store failed")]
     Query(#[source] DbFailure),

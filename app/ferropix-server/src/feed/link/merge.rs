@@ -276,12 +276,11 @@ pub(super) async fn candidates(
              ORDER BY p.n
              ON CONFLICT (record_a, record_b) WHERE status IN ('open', 'deferred')
              DO UPDATE SET a_version = EXCLUDED.a_version, b_version = EXCLUDED.b_version,
-                           score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence,
-                           evidence_json = NULL
+                           score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence
              WHERE pix.candidate.status = 'open'
                AND NOT ($8 AND pix.candidate.score = EXCLUDED.score
                         AND pix.candidate.grade = EXCLUDED.grade
-                        AND pix.candidate.evidence IS NOT DISTINCT FROM EXCLUDED.evidence)
+                        AND pix.candidate.evidence = EXCLUDED.evidence)
              RETURNING id, record_a, record_b
          ), ordered AS (
              SELECT w.id, p.n FROM written w

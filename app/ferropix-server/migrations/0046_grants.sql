@@ -1,9 +1,8 @@
 -- SPDX-FileCopyrightText: Cadasto B.V.
 -- SPDX-License-Identifier: BUSL-1.1
 
--- The grants again, last in the set (0029_grants.sql says why), over the
--- evidence refill's record 0044 adds, which the server writes once the
--- refill is done.
+-- The grants again, last in the set (0029_grants.sql says why), after the
+-- evidence of 0044 and 0045 changed columns of pix.candidate and pix.link.
 
 DO $$
 BEGIN

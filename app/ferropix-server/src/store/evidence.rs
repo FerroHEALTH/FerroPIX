@@ -21,10 +21,9 @@
 //! Each value is kept exactly as the masking of §12.5 wrote it, so the
 //! store holds no more of a value than the JSON did. The names the JSON
 //! repeated in every entry are the codes of this module's tables. The
-//! evidence the store held as JSON is moved by the server after the
-//! migrations, a thousand rows at a time, and records the refill done in
-//! `pix.evidence_refill`; a server that does not migrate refuses to start
-//! until it is. No specification governs
+//! evidence the store held as JSON is packed by the server between the
+//! migration that makes room and the one that drops the JSON, a thousand
+//! rows at a time ([`crate::store::schema::apply`]). No specification governs
 //! the stored form: our own design.
 
 use sqlx::PgPool;
@@ -64,9 +63,6 @@ pub enum EvidenceError {
     /// The evidence stored as JSON before the layout does not read.
     #[error("the evidence stored as JSON does not read")]
     Json,
-    /// A row still holds its evidence as JSON, which `db migrate` moves.
-    #[error("a candidate's or a link's evidence is still stored as JSON; run db migrate")]
-    Unpacked,
 }
 
 /// The code of each grade.
@@ -470,27 +466,7 @@ pub async fn refill(pool: &PgPool, batch: i64) -> Result<u64, StoreError> {
         }
         moved = moved.saturating_add(rows);
     }
-    sqlx::query("UPDATE pix.evidence_refill SET done_at = now() WHERE done_at IS NULL")
-        .execute(pool)
-        .await?;
     Ok(moved)
-}
-
-/// Refuses the start of a server that does not migrate until the refill
-/// in `pool` is recorded done.
-///
-/// # Errors
-///
-/// Returns [`StoreError::Evidence`] with [`EvidenceError::Unpacked`] while
-/// a row is left, and [`StoreError::Query`] when the statement fails.
-pub async fn check(pool: &PgPool) -> Result<(), StoreError> {
-    let left: bool = sqlx::query_scalar("SELECT done_at IS NULL FROM pix.evidence_refill")
-        .fetch_one(pool)
-        .await?;
-    if left {
-        return Err(StoreError::Evidence(EvidenceError::Unpacked));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

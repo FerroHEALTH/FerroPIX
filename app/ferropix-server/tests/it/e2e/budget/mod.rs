@@ -475,8 +475,34 @@ async fn each_fhir_transaction_stays_within_its_budget() {
         analyzed.is_empty(),
         "no table was analyzed during the measurement, which would replan it: {analyzed:?}\n{report}"
     );
+    report.push_str(&tables(&harness).await);
     assert!(!over, "a transaction is over its budget:\n{report}");
     eprintln!("{report}");
+}
+
+/// Each table of `harness`'s store with the rows written to it and its
+/// size, which the report shows beside its ledger.
+async fn tables(harness: &Harness) -> String {
+    let admin = admin(harness.postgres()).await;
+    let rows: Vec<(String, i64, i64, i64, i64, i64)> =
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "/* {OWN} */ SELECT relname::text, n_tup_ins, n_tup_upd, n_tup_del, n_dead_tup,
+                pg_total_relation_size(relid)
+         FROM pg_catalog.pg_stat_user_tables WHERE schemaname = 'pix' ORDER BY 1"
+        )))
+        .fetch_all(&admin)
+        .await
+        .expect("the table counts read");
+    admin.close().await;
+    let mut text = String::from("  tables (inserted, updated, deleted, dead, bytes):\n");
+    for (name, inserted, updated, deleted, dead, bytes) in rows {
+        writeln!(
+            text,
+            "    {name}: {inserted} {updated} {deleted} {dead} {bytes}"
+        )
+        .expect("a String takes it");
+    }
+    text
 }
 
 /// The tables of `harness`'s store that were vacuumed or analyzed, by hand

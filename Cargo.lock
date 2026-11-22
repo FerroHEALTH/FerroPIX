@@ -2384,9 +2384,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.24.1"
+version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fd062cce2ca9a7888bcfc107ccaea3e3b557f96dbdbc1b9fd79943ea4fb5b3c"
+checksum = "c00ce3cc0634201ddae3a3cdca3e36ed8cdd9730a24d005d3dc81030467f9cae"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -4666,7 +4666,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

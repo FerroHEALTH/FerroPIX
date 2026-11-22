@@ -140,9 +140,12 @@ http = "1.5.0"
 # records waiting as one batch Bundle, its client answering a `FeedAnswer`
 # (FerroHEALTH/FerroAUDIT#254); 0.24.1 withdraws a read's records still
 # queued at the write timeout and queues the records of its refusal in their
-# place (FerroHEALTH/FerroAUDIT#258, #260). Verified against crates.io on
-# 2026-11-22 (0.24.1).
-ihe-atna = { version = "=0.24.1", default-features = false }
+# place (FerroHEALTH/FerroAUDIT#258, #260); 0.24.3 appends a spool's batches
+# to one segment from one writer thread, opens a backlog through segment
+# indexes and removes a delivered record from the active segment
+# (FerroHEALTH/FerroAUDIT#264, #263, #267). Verified against crates.io on
+# 2026-11-22 (0.24.3).
+ihe-atna = { version = "=0.24.3", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.62.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

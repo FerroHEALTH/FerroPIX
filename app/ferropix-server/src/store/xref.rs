@@ -54,15 +54,12 @@ macro_rules! persons_ctes {
              FROM pix.source_record r JOIN chain c ON r.id = c.replaced_by
              WHERE c.hops < $3
          ),
-         survivor AS (
-             SELECT id, removed FROM chain WHERE replaced_by IS NULL
-         ),
          start (id) AS (
              SELECT l.person_id
-             FROM survivor s
+             FROM chain s
              JOIN pix.link l ON l.record_id = s.id AND upper_inf(l.valid)
-             WHERE NOT s.removed
-             UNION
+             WHERE s.replaced_by IS NULL AND NOT s.removed
+             UNION ALL
              SELECT l.person_id
              FROM pix.carried_identifier c
              JOIN pix.identifier_domain d ON d.id = c.domain_id
@@ -71,10 +68,7 @@ macro_rules! persons_ctes {
              WHERE c.domain_id = $1 AND c.identifier_hmac = $2
                AND d.kind = 'authoritative'
                AND r.active AND r.removed_at IS NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM pix.source_record o
-                   WHERE o.domain_id = $1 AND o.identifier_hmac = $2
-               )
+               AND NOT EXISTS (SELECT 1 FROM chain)
          ),
          people (id, merged_into, hops) AS (
              SELECT p.id, p.merged_into, 0
@@ -92,30 +86,33 @@ macro_rules! persons_ctes {
 
 /// The identifiers of the person in the CTE `pick`, as the CTE `identified`:
 /// its records' own (`part` 0, by record id) and the authoritative ones they
-/// carry with no record of their own (`part` 1, by HMAC).
+/// carry with no record of their own (`part` 1, by HMAC), both from the
+/// person's open records read once as `held`.
 macro_rules! identified_cte {
     () => {
-        "identified (domain_id, system, sealed, plain, part, rid, hmac) AS (
-             SELECT r.domain_id, d.system, r.identifier_sealed, r.identifier_value,
-                    0, r.id, NULL::bytea
+        "held AS MATERIALIZED (
+             SELECT r.id, r.domain_id, r.identifier_sealed, r.identifier_value, r.head_version
              FROM pix.link l
              JOIN pix.source_record r ON r.id = l.record_id
-             JOIN pix.identifier_domain d ON d.id = r.domain_id
              WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
-               AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL
+               AND r.active AND r.removed_at IS NULL
+         ),
+         identified (domain_id, system, sealed, plain, part, rid, hmac) AS (
+             SELECT h.domain_id, d.system, h.identifier_sealed, h.identifier_value,
+                    0, h.id, NULL::bytea
+             FROM held h
+             JOIN pix.identifier_domain d ON d.id = h.domain_id
+             WHERE d.retired_at IS NULL
              UNION ALL
              SELECT * FROM (
                  SELECT DISTINCT ON (d.system, c.identifier_hmac)
                         c.domain_id, d.system, c.identifier_sealed, c.identifier_value,
                         1, NULL::uuid, c.identifier_hmac
-                 FROM pix.link l
-                 JOIN pix.source_record r ON r.id = l.record_id
+                 FROM held h
                  JOIN pix.carried_identifier c
-                   ON c.record_id = r.id AND c.version = r.head_version
+                   ON c.record_id = h.id AND c.version = h.head_version
                  JOIN pix.identifier_domain d ON d.id = c.domain_id
-                 WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
-                   AND r.active AND r.removed_at IS NULL
-                   AND d.kind = 'authoritative' AND d.retired_at IS NULL
+                 WHERE d.kind = 'authoritative' AND d.retired_at IS NULL
                    AND NOT EXISTS (
                        SELECT 1 FROM pix.source_record o
                        WHERE o.domain_id = c.domain_id
@@ -131,7 +128,10 @@ macro_rules! identified_cte {
 /// value the domain's rule refuses), `$3` the hops, `$4` the target systems
 /// and `$5` whether the pseudonymisation domains are read. Each row's first
 /// column names its part: 0 the domain, 1 a person found, 2 an identifier
-/// of the one person found, 3 a target, 4 a pseudonymisation domain.
+/// of the one person found, 3 a target, 4 a pseudonymisation domain. The
+/// rows come in part order, each part in the order [`assemble`] keeps:
+/// persons by id, identifiers by part, record id and HMAC, targets as asked
+/// and pseudonymisation domains by namespace.
 const QUERY: &str = concat!(
     persons_ctes!(),
     ",
@@ -144,14 +144,13 @@ const QUERY: &str = concat!(
      SELECT part, id, text, sealed, plain, client, flag, value FROM (
          SELECT 0 AS part, d.id AS id, NULL::text AS text, NULL::bytea AS sealed,
                 NULL::text AS plain, NULL::text AS client,
-                d.retired_at IS NOT NULL AS flag, NULL::uuid AS value, 0::bigint AS ord
+                d.retired_at IS NOT NULL AS flag, NULL::uuid AS value,
+                0 AS sub, NULL::uuid AS rid, NULL::bytea AS hmac, 0::bigint AS ord
          FROM pix.identifier_domain d WHERE d.id = $1
          UNION ALL
-         SELECT 1, id, NULL, NULL, NULL, NULL, NULL, NULL, row_number() OVER (ORDER BY id)
-         FROM found
+         SELECT 1, id, NULL, NULL, NULL, NULL, NULL, NULL, 0, id, NULL, 0 FROM found
          UNION ALL
-         SELECT 2, domain_id, system, sealed, plain, NULL, NULL, NULL,
-                row_number() OVER (ORDER BY part, rid, hmac)
+         SELECT 2, domain_id, system, sealed, plain, NULL, NULL, NULL, part, rid, hmac, 0
          FROM identified
          UNION ALL
          SELECT 3, NULL, t.system, NULL, NULL, NULL,
@@ -159,12 +158,11 @@ const QUERY: &str = concat!(
                     SELECT 1 FROM pix.identifier_domain d
                     WHERE d.system = t.system AND d.retired_at IS NULL
                 ),
-                NULL, t.ord
+                NULL, 0, NULL, NULL, t.ord
          FROM unnest($4::text[]) WITH ORDINALITY AS t (system, ord)
          UNION ALL
          SELECT 4, p.id, p.namespace, NULL, NULL, p.consumer_client_id,
-                p.retired_at IS NOT NULL, s.value,
-                row_number() OVER (ORDER BY p.namespace)
+                p.retired_at IS NOT NULL, s.value, 0, NULL, NULL, 0
          FROM pix.pseudonym_domain p
          LEFT JOIN pix.pseudonym s
            ON s.domain_id = p.id AND s.person_id = (SELECT id FROM pick)
@@ -174,7 +172,7 @@ const QUERY: &str = concat!(
                  AND s.value IS NOT NULL AND p.retired_at IS NULL)
          )
      ) parts
-     ORDER BY part, ord",
+     ORDER BY part, sub, rid, hmac, text, ord",
 );
 
 /// What the store holds for one identifier.

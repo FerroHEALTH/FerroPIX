@@ -350,6 +350,11 @@ struct Case {
 /// statement from ITI-104 and ITI-119, 1 and 25 buffers, 31 and 17
 /// allocations and 5,908 and 2,712 bytes allocated, and each ceiling fell
 /// by as much.
+/// Reading the person's open records once for its own and its carried
+/// identifiers, and the subsumed-record check from the chain already read
+/// (#762), lowered ITI-83 GET and POST from 76 and 75 buffers to 41 and 40,
+/// ITI-78 from 76 to 45 and ITI-119 from 88 to 57, and each ceiling fell by
+/// as much.
 /// The allocations and the bytes allocated are 2% above the higher of the
 /// values on CI's Linux runner and of three macOS runs (#721): the counts
 /// were the same in each run, the bytes within 0.1%, and Linux counts 17 to
@@ -374,7 +379,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 1,
             nested: 0,
-            blocks: 78,
+            blocks: 43,
             wal: 0,
             audit: 2188,
             answer: 263,
@@ -388,7 +393,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 1,
             nested: 0,
-            blocks: 77,
+            blocks: 42,
             wal: 0,
             audit: 2433,
             answer: 361,
@@ -402,7 +407,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 7,
             nested: 0,
-            blocks: 78,
+            blocks: 47,
             wal: 0,
             audit: 2057,
             answer: 1084,
@@ -416,7 +421,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 7,
             nested: 0,
-            blocks: 91,
+            blocks: 60,
             wal: 0,
             audit: 2728,
             answer: 1067,

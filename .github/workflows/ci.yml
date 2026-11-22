@@ -152,6 +152,9 @@ jobs:
       - name: self-tests / The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
         if: ${{ !cancelled() }}
         run: bash scripts/perf/gate.sh --self-test
+      - name: self-tests / The capacity campaign generates its synthetic patients, renders its plans and reads its pins
+        if: ${{ !cancelled() }}
+        run: bash scripts/perf/capacity.sh --self-test
       - name: self-tests / The quickstart tour holds every anchor the book includes, and the README shows each as the script holds it
         if: ${{ !cancelled() }}
         run: bash scripts/quickstart/tour.sh --self-test

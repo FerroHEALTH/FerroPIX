@@ -470,8 +470,32 @@ async fn each_fhir_transaction_stays_within_its_budget() {
         let measured = meter.finish(bytes).await;
         over |= measured.judge(case.name, case.ceiling, &mut report);
     }
+    let analyzed = analyzed(&harness).await;
+    assert!(
+        analyzed.is_empty(),
+        "no table was analyzed during the measurement, which would replan it: {analyzed:?}\n{report}"
+    );
     assert!(!over, "a transaction is over its budget:\n{report}");
     eprintln!("{report}");
+}
+
+/// The tables of `harness`'s store that were vacuumed or analyzed, by hand
+/// or automatically, with the statistics each holds.
+async fn analyzed(harness: &Harness) -> Vec<(String, f32)> {
+    let admin = admin(harness.postgres()).await;
+    let rows: Vec<(String, f32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "/* {OWN} */ SELECT s.relname::text, c.reltuples
+         FROM pg_catalog.pg_stat_user_tables s JOIN pg_catalog.pg_class c ON c.oid = s.relid
+         WHERE s.schemaname = 'pix' AND (s.last_autoanalyze IS NOT NULL
+             OR s.last_analyze IS NOT NULL OR s.last_autovacuum IS NOT NULL
+             OR s.last_vacuum IS NOT NULL OR c.reltuples >= 0)
+         ORDER BY 1"
+    )))
+    .fetch_all(&admin)
+    .await
+    .expect("the table statistics read");
+    admin.close().await;
+    rows
 }
 
 /// The shared buffers `REQUESTS` ITI-78 searches touch.

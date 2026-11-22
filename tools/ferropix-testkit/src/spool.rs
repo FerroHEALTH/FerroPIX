@@ -3,13 +3,14 @@
 
 //! The records an audit spool holds on disk, as the suites read them.
 //!
-//! `ihe-atna` 0.24 stores the records a batch writes as one segment file,
-//! `{first:020}.seg`, each record framed by its length and its CRC-32, four
-//! bytes big-endian each, and a sidecar `{first:020}.sent` counting the
-//! records settled from the first (FerroHEALTH/FerroAUDIT#254). A suite runs
-//! no repository, so it reads every record of every segment, after the
-//! settled ones, in sequence order. No specification governs the layout:
-//! `ihe-atna`'s own design.
+//! `ihe-atna` 0.24.2 appends the records of each batch to the active segment
+//! `{first:020}.open` and seals a full one as `{first:020}.seg`, each record
+//! framed by its length and its CRC-32, four bytes big-endian each, with a
+//! sidecar `{first:020}.sent` counting the records settled from the first
+//! (FerroHEALTH/FerroAUDIT#254, #264). A suite runs no repository, so it reads
+//! every record of every segment, sealed or active, after the settled ones,
+//! in sequence order. No specification governs the layout: `ihe-atna`'s own
+//! design.
 
 use std::path::{Path, PathBuf};
 
@@ -23,7 +24,10 @@ pub fn records(directory: &Path) -> Vec<Vec<u8>> {
     let mut segments: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "seg"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "seg" || extension == "open")
+        })
         .collect();
     segments.sort();
     let mut records = Vec::new();

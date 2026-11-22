@@ -256,21 +256,16 @@ impl Harness {
         headers: &[(header::HeaderName, &str)],
         body: Option<String>,
     ) -> Answer {
-        let mut request = Request::builder().method(method).uri(uri);
-        if let Some(token) = token {
-            request = request.header(header::AUTHORIZATION, token);
-        }
-        for (name, value) in headers {
-            request = request.header(name, *value);
-        }
+        self.exchange(request(method, uri, token, headers, body))
+            .await
+    }
+
+    /// Sends `request` and reads the answer.
+    pub(crate) async fn exchange(&self, request: Request<Body>) -> Answer {
         let response = self
             .app
             .clone()
-            .oneshot(
-                request
-                    .body(body.map_or_else(Body::empty, Body::from))
-                    .expect("a legal request"),
-            )
+            .oneshot(request)
             .await
             .expect("the router answers");
         let status = response.status();
@@ -321,6 +316,26 @@ impl Harness {
         )
         .await
     }
+}
+
+/// One request with `token` as its bearer, `headers` and `body`.
+pub(crate) fn request(
+    method: Method,
+    uri: &str,
+    token: Option<&str>,
+    headers: &[(header::HeaderName, &str)],
+    body: Option<String>,
+) -> Request<Body> {
+    let mut request = Request::builder().method(method).uri(uri);
+    if let Some(token) = token {
+        request = request.header(header::AUTHORIZATION, token);
+    }
+    for (name, value) in headers {
+        request = request.header(name, *value);
+    }
+    request
+        .body(body.map_or_else(Body::empty, Body::from))
+        .expect("a legal request")
 }
 
 /// One answer.

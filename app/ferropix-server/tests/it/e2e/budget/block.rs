@@ -40,18 +40,21 @@ const MATES: usize = 282;
 /// decision, the candidate and its steward action). A revision that states
 /// the demographics of its head before leaves each open candidate it scores
 /// the same as it is and records no action for it (#752): 101 statements,
-/// 2540 buffers, 4799 WAL bytes and 22,897 allocations.
+/// 2540 buffers, 4799 WAL bytes and 22,897 allocations. The graded pairs'
+/// masters read once and their candidates and steward actions written in
+/// one statement (#752) leave 22 statements, 2358 buffers, 4802 WAL bytes
+/// and 21,886 allocations.
 const CASE: Case = Case {
     name: "ITI-104 revise",
     ceiling: Ceiling {
-        statements: 101,
+        statements: 22,
         nested: 1,
-        blocks: 2591,
-        wal: 4895,
+        blocks: 2406,
+        wal: 4899,
         audit: 0,
         answer: 173,
-        allocations: 23_355,
-        allocated: 2_774_837,
+        allocations: 22_324,
+        allocated: 2_621_408,
     },
     expected: StatusCode::OK,
 };

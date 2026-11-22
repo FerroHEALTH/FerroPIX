@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::feed::write::{self, Subjects};
 use crate::feed::{CandidateId, Context, FeedError};
 use crate::matching::scorer::Scored;
-use crate::store::record::{PersonId, RecordId};
+use crate::store::record::PersonId;
 
 use super::{LinkKind, Me, MergeKind, Other, store};
 
@@ -211,95 +211,99 @@ pub(super) async fn close_candidates(
     Ok(())
 }
 
-/// Records the pair of `me` and `other` as an open candidate, or refreshes
-/// the open candidate of the pair, and records the system action; a pair
-/// a steward deferred is left as it is, a pair a steward held to be two
-/// patients is not queued again while both records state what they stated
-/// then, and an open candidate a version of unchanged demographics scores
-/// to the same score, grade and evidence is not written or recorded again.
-pub(super) async fn candidate(
-    connection: &mut PgConnection,
-    me: &Me<'_>,
-    other: &Other,
-    scored: &Scored,
-    context: &Context,
-) -> Result<Option<CandidateId>, FeedError> {
-    let ((a, a_version), (b, b_version)) = if me.record < other.record {
-        ((me.record, me.version), (other.record, other.version))
-    } else {
-        ((other.record, other.version), (me.record, me.version))
-    };
-    if decided_apart(connection, (a, a_version), (b, b_version)).await? {
-        return Ok(None);
-    }
-    let evidence = serde_json::to_string(&scored.evidence).map_err(|_json| FeedError::Evidence)?;
-    let id: Option<Uuid> = sqlx::query_scalar(
-        "INSERT INTO pix.candidate (record_a, record_b, a_version, b_version, score, grade, evidence)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-         ON CONFLICT (record_a, record_b) WHERE status IN ('open', 'deferred')
-         DO UPDATE SET a_version = EXCLUDED.a_version, b_version = EXCLUDED.b_version,
-                       score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence
-         WHERE pix.candidate.status = 'open'
-           AND NOT ($8 AND pix.candidate.score = EXCLUDED.score
-                    AND pix.candidate.grade = EXCLUDED.grade
-                    AND pix.candidate.evidence = EXCLUDED.evidence)
-         RETURNING id",
-    )
-    .bind(a.uuid())
-    .bind(b.uuid())
-    .bind(a_version)
-    .bind(b_version)
-    .bind(scored.score)
-    .bind(scored.grade.code())
-    .bind(evidence)
-    .bind(me.unchanged)
-    .fetch_optional(&mut *connection)
-    .await
-    .map_err(store)?;
-    let Some(id) = id else {
-        return Ok(None);
-    };
-    write::recorded(
-        connection,
-        "candidate",
-        context,
-        Subjects {
-            record: Some(me.record),
-            candidate: Some(id),
-            ..Subjects::default()
-        },
-        None,
-    )
-    .await?;
-    Ok(Some(CandidateId(id)))
-}
-
-/// Whether a steward held the records `a` and `b` to be two patients on
-/// versions whose demographics their versions `a.1` and `b.1` still state.
+/// Records each pair of `me` and another record in `pairs` as an open
+/// candidate, or refreshes the open candidate of the pair, with the system
+/// action of each, in one statement, and returns the candidates written in
+/// the order of `pairs`; a pair a steward deferred is left as it is, a
+/// pair a steward held to be two patients is not queued again while both
+/// records state what they stated then, and an open candidate a version of
+/// unchanged demographics scores to the same score, grade and evidence is
+/// not written or recorded again.
 ///
 /// A version that changes only what the scorer does not compare (an
-/// identifier, a `meta` element) leaves the decision standing; a change of
-/// the demographics queues the pair again (`docs/architecture.md` §5.3).
-pub(super) async fn decided_apart(
+/// identifier, a `meta` element) leaves a steward's not-a-match standing;
+/// a change of the demographics queues the pair again
+/// (`docs/architecture.md` §5.3).
+pub(super) async fn candidates(
     connection: &mut PgConnection,
-    a: (RecordId, i32),
-    b: (RecordId, i32),
-) -> Result<bool, FeedError> {
-    sqlx::query_scalar(
-        "SELECT EXISTS (
-             SELECT 1 FROM pix.candidate c
-             JOIN pix.source_record_version da ON da.record_id = c.record_a AND da.version = c.a_version
-             JOIN pix.source_record_version db ON db.record_id = c.record_b AND db.version = c.b_version
-             JOIN pix.source_record_version na ON na.record_id = c.record_a AND na.version = $3
-             JOIN pix.source_record_version nb ON nb.record_id = c.record_b AND nb.version = $4
-             WHERE c.record_a = $1 AND c.record_b = $2 AND c.status = 'not-a-match'
-               AND da.demographics = na.demographics AND db.demographics = nb.demographics)",
+    me: &Me<'_>,
+    pairs: &[(&Other, Scored)],
+    context: &Context,
+) -> Result<Vec<CandidateId>, FeedError> {
+    if pairs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut record_a = Vec::with_capacity(pairs.len());
+    let mut record_b = Vec::with_capacity(pairs.len());
+    let mut a_version = Vec::with_capacity(pairs.len());
+    let mut b_version = Vec::with_capacity(pairs.len());
+    let mut score = Vec::with_capacity(pairs.len());
+    let mut grade = Vec::with_capacity(pairs.len());
+    let mut evidence = Vec::with_capacity(pairs.len());
+    for (other, scored) in pairs {
+        let ((a, av), (b, bv)) = if me.record < other.record {
+            ((me.record, me.version), (other.record, other.version))
+        } else {
+            ((other.record, other.version), (me.record, me.version))
+        };
+        record_a.push(a.uuid());
+        record_b.push(b.uuid());
+        a_version.push(av);
+        b_version.push(bv);
+        score.push(scored.score);
+        grade.push(scored.grade.code());
+        evidence
+            .push(serde_json::to_string(&scored.evidence).map_err(|_json| FeedError::Evidence)?);
+    }
+    let ids: Vec<Uuid> = sqlx::query_scalar(
+        "WITH pair AS (
+             SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::int[], $4::int[],
+                                  $5::float8[], $6::text[], $7::text[])
+                  WITH ORDINALITY AS p (record_a, record_b, a_version, b_version,
+                                        score, grade, evidence, n)
+         ), written AS (
+             INSERT INTO pix.candidate (record_a, record_b, a_version, b_version, score, grade, evidence)
+             SELECT p.record_a, p.record_b, p.a_version, p.b_version, p.score, p.grade, p.evidence::jsonb
+             FROM pair p
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM pix.candidate c
+                 JOIN pix.source_record_version da ON da.record_id = c.record_a AND da.version = c.a_version
+                 JOIN pix.source_record_version db ON db.record_id = c.record_b AND db.version = c.b_version
+                 JOIN pix.source_record_version na ON na.record_id = c.record_a AND na.version = p.a_version
+                 JOIN pix.source_record_version nb ON nb.record_id = c.record_b AND nb.version = p.b_version
+                 WHERE c.record_a = p.record_a AND c.record_b = p.record_b AND c.status = 'not-a-match'
+                   AND da.demographics = na.demographics AND db.demographics = nb.demographics)
+             ORDER BY p.n
+             ON CONFLICT (record_a, record_b) WHERE status IN ('open', 'deferred')
+             DO UPDATE SET a_version = EXCLUDED.a_version, b_version = EXCLUDED.b_version,
+                           score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence
+             WHERE pix.candidate.status = 'open'
+               AND NOT ($8 AND pix.candidate.score = EXCLUDED.score
+                        AND pix.candidate.grade = EXCLUDED.grade
+                        AND pix.candidate.evidence = EXCLUDED.evidence)
+             RETURNING id, record_a, record_b
+         ), ordered AS (
+             SELECT w.id, p.n FROM written w
+             JOIN pair p ON p.record_a = w.record_a AND p.record_b = w.record_b
+         ), recorded AS (
+             INSERT INTO pix.steward_action (kind, actor, record_id, candidate_id, request_id)
+             SELECT 'candidate', $9, $10, o.id, $11 FROM ordered o ORDER BY o.n
+         )
+         SELECT id FROM ordered ORDER BY n",
     )
-    .bind(a.0.uuid())
-    .bind(b.0.uuid())
-    .bind(a.1)
-    .bind(b.1)
-    .fetch_one(&mut *connection)
+    .bind(record_a)
+    .bind(record_b)
+    .bind(a_version)
+    .bind(b_version)
+    .bind(score)
+    .bind(grade)
+    .bind(evidence)
+    .bind(me.unchanged)
+    .bind(&context.actor)
+    .bind(me.record.uuid())
+    .bind(context.request_id.as_deref())
+    .fetch_all(&mut *connection)
     .await
-    .map_err(store)
+    .map_err(store)?;
+    Ok(ids.into_iter().map(CandidateId).collect())
 }

@@ -11,16 +11,21 @@
 //! scored pair to a ceiling. No specification governs a request's cost: our
 //! own design.
 
+use std::fmt::Write as _;
+
 use ferropix_testkit::containers::e2e_enabled;
-use ferropix_testkit::synthetic::{GIVEN_NAMES, PRACTICE_DOMAIN};
+use ferropix_testkit::synthetic::{
+    GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN,
+};
 use fhir_types::codec::Value as Document;
 use http::StatusCode;
 use serde_json::json;
 
 use super::{
-    Case, Ceiling, Harness, Meter, POPULATION, analyzed, feed_both, hold_statistics, measure,
-    populate, runtime, synthetic_seeds, tables,
+    Case, Ceiling, Harness, Meter, OWN, POPULATION, admin, analyzed, feed_both, hold_statistics,
+    measure, populate, runtime, synthetic_seeds, tables,
 };
+use crate::e2e::decisions::{fed, patient};
 
 /// The records that grade a candidate against the hospital patient: its
 /// family name, birth date and gender with another given name and no
@@ -45,7 +50,9 @@ const MATES: usize = 282;
 /// one statement (#752) leave 22 statements, 2358 buffers, 4802 WAL bytes
 /// and 21,886 allocations. Reading the local identifiers in the blocking
 /// read (#752) leaves 20 statements, 2041 buffers and 21,785 allocations,
-/// and each ceiling fell by the drop.
+/// and each ceiling fell by the drop. Writing the evidence in the packed
+/// layout and not as JSON (#752) took 111 allocations and 211,887 bytes
+/// allocated more off, and the two ceilings fell by as much.
 const CASE: Case = Case {
     name: "ITI-104 revise",
     ceiling: Ceiling {
@@ -55,11 +62,58 @@ const CASE: Case = Case {
         wal: 4895,
         audit: 0,
         answer: 173,
-        allocations: 22_223,
-        allocated: 2_592_993,
+        allocations: 22_112,
+        allocated: 2_381_106,
     },
     expected: StatusCode::OK,
 };
+
+/// The most bytes an open candidate's row and its evidence may hold on
+/// average: the evidence in the packed layout of `store::evidence` (#752),
+/// measured at 1,922 and 1,800 bytes as JSON on the capacity store, 2%
+/// above the 325 and 205 bytes measured.
+const CANDIDATE_BYTES: (u64, u64) = (332, 210);
+
+/// The most bytes a probabilistic link's row and its evidence may hold,
+/// 2% above the 355 and 219 bytes measured (#752).
+const LINK_BYTES: (u64, u64) = (363, 224);
+
+/// The average bytes of the rows of `table` that `filter` keeps and of
+/// their evidence, in `harness`'s store.
+async fn stored_bytes(harness: &Harness, table: &str, filter: &str) -> (u64, u64) {
+    let admin = admin(harness.postgres()).await;
+    let (row, evidence): (i64, i64) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "/* {OWN} */ SELECT avg(pg_column_size(t.*))::bigint, avg(pg_column_size(t.evidence))::bigint
+         FROM pix.{table} t WHERE {filter}"
+    )))
+    .fetch_one(&admin)
+    .await
+    .expect("the sizes read");
+    admin.close().await;
+    (
+        u64::try_from(row).expect("a size"),
+        u64::try_from(evidence).expect("a size"),
+    )
+}
+
+/// Writes the bytes `measured` of `what` against `ceiling` into `report`,
+/// and returns whether one is over it.
+fn judge_bytes(what: &str, measured: (u64, u64), ceiling: (u64, u64), report: &mut String) -> bool {
+    let mut over = false;
+    for (part, value, limit) in [
+        ("row", measured.0, ceiling.0),
+        ("evidence", measured.1, ceiling.1),
+    ] {
+        let mark = if value > limit { "  OVER" } else { "" };
+        writeln!(
+            report,
+            "  {what} {part} bytes: {value} (ceiling {limit}){mark}"
+        )
+        .expect("a String takes it");
+        over |= value > limit;
+    }
+    over
+}
 
 /// Feeds the block's records under the practice's domain, each its own
 /// person: the [`NEAR`] records, then the [`MATES`].
@@ -106,7 +160,7 @@ fn an_iti_104_revision_over_a_block_stays_within_its_budget() {
         (harness, hospital, meter)
     });
     let mut report = format!("over a block of {NEAR} near records and {MATES} mates\n");
-    let over = measure(
+    let mut over = measure(
         &runtime,
         &harness,
         &mut meter,
@@ -114,6 +168,8 @@ fn an_iti_104_revision_over_a_block_stays_within_its_budget() {
         &hospital,
         &mut report,
     );
+    let candidates = runtime.block_on(stored_bytes(&harness, "candidate", "t.status = 'open'"));
+    over |= judge_bytes("open candidate", candidates, CANDIDATE_BYTES, &mut report);
     let analyzed = runtime.block_on(analyzed(&harness));
     assert!(
         analyzed.is_empty(),
@@ -125,5 +181,38 @@ fn an_iti_104_revision_over_a_block_stays_within_its_budget() {
         !over,
         "a revision over a block is over its budget:\n{report}"
     );
+    eprintln!("{report}");
+}
+
+#[test]
+fn a_probabilistic_link_stays_within_its_bytes() {
+    if !e2e_enabled() {
+        return;
+    }
+    let runtime = runtime();
+    let measured = runtime.block_on(async {
+        let harness = Harness::start_with(synthetic_seeds(), |settings| {
+            settings.matching.auto_link = true;
+        })
+        .await;
+        for (system, value) in [(HOSPITAL_DOMAIN, "H-1"), (LABORATORY_DOMAIN, "L-1")] {
+            fed(
+                &harness,
+                system,
+                value,
+                &patient(system, value, "Wolderink", "Sanne", "1966-08-17"),
+            )
+            .await;
+        }
+        stored_bytes(
+            &harness,
+            "link",
+            "t.kind = 'probabilistic' AND t.evidence IS NOT NULL",
+        )
+        .await
+    });
+    let mut report = String::new();
+    let over = judge_bytes("probabilistic link", measured, LINK_BYTES, &mut report);
+    assert!(!over, "a link is over its bytes:\n{report}");
     eprintln!("{report}");
 }

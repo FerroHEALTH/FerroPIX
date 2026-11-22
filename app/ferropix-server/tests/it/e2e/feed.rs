@@ -157,12 +157,14 @@ async fn a_feed_with_a_hard_conflict_produces_a_candidate_and_no_link() {
         .unwrap();
     assert_ne!(first.person, second.person, "no link across the conflict");
     assert_eq!(1, second.candidates.len(), "one candidate");
-    let (status, grade, evidence): (String, String, serde_json::Value) =
+    let (status, grade, stored): (String, String, Vec<u8>) =
         sqlx::query_as("SELECT status, grade, evidence FROM pix.candidate WHERE id = $1")
             .bind(second.candidates[0].uuid())
             .fetch_one(started.store.pool())
             .await
             .unwrap();
+    let evidence: serde_json::Value =
+        serde_json::to_value(ferropix_server::store::evidence::unpack(&stored).unwrap()).unwrap();
     assert_eq!("open", status);
     assert_ne!("certainly-not", grade);
     assert_eq!(serde_json::json!(["birth_year"]), evidence["conflicts"]);

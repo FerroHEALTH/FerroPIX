@@ -73,8 +73,8 @@ async fn with_auto_link_on_the_same_feed_links_with_the_evidence_on_the_link() {
     .await;
     twins(&harness).await;
     assert_eq!(0, queue(&harness, "").await.total, "no candidate");
-    let links: Vec<(f64, String)> = sqlx::query_as(
-        "SELECT score, evidence::text FROM pix.link
+    let links: Vec<(f64, Vec<u8>)> = sqlx::query_as(
+        "SELECT score, evidence FROM pix.link
          WHERE kind = 'probabilistic' AND upper_inf(valid)",
     )
     .fetch_all(harness.store.pool())
@@ -83,7 +83,10 @@ async fn with_auto_link_on_the_same_feed_links_with_the_evidence_on_the_link() {
     assert_eq!(1, links.len(), "one record moved by the scorer");
     let (score, evidence) = &links[0];
     assert!(*score >= harness.matching.link_at, "{score}");
-    let evidence: Value = serde_json::from_str(evidence).expect("the evidence is JSON");
+    let evidence: Value = serde_json::to_value(
+        ferropix_server::store::evidence::unpack(evidence).expect("the stored evidence reads"),
+    )
+    .expect("the evidence is JSON");
     assert_eq!("certain", evidence["grade"]);
     assert!(
         evidence["fields"]

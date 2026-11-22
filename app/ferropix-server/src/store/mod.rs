@@ -22,6 +22,7 @@
 pub mod blocking;
 pub mod demographics;
 pub mod estimate;
+pub mod evidence;
 pub mod features;
 pub mod gate;
 pub mod identifier;
@@ -98,7 +99,8 @@ impl Store {
     /// Returns [`StoreError::Url`] for a URL the driver refuses,
     /// [`StoreError::Connect`] when no connection opens, every refusal of
     /// [`server_version::check`], [`gate::check`], [`schema::apply`],
-    /// [`features::refill`], [`features::check`], [`key::verify`] and
+    /// [`schema::check`], [`features::refill`], [`features::check`],
+    /// [`key::verify`] and
     /// [`seed::apply`], and [`StoreError::Seal`] when the keys cannot be
     /// derived.
     pub async fn start(
@@ -115,6 +117,7 @@ impl Store {
             schema::apply(&store).await?;
             features::refill(store.pool(), features::BATCH).await?;
         } else {
+            schema::check(&store).await?;
             features::check(store.pool()).await?;
         }
         key::verify(&store).await?;
@@ -255,6 +258,13 @@ pub enum StoreError {
     /// The migration set cannot be applied.
     #[error("the migrations cannot be applied")]
     Migrate(#[source] sqlx::migrate::MigrateError),
+    /// A server that does not migrate meets a store some migrations of its
+    /// set have not been applied to.
+    #[error("{missing} of the store's migrations are not applied; run ferropix db migrate")]
+    MigrationsPending {
+        /// The migrations of the set the store has not applied.
+        missing: usize,
+    },
     /// A statement on the store failed.
     #[error("a statement on the store failed")]
     Query(#[source] DbFailure),
@@ -341,6 +351,9 @@ pub enum StoreError {
     /// A head's stored demographics are no `Patient`.
     #[error("a record head's demographics cannot be read")]
     Demographics(#[from] demographics::DemographicsError),
+    /// A score's stored evidence cannot be written or read.
+    #[error("a score's stored evidence cannot be used")]
+    Evidence(#[from] evidence::EvidenceError),
 }
 
 impl StoreError {

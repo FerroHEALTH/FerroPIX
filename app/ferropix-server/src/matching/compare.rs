@@ -13,7 +13,7 @@
 
 use std::collections::BTreeSet;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::section::matching::Field;
 use crate::matching::subject::{Birth, IdentifierKey, Subject};
@@ -31,7 +31,7 @@ pub const ADDRESS_AGREES: f64 = 0.5;
 pub const POSTAL_PREFIX: usize = 4;
 
 /// How a field compared.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Agreement {
     /// The field is absent on one side or both: it adds no weight.
@@ -45,7 +45,7 @@ pub enum Agreement {
 }
 
 /// The comparator a field is read with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Comparator {
     /// Jaro-Winkler similarity over the normalised text.

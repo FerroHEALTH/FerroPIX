@@ -532,7 +532,13 @@ last three characters and at most half its length, section 12.5), the
 agreement, the comparator's reading, and the weight it added, plus the
 blocking key that produced the pair. The console draws
 the breakdown from that, and the ITI-119 answer carries the score and the
-grade and nothing of the evidence.
+grade and nothing of the evidence. The store keeps it in a versioned binary
+layout of its own (`store::evidence`, #752), its first byte the layout's
+version, each name a code and each masked value as the count of the bullets
+it opens with and the characters it shows: about 205 bytes a candidate
+where the JSON took 1,800. The migrations moved the evidence stored as JSON
+into it: one makes room, the server packs every row a thousand at a time,
+and the next drops the JSON, so the set ends with every row in the layout.
 
 **Automatic linking is off by default.** `[matching] auto_link = false`
 means a `certain` pair is still a candidate at the top of the queue: a

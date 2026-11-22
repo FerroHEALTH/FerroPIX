@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::section::matching::{BlockingKey, Field, Matching, Weights};
 use crate::matching::compare::{self, Agreement, Comparator};
@@ -65,7 +65,7 @@ pub const fn default_weights(field: Field) -> Weights {
 
 /// The grade of a score against the thresholds (PDQm 3.2.0
 /// §2:3.119.4.2.2.4, the `match-grade` codes).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Grade {
     /// Below `possible_at`: not queued.
@@ -221,11 +221,11 @@ pub struct Scored {
 /// produced the pair, as the candidate keeps it and the console draws it.
 ///
 /// `Debug` leaves the masked values out.
-#[derive(Clone, PartialEq, Serialize)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub struct Evidence {
     /// The hard conflicts that held a shared authoritative identifier from
     /// linking the pair, the first line of the evidence when there are any.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conflicts: Vec<Conflict>,
     /// The blocking key that produced the pair, `None` for a pair the
     /// deterministic tier named.
@@ -256,7 +256,7 @@ impl fmt::Debug for Evidence {
 /// The evidence of one field.
 ///
 /// `Debug` leaves the masked values out.
-#[derive(Clone, PartialEq, Serialize)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub struct FieldEvidence {
     /// The field.
     pub field: Field,

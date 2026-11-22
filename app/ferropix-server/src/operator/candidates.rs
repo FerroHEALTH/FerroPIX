@@ -419,7 +419,7 @@ struct CandidateFields {
     b_version: i32,
     score: f64,
     grade: String,
-    evidence: String,
+    evidence: Option<Vec<u8>>,
     status: String,
     created_at: String,
     decided_by: Option<String>,
@@ -432,7 +432,7 @@ struct CandidateFields {
 async fn read_one(operator: &Operator, id: Uuid) -> Result<Option<Candidate>, OperatorError> {
     let mut snapshot = snapshot(&operator.store).await?;
     let fields: Option<CandidateFields> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT record_a, record_b, a_version, b_version, score, grade, evidence::text AS evidence,
+        "SELECT record_a, record_b, a_version, b_version, score, grade, evidence,
                 status, to_char(created_at AT TIME ZONE 'UTC', '{UTC}') AS created_at,
                 decided_by, to_char(decided_at AT TIME ZONE 'UTC', '{UTC}') AS decided_at, reason,
                 to_char(deferred_until AT TIME ZONE 'UTC', '{UTC}') AS deferred_until
@@ -454,7 +454,7 @@ async fn read_one(operator: &Operator, id: Uuid) -> Result<Option<Candidate>, Op
         status: status(&fields.status)?,
         score: fields.score,
         grade: grade(&fields.grade)?,
-        evidence: evidence(&fields.evidence)?,
+        evidence: evidence(fields.evidence.as_deref())?,
         a,
         b,
         thresholds: Thresholds {
@@ -602,9 +602,16 @@ const fn grade_code(grade: Grade) -> &'static str {
     }
 }
 
-/// Reads the stored evidence as the document's.
-fn evidence(stored: &str) -> Result<Evidence, OperatorError> {
-    serde_json::from_str(stored).map_err(|_unread| OperatorError::Unadmitted("candidate evidence"))
+/// Reads the stored evidence as the document's: the scorer's evidence
+/// unpacked, then read through its JSON form, so the document is the one
+/// the evidence stored as JSON read as.
+fn evidence(stored: Option<&[u8]>) -> Result<Evidence, OperatorError> {
+    let unadmitted = || OperatorError::Unadmitted("candidate evidence");
+    let unpacked = crate::store::evidence::unpack(stored.ok_or_else(unadmitted)?)
+        .map_err(|_unread| unadmitted())?;
+    serde_json::to_value(&unpacked)
+        .and_then(serde_json::from_value)
+        .map_err(|_unread| unadmitted())
 }
 
 #[cfg(test)]
@@ -632,8 +639,15 @@ mod tests {
             std::collections::BTreeSet::new(),
         );
         let found = scorer.score(&a, &b, None);
-        let stored = serde_json::to_string(&found.evidence).expect("the evidence writes");
-        let read = evidence(&stored).expect("the stored evidence reads as the document's");
+        let stored = crate::store::evidence::pack(&found.evidence).expect("the evidence packs");
+        let read = evidence(Some(&stored)).expect("the stored evidence reads as the document's");
+        let json = serde_json::to_string(&found.evidence).expect("the evidence writes");
+        let before: ferropix_operator_api::candidate::Evidence =
+            serde_json::from_str(&json).expect("the evidence as JSON reads");
+        assert_eq!(
+            before, read,
+            "the packed evidence reads as the document the JSON read as"
+        );
         assert_eq!(read.fields.len(), found.evidence.fields.len());
         assert!(
             read.fields

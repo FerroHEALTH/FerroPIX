@@ -242,6 +242,33 @@ fn spool_bytes(spool: &Path) -> u64 {
         .unwrap_or_default()
 }
 
+/// Turns autovacuum off on every table of `harness`'s store before a case
+/// writes to it, so no automatic analyze replans the measured statements
+/// at a moment that depends on the host's timing.
+pub(crate) async fn hold_statistics(harness: &Harness) {
+    let admin = admin(harness.postgres()).await;
+    // NOTE: PostgreSQL CREATE TABLE, storage parameter autovacuum_enabled; no
+    // automatic analyze runs, so every run measures the never-analyzed store.
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "/* {OWN} */ DO $$
+         DECLARE t regclass;
+         BEGIN
+             FOR t IN SELECT c.oid::regclass FROM pg_catalog.pg_class c
+                      WHERE c.relnamespace = 'pix'::regnamespace AND c.relkind = 'r' LOOP
+                 EXECUTE format(
+                     'ALTER TABLE %s SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)',
+                     t
+                 );
+             END LOOP;
+         END
+         $$"
+    )))
+    .execute(&admin)
+    .await
+    .expect("autovacuum is turned off on the store's tables");
+    admin.close().await;
+}
+
 /// One kind of FHIR request and its ceiling.
 struct Case {
     name: &'static str,
@@ -410,6 +437,7 @@ async fn each_fhir_transaction_stays_within_its_budget() {
         return;
     }
     let harness = Harness::start(synthetic_seeds()).await;
+    hold_statistics(&harness).await;
     let (hospital, _bsn) = feed_both(&harness).await;
     populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
@@ -465,6 +493,7 @@ async fn an_iti_78_search_reads_no_more_over_four_times_the_persons() {
         return;
     }
     let harness = Harness::start(synthetic_seeds()).await;
+    hold_statistics(&harness).await;
     let (hospital, _bsn) = feed_both(&harness).await;
     populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;

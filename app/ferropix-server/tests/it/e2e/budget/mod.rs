@@ -371,9 +371,9 @@ struct Case {
 /// which held the guard's whole check. ihe-atna 0.25 writes a read's
 /// refusal only when its record is withdrawn and every record's bytes with no
 /// JSON value between, and ferrohealth-telemetry 0.5.1 formats no span fields
-/// (#766): that took 398 to 410 allocations and 59,141 to 69,554 bytes
-/// allocated off each read, and 170 and 21,259 off an ITI-104 revision, and
-/// each ceiling fell by as much.
+/// (#766): an ITI-83 GET allocates 354 times where it allocated 764, and
+/// each case's two ceilings are again 2% above the higher of CI's Linux run
+/// and three macOS runs of the same tree.
 const CASES: [Case; 6] = [
     Case {
         name: "ITI-104 revise",
@@ -384,8 +384,8 @@ const CASES: [Case; 6] = [
             wal: 3264,
             audit: 0,
             answer: 173,
-            allocations: 1_414,
-            allocated: 538_697,
+            allocations: 1_386,
+            allocated: 540_109,
         },
         expected: StatusCode::OK,
         minted: false,
@@ -399,8 +399,8 @@ const CASES: [Case; 6] = [
             wal: 0,
             audit: 2188,
             answer: 263,
-            allocations: 461,
-            allocated: 82_844,
+            allocations: 362,
+            allocated: 86_012,
         },
         expected: StatusCode::OK,
         minted: false,
@@ -414,8 +414,8 @@ const CASES: [Case; 6] = [
             wal: 0,
             audit: 2188,
             answer: 263,
-            allocations: 521,
-            allocated: 86_209,
+            allocations: 433,
+            allocated: 89_381,
         },
         expected: StatusCode::OK,
         minted: true,
@@ -429,8 +429,8 @@ const CASES: [Case; 6] = [
             wal: 0,
             audit: 2433,
             answer: 361,
-            allocations: 1_285,
-            allocated: 106_225,
+            allocations: 1_186,
+            allocated: 110_296,
         },
         expected: StatusCode::OK,
         minted: false,
@@ -444,8 +444,8 @@ const CASES: [Case; 6] = [
             wal: 0,
             audit: 2057,
             answer: 1084,
-            allocations: 687,
-            allocated: 143_057,
+            allocations: 601,
+            allocated: 147_255,
         },
         expected: StatusCode::OK,
         minted: false,
@@ -459,8 +459,8 @@ const CASES: [Case; 6] = [
             wal: 0,
             audit: 2728,
             answer: 1067,
-            allocations: 2_010,
-            allocated: 204_611,
+            allocations: 1_927,
+            allocated: 206_702,
         },
         expected: StatusCode::OK,
         minted: false,

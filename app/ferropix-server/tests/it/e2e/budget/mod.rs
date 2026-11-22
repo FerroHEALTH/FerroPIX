@@ -34,6 +34,7 @@
     reason = "the test seam: the fixtures are edited as JSON values"
 )]
 
+mod block;
 mod iti8;
 
 use std::fmt::Write as _;
@@ -522,6 +523,37 @@ async fn exchange_all(
     bytes
 }
 
+/// Sends the warm-up requests of `case`, then counts `REQUESTS` more, and
+/// writes their figures against the case's ceiling into `report`; returns
+/// whether one is over it.
+fn measure(
+    runtime: &Runtime,
+    harness: &Harness,
+    meter: &mut Meter,
+    case: &Case,
+    hospital: &str,
+    report: &mut String,
+) -> bool {
+    let warm = (0..WARMUP)
+        .map(|_| build(harness, case.name, hospital))
+        .collect();
+    runtime.block_on(exchange_all(harness, case.name, case.expected, warm));
+    // The requests are built before the count, so the test's signing of
+    // their tokens is not counted.
+    let requests = (0..REQUESTS)
+        .map(|_| build(harness, case.name, hospital))
+        .collect();
+    runtime.block_on(meter.start());
+    let (bytes, allocations) = counted(
+        runtime,
+        exchange_all(harness, case.name, case.expected, requests),
+    );
+    let measured = runtime
+        .block_on(meter.finish(bytes))
+        .with_allocations(allocations);
+    measured.judge(case.name, case.ceiling, report)
+}
+
 #[test]
 fn each_fhir_transaction_stays_within_its_budget() {
     if !e2e_enabled() {
@@ -539,24 +571,7 @@ fn each_fhir_transaction_stays_within_its_budget() {
     let mut report = String::new();
     let mut over = false;
     for case in &CASES {
-        let warm = (0..WARMUP)
-            .map(|_| build(&harness, case.name, &hospital))
-            .collect();
-        runtime.block_on(exchange_all(&harness, case.name, case.expected, warm));
-        // The requests are built before the count, so the test's signing of
-        // their tokens is not counted.
-        let requests = (0..REQUESTS)
-            .map(|_| build(&harness, case.name, &hospital))
-            .collect();
-        runtime.block_on(meter.start());
-        let (bytes, allocations) = counted(
-            &runtime,
-            exchange_all(&harness, case.name, case.expected, requests),
-        );
-        let measured = runtime
-            .block_on(meter.finish(bytes))
-            .with_allocations(allocations);
-        over |= measured.judge(case.name, case.ceiling, &mut report);
+        over |= measure(&runtime, &harness, &mut meter, case, &hospital, &mut report);
     }
     let analyzed = runtime.block_on(analyzed(&harness));
     assert!(

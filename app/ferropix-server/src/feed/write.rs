@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::config::section::domain::DomainKind;
 use crate::feed::{Context, FeedError};
+use crate::matching::features::FEATURES_VERSION;
 use crate::store::StoreError;
 use crate::store::identifier::Rule;
 use crate::store::record::{self, Blocks, Demographics, Domain, DomainId, PersonId, RecordId};
@@ -74,13 +75,6 @@ pub(super) fn carried(
     carried.sort_by_key(|c| (c.domain, c.hmac));
     carried.dedup_by(|a, b| a.domain == b.domain && a.hmac == b.hmac);
     Ok(carried)
-}
-
-/// Returns the advisory lock key of the identifier whose HMAC is `hmac`:
-/// its first eight bytes, which the HMAC's domain id already scopes.
-pub(super) fn identity_key(hmac: &[u8; 32]) -> i64 {
-    let [b0, b1, b2, b3, b4, b5, b6, b7, ..] = *hmac;
-    i64::from_be_bytes([b0, b1, b2, b3, b4, b5, b6, b7])
 }
 
 /// Returns the advisory lock key of `person`: the last eight bytes of its
@@ -179,7 +173,7 @@ pub(super) async fn lock_or_insert(
 }
 
 /// Inserts the next version of `record` and makes it the head with its
-/// blocking keys `blocks`, a removed record coming back with it; returns the
+/// blocking keys and scoring features `blocks`, a removed record coming back with it; returns the
 /// version's number.
 ///
 /// A record [`lock_or_insert`] created already holds `blocks` and names
@@ -210,9 +204,11 @@ pub(super) async fn add_version(
     if !record.created {
         sqlx::query(
             "WITH block AS (
-                 UPDATE pix.record_block SET block_phonetic = $3, block_postal = $4
+                 UPDATE pix.record_block
+                 SET block_phonetic = $3, block_postal = $4, features = $5, features_version = $6
                  WHERE record_id = $1
-                   AND (block_phonetic, block_postal) IS DISTINCT FROM ($3, $4)
+                   AND (block_phonetic, block_postal, features, features_version)
+                       IS DISTINCT FROM ($3, $4, $5, $6)
              )
              UPDATE pix.source_record SET head_version = $2, removed_at = NULL WHERE id = $1",
         )
@@ -220,6 +216,8 @@ pub(super) async fn add_version(
         .bind(version)
         .bind(blocks.phonetic.as_deref())
         .bind(blocks.postal.as_deref())
+        .bind(blocks.features.as_str())
+        .bind(FEATURES_VERSION)
         .execute(&mut *connection)
         .await?;
     }

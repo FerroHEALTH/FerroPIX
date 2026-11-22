@@ -11,11 +11,12 @@
 
 use std::collections::BTreeSet;
 
-use ferropix_server::config::section::matching::{BlockingKey, Field, Matching};
+use ferropix_server::config::section::matching::{Field, Matching};
 use ferropix_server::feed::Feeder;
-use ferropix_server::matching::blocking::text_key;
+use ferropix_server::matching::features::FEATURES_VERSION;
 use ferropix_server::matching::subject::Subject;
 use ferropix_server::store::Store;
+use ferropix_server::store::record::Blocks;
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::{
     GIVEN_NAMES, HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN,
@@ -69,16 +70,13 @@ fn json(family: &str, given: &str, birth: &str, postal: &str) -> String {
     )
 }
 
-/// The blocking keys the feed would write on the head for `json`.
-fn blocks(json: &str) -> (Option<String>, Option<String>) {
+/// The blocking keys and the scoring features the feed would write on the
+/// head for `json`.
+fn blocks(json: &str) -> Blocks {
     let value: Value = serde_json::from_str(json).unwrap();
     let patient =
         FhirPatient::from_json(value.as_object().unwrap(), &mut Path::root("Patient")).unwrap();
-    let subject = Subject::from_patient(&patient, BTreeSet::new());
-    (
-        text_key(BlockingKey::BirthYearFamilyPhonetic, &subject),
-        text_key(BlockingKey::PostalCodeBirthDate, &subject),
-    )
+    Blocks::of(&Subject::from_patient(&patient, BTreeSet::new())).unwrap()
 }
 
 /// Loads `RECORDS` synthetic records into the practice domain, each in a
@@ -101,6 +99,7 @@ async fn load(store: &Store, twin: &str) {
         let mut values = Vec::new();
         let mut phonetic = Vec::new();
         let mut postal = Vec::new();
+        let mut features = Vec::new();
         for (offset, document) in chunk.iter().enumerate() {
             let value = format!("P-{}", batch * BATCH + offset);
             let identifier =
@@ -109,9 +108,10 @@ async fn load(store: &Store, twin: &str) {
             persons.push(Uuid::new_v4());
             hmacs.push(keys.hmac(domain.id.uuid(), &identifier).to_vec());
             values.push(value);
-            let (p, q) = blocks(document);
-            phonetic.push(p);
-            postal.push(q);
+            let held = blocks(document);
+            phonetic.push(held.phonetic);
+            postal.push(held.postal);
+            features.push(held.features);
         }
         let mut transaction = store.pool().begin().await.unwrap();
         sqlx::query("INSERT INTO pix.person (id) SELECT unnest($1::uuid[])")
@@ -121,12 +121,14 @@ async fn load(store: &Store, twin: &str) {
             .unwrap();
         sqlx::query(
             "WITH t AS (
-                 SELECT * FROM unnest($1::uuid[], $3::bytea[], $4::text[], $6::text[], $7::text[])
-                     AS t(r, h, v, p, q)
+                 SELECT * FROM unnest(
+                     $1::uuid[], $3::bytea[], $4::text[], $6::text[], $7::text[], $8::text[]
+                 ) AS t(r, h, v, p, q, f)
              ),
              block AS (
-                 INSERT INTO pix.record_block (record_id, block_phonetic, block_postal)
-                 SELECT r, p, q FROM t
+                 INSERT INTO pix.record_block
+                     (record_id, block_phonetic, block_postal, features, features_version)
+                 SELECT r, p, q, f, $9 FROM t
              )
              INSERT INTO pix.source_record (id, domain_id, identifier_hmac, identifier_value, key_id)
              SELECT r, $2, h, v, $5 FROM t",
@@ -138,6 +140,8 @@ async fn load(store: &Store, twin: &str) {
         .bind(&key_id)
         .bind(&phonetic)
         .bind(&postal)
+        .bind(&features)
+        .bind(FEATURES_VERSION)
         .execute(&mut *transaction)
         .await
         .unwrap();
@@ -182,7 +186,9 @@ async fn a_feed_scores_only_the_pairs_its_blocking_keys_produce_among_100000_rec
     let store = &started.store;
     let (patient, twin) = probe(HOSPITAL_DOMAIN, "H-90");
     load(store, &twin).await;
-    let (phonetic, postal) = blocks(&twin);
+    let Blocks {
+        phonetic, postal, ..
+    } = blocks(&twin);
     let sharing: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pix.record_block WHERE block_phonetic = $1 OR block_postal = $2",
     )

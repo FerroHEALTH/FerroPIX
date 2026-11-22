@@ -293,7 +293,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 19,
             nested: 1,
-            blocks: 198,
+            blocks: 194,
             wal: 2323,
             audit: 2036,
             answer: 173,
@@ -341,7 +341,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 121,
+            blocks: 117,
             wal: 0,
             audit: 2728,
             answer: 1067,

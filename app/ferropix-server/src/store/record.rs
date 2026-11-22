@@ -19,6 +19,10 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::config::section::domain::DomainKind;
+use crate::config::section::matching::BlockingKey;
+use crate::matching::blocking;
+use crate::matching::features::{self, FEATURES_VERSION};
+use crate::matching::subject::Subject;
 use crate::store::StoreError;
 use crate::store::seal::{IdentifierValue, Sealer};
 
@@ -198,14 +202,52 @@ fn read_domain((id, system, kind, sensitive, retired): DomainRow) -> Result<Doma
     })
 }
 
-/// The text blocking keys of a version, kept beside its record while it is
-/// the head (`docs/architecture.md` §5.2).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// The text blocking keys and the scoring features of a version, kept
+/// beside its record while it is the head (`docs/architecture.md` §5.2).
+///
+/// `Debug` shows which keys are present, never a value.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Blocks {
     /// `(birth year, phonetic key of the family name)`.
     pub phonetic: Option<String>,
     /// `(postal code, birth date)`.
     pub postal: Option<String>,
+    /// The scoring features, written under [`FEATURES_VERSION`].
+    pub features: String,
+}
+
+impl Blocks {
+    /// Returns the keys and the features of `subject`.
+    ///
+    /// # Errors
+    /// Returns [`StoreError::Features`] when the features cannot be written.
+    pub fn of(subject: &Subject) -> Result<Self, StoreError> {
+        Ok(Self {
+            phonetic: blocking::text_key(BlockingKey::BirthYearFamilyPhonetic, subject),
+            postal: blocking::text_key(BlockingKey::PostalCodeBirthDate, subject),
+            features: features::encode(subject)?,
+        })
+    }
+}
+
+impl fmt::Debug for Blocks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Blocks")
+            .field("phonetic", &self.phonetic.is_some())
+            .field("postal", &self.postal.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Returns the advisory lock key of the identifier whose HMAC is `hmac`:
+/// its first eight bytes, which the HMAC's domain id already scopes.
+///
+/// Every writer that moves a record's head holds this lock on the record's
+/// own identifier first.
+#[must_use]
+pub fn identity_key(hmac: &[u8; 32]) -> i64 {
+    let [b0, b1, b2, b3, b4, b5, b6, b7, ..] = *hmac;
+    i64::from_be_bytes([b0, b1, b2, b3, b4, b5, b6, b7])
 }
 
 /// Inserts the record of `value` in `domain`, with `blocks`, the blocking
@@ -238,8 +280,9 @@ pub(crate) async fn insert(
              RETURNING id
          ),
          block AS (
-             INSERT INTO pix.record_block (record_id, block_phonetic, block_postal)
-             SELECT id, $6, $7 FROM record
+             INSERT INTO pix.record_block
+                 (record_id, block_phonetic, block_postal, features, features_version)
+             SELECT id, $6, $7, $8, $9 FROM record
          )
          SELECT id FROM record",
     )
@@ -250,13 +293,16 @@ pub(crate) async fn insert(
     .bind(keys.key_id().as_bytes().as_slice())
     .bind(blocks.phonetic.as_deref())
     .bind(blocks.postal.as_deref())
+    .bind(blocks.features.as_str())
+    .bind(FEATURES_VERSION)
     .fetch_one(&mut *connection)
     .await?;
     Ok(RecordId(id))
 }
 
 /// Inserts a record for `value` in `domain` with its first version, inside
-/// the caller's transaction.
+/// the caller's transaction, with `blocks` the keys and the features of the
+/// version beside it.
 ///
 /// The identifier is written as its HMAC beside its sealed form in a
 /// sensitive domain and its plain form in another, under the key `keys`
@@ -267,16 +313,21 @@ pub(crate) async fn insert(
 /// [`StoreError::Query`] when a statement fails, a record of the same
 /// identifier in the domain included (the constraint
 /// `source_record_identifier_key`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the record's identifier, its first version and that version's head keys are each the caller's"
+)]
 pub async fn create(
     connection: &mut PgConnection,
     keys: &Sealer,
     domain: &Domain,
     value: &IdentifierValue,
     demographics: &Demographics,
+    blocks: &Blocks,
     channel: Channel,
     request_id: Option<&str>,
 ) -> Result<RecordId, StoreError> {
-    let RecordId(id) = insert(connection, keys, domain, value, &Blocks::default()).await?;
+    let RecordId(id) = insert(connection, keys, domain, value, blocks).await?;
     sqlx::query(
         "INSERT INTO pix.source_record_version (record_id, version, demographics, channel, request_id)
          VALUES ($1, 1, $2, $3, $4)",

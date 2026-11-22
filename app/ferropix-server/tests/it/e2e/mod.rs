@@ -48,8 +48,9 @@ use ferrohealth_secret::secret_url::SecretUrl;
 use ferropix_server::config::section::db::DbSettings;
 use ferropix_server::config::section::db::SealingKey;
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
+use ferropix_server::matching::subject::Subject;
 use ferropix_server::store::Store;
-use ferropix_server::store::record::{self, Channel, Demographics, Domain, RecordId};
+use ferropix_server::store::record::{self, Blocks, Channel, Demographics, Domain, RecordId};
 use ferropix_server::store::seal::IdentifierValue;
 use ferropix_testkit::containers::Postgres;
 use ferropix_testkit::synthetic::{FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN};
@@ -176,6 +177,17 @@ pub(crate) fn demographics(index: usize) -> Demographics {
     .expect("the demographics are JSON")
 }
 
+/// The head keys and scoring features the demographics `demographics` give.
+pub(crate) fn blocks(demographics: &Demographics) -> Blocks {
+    let patient = ferropix_server::store::demographics::patient(demographics.expose())
+        .expect("the demographics are a Patient");
+    Blocks::of(&Subject::from_patient(
+        &patient,
+        std::collections::BTreeSet::new(),
+    ))
+    .expect("the features are written")
+}
+
 /// Creates a record of `value` in `domain`, committed.
 pub(crate) async fn create(
     store: &Store,
@@ -190,6 +202,7 @@ pub(crate) async fn create(
         domain,
         value,
         &demographics(index),
+        &blocks(&demographics(index)),
         Channel::Fhir,
         Some("e2e"),
     )

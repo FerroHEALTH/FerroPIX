@@ -35,6 +35,7 @@ async fn a_sealed_identifier_is_unreadable_in_a_dump_and_found_in_one_index_prob
             &bsn_domain,
             &bsn(index),
             &super::demographics(index),
+            &super::blocks(&super::demographics(index)),
             record::Channel::Fhir,
             None,
         )

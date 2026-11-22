@@ -18,6 +18,11 @@
 #   scripts/perf/capacity.sh seed N
 #       Feeds N synthetic patients over ITI-104, INFLIGHT (64) at once, in
 #       chunks of 10000; FROM=k resumes at patient k.
+#   scripts/perf/capacity.sh patients N
+#       Writes the first N seeded patients, as the seed generated them, to
+#       WORK/patients.jsonl, the data file the feed and mixed plans draw a
+#       patient from for each arrival (ferrohealth-perf variables), so each
+#       feed revises a record of its own; N is at most the patients seeded.
 #   scripts/perf/capacity.sh snapshot | restore
 #       Stops the server and PostgreSQL and exports the volume to SNAP
 #       (target/capacity/pg.tar), or imports SNAP into a fresh volume.
@@ -157,35 +162,71 @@ up() {
   serve
 }
 
-# chunk START END TOKEN BASE: the curl config of the ITI-104 feeds of the
-# synthetic patients START to END-1 at BASE: a name from 16 x 16 x 8
+# The synthetic patient of number i, as awk: patient(i) sets P_ID, P_FAMILY,
+# P_GIVEN, P_GENDER, P_BIRTH, P_LINE and P_POSTAL: a name from 16 x 16 x 8
 # syllables and 26 given names, a birth date over 90 years, a postal code of
-# 9000 numbers and 441 letter pairs.
+# 9000 numbers and 441 letter pairs. The seed and the capacity plans' data
+# file both take it from here, so a feed revises a record with the
+# demographics it already holds.
+readonly PATIENT_AWK='
+function init() {
+  split("Proef Test Voor Fict Ver Steek Model Schets Oefen Proto Monster Staal Bedacht Gefingeerd Verzon Droom", F, " ")
+  split("sma erink beeldt huis zinga proef ma ink stra veld berg hof dijk kamp laar wijk", M, " ")
+  split("- en er s ing a o e", L, " ")
+  split("Ada Bram Cato Daan Elin Floor Gijs Hanna Ilse Joost Kiki Lars Mira Noud Olga Piet Quinta Ruud Saar Teun Uma Vera Wout Xena Yara Zeno", G, " ")
+  split("A B C D E F G H J K L M N P R S T V W X Z", P, " ")
+  split("an el ik om ur is ad ef og uk ber dor fen gal hum jor", S, " ")
+}
+function patient(i,    h, k, last, year, month, day) {
+  # Two multiplicative hashes of i, so each attribute varies on its own.
+  h = (i * 2654435761) % 4294967296
+  k = (i * 40503 + 7919) % 1048576
+  last = L[int(h / 4096) % 8 + 1]; if (last == "-") last = ""
+  P_ID = sprintf("C-%07d", i)
+  P_FAMILY = F[h % 16 + 1] S[int(h / 16) % 16 + 1] M[int(h / 256) % 16 + 1] last
+  P_GIVEN = G[int(h / 32768) % 26 + 1]
+  year = 1930 + int(h / 851968) % 90; month = 1 + k % 12; day = 1 + int(k / 12) % 28
+  P_BIRTH = sprintf("%04d-%02d-%02d", year, month, day)
+  P_POSTAL = sprintf("%04d %s%s", 1000 + int(k / 336) % 9000, P[int(h / 65536) % 21 + 1], P[int(k / 64) % 21 + 1])
+  P_GENDER = (i % 2 == 0) ? "female" : "male"
+  P_LINE = sprintf("Synthetische straat %d", i % 300)
+}'
+
+# chunk START END TOKEN BASE: the curl config of the ITI-104 feeds of the
+# synthetic patients START to END-1 at BASE.
 chunk() {
-  awk -v start="$1" -v end="$2" -v token="$3" -v url="$4" 'BEGIN {
-    split("Proef Test Voor Fict Ver Steek Model Schets Oefen Proto Monster Staal Bedacht Gefingeerd Verzon Droom", F, " ")
-    split("sma erink beeldt huis zinga proef ma ink stra veld berg hof dijk kamp laar wijk", M, " ")
-    split("- en er s ing a o e", L, " ")
-    split("Ada Bram Cato Daan Elin Floor Gijs Hanna Ilse Joost Kiki Lars Mira Noud Olga Piet Quinta Ruud Saar Teun Uma Vera Wout Xena Yara Zeno", G, " ")
-    split("A B C D E F G H J K L M N P R S T V W X Z", P, " ")
-    split("an el ik om ur is ad ef og uk ber dor fen gal hum jor", S, " ")
+  awk -v start="$1" -v end="$2" -v token="$3" -v url="$4" "$PATIENT_AWK"'
+  BEGIN {
+    init()
     for (i = start; i < end; i++) {
-      # Two multiplicative hashes of i, so each attribute varies on its own.
-      h = (i * 2654435761) % 4294967296
-      k = (i * 40503 + 7919) % 1048576
-      last = L[int(h / 4096) % 8 + 1]; if (last == "-") last = ""
-      family = F[h % 16 + 1] S[int(h / 16) % 16 + 1] M[int(h / 256) % 16 + 1] last
-      given = G[int(h / 32768) % 26 + 1]
-      year = 1930 + int(h / 851968) % 90; month = 1 + k % 12; day = 1 + int(k / 12) % 28
-      postal = sprintf("%04d %s%s", 1000 + int(k / 336) % 9000, P[int(h / 65536) % 21 + 1], P[int(k / 64) % 21 + 1])
-      gender = (i % 2 == 0) ? "female" : "male"
-      body = sprintf("{\\\"resourceType\\\":\\\"Patient\\\",\\\"identifier\\\":[{\\\"system\\\":\\\"urn:oid:2.999.1.1\\\",\\\"value\\\":\\\"C-%07d\\\"}],\\\"active\\\":true,\\\"name\\\":[{\\\"use\\\":\\\"official\\\",\\\"family\\\":\\\"%s\\\",\\\"given\\\":[\\\"%s\\\"]}],\\\"gender\\\":\\\"%s\\\",\\\"birthDate\\\":\\\"%04d-%02d-%02d\\\",\\\"address\\\":[{\\\"use\\\":\\\"home\\\",\\\"line\\\":[\\\"Synthetische straat %d\\\"],\\\"city\\\":\\\"Teststad\\\",\\\"postalCode\\\":\\\"%s\\\",\\\"country\\\":\\\"NL\\\"}]}", i, family, given, gender, year, month, day, i % 300, postal)
+      patient(i)
+      body = sprintf("{\\\"resourceType\\\":\\\"Patient\\\",\\\"identifier\\\":[{\\\"system\\\":\\\"urn:oid:2.999.1.1\\\",\\\"value\\\":\\\"%s\\\"}],\\\"active\\\":true,\\\"name\\\":[{\\\"use\\\":\\\"official\\\",\\\"family\\\":\\\"%s\\\",\\\"given\\\":[\\\"%s\\\"]}],\\\"gender\\\":\\\"%s\\\",\\\"birthDate\\\":\\\"%s\\\",\\\"address\\\":[{\\\"use\\\":\\\"home\\\",\\\"line\\\":[\\\"%s\\\"],\\\"city\\\":\\\"Teststad\\\",\\\"postalCode\\\":\\\"%s\\\",\\\"country\\\":\\\"NL\\\"}]}", P_ID, P_FAMILY, P_GIVEN, P_GENDER, P_BIRTH, P_LINE, P_POSTAL)
       if (i > start) printf "next\n"
-      printf "url = \"%s/fhir/Patient?identifier=urn%%3Aoid%%3A2.999.1.1%%7CC-%07d\"\n", url, i
+      printf "url = \"%s/fhir/Patient?identifier=urn%%3Aoid%%3A2.999.1.1%%7C%s\"\n", url, P_ID
       printf "request = PUT\nheader = \"Authorization: Bearer %s\"\nheader = \"Content-Type: application/fhir+json\"\n", token
       printf "data = \"%s\"\noutput = /dev/null\nwrite-out = \"%%{http_code}\\n\"\n", body
     }
   }'
+}
+
+# rows N: the JSON Lines rows of the synthetic patients 0 to N-1, one object
+# a patient, the data file of the capacity plans' `patient` variable.
+rows() {
+  awk -v n="$1" "$PATIENT_AWK"'
+  BEGIN {
+    init()
+    for (i = 0; i < n; i++) {
+      patient(i)
+      printf "{\"id\":\"%s\",\"family\":\"%s\",\"given\":\"%s\",\"gender\":\"%s\",\"birthDate\":\"%s\",\"line\":\"%s\",\"postalCode\":\"%s\"}\n", P_ID, P_FAMILY, P_GIVEN, P_GENDER, P_BIRTH, P_LINE, P_POSTAL
+    }
+  }'
+}
+
+# patients N: writes the data file of the first N seeded patients.
+patients() {
+  mkdir -p "$WORK"
+  rows "$1" > "$WORK/patients.jsonl"
+  echo "patients: $WORK/patients.jsonl ($1 rows)"
 }
 
 seed() {
@@ -217,16 +258,18 @@ restore() {
   "$CONTAINER" volume import "$VOLUME" "$SNAP"
 }
 
-# render PLAN OUT RATE CONSUMER SOURCE: PLAN at RATE with its tokens filled,
-# refused when a placeholder is left.
+# render PLAN OUT RATE CONSUMER SOURCE PATIENTS: PLAN at RATE with its
+# tokens and its patients data file filled, refused when a placeholder is
+# left. A {{name}} placeholder is ferrohealth-perf's own and stays.
 render() {
   local text
   text="$(< "$1")"
   text="${text//\{consumer_token\}/$4}"
   text="${text//\{source_token\}/$5}"
+  text="${text//\{patients_file\}/$6}"
   # shellcheck disable=SC2001 # the rate line is matched as a pattern, which parameter expansion cannot anchor
   text="$(sed "s/^rate = .*/rate = $3.0/" <<< "$text")"
-  if grep -qE '\{[a-z_]+_token\}' <<< "$text"; then
+  if grep -qE '(^|[^{])\{[a-z_]+_(token|file)\}' <<< "$text"; then
     echo "capacity: $1 holds a placeholder the script does not fill" >&2
     return 1
   fi
@@ -237,8 +280,12 @@ run() {
   local group="$1" rate="$2" out pid sampler
   out="$WORK/run-$group-$rate"
   mkdir -p "$out"
+  if grep -q '{patients_file}' "$root/perf/capacity/$group.toml"; then
+    [[ -s "$WORK/patients.jsonl" ]] || die "no $WORK/patients.jsonl: run \`capacity.sh patients N\` with N at most the patients seeded"
+  fi
   render "$root/perf/capacity/$group.toml" "$out/plan.toml" "$rate" \
-    "$(token perf-consumer system/Patient.rs)" "$(token perf-source system/Patient.cud)"
+    "$(token perf-consumer system/Patient.rs)" "$(token perf-source system/Patient.cud)" \
+    "$WORK/patients.jsonl"
   pid="$(cat "$WORK/server.pid")"
   uptime > "$out/uptime-before"
   (while kill -0 "$pid" 2> /dev/null; do ps -o %cpu=,rss= -p "$pid"; sleep 1; done) > "$out/server-ps" &
@@ -275,12 +322,17 @@ self_test() {
       | jq -r '[.name[0].family, .name[0].given[0], .gender, .birthDate, .address[0].postalCode] | join(" ")')"
   check "each body is JSON once unescaped" 2 \
     "$(sed -n 's/^data = "\(.*\)"$/\1/p' <<< "$cfg" | sed 's/\\"/"/g' | jq -c .resourceType | grep -c Patient)"
-  printf 'rate = 1.0\npath = "{consumer_token}"\nbody = "{source_token}"\n' > "$work/plan.toml"
-  render "$work/plan.toml" "$work/out.toml" 250 C S
+  check "a data file row is the seeded patient" "C-0500000 Proefikink Xena female 1987-04-10 2070 CN" \
+    "$(rows 500001 | sed -n '$p' | jq -r '[.id, .family, .given, .gender, .birthDate, .postalCode] | join(" ")')"
+  check "the data file holds a row a patient" 3 "$(rows 3 | jq -c .id | wc -l | tr -d ' ')"
+  printf 'rate = 1.0\npath = "{consumer_token}"\nbody = "{source_token}"\nfile = "{patients_file}"\nx = "{{patient.id}}"\n' > "$work/plan.toml"
+  render "$work/plan.toml" "$work/out.toml" 250 C S /p.jsonl
   check "the rate is set" "rate = 250.0" "$(sed -n 1p "$work/out.toml")"
   check "the tokens are filled" 'path = "C" body = "S"' "$(sed -n '2,3p' "$work/out.toml" | tr '\n' ' ' | sed 's/ $//')"
+  check "the data file is filled" 'file = "/p.jsonl"' "$(sed -n 4p "$work/out.toml")"
+  check "a variable of the plan stays" 'x = "{{patient.id}}"' "$(sed -n 5p "$work/out.toml")"
   printf 'rate = 1.0\nx = "{other_token}"\n' > "$work/left.toml"
-  check "a placeholder left is refused" 1 "$(render "$work/left.toml" "$work/x.toml" 1 C S 2> /dev/null; echo $?)"
+  check "a placeholder left is refused" 1 "$(render "$work/left.toml" "$work/x.toml" 1 C S P 2> /dev/null; echo $?)"
   # shellcheck disable=SC2016 # the backticks are the matrix's own text
   printf '| Item | Pin |\n|---|---|\n| PostgreSQL test image | `postgres:1@sha256:00` |\n' > "$work/matrix.md"
   check "a pin is read without its backticks" "postgres:1@sha256:00" "$(pin "PostgreSQL test image" "$work/matrix.md")"
@@ -290,6 +342,7 @@ self_test() {
 case "${1:-}" in
   up) up ;;
   seed) seed "${2:?the number of patients}" ;;
+  patients) patients "${2:?the number of patients}" ;;
   snapshot) snapshot ;;
   restore) restore ;;
   run) run "${2:?a group of perf/capacity}" "${3:?a rate}" ;;

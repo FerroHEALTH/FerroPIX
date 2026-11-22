@@ -28,7 +28,7 @@ server reads.
 | `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[auth.issuer.<name>]`, then serves until `SIGTERM` or `SIGINT`. On the signal readiness answers `503` at once, the listener keeps accepting for `server.drain_delay`, then closes, and the requests in flight get `server.shutdown_timeout` to finish. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, prints every key as `key = value  # source` (the file, the default, the environment variable or the `--set` argument that set it, with every secret shown as `***`), and exits 0 when the server would start on it. Otherwise it prints the refusals on one line, each naming its key, and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, over TLS when `[server.tls]` is set, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down, or from a server that is draining, exits 1. Use it as the container health check. |
-| `ferropix db migrate` | Applies the pending migrations, rewrites the stored scoring fields of every record written under an older normalisation, applies the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
+| `ferropix db migrate` | Applies the pending migrations, rewrites the stored scoring fields of every record written under an older normalisation, moves the evidence of every candidate and link stored as JSON into the compact form, applies the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 
 Every command takes `--config <PATH>` and any number of `--set key=value`
@@ -199,7 +199,7 @@ Without a `[telemetry.otlp]` table nothing is exported.
 | `db.url` | none | The PostgreSQL URL, `postgres://` or `postgresql://`. Development only; under production use `db.url_file`. |
 | `db.url_file` | none | The file holding the PostgreSQL URL. One of `db.url` and `db.url_file` is required. |
 | `db.pool_size` | `10` | The most connections the pool holds. A connection idle for a second or more is pinged before a request gets it; a busy one is handed out without a ping. |
-| `db.migrate` | `true` | Whether `serve` applies the pending migrations at start. With `false`, run `ferropix db migrate` before `serve`; `serve` refuses to start while a record's stored scoring fields are of an older version than its own. |
+| `db.migrate` | `true` | Whether `serve` applies the pending migrations at start. With `false`, run `ferropix db migrate` before `serve`; `serve` refuses to start while a record's stored scoring fields are of an older version than its own, or until the evidence stored as JSON is moved into the compact form. |
 | `db.data_key_file` | none, required | The file holding the sealing key: the base64 of 32 random bytes, which `openssl rand -base64 32` makes. Any other content is refused. |
 
 ### The store

@@ -159,7 +159,8 @@ the two values as compared, masked to their last three characters (at most
 half the value), how the field agreed, the comparator's reading (such as the
 Jaro-Winkler similarity) and the weight it added, plus the blocking key
 that produced the pair. The operator console draws its score breakdown from
-it. No log line and no error shows a compared value.
+it. The store keeps the evidence in a compact binary form of its own, about
+205 bytes a candidate. No log line and no error shows a compared value.
 
 ## Estimating `u`
 

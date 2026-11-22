@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::feed::write::{self, Subjects};
 use crate::feed::{CandidateId, Context, FeedError};
 use crate::matching::scorer::Scored;
+use crate::store::evidence;
 use crate::store::record::PersonId;
 
 use super::{LinkKind, Me, MergeKind, Other, store};
@@ -104,7 +105,7 @@ pub(super) async fn merge_moving(
         Moved::Scored(scored) => (
             LinkKind::Probabilistic,
             Some(scored.score),
-            Some(serde_json::to_string(&scored.evidence).map_err(|_json| FeedError::Evidence)?),
+            Some(evidence::pack(&scored.evidence).map_err(|_long| FeedError::Evidence)?),
         ),
     };
     let merge: Uuid = sqlx::query_scalar(
@@ -158,7 +159,7 @@ pub(super) async fn merge_moving(
     for (closed, record) in closed {
         let opened: Uuid = sqlx::query_scalar(
             "INSERT INTO pix.link (record_id, person_id, kind, score, evidence, valid, made_by)
-             VALUES ($1, $2, $3, $4, $5::jsonb, tstzrange(clock_timestamp(), NULL), $6)
+             VALUES ($1, $2, $3, $4, $5, tstzrange(clock_timestamp(), NULL), $6)
              RETURNING id",
         )
         .bind(record)
@@ -239,7 +240,7 @@ pub(super) async fn candidates(
     let mut b_version = Vec::with_capacity(pairs.len());
     let mut score = Vec::with_capacity(pairs.len());
     let mut grade = Vec::with_capacity(pairs.len());
-    let mut evidence = Vec::with_capacity(pairs.len());
+    let mut packed = Vec::with_capacity(pairs.len());
     for (other, scored) in pairs {
         let ((a, av), (b, bv)) = if me.record < other.record {
             ((me.record, me.version), (other.record, other.version))
@@ -252,18 +253,17 @@ pub(super) async fn candidates(
         b_version.push(bv);
         score.push(scored.score);
         grade.push(scored.grade.code());
-        evidence
-            .push(serde_json::to_string(&scored.evidence).map_err(|_json| FeedError::Evidence)?);
+        packed.push(evidence::pack(&scored.evidence).map_err(|_long| FeedError::Evidence)?);
     }
     let ids: Vec<Uuid> = sqlx::query_scalar(
         "WITH pair AS (
              SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::int[], $4::int[],
-                                  $5::float8[], $6::text[], $7::text[])
+                                  $5::float8[], $6::text[], $7::bytea[])
                   WITH ORDINALITY AS p (record_a, record_b, a_version, b_version,
                                         score, grade, evidence, n)
          ), written AS (
              INSERT INTO pix.candidate (record_a, record_b, a_version, b_version, score, grade, evidence)
-             SELECT p.record_a, p.record_b, p.a_version, p.b_version, p.score, p.grade, p.evidence::jsonb
+             SELECT p.record_a, p.record_b, p.a_version, p.b_version, p.score, p.grade, p.evidence
              FROM pair p
              WHERE NOT EXISTS (
                  SELECT 1 FROM pix.candidate c
@@ -276,11 +276,12 @@ pub(super) async fn candidates(
              ORDER BY p.n
              ON CONFLICT (record_a, record_b) WHERE status IN ('open', 'deferred')
              DO UPDATE SET a_version = EXCLUDED.a_version, b_version = EXCLUDED.b_version,
-                           score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence
+                           score = EXCLUDED.score, grade = EXCLUDED.grade, evidence = EXCLUDED.evidence,
+                           evidence_json = NULL
              WHERE pix.candidate.status = 'open'
                AND NOT ($8 AND pix.candidate.score = EXCLUDED.score
                         AND pix.candidate.grade = EXCLUDED.grade
-                        AND pix.candidate.evidence = EXCLUDED.evidence)
+                        AND pix.candidate.evidence IS NOT DISTINCT FROM EXCLUDED.evidence)
              RETURNING id, record_a, record_b
          ), ordered AS (
              SELECT w.id, p.n FROM written w
@@ -297,7 +298,7 @@ pub(super) async fn candidates(
     .bind(b_version)
     .bind(score)
     .bind(grade)
-    .bind(evidence)
+    .bind(packed)
     .bind(me.unchanged)
     .bind(&context.actor)
     .bind(me.record.uuid())

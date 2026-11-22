@@ -178,13 +178,20 @@ async fn matching_never_merges_two_master_identities_and_a_master_identity_survi
         merged_into(&harness, second).await,
         "and the second is not merged into it"
     );
-    let held: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pix.candidate
-         WHERE status = 'open' AND evidence -> 'conflicts' ? 'master_identities'",
-    )
-    .fetch_one(harness.store.pool())
-    .await
-    .expect("the candidates read");
+    let open: Vec<Vec<u8>> =
+        sqlx::query_scalar("SELECT evidence FROM pix.candidate WHERE status = 'open'")
+            .fetch_all(harness.store.pool())
+            .await
+            .expect("the candidates read");
+    let held = open
+        .iter()
+        .map(|stored| ferropix_server::store::evidence::unpack(stored).expect("the evidence reads"))
+        .filter(|evidence| {
+            evidence
+                .conflicts
+                .contains(&ferropix_server::matching::conflict::Conflict::MasterIdentities)
+        })
+        .count();
     assert!(
         held >= 1,
         "the master identities are held apart as a candidate"

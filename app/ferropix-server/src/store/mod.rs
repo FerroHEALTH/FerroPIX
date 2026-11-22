@@ -22,6 +22,7 @@
 pub mod blocking;
 pub mod demographics;
 pub mod estimate;
+pub mod evidence;
 pub mod features;
 pub mod gate;
 pub mod identifier;
@@ -98,7 +99,8 @@ impl Store {
     /// Returns [`StoreError::Url`] for a URL the driver refuses,
     /// [`StoreError::Connect`] when no connection opens, every refusal of
     /// [`server_version::check`], [`gate::check`], [`schema::apply`],
-    /// [`features::refill`], [`features::check`], [`key::verify`] and
+    /// [`features::refill`], [`features::check`], [`evidence::refill`],
+    /// [`evidence::check`], [`key::verify`] and
     /// [`seed::apply`], and [`StoreError::Seal`] when the keys cannot be
     /// derived.
     pub async fn start(
@@ -114,8 +116,10 @@ impl Store {
         if job == Job::Migrate || db.migrate {
             schema::apply(&store).await?;
             features::refill(store.pool(), features::BATCH).await?;
+            evidence::refill(store.pool(), evidence::BATCH).await?;
         } else {
             features::check(store.pool()).await?;
+            evidence::check(store.pool()).await?;
         }
         key::verify(&store).await?;
         seed::apply(&store, domains).await?;
@@ -341,6 +345,9 @@ pub enum StoreError {
     /// A head's stored demographics are no `Patient`.
     #[error("a record head's demographics cannot be read")]
     Demographics(#[from] demographics::DemographicsError),
+    /// A score's stored evidence cannot be written or read.
+    #[error("a score's stored evidence cannot be used")]
+    Evidence(#[from] evidence::EvidenceError),
 }
 
 impl StoreError {

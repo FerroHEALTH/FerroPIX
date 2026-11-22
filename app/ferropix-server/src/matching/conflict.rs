@@ -10,12 +10,12 @@
 //! evidence (`docs/architecture.md` §5.1). No specification governs the
 //! conflicts: our own design.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::matching::subject::Subject;
 
 /// A demographic difference no shared authoritative identifier outweighs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Conflict {
     /// The birth years differ.

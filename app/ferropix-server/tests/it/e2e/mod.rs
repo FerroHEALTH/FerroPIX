@@ -14,6 +14,7 @@ mod blocking;
 mod budget;
 mod cli;
 mod decisions;
+mod evidence;
 mod feed;
 mod feed_auth;
 mod feed_sender;

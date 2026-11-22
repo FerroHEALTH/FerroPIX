@@ -341,8 +341,10 @@ struct Case {
 /// run over a store pool of one connection (#749): the pages a table fills
 /// depend on how many backends insert into it, which the pool's rotation
 /// decided at a timing of the host's, so the reads now measure 76, 75, 76 and 113 buffers.
-/// The allocations and the bytes allocated are 2% above the values of three
-/// runs (#721): the counts were the same in each, the bytes within 0.1%.
+/// The allocations and the bytes allocated are 2% above the higher of the
+/// values on CI's Linux runner and of three macOS runs (#721): the counts
+/// were the same in each run, the bytes within 0.1%, and Linux counts 17 to
+/// 86 more allocations a request, most of them where a read writes the spool.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
@@ -353,7 +355,7 @@ const CASES: [Case; 5] = [
             wal: 3264,
             audit: 0,
             answer: 173,
-            allocations: 1_658,
+            allocations: 1_675,
             allocated: 568_948,
         },
         expected: StatusCode::OK,
@@ -367,7 +369,7 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2188,
             answer: 263,
-            allocations: 843,
+            allocations: 931,
             allocated: 152_622,
         },
         expected: StatusCode::OK,
@@ -381,7 +383,7 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2433,
             answer: 361,
-            allocations: 1_667,
+            allocations: 1_755,
             allocated: 177_384,
         },
         expected: StatusCode::OK,
@@ -395,7 +397,7 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2057,
             answer: 1084,
-            allocations: 1_070,
+            allocations: 1_145,
             allocated: 204_922,
         },
         expected: StatusCode::OK,
@@ -409,7 +411,7 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2728,
             answer: 1067,
-            allocations: 2_415,
+            allocations: 2_486,
             allocated: 279_699,
         },
         expected: StatusCode::OK,

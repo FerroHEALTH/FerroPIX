@@ -25,8 +25,8 @@ use crate::e2e::hl7v2::{V2, adt, code};
 /// to 19), the WAL 1547 to 2261 bytes and the buffers 110 to 114, the
 /// record's heap and index pages, and the spool takes none of its 1,444
 /// bytes. The allocations and the bytes allocated are 2% above the values
-/// of three runs (#721), which count the test's own MLLP client beside the
-/// face.
+/// of three macOS runs (#721), which CI's Linux runner stays under, and
+/// count the test's own MLLP client beside the face.
 const CEILING: Ceiling = Ceiling {
     statements: 19,
     nested: 1,

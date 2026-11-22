@@ -52,13 +52,13 @@ use crate::feed::attempt::{
     Resolving, Revising, announced, condition, current, identity_keys, local_keys, me,
 };
 use crate::feed::link::MergeKind;
-use crate::feed::write::{Blocks, Carried, Subjects};
+use crate::feed::write::{Carried, Subjects};
 use crate::matching::blocking;
 use crate::matching::scorer::Scorer;
 use crate::matching::subject::Subject;
 use crate::store::demographics::{self, DemographicsError};
 use crate::store::identifier::Refused;
-use crate::store::record::{self, Channel, PersonId, RecordId};
+use crate::store::record::{self, Blocks, Channel, PersonId, RecordId};
 use crate::store::{Store, StoreError};
 
 /// The times a transaction is tried when a concurrent one moved what it
@@ -335,12 +335,13 @@ impl Feeder {
         let carried = write::carried(patient, &domains, keys)?;
         let own = keys.hmac(domain.id.uuid(), &value);
         write::advisory(&mut transaction, identity_keys(&own, &carried)).await?;
+        let fed = Fed::new(patient, &carried);
         let locked = match revising.master {
             Some(master) if master.known => write::lock(&mut transaction, domain.id, &own)
                 .await?
                 .filter(|locked| !locked.removed)
                 .ok_or(FeedError::NotFound)?,
-            _ => write::lock_or_insert(&mut transaction, keys, domain, &value).await?,
+            _ => write::lock_or_insert(&mut transaction, keys, domain, &value, &fed.blocks).await?,
         };
         if !locked.active {
             return Err(FeedError::Subsumed);
@@ -350,8 +351,8 @@ impl Feeder {
         {
             return Err(FeedError::Subsumed);
         }
-        let (version, subject) = self
-            .write_version(&mut transaction, &locked, patient, &carried, context)
+        let version = self
+            .write_version(&mut transaction, &locked, &fed, context)
             .await?;
         write::recorded(
             &mut transaction,
@@ -367,7 +368,7 @@ impl Feeder {
         let mut me = me(
             locked.id,
             version,
-            &subject,
+            &fed.subject,
             &carried,
             domain.kind == DomainKind::Master,
         );
@@ -425,8 +426,10 @@ impl Feeder {
         if !kept.active || kept.removed {
             return Err(FeedError::SurvivorNotFound);
         }
-        let locked = write::lock_or_insert(&mut transaction, keys, domain, &subsumed).await?;
-        self.write_version(&mut transaction, &locked, patient, &carried, context)
+        let fed = Fed::new(patient, &carried);
+        let locked =
+            write::lock_or_insert(&mut transaction, keys, domain, &subsumed, &fed.blocks).await?;
+        self.write_version(&mut transaction, &locked, &fed, context)
             .await?;
         let action = write::recorded(
             &mut transaction,
@@ -506,25 +509,46 @@ impl Feeder {
         })
     }
 
-    /// Writes the next version of `locked` from `patient` with the
-    /// identifiers it carries, and returns its number and its subject.
+    /// Writes the next version of `locked` from `fed`, with its blocking
+    /// keys and the identifiers it carries, and returns its number.
     async fn write_version(
         &self,
         connection: &mut PgConnection,
         locked: &write::Locked,
-        patient: &Patient,
-        carried: &[Carried],
+        fed: &Fed<'_>,
         context: &Context,
-    ) -> Result<(i32, Subject), FeedError> {
-        let stored = demographics::stored(patient)?;
+    ) -> Result<i32, FeedError> {
+        let stored = demographics::stored(fed.patient)?;
+        let version = write::add_version(connection, locked, &stored, &fed.blocks, context).await?;
+        let sealer = self.store.sealer();
+        write::insert_carried(connection, sealer, locked.id, version, fed.carried).await?;
+        Ok(version)
+    }
+}
+
+/// The `Patient` of a feed with the identifiers it carries, the subject the
+/// matching weighs, and the blocking keys its version takes.
+struct Fed<'a> {
+    patient: &'a Patient,
+    carried: &'a [Carried],
+    subject: Subject,
+    blocks: Blocks,
+}
+
+impl<'a> Fed<'a> {
+    /// Reads `patient` with the identifiers it carries.
+    fn new(patient: &'a Patient, carried: &'a [Carried]) -> Self {
         let subject = Subject::from_patient(patient, local_keys(carried));
         let blocks = Blocks {
             phonetic: blocking::text_key(BlockingKey::BirthYearFamilyPhonetic, &subject),
             postal: blocking::text_key(BlockingKey::PostalCodeBirthDate, &subject),
         };
-        let version = write::add_version(connection, locked, &stored, &blocks, context).await?;
-        write::insert_carried(connection, self.store.sealer(), locked.id, version, carried).await?;
-        Ok((version, subject))
+        Self {
+            patient,
+            carried,
+            subject,
+            blocks,
+        }
     }
 }
 

@@ -260,7 +260,8 @@ row reads in order without a sequence.
 |---|---|---|
 | `identifier_domain` | `id`, `system` (unique), `name`, `kind`, `source_client_id`, `sensitive`, `created_at`, `retired_at` | retired, never deleted; a retired domain answers `targetSystem not found` (section 6) |
 | `source_record` | `id`, `domain_id`, `identifier_hmac` (unique with `domain_id`), `identifier_sealed` or `identifier_value` (exactly one), `key_id`, `head_version`, `active`, `replaced_by` (a `source_record.id` of the same domain), `removed_at` | the one mutable row per record; `replaced_by` is the Source's own duplicate resolution (PIXm 3.1.0 §2:3.104.4.2.3) |
-| `source_record_version` | `id`, `record_id`, `version`, `demographics` (jsonb), `received_at`, `channel` (`fhir`, `v2`, `pmir`), `request_id`, `block_phonetic`, `block_postal` | write-once; every feed inserts one; the demographics hold no identifier (the fed `Patient` without `identifier`, `link`, `contained`, `text`, `id` and `meta`), and the two text blocking keys of section 5.2 are indexed columns |
+| `record_block` | `record_id`, `block_phonetic`, `block_postal` | one row per record: the two text blocking keys of section 5.2 of the head version, indexed, written by the statement that moves `head_version` (#724) |
+| `source_record_version` | `id`, `record_id`, `version`, `demographics` (jsonb), `received_at`, `channel` (`fhir`, `v2`, `pmir`), `request_id` | write-once; every feed inserts one; the demographics hold no identifier (the fed `Patient` without `identifier`, `link`, `contained`, `text`, `id` and `meta`) |
 | `carried_identifier` | `id`, `record_id`, `version`, `domain_id`, `identifier_hmac`, `identifier_sealed` or `identifier_value`, `key_id` | every identifier a version carries in a domain the store knows, the record's own included, found and sealed as a record's own; kept, never deleted, rewritten only by `db reseal` |
 | `person` | `id`, `status` (`active`, `merged`), `merged_into`, `created_at` | the Patient Master Identity; `id` is the FHIR `Patient.id` |
 | `link` | `id`, `record_id`, `person_id`, `kind`, `score`, `evidence` (jsonb, a `probabilistic` link's alone), `valid` (`tstzrange`), `made_by` (an actor), `made_at`, `reason`, `ended_by_action` | `UNIQUE (record_id, valid WITHOUT OVERLAPS)` over `btree_gist`, so a record is in one person at any instant and the history is the table; a partial B-tree index on `record_id` where `upper_inf(valid)` finds a record's open link (#718) |
@@ -496,9 +497,16 @@ deployments. The grade follows the thresholds:
 year, the phonetic key of the family name)`, `(postal code, birth date)`, or
 an identifier value shared across domains. The phonetic key is American
 Soundex over the last word of the folded family name, so a Dutch prefix
-(`van`, `de`, `van der`) does not decide the block. The keys are columns of
-`source_record_version`, indexed, so a feed scores tens of pairs and not the
-table.
+(`van`, `de`, `van der`) does not decide the block. The two text keys live
+on the head: `record_block` holds one row per record with the keys of its
+head version, written by the statement that moves `head_version` (the
+insert of a new record, the update of a revision), so a head never names a
+version whose keys differ and the version rows keep no copy. The keys sit
+beside the record row, which every lookup reads, so that row stays narrow.
+A blocking read probes the key's index and reads each record it finds
+through its own keys, so it touches only the current records that carry
+the key, whatever their history, and a feed scores tens of pairs and not
+the table (#724).
 
 **Evidence.** Every score is kept with its evidence: one entry per field
 with the comparator, the two values as compared (every value masked to its

@@ -27,6 +27,7 @@ use crate::matching::scorer::{Grade, Scorer};
 use crate::matching::subject::{IdentifierKey, Subject};
 use crate::pdqm::PdqError;
 use crate::store::StoreError;
+use crate::store::blocking::{MATCH_BY_PHONETIC, MATCH_BY_POSTAL};
 use crate::store::demographics;
 use crate::store::identifier::Rule;
 use crate::store::record;
@@ -93,24 +94,16 @@ pub async fn run(
                 let Some(value) = blocking::text_key(*key, &subject) else {
                     continue;
                 };
-                let column = if *key == BlockingKey::BirthYearFamilyPhonetic {
-                    "block_phonetic"
+                let statement = if *key == BlockingKey::BirthYearFamilyPhonetic {
+                    MATCH_BY_PHONETIC
                 } else {
-                    "block_postal"
+                    MATCH_BY_POSTAL
                 };
-                sqlx::query_as(sqlx::AssertSqlSafe(format!(
-                    "SELECT r.id, l.person_id, v.demographics::text
-                     FROM pix.source_record_version v
-                     JOIN pix.source_record r ON r.id = v.record_id AND v.version = r.head_version
-                     JOIN pix.link l ON l.record_id = r.id AND upper_inf(l.valid)
-                     JOIN pix.identifier_domain d ON d.id = r.domain_id
-                     WHERE v.{column} = $1
-                       AND r.active AND r.removed_at IS NULL AND d.retired_at IS NULL"
-                )))
-                .bind(value)
-                .fetch_all(&mut *connection)
-                .await
-                .map_err(store)?
+                sqlx::query_as(statement)
+                    .bind(value)
+                    .fetch_all(&mut *connection)
+                    .await
+                    .map_err(store)?
             }
             BlockingKey::SharedIdentifier => {
                 if local.is_empty() {

@@ -28,6 +28,8 @@ pub mod pdqm;
 pub mod problem;
 pub mod serve;
 pub mod store;
+#[cfg(test)]
+mod testing;
 pub mod usage_report;
 pub mod v2;
 pub mod xcpd;

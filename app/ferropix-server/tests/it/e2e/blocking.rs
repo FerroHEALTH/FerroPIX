@@ -69,7 +69,7 @@ fn json(family: &str, given: &str, birth: &str, postal: &str) -> String {
     )
 }
 
-/// The blocking columns the feed would write for `json`.
+/// The blocking keys the feed would write on the head for `json`.
 fn blocks(json: &str) -> (Option<String>, Option<String>) {
     let value: Value = serde_json::from_str(json).unwrap();
     let patient =
@@ -120,27 +120,33 @@ async fn load(store: &Store, twin: &str) {
             .await
             .unwrap();
         sqlx::query(
-            "INSERT INTO pix.source_record (id, domain_id, identifier_hmac, identifier_value, key_id)
-             SELECT r, $2, h, v, $5 FROM unnest($1::uuid[], $3::bytea[], $4::text[]) AS t(r, h, v)",
+            "WITH t AS (
+                 SELECT * FROM unnest($1::uuid[], $3::bytea[], $4::text[], $6::text[], $7::text[])
+                     AS t(r, h, v, p, q)
+             ),
+             block AS (
+                 INSERT INTO pix.record_block (record_id, block_phonetic, block_postal)
+                 SELECT r, p, q FROM t
+             )
+             INSERT INTO pix.source_record (id, domain_id, identifier_hmac, identifier_value, key_id)
+             SELECT r, $2, h, v, $5 FROM t",
         )
         .bind(&records)
         .bind(domain.id.uuid())
         .bind(&hmacs)
         .bind(&values)
         .bind(&key_id)
+        .bind(&phonetic)
+        .bind(&postal)
         .execute(&mut *transaction)
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO pix.source_record_version
-                 (record_id, version, demographics, channel, block_phonetic, block_postal)
-             SELECT r, 1, d::jsonb, 'fhir', p, q
-             FROM unnest($1::uuid[], $2::text[], $3::text[], $4::text[]) AS t(r, d, p, q)",
+            "INSERT INTO pix.source_record_version (record_id, version, demographics, channel)
+             SELECT r, 1, d::jsonb, 'fhir' FROM unnest($1::uuid[], $2::text[]) AS t(r, d)",
         )
         .bind(&records)
         .bind(chunk)
-        .bind(&phonetic)
-        .bind(&postal)
         .execute(&mut *transaction)
         .await
         .unwrap();
@@ -178,7 +184,7 @@ async fn a_feed_scores_only_the_pairs_its_blocking_keys_produce_among_100000_rec
     load(store, &twin).await;
     let (phonetic, postal) = blocks(&twin);
     let sharing: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pix.source_record_version WHERE block_phonetic = $1 OR block_postal = $2",
+        "SELECT count(*) FROM pix.record_block WHERE block_phonetic = $1 OR block_postal = $2",
     )
     .bind(&phonetic)
     .bind(&postal)

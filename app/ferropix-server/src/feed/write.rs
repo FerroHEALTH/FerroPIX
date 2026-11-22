@@ -15,7 +15,7 @@ use crate::config::section::domain::DomainKind;
 use crate::feed::{Context, FeedError};
 use crate::store::StoreError;
 use crate::store::identifier::Rule;
-use crate::store::record::{Demographics, Domain, DomainId, PersonId, RecordId};
+use crate::store::record::{self, Blocks, Demographics, Domain, DomainId, PersonId, RecordId};
 use crate::store::seal::{IdentifierValue, Sealer};
 
 /// One identifier a version carries, in a domain the store knows.
@@ -151,7 +151,8 @@ pub(super) async fn lock(
     }))
 }
 
-/// Locks the record of `value` in `domain`, or inserts it.
+/// Locks the record of `value` in `domain`, or inserts it with `blocks`,
+/// the blocking keys of the first version it is about to take.
 ///
 /// An inserted record waits for its first version, which the deferred
 /// head-version constraint requires before the commit.
@@ -160,32 +161,16 @@ pub(super) async fn lock_or_insert(
     keys: &Sealer,
     domain: &Domain,
     value: &IdentifierValue,
+    blocks: &Blocks,
 ) -> Result<Locked, StoreError> {
     let domain_id = domain.id.uuid();
     let hmac = keys.hmac(domain_id, value);
     if let Some(locked) = lock(connection, domain.id, &hmac).await? {
         return Ok(locked);
     }
-    let (sealed, plain) = if domain.sensitive {
-        (Some(keys.seal(domain_id, value)?), None)
-    } else {
-        (None, Some(value.expose()))
-    };
-    let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO pix.source_record
-             (domain_id, identifier_hmac, identifier_sealed, identifier_value, key_id)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id",
-    )
-    .bind(domain_id)
-    .bind(hmac.as_slice())
-    .bind(sealed)
-    .bind(plain)
-    .bind(keys.key_id().as_bytes().as_slice())
-    .fetch_one(&mut *connection)
-    .await?;
+    let id = record::insert(connection, keys, domain, value, blocks).await?;
     Ok(Locked {
-        id: RecordId::from_uuid(id),
+        id,
         created: true,
         head: 0,
         active: true,
@@ -193,17 +178,12 @@ pub(super) async fn lock_or_insert(
     })
 }
 
-/// The text blocking keys of a version.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(super) struct Blocks {
-    /// `(birth year, phonetic key of the family name)`.
-    pub phonetic: Option<String>,
-    /// `(postal code, birth date)`.
-    pub postal: Option<String>,
-}
-
-/// Inserts the next version of `record` and makes it the head, a removed
-/// record coming back with it; returns the version's number.
+/// Inserts the next version of `record` and makes it the head with its
+/// blocking keys `blocks`, a removed record coming back with it; returns the
+/// version's number.
+///
+/// A record [`lock_or_insert`] created already holds `blocks` and names
+/// version 1 as its head.
 pub(super) async fn add_version(
     connection: &mut PgConnection,
     record: &Locked,
@@ -217,24 +197,29 @@ pub(super) async fn add_version(
         .ok_or(StoreError::VersionOverflow)?;
     sqlx::query(
         "INSERT INTO pix.source_record_version
-             (record_id, version, demographics, channel, request_id, block_phonetic, block_postal)
-         VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)",
+             (record_id, version, demographics, channel, request_id)
+         VALUES ($1, $2, $3::jsonb, $4, $5)",
     )
     .bind(record.id.uuid())
     .bind(version)
     .bind(demographics.expose())
     .bind(context.channel.as_str())
     .bind(context.request_id.as_deref())
-    .bind(blocks.phonetic.as_deref())
-    .bind(blocks.postal.as_deref())
     .execute(&mut *connection)
     .await?;
     if !record.created {
         sqlx::query(
-            "UPDATE pix.source_record SET head_version = $2, removed_at = NULL WHERE id = $1",
+            "WITH block AS (
+                 UPDATE pix.record_block SET block_phonetic = $3, block_postal = $4
+                 WHERE record_id = $1
+                   AND (block_phonetic, block_postal) IS DISTINCT FROM ($3, $4)
+             )
+             UPDATE pix.source_record SET head_version = $2, removed_at = NULL WHERE id = $1",
         )
         .bind(record.id.uuid())
         .bind(version)
+        .bind(blocks.phonetic.as_deref())
+        .bind(blocks.postal.as_deref())
         .execute(&mut *connection)
         .await?;
     }

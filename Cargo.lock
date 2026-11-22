@@ -1547,6 +1547,7 @@ dependencies = [
  "ferropix-testkit",
  "fhir-search",
  "fhir-types",
+ "flate2",
  "hl7v2-types",
  "http",
  "ihe-atna",
@@ -2383,9 +2384,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.24.0"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48877a3d54d4975c889ba035c48af3f5731cac6f05ce1723367aff609103873e"
+checksum = "9fd062cce2ca9a7888bcfc107ccaea3e3b557f96dbdbc1b9fd79943ea4fb5b3c"
 dependencies = [
  "async-trait",
  "base64 0.23.1",

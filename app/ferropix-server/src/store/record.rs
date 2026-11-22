@@ -198,6 +198,63 @@ fn read_domain((id, system, kind, sensitive, retired): DomainRow) -> Result<Doma
     })
 }
 
+/// The text blocking keys of a version, kept beside its record while it is
+/// the head (`docs/architecture.md` §5.2).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Blocks {
+    /// `(birth year, phonetic key of the family name)`.
+    pub phonetic: Option<String>,
+    /// `(postal code, birth date)`.
+    pub postal: Option<String>,
+}
+
+/// Inserts the record of `value` in `domain`, with `blocks`, the blocking
+/// keys of the first version it is about to take, beside it in one
+/// statement.
+///
+/// The identifier is written as its HMAC beside its sealed form in a
+/// sensitive domain and its plain form in another, under the key `keys`
+/// holds. The record waits for its first version, which the deferred
+/// head-version constraint requires before the commit.
+pub(crate) async fn insert(
+    connection: &mut PgConnection,
+    keys: &Sealer,
+    domain: &Domain,
+    value: &IdentifierValue,
+    blocks: &Blocks,
+) -> Result<RecordId, StoreError> {
+    let domain_id = domain.id.uuid();
+    let hmac = keys.hmac(domain_id, value);
+    let (sealed, plain) = if domain.sensitive {
+        (Some(keys.seal(domain_id, value)?), None)
+    } else {
+        (None, Some(value.expose()))
+    };
+    let id: Uuid = sqlx::query_scalar(
+        "WITH record AS (
+             INSERT INTO pix.source_record
+                 (domain_id, identifier_hmac, identifier_sealed, identifier_value, key_id)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id
+         ),
+         block AS (
+             INSERT INTO pix.record_block (record_id, block_phonetic, block_postal)
+             SELECT id, $6, $7 FROM record
+         )
+         SELECT id FROM record",
+    )
+    .bind(domain_id)
+    .bind(hmac.as_slice())
+    .bind(sealed)
+    .bind(plain)
+    .bind(keys.key_id().as_bytes().as_slice())
+    .bind(blocks.phonetic.as_deref())
+    .bind(blocks.postal.as_deref())
+    .fetch_one(&mut *connection)
+    .await?;
+    Ok(RecordId(id))
+}
+
 /// Inserts a record for `value` in `domain` with its first version, inside
 /// the caller's transaction.
 ///
@@ -219,26 +276,7 @@ pub async fn create(
     channel: Channel,
     request_id: Option<&str>,
 ) -> Result<RecordId, StoreError> {
-    let domain_id = domain.id.uuid();
-    let hmac = keys.hmac(domain_id, value);
-    let (sealed, plain) = if domain.sensitive {
-        (Some(keys.seal(domain_id, value)?), None)
-    } else {
-        (None, Some(value.expose()))
-    };
-    let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO pix.source_record
-             (domain_id, identifier_hmac, identifier_sealed, identifier_value, key_id)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id",
-    )
-    .bind(domain_id)
-    .bind(hmac.as_slice())
-    .bind(sealed)
-    .bind(plain)
-    .bind(keys.key_id().as_bytes().as_slice())
-    .fetch_one(&mut *connection)
-    .await?;
+    let RecordId(id) = insert(connection, keys, domain, value, &Blocks::default()).await?;
     sqlx::query(
         "INSERT INTO pix.source_record_version (record_id, version, demographics, channel, request_id)
          VALUES ($1, 1, $2, $3, $4)",

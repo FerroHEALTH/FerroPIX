@@ -242,6 +242,33 @@ fn spool_bytes(spool: &Path) -> u64 {
         .unwrap_or_default()
 }
 
+/// Turns autovacuum off on every table of `harness`'s store before a case
+/// writes to it, so no automatic analyze replans the measured statements
+/// at a moment that depends on the host's timing.
+pub(crate) async fn hold_statistics(harness: &Harness) {
+    let admin = admin(harness.postgres()).await;
+    // NOTE: PostgreSQL CREATE TABLE, storage parameter autovacuum_enabled; no
+    // automatic analyze runs, so every run measures the never-analyzed store.
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "/* {OWN} */ DO $$
+         DECLARE t regclass;
+         BEGIN
+             FOR t IN SELECT c.oid::regclass FROM pg_catalog.pg_class c
+                      WHERE c.relnamespace = 'pix'::regnamespace AND c.relkind = 'r' LOOP
+                 EXECUTE format(
+                     'ALTER TABLE %s SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)',
+                     t
+                 );
+             END LOOP;
+         END
+         $$"
+    )))
+    .execute(&admin)
+    .await
+    .expect("autovacuum is turned off on the store's tables");
+    admin.close().await;
+}
+
 /// One kind of FHIR request and its ceiling.
 struct Case {
     name: &'static str,
@@ -257,19 +284,21 @@ struct Case {
 /// revision now spends on the trigger that keeps the keys. Dropping the hot
 /// tables' unread keys (#730) lowered an ITI-104 revision's WAL from 2898 to
 /// 2439 bytes, and with the domains read once (#715) an ITI-78 search reads
-/// 84 buffers. Keeping a revision's BALP record in its own transaction
-/// (#742) costs it one statement (19 to 20) and raises its WAL from 2439 to
-/// 3362 bytes, the record compressed and sealed in `pix.audit_outbox`, in
-/// exchange for the spool's 2,036 bytes and their flush, which it no longer
-/// writes.
+/// 84 buffers. The blocking keys kept beside the record head (#724) lowered
+/// ITI-104 from 1106 to 194 buffers and from 2443 to 2277 WAL bytes, and
+/// ITI-119 from 588 to 118 buffers. Keeping a revision's BALP record in its
+/// own transaction (#742) costs it one statement (19 to 20) and raises its
+/// WAL from 2277 to 3200 bytes, the record compressed and sealed in
+/// `pix.audit_outbox`, in exchange for the spool's 2,036 bytes and their
+/// flush, which it no longer writes.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
         ceiling: Ceiling {
             statements: 20,
             nested: 1,
-            blocks: 1121,
-            wal: 3430,
+            blocks: 198,
+            wal: 3264,
             audit: 0,
             answer: 173,
         },
@@ -316,7 +345,7 @@ const CASES: [Case; 5] = [
         ceiling: Ceiling {
             statements: 8,
             nested: 0,
-            blocks: 599,
+            blocks: 121,
             wal: 0,
             audit: 2728,
             answer: 1067,
@@ -412,6 +441,7 @@ async fn each_fhir_transaction_stays_within_its_budget() {
         return;
     }
     let harness = Harness::start(synthetic_seeds()).await;
+    hold_statistics(&harness).await;
     let (hospital, _bsn) = feed_both(&harness).await;
     populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
@@ -467,6 +497,7 @@ async fn an_iti_78_search_reads_no_more_over_four_times_the_persons() {
         return;
     }
     let harness = Harness::start(synthetic_seeds()).await;
+    hold_statistics(&harness).await;
     let (hospital, _bsn) = feed_both(&harness).await;
     populate(&harness, 0..POPULATION).await;
     let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;

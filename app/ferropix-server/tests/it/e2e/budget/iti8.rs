@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use ferropix_server::hl7v2::cursor::Cursors;
 use ferropix_testkit::containers::e2e_enabled;
 
-use super::{Ceiling, Meter, REQUESTS, WARMUP};
+use super::{Ceiling, Meter, REQUESTS, WARMUP, hold_statistics};
 use crate::e2e::hl7v2::{V2, adt, code};
 
 /// The ceiling of one ITI-8 revision: the statements as measured, and the
@@ -19,15 +19,17 @@ use crate::e2e::hl7v2::{V2, adt, code};
 /// 2026-11-21 (#713). The search keys (#722) cost a revision one nested
 /// statement and 16 shared buffers, the trigger that compares what a search
 /// reads. Dropping the hot tables' unread keys (#730) lowered the WAL from
-/// 1925 to 1629 bytes. Keeping the BALP record in the message's own
-/// transaction (#742) costs one statement (18 to 19), the WAL 1629 to 2343
-/// bytes and the buffers 111 to 115, the record's heap and index pages, and
-/// the spool takes none of its 1,444 bytes.
+/// 1925 to 1629 bytes, and the blocking keys kept beside the record head
+/// (#724) to 1547, for 2 shared buffers more (108 to 110). Keeping the BALP
+/// record in the message's own transaction (#742) costs one statement (18
+/// to 19), the WAL 1547 to 2261 bytes and the buffers 110 to 114, the
+/// record's heap and index pages, and the spool takes none of its 1,444
+/// bytes.
 const CEILING: Ceiling = Ceiling {
     statements: 19,
     nested: 1,
-    blocks: 115,
-    wal: 2390,
+    blocks: 117,
+    wal: 2307,
     audit: 0,
     answer: 106,
 };
@@ -63,6 +65,7 @@ async fn an_iti_8_revision_stays_within_its_budget() {
         return;
     }
     let v2 = Box::pin(V2::start(Cursors::default())).await;
+    hold_statistics(&v2.pix).await;
     let created = v2
         .send(&adt("A01", "B-0", "H-1^^^HOSP", 0, "19800229"))
         .await;

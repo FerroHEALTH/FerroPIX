@@ -1,0 +1,1 @@
+- The quickstart's `hl7v2` profile runs FerroTERM 0.4.7, its latest release, in place of 0.4.2.

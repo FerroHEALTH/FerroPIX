@@ -15,11 +15,17 @@
 //! `pg_walinspect` (the server writes no full-page images, so a checkpoint
 //! adds nothing, and the pruning, vacuum and visibility records are left out,
 //! since they run when the xmin horizon lets them, not when a request asks,
-//! #731), the bytes of the audit records the spool takes, and the
-//! bytes of the answer. Each container serves one case, so the counts are
+//! #731), the bytes of the audit records the spool takes, the bytes of the
+//! answer, and the heap allocations and bytes allocated on the thread that
+//! runs the router, its tasks and the store's connection (#721). Each container serves one case, so the counts are
 //! the case's alone; the test's own reads carry [`OWN`] and are left out,
 //! and so are the reads of the WAL position, whose comment the server does
-//! not keep.
+//! not keep. The allocations are counted by `allocation-counter` on a
+//! runtime of the test's thread alone, so every task a request wakes is
+//! polled where it is counted; the audit spool's writer thread is not, and
+//! the count includes the test's own building of each request and reading
+//! of each answer. The counter is the test binary's global allocator and
+//! counts only inside a measurement, on that thread.
 //! Every ceiling is the measured value; a change that lowers one lowers its
 //! ceiling in the same pull request. No specification governs a request's
 //! cost: our own design.
@@ -31,19 +37,27 @@
 mod iti8;
 
 use std::fmt::Write as _;
+use std::future::Future;
 use std::path::Path;
+
+use allocation_counter::AllocationInfo;
+use axum::body::Body;
 
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::fixtures::Fixture;
 use ferropix_testkit::synthetic::{FAMILY_NAMES, GIVEN_NAMES, HOSPITAL_DOMAIN};
 use fhir_types::codec::Value as Document;
-use http::{Method, StatusCode, header};
+use http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use super::BSN_SYSTEM;
 use super::admin;
-use super::pixm::{Answer, Harness, feed_both, fixture, pix_parameters, synthetic_seeds};
+use super::feeds::condition;
+use super::pixm::{
+    Answer, Harness, feed_both, fixture, pix_parameters, pix_uri, request, synthetic_seeds,
+};
+use tokio::runtime::Runtime;
 
 /// The requests of each kind measured.
 const REQUESTS: u64 = 20;
@@ -74,6 +88,10 @@ pub(crate) struct Ceiling {
     pub audit: u64,
     /// The bytes of the answer.
     pub answer: u64,
+    /// The heap allocations.
+    pub allocations: u64,
+    /// The bytes allocated.
+    pub allocated: u64,
 }
 
 /// What `REQUESTS` requests of one kind cost.
@@ -85,10 +103,19 @@ pub(crate) struct Measured {
     wal: u64,
     audit: u64,
     answer: u64,
+    allocations: u64,
+    allocated: u64,
     ledger: String,
 }
 
 impl Measured {
+    /// Adds the allocations `info` counted over the requests.
+    pub(crate) fn with_allocations(mut self, info: AllocationInfo) -> Self {
+        self.allocations = info.count_total;
+        self.allocated = info.bytes_total;
+        self
+    }
+
     /// Writes the per-request figures of `name` against `ceiling` into
     /// `report`, and returns whether one is over its ceiling.
     pub(crate) fn judge(&self, name: &str, ceiling: Ceiling, report: &mut String) -> bool {
@@ -99,6 +126,8 @@ impl Measured {
             ("WAL bytes", self.wal, ceiling.wal),
             ("audit bytes", self.audit, ceiling.audit),
             ("answer bytes", self.answer, ceiling.answer),
+            ("allocations", self.allocations, ceiling.allocations),
+            ("bytes allocated", self.allocated, ceiling.allocated),
         ];
         let mut over = false;
         writeln!(report, "{name}, per request over {REQUESTS}:").expect("a String takes it");
@@ -223,6 +252,23 @@ impl Meter {
     }
 }
 
+/// A runtime on the test's thread alone, so every task a measured request
+/// wakes is polled on the thread whose allocations are counted.
+pub(crate) fn runtime() -> Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime builds")
+}
+
+/// Runs `work` to its end on `runtime`, with the allocations made on this
+/// thread meanwhile.
+pub(crate) fn counted<T>(runtime: &Runtime, work: impl Future<Output = T>) -> (T, AllocationInfo) {
+    let mut out = None;
+    let info = allocation_counter::measure(|| out = Some(runtime.block_on(work)));
+    (out.expect("the work ran to its end"), info)
+}
+
 /// Returns `value` as a count.
 fn count(value: i64) -> u64 {
     u64::try_from(value).expect("a count is not negative")
@@ -295,6 +341,10 @@ struct Case {
 /// run over a store pool of one connection (#749): the pages a table fills
 /// depend on how many backends insert into it, which the pool's rotation
 /// decided at a timing of the host's, so the reads now measure 76, 75, 76 and 113 buffers.
+/// The allocations and the bytes allocated are 2% above the higher of the
+/// values on CI's Linux runner and of three macOS runs (#721): the counts
+/// were the same in each run, the bytes within 0.1%, and Linux counts 17 to
+/// 86 more allocations a request, most of them where a read writes the spool.
 const CASES: [Case; 5] = [
     Case {
         name: "ITI-104 revise",
@@ -305,6 +355,8 @@ const CASES: [Case; 5] = [
             wal: 3264,
             audit: 0,
             answer: 173,
+            allocations: 1_675,
+            allocated: 568_948,
         },
         expected: StatusCode::OK,
     },
@@ -317,6 +369,8 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2188,
             answer: 263,
+            allocations: 931,
+            allocated: 152_622,
         },
         expected: StatusCode::OK,
     },
@@ -329,6 +383,8 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2433,
             answer: 361,
+            allocations: 1_755,
+            allocated: 177_384,
         },
         expected: StatusCode::OK,
     },
@@ -341,6 +397,8 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2057,
             answer: 1084,
+            allocations: 1_145,
+            allocated: 204_922,
         },
         expected: StatusCode::OK,
     },
@@ -353,6 +411,8 @@ const CASES: [Case; 5] = [
             wal: 0,
             audit: 2728,
             answer: 1067,
+            allocations: 2_486,
+            allocated: 279_699,
         },
         expected: StatusCode::OK,
     },
@@ -390,96 +450,121 @@ fn family(index: usize) -> &'static str {
     }
 }
 
-/// Sends one request of the case `name`.
-async fn send(harness: &Harness, name: &str, hospital: &str) -> Answer {
+/// One request of the case `name`.
+fn build(harness: &Harness, name: &str, hospital: &str) -> Request<Body> {
+    let json = [(header::CONTENT_TYPE, "application/fhir+json")];
     match name {
-        "ITI-104 revise" => {
-            harness
-                .feed(HOSPITAL_DOMAIN, hospital, &fixture(Fixture::FeedHospital))
-                .await
-        }
-        "ITI-83 GET" => {
-            harness
-                .pix_get(HOSPITAL_DOMAIN, hospital, &[BSN_SYSTEM])
-                .await
-        }
-        "ITI-83 POST" => {
-            harness
-                .pix_post(&pix_parameters(
-                    HOSPITAL_DOMAIN,
-                    hospital,
-                    &[BSN_SYSTEM, ferropix_testkit::synthetic::LABORATORY_DOMAIN],
-                ))
-                .await
-        }
-        "ITI-78 search" => {
-            harness
-                .send(
-                    Method::GET,
-                    "/fhir/Patient?family=Proefsma&birthdate=1961-04-12",
-                    Some(&harness.consumer()),
-                    &[],
-                    None,
-                )
-                .await
-        }
+        "ITI-104 revise" => request(
+            Method::PUT,
+            &format!("/fhir/Patient?{}", condition(HOSPITAL_DOMAIN, hospital)),
+            Some(&harness.source()),
+            &json,
+            Some(serde_json::to_string(&fixture(Fixture::FeedHospital)).expect("JSON")),
+        ),
+        "ITI-83 GET" => request(
+            Method::GET,
+            &pix_uri(HOSPITAL_DOMAIN, hospital, &[BSN_SYSTEM]),
+            Some(&harness.consumer()),
+            &[],
+            None,
+        ),
+        "ITI-83 POST" => request(
+            Method::POST,
+            "/fhir/Patient/$ihe-pix",
+            Some(&harness.consumer()),
+            &json,
+            Some(pix_parameters(
+                HOSPITAL_DOMAIN,
+                hospital,
+                &[BSN_SYSTEM, ferropix_testkit::synthetic::LABORATORY_DOMAIN],
+            )),
+        ),
+        "ITI-78 search" => request(
+            Method::GET,
+            "/fhir/Patient?family=Proefsma&birthdate=1961-04-12",
+            Some(&harness.consumer()),
+            &[],
+            None,
+        ),
         "ITI-119 match" => {
             let body: Value = serde_json::to_value(fixture(Fixture::MatchIn)).expect("JSON");
-            harness
-                .send(
-                    Method::POST,
-                    "/fhir/Patient/$match",
-                    Some(&harness.consumer()),
-                    &[(header::CONTENT_TYPE, "application/fhir+json")],
-                    Some(body.to_string()),
-                )
-                .await
+            request(
+                Method::POST,
+                "/fhir/Patient/$match",
+                Some(&harness.consumer()),
+                &json,
+                Some(body.to_string()),
+            )
         }
         other => panic!("no case {other}"),
     }
 }
 
-#[tokio::test]
-async fn each_fhir_transaction_stays_within_its_budget() {
+/// Sends one request of the case `name`.
+async fn send(harness: &Harness, name: &str, hospital: &str) -> Answer {
+    harness.exchange(build(harness, name, hospital)).await
+}
+
+/// Sends `requests` in turn, asserting each is answered `expected`, and
+/// returns the bytes of the answers.
+async fn exchange_all(
+    harness: &Harness,
+    name: &str,
+    expected: StatusCode,
+    requests: Vec<Request<Body>>,
+) -> u64 {
+    let mut bytes = 0;
+    for request in requests {
+        let answer = harness.exchange(request).await;
+        assert_eq!(expected, answer.status, "{name}: {}", answer.body);
+        bytes += u64::try_from(answer.body.len()).expect("a length");
+    }
+    bytes
+}
+
+#[test]
+fn each_fhir_transaction_stays_within_its_budget() {
     if !e2e_enabled() {
         return;
     }
-    let harness = Harness::start_on_one_connection(synthetic_seeds()).await;
-    hold_statistics(&harness).await;
-    let (hospital, _bsn) = feed_both(&harness).await;
-    populate(&harness, 0..POPULATION).await;
-    let mut meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
+    let runtime = runtime();
+    let (harness, hospital, mut meter) = runtime.block_on(async {
+        let harness = Harness::start_on_one_connection(synthetic_seeds()).await;
+        hold_statistics(&harness).await;
+        let (hospital, _bsn) = feed_both(&harness).await;
+        populate(&harness, 0..POPULATION).await;
+        let meter = Meter::open(&harness, &harness.spool.path().join("spool")).await;
+        (harness, hospital, meter)
+    });
     let mut report = String::new();
     let mut over = false;
     for case in &CASES {
-        for _ in 0..WARMUP {
-            let answer = send(&harness, case.name, &hospital).await;
-            assert_eq!(
-                case.expected, answer.status,
-                "{}: {}",
-                case.name, answer.body
-            );
-        }
-        meter.start().await;
-        let mut bytes = 0;
-        for _ in 0..REQUESTS {
-            let answer = send(&harness, case.name, &hospital).await;
-            assert_eq!(
-                case.expected, answer.status,
-                "{}: {}",
-                case.name, answer.body
-            );
-            bytes += u64::try_from(answer.body.len()).expect("a length");
-        }
-        let measured = meter.finish(bytes).await;
+        let warm = (0..WARMUP)
+            .map(|_| build(&harness, case.name, &hospital))
+            .collect();
+        runtime.block_on(exchange_all(&harness, case.name, case.expected, warm));
+        // The requests are built before the count, so the test's signing of
+        // their tokens is not counted.
+        let requests = (0..REQUESTS)
+            .map(|_| build(&harness, case.name, &hospital))
+            .collect();
+        runtime.block_on(meter.start());
+        let (bytes, allocations) = counted(
+            &runtime,
+            exchange_all(&harness, case.name, case.expected, requests),
+        );
+        let measured = runtime
+            .block_on(meter.finish(bytes))
+            .with_allocations(allocations);
         over |= measured.judge(case.name, case.ceiling, &mut report);
     }
-    let analyzed = analyzed(&harness).await;
+    let analyzed = runtime.block_on(analyzed(&harness));
     assert!(
         analyzed.is_empty(),
         "no table was analyzed during the measurement, which would replan it: {analyzed:?}\n{report}"
     );
-    report.push_str(&tables(&harness).await);
+    report.push_str(&runtime.block_on(tables(&harness)));
+    runtime.block_on(async move { drop((meter, harness)) });
     assert!(!over, "a transaction is over its budget:\n{report}");
     eprintln!("{report}");
 }

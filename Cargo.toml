@@ -22,6 +22,9 @@ authors = ["Ruben Talstra"]
 # FerroFED pins, so a product that takes these crates resolves one copy of
 # each.
 [workspace.dependencies]
+# The heap allocations the transaction budget counts per request (#721), the
+# crate FerroEHR's budget counts with. Verified against crates.io on 2026-11-22.
+allocation-counter = "0.8.1"
 async-trait = "0.1.92"
 # The operator console's HTTP service (app/ferropix-console): axum, with
 # tower's middleware and tower-http's compression, at the versions

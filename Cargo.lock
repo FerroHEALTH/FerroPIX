@@ -1305,9 +1305,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-secret"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fff81811fa608ab1d92b9124969ffc4cf9a8a0159ba0a303fb186f0b8c37ca9"
+checksum = "19300614da2ee96deb154c40ff231a1d8296147e8194f7ab5472e21245095d87"
 dependencies = [
  "secrecy",
  "serde",
@@ -1317,9 +1317,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-server"
-version = "0.12.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5beacbdd769527817f33963e3341b31109202968c28e817d417bf0b0f8530e50"
+checksum = "26080981973ace77a850adbbba06131f6408d9e4ddc4e3e87903b6a7e6238d34"
 dependencies = [
  "axum",
  "clap",
@@ -2398,7 +2398,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2938,7 +2938,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

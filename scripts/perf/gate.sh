@@ -17,8 +17,9 @@
 #       base: the merge base of HEAD with BASE, a commit or ref, or with no
 #       BASE the newest v* tag before HEAD, else HEAD's first parent. The
 #       base is built from `git archive` of that commit under target/, with
-#       its own toolchain pin, into the same target directory, so the
-#       dependencies build once.
+#       its own toolchain pin, into a target directory of its own: Cargo names
+#       a workspace member's artefacts by its path inside the workspace, so in
+#       one directory the head would link a base library it takes for fresh.
 #   scripts/perf/gate.sh run
 #       Starts PostgreSQL, the provider and both servers, the head on 8080
 #       and MLLP 2575 with perf/ferropix.toml, the base on 8081 and 2576
@@ -58,6 +59,7 @@ readonly BUSY_PLAN=perf/busy-loop.toml
 readonly CONFIG=perf/ferropix.toml
 readonly WORK=target/perf-run
 readonly BASE_TREE=target/perf-base
+readonly BASE_TARGET=target/perf-base-target
 readonly HEAD_URL=http://127.0.0.1:8080
 readonly BASE_URL=http://127.0.0.1:8081
 readonly HEAD_MLLP=127.0.0.1:2575
@@ -179,8 +181,8 @@ build() {
   git archive "$rev" | tar -x -C "$BASE_TREE/src"
   printf '%s\n' "$rev" > "$BASE_TREE/rev"
   # From inside the base's tree, so its own toolchain pin builds it.
-  (cd "$BASE_TREE/src" && cargo build --release --locked -p ferropix-server --target-dir "$root/target")
-  cp target/release/ferropix "$BASE_TREE/ferropix"
+  (cd "$BASE_TREE/src" && cargo build --release --locked -p ferropix-server --target-dir "$root/$BASE_TARGET")
+  cp "$BASE_TARGET/release/ferropix" "$BASE_TREE/ferropix"
   cargo build --release --locked -p ferropix-server
 }
 

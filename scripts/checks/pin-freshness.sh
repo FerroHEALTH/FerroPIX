@@ -128,7 +128,8 @@ DIF Claim Format Registry	decentralized-identity/claim-format-registry	main"
 # stale pin.
 readonly WATCHED_TAGS="\
 IHE IUA supplement	IHE/ITI.IUA	-	-
-Netherlands Generic Functions IG source	nuts-foundation/nl-generic-functions-ig	v	-"
+Netherlands Generic Functions IG source	nuts-foundation/nl-generic-functions-ig	v	-
+mermaid	mermaid-js/mermaid	mermaid@	the book serves the bundle mdbook-mermaid 0.17.1 ships, as every FerroHEALTH book does"
 
 # One "matrix label<TAB>package<TAB>hold" record per line: a FHIR package, or
 # the pages of the implementation guide it publishes, pinned by version and

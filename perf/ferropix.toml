@@ -22,12 +22,16 @@ public_base_url = "http://localhost:8080"
 [server]
 listen = "127.0.0.1:8080"
 
-# The development provider signs any client credentials request as an
-# RFC 9068 `at+jwt` token with the client as `sub` and `client_id`
-# (scripts/perf/gate.sh), so every token it signs is a machine's.
+# The development provider signs any client credentials request with the
+# client as `sub` and `client_id` (scripts/perf/gate.sh), so every token it
+# signs is a machine's.
 [auth.issuer.dev]
 issuer = "http://localhost:8180/ferropix"
 audience = ["http://localhost:8080/fhir"]
+
+# TODO(#782): the gate's tokens serve the base too, which reads `typ` JWT alone.
+[auth.issuer.dev.profile]
+token_types = ["JWT"]
 
 [[trust.issuer]]
 issuer = "dev"

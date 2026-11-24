@@ -4,6 +4,8 @@
 //! The ITI-104 messages the feed cases send, read by `ihe-iti` as the route
 //! will read them, and the store they run against.
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use ferropix_server::audit::Audit;
 use ferropix_server::config::section::audit::AuditSettings;
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
@@ -31,6 +33,7 @@ pub(crate) fn seeds() -> Vec<DomainSeed> {
         system: system.to_owned(),
         name: name.to_owned(),
         kind: DomainKind::Local,
+        identifier_type: IdentifierType::Pi,
         source_client_id: SOURCE.to_owned(),
         sensitive: false,
     };
@@ -39,6 +42,7 @@ pub(crate) fn seeds() -> Vec<DomainSeed> {
             system: BSN_SYSTEM.to_owned(),
             name: String::from("BSN"),
             kind: DomainKind::Authoritative,
+            identifier_type: IdentifierType::Ni,
             source_client_id: SOURCE.to_owned(),
             sensitive: true,
         },

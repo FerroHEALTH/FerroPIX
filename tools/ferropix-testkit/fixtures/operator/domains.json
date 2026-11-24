@@ -5,6 +5,7 @@
       "system": "urn:oid:2.999.1.1",
       "name": "Synthetic hospital",
       "kind": "local",
+      "identifier_type": "PI",
       "sensitive": false,
       "source_client_id": "east-lab",
       "created_at": "2026-10-20T08:00:00Z",

@@ -8,7 +8,8 @@
 //! the Master Patient Identification Domain, `public_base_url`
 //! (PMIR 1.6.0 §2:3.93.4.1.3), and the identifiers a PIX query answers for
 //! the person ([`crate::store::xref::identifiers`]), each in its domain's
-//! system, opened from its sealed form for the answer alone. Its demographics are the current version of
+//! system with its domain's identifier type, opened from its sealed form for
+//! the answer alone. Its demographics are the current version of
 //! one record: an `authoritative` domain's first, then the most recently
 //! received. A merged person reads `active = false` with a `replaced-by`
 //! link to its active survivor (FHIR R4 Patient, "Patient records that have
@@ -17,6 +18,9 @@
 
 use std::collections::BTreeMap;
 
+use ferropix_operator_api::patient::IdentifierType;
+use fhir_types::r4::codeable_concept::CodeableConcept;
+use fhir_types::r4::coding::Coding;
 use fhir_types::r4::identifier::Identifier;
 use fhir_types::r4::meta::Meta;
 use fhir_types::r4::patient::{Patient, PatientLink};
@@ -132,8 +136,8 @@ pub async fn patients(
         identifiers.insert(
             person.id,
             held.iter()
-                .filter(|(system, value)| !(system == master && value.expose() == id))
-                .map(|(system, value)| identifier(system, value.expose()))
+                .filter(|held| !(held.system == master && held.value.expose() == id))
+                .map(|held| identifier(&held.system, held.kind, held.value.expose()))
                 .collect(),
         );
     }
@@ -149,7 +153,7 @@ pub async fn patients(
             profile: vec![PDQM_PATIENT.into()],
             ..Meta::default()
         });
-        patient.identifier = std::iter::once(identifier(master, &id))
+        patient.identifier = std::iter::once(identifier(master, IdentifierType::Pi, &id))
             .chain(identifiers.remove(&person.id).unwrap_or_default())
             .collect();
         patient.active = Some((!person.merged()).into());
@@ -170,16 +174,102 @@ pub async fn patients(
     Ok(patients)
 }
 
-/// Returns the identifier `value` in `system`.
-fn identifier(system: &str, value: &str) -> Identifier {
+/// The HL7 Identifier Type code system.
+pub const IDENTIFIER_TYPE: &str = "http://terminology.hl7.org/CodeSystem/v2-0203";
+
+/// Returns the identifier `value` in `system`, of the type `kind`.
+pub(crate) fn identifier(system: &str, kind: IdentifierType, value: &str) -> Identifier {
     Identifier {
+        r#type: Some(identifier_type(kind)),
         system: Some(system.into()),
         value: Some(value.into()),
         ..Identifier::default()
     }
 }
 
+/// Returns `Identifier.type` for `kind`: a coding of the HL7 Identifier Type,
+/// or the code as text for an EHDS code no published code system holds.
+// NOTE: draft EEHRxF Annexes, Table 26: EHDSPatient.identifier.type extends the HL7
+// Identifier Type with HI, HIN, REGPID and REGION, and names no code system for them.
+pub(crate) fn identifier_type(kind: IdentifierType) -> CodeableConcept {
+    match kind.v2_display() {
+        Some(display) => CodeableConcept {
+            coding: vec![Coding {
+                system: Some(IDENTIFIER_TYPE.into()),
+                code: Some(kind.code().into()),
+                display: Some(display.into()),
+                ..Coding::default()
+            }],
+            ..CodeableConcept::default()
+        },
+        None => CodeableConcept {
+            text: Some(kind.code().into()),
+            ..CodeableConcept::default()
+        },
+    }
+}
+
 /// Wraps a driver error.
 fn store(source: sqlx::Error) -> PdqError {
     PdqError::Store(source.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use ferropix_operator_api::patient::IdentifierType;
+
+    use super::{IDENTIFIER_TYPE, identifier_type};
+
+    #[test]
+    fn a_v2_code_is_a_coding_and_an_ehds_code_is_text() {
+        for kind in IdentifierType::ALL {
+            let concept = identifier_type(kind);
+            match kind {
+                IdentifierType::Hi
+                | IdentifierType::Hin
+                | IdentifierType::Regpid
+                | IdentifierType::Region => {
+                    assert!(concept.coding.is_empty(), "{kind}: no code system holds it");
+                    assert_eq!(
+                        Some(kind.code()),
+                        concept
+                            .text
+                            .as_ref()
+                            .and_then(|value| value.value.as_deref()),
+                        "{kind}"
+                    );
+                }
+                _ => {
+                    let [coding] = concept.coding.as_slice() else {
+                        panic!("{kind}: one coding");
+                    };
+                    assert_eq!(
+                        Some(IDENTIFIER_TYPE),
+                        coding
+                            .system
+                            .as_ref()
+                            .and_then(|value| value.value.as_deref()),
+                        "{kind}"
+                    );
+                    assert_eq!(
+                        Some(kind.code()),
+                        coding
+                            .code
+                            .as_ref()
+                            .and_then(|value| value.value.as_deref()),
+                        "{kind}"
+                    );
+                    assert!(coding.display.is_some(), "{kind}");
+                    assert_eq!(
+                        None,
+                        concept
+                            .text
+                            .as_ref()
+                            .and_then(|value| value.value.as_deref()),
+                        "{kind}"
+                    );
+                }
+            }
+        }
+    }
 }

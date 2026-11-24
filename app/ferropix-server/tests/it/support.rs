@@ -147,6 +147,7 @@ clients = ["east-lab", "west-lab"]
 system = "urn:oid:2.999.1.1"
 name = "East hospital"
 kind = "local"
+identifier_type = "PI"
 source_client_id = "east-lab"
 sensitive = false
 
@@ -154,6 +155,7 @@ sensitive = false
 system = "https://example.org/fhir/sid/national"
 name = "A national number"
 kind = "authoritative"
+identifier_type = "NI"
 source_client_id = "west-lab"
 
 [matching]

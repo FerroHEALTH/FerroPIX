@@ -140,6 +140,117 @@ pub enum DomainKind {
     Master,
 }
 
+/// The type of a domain's identifiers, as the store spells it.
+///
+/// The value set is the HL7 Identifier Type
+/// (`http://terminology.hl7.org/CodeSystem/v2-0203`) extended with the EHDS
+/// codes of the draft `EEHRxF` Annexes, Table 26 `EHDSPatient.identifier.type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum IdentifierType {
+    /// National unique individual identifier (v2-0203).
+    #[serde(rename = "NI")]
+    Ni,
+    /// Social Security number (v2-0203).
+    #[serde(rename = "SS")]
+    Ss,
+    /// Patient internal identifier (v2-0203).
+    #[serde(rename = "PI")]
+    Pi,
+    /// Medical record number (v2-0203).
+    #[serde(rename = "MR")]
+    Mr,
+    /// Passport number (v2-0203).
+    #[serde(rename = "PPN")]
+    Ppn,
+    /// National Health Plan Identifier (v2-0203).
+    #[serde(rename = "NH")]
+    Nh,
+    /// Jurisdictional health number (v2-0203).
+    #[serde(rename = "JHN")]
+    Jhn,
+    /// Health Card Number (v2-0203).
+    #[serde(rename = "HC")]
+    Hc,
+    /// Health identifier (EHDS).
+    #[serde(rename = "HI")]
+    Hi,
+    /// Health insurance number (EHDS).
+    #[serde(rename = "HIN")]
+    Hin,
+    /// Regional person identifier (EHDS).
+    #[serde(rename = "REGPID")]
+    Regpid,
+    /// Region identifier (EHDS).
+    #[serde(rename = "REGION")]
+    Region,
+}
+
+impl IdentifierType {
+    /// Every type, in the order of the value set.
+    pub const ALL: [Self; 12] = [
+        Self::Ni,
+        Self::Ss,
+        Self::Pi,
+        Self::Mr,
+        Self::Ppn,
+        Self::Nh,
+        Self::Jhn,
+        Self::Hc,
+        Self::Hi,
+        Self::Hin,
+        Self::Regpid,
+        Self::Region,
+    ];
+
+    /// The code.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Ni => "NI",
+            Self::Ss => "SS",
+            Self::Pi => "PI",
+            Self::Mr => "MR",
+            Self::Ppn => "PPN",
+            Self::Nh => "NH",
+            Self::Jhn => "JHN",
+            Self::Hc => "HC",
+            Self::Hi => "HI",
+            Self::Hin => "HIN",
+            Self::Regpid => "REGPID",
+            Self::Region => "REGION",
+        }
+    }
+
+    /// The type whose code is `code`, or `None`.
+    #[must_use]
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.code() == code)
+    }
+
+    /// The display of a v2-0203 code, or `None` for an EHDS code, which no
+    /// published code system holds yet.
+    #[must_use]
+    pub const fn v2_display(self) -> Option<&'static str> {
+        match self {
+            Self::Ni => Some("National unique individual identifier"),
+            Self::Ss => Some("Social Security number"),
+            Self::Pi => Some("Patient internal identifier"),
+            Self::Mr => Some("Medical record number"),
+            Self::Ppn => Some("Passport number"),
+            Self::Nh => Some("National Health Plan Identifier"),
+            Self::Jhn => Some("Jurisdictional health number"),
+            Self::Hc => Some("Health Card Number"),
+            Self::Hi | Self::Hin | Self::Regpid | Self::Region => None,
+        }
+    }
+}
+
+impl fmt::Display for IdentifierType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.code())
+    }
+}
+
 /// The domain an identifier or a record belongs to, as a list row names it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -12,6 +12,7 @@
 
 use std::collections::BTreeSet;
 
+use ferropix_operator_api::patient::IdentifierType;
 use serde::{Deserialize, Serialize};
 
 use crate::config::error::Error;
@@ -40,6 +41,9 @@ pub struct Domain {
     /// What the domain's identifiers are.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<DomainKind>,
+    /// The type of the domain's identifiers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identifier_type: Option<IdentifierType>,
     /// The client id of the domain's one Patient Identity Source.
     pub source_client_id: String,
     /// Whether the identifier values are sealed at rest.
@@ -52,6 +56,7 @@ impl Default for Domain {
             system: String::new(),
             name: String::new(),
             kind: None,
+            identifier_type: None,
             source_client_id: String::new(),
             sensitive: true,
         }
@@ -67,6 +72,8 @@ pub struct DomainSeed {
     pub name: String,
     /// What the domain's identifiers are.
     pub kind: DomainKind,
+    /// The type of the domain's identifiers.
+    pub identifier_type: IdentifierType,
     /// The client id of the domain's one Patient Identity Source.
     pub source_client_id: String,
     /// Whether the identifier values are sealed at rest.
@@ -76,8 +83,8 @@ pub struct DomainSeed {
 /// Resolves the seed against the resolved `[auth]` section.
 ///
 /// # Errors
-/// Returns [`Error::Missing`] for an entry without its system, name, kind or
-/// client, [`Error::Value`] for a system that is no absolute URI or no FHIR
+/// Returns [`Error::Missing`] for an entry without its system, name, kind,
+/// identifier type or client, [`Error::Value`] for a system that is no absolute URI or no FHIR
 /// `oid`, [`Error::DuplicateSystem`] for a system seeded twice and
 /// [`Error::ClientNotAdmitted`] for a client no issuer lists.
 pub fn resolve(domains: &[Domain], auth: &AuthSettings) -> Result<Vec<DomainSeed>, Error> {
@@ -97,6 +104,9 @@ pub fn resolve(domains: &[Domain], auth: &AuthSettings) -> Result<Vec<DomainSeed
         let kind = domain
             .kind
             .ok_or_else(|| Error::Missing { key: key("kind") })?;
+        let identifier_type = domain.identifier_type.ok_or_else(|| Error::Missing {
+            key: key("identifier_type"),
+        })?;
         if !is_system(&domain.system) {
             return Err(Error::Value {
                 key: key("system"),
@@ -119,6 +129,7 @@ pub fn resolve(domains: &[Domain], auth: &AuthSettings) -> Result<Vec<DomainSeed
             system: domain.system.clone(),
             name: domain.name.clone(),
             kind,
+            identifier_type,
             source_client_id: domain.source_client_id.clone(),
             sensitive: domain.sensitive,
         });

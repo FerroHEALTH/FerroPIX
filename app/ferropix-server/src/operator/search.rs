@@ -282,14 +282,14 @@ async fn read_hits(
         let identifiers = xref::identifiers(&mut snapshot, operator.store.sealer(), *person)
             .await?
             .into_iter()
-            .map(|(system, value)| {
+            .map(|held| {
                 let domain = domains
-                    .get(&system)
+                    .get(&held.system)
                     .cloned()
                     .ok_or(OperatorError::Unadmitted("identifier domain"))?;
                 Ok(MaskedIdentifier {
                     domain,
-                    masked: Masked(mask(value.expose())),
+                    masked: Masked(mask(held.value.expose())),
                 })
             })
             .collect::<Result<Vec<_>, OperatorError>>()?;

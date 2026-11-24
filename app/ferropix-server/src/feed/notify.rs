@@ -66,8 +66,8 @@ pub async fn notify(
         for consumer in settings.consumers.iter() {
             let identifiers: Vec<(String, String)> = held
                 .iter()
-                .filter(|(system, _)| consumer.wants(system))
-                .map(|(system, value)| (system.clone(), value.expose().to_owned()))
+                .filter(|held| consumer.wants(&held.system))
+                .map(|held| (held.system.clone(), held.value.expose().to_owned()))
                 .collect();
             // NOTE: ITI TF-2 §3.10.4.1.2, the example of DOM_A: a person with an identifier in one domain of interest is notified with that one.
             if identifiers.is_empty() {

@@ -20,6 +20,8 @@
     reason = "the test seam: the messages are read as JSON values"
 )]
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use std::time::Duration;
 
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
@@ -69,6 +71,7 @@ pub(super) fn with_master() -> Vec<DomainSeed> {
         system: MASTER.to_owned(),
         name: String::from("Master Patient Identification Domain"),
         kind: DomainKind::Master,
+        identifier_type: IdentifierType::Pi,
         source_client_id: SOURCE.to_owned(),
         sensitive: false,
     });

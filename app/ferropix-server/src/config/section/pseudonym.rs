@@ -120,6 +120,7 @@ mod tests {
             system: String::from("urn:oid:2.999.1.1"),
             name: String::from("East"),
             kind: DomainKind::Local,
+            identifier_type: ferropix_operator_api::patient::IdentifierType::Pi,
             source_client_id: String::from("east-lab"),
             sensitive: true,
         };

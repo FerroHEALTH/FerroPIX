@@ -9,6 +9,8 @@
 //!
 //! The patient is IHE's fictional test patient of that example.
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use std::path::PathBuf;
 
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
@@ -48,6 +50,7 @@ async fn ihes_example_request_finds_the_patient_its_identifier_names() {
         system: system.clone(),
         name: String::from("IHE example authority"),
         kind: DomainKind::Local,
+        identifier_type: IdentifierType::Pi,
         source_client_id: SOURCE.to_owned(),
         sensitive: true,
     }])

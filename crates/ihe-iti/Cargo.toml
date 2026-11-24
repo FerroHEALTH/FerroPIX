@@ -199,6 +199,8 @@ uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
+# The verdicts and pass lists of the conformance corpora.
+ferropix-conformance = { path = "../../tools/ferropix-conformance" }
 # The endpoint tables the tests build each client's outbound client from.
 ferrohealth-config = { workspace = true }
 ferrohealth-secret = { workspace = true }

@@ -195,7 +195,7 @@ async fn an_administrator_adds_a_domain_once_and_only_with_a_listed_source() {
     }
     let fed = Fed::start().await;
     let admin = fed.harness.admin();
-    let body = r#"{"system":"urn:oid:2.999.1.9","name":"Synthetic clinic","kind":"local","source_client_id":"west-lab","reason":"a new clinic"}"#;
+    let body = r#"{"system":"urn:oid:2.999.1.9","name":"Synthetic clinic","kind":"local","identifier_type":"PI","source_client_id":"west-lab","reason":"a new clinic"}"#;
     let created = send_as(
         &fed.harness,
         Method::POST,
@@ -228,7 +228,7 @@ async fn an_administrator_adds_a_domain_once_and_only_with_a_listed_source() {
     assert_eq!(StatusCode::FORBIDDEN, steward.status);
     for (refused, status) in [
         (
-            r#"{"system":"urn:oid:2.999.1.8","name":"X","kind":"local","source_client_id":"north-lab"}"#,
+            r#"{"system":"urn:oid:2.999.1.8","name":"X","kind":"local","identifier_type":"PI","source_client_id":"north-lab"}"#,
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (
@@ -236,7 +236,7 @@ async fn an_administrator_adds_a_domain_once_and_only_with_a_listed_source() {
             StatusCode::BAD_REQUEST,
         ),
         (
-            r#"{"system":"not a uri","name":"X","kind":"local","source_client_id":"west-lab"}"#,
+            r#"{"system":"not a uri","name":"X","kind":"local","identifier_type":"PI","source_client_id":"west-lab"}"#,
             StatusCode::BAD_REQUEST,
         ),
     ] {

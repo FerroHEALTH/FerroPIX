@@ -20,7 +20,9 @@ use ihe_iti::server::format::Format;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
-use super::{encoded, example, examples, is_audit, record, verdict_noted};
+use ferropix_conformance::{record, verdict_noted};
+
+use super::{encoded, example, examples, is_audit};
 use crate::pixm::{BLUE, FHIR_JSON, PROMPT, RED, RED_VALUE, client, manager, red_source, target};
 
 /// The vendored package under `docs/specs/`.

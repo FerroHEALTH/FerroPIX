@@ -308,12 +308,14 @@ clients = ["east-lab", "west-lab"]
 system = "{DOMAIN}"
 name = "East hospital"
 kind = "local"
+identifier_type = "PI"
 source_client_id = "east-lab"
 
 [[domain]]
 system = "http://localhost:8080"
 name = "Master Patient Identification Domain"
 kind = "master"
+identifier_type = "PI"
 source_client_id = "east-lab"
 sensitive = false
 

@@ -28,7 +28,7 @@ use ferrohealth_ui::view::template::settings::{
 use ferrohealth_ui::view::time::timestamp;
 use ferropix_operator_api::configuration::{Configuration, Origin, Section};
 use ferropix_operator_api::domain::{Domain, DomainPage, Domains, FeedOutcome};
-use ferropix_operator_api::patient::{Channel, DomainKind};
+use ferropix_operator_api::patient::{Channel, DomainKind, IdentifierType};
 use ferropix_operator_api::source::{Admission, Message, Source, SourcePage, Sources};
 
 use crate::app::{DOMAINS, SOURCES};
@@ -48,6 +48,25 @@ pub fn channel(visit: &Visit, channel: Channel) -> String {
         Channel::Fhir => Msg::ChannelFhir,
         Channel::V2 => Msg::ChannelV2,
         Channel::Pmir => Msg::ChannelPmir,
+    })
+}
+
+/// The words of an identifier type, its code first.
+#[must_use]
+pub fn identifier_type(visit: &Visit, kind: IdentifierType) -> String {
+    visit.tr(match kind {
+        IdentifierType::Ni => Msg::IdentifierTypeNi,
+        IdentifierType::Ss => Msg::IdentifierTypeSs,
+        IdentifierType::Pi => Msg::IdentifierTypePi,
+        IdentifierType::Mr => Msg::IdentifierTypeMr,
+        IdentifierType::Ppn => Msg::IdentifierTypePpn,
+        IdentifierType::Nh => Msg::IdentifierTypeNh,
+        IdentifierType::Jhn => Msg::IdentifierTypeJhn,
+        IdentifierType::Hc => Msg::IdentifierTypeHc,
+        IdentifierType::Hi => Msg::IdentifierTypeHi,
+        IdentifierType::Hin => Msg::IdentifierTypeHin,
+        IdentifierType::Regpid => Msg::IdentifierTypeRegpid,
+        IdentifierType::Region => Msg::IdentifierTypeRegion,
     })
 }
 
@@ -322,6 +341,26 @@ fn create_form(visit: &Visit) -> Html {
     let kind = Field::new("kind", visit.tr(Msg::ColKind)).view(Html::raw(format!(
         "<select id=\"kind\" name=\"kind\" class=\"{SELECT}\">{kinds}</select>"
     )));
+    let types: Html = IdentifierType::ALL
+        .into_iter()
+        .map(|each| {
+            let selected = if each == IdentifierType::Pi {
+                " selected"
+            } else {
+                ""
+            };
+            Html::raw(format!(
+                "<option value=\"{}\"{selected}>{}</option>",
+                each.code(),
+                Html::text(identifier_type(visit, each))
+            ))
+        })
+        .collect();
+    let types = Field::new("identifier_type", visit.tr(Msg::ColIdentifierType)).view(Html::raw(
+        format!(
+            "<select id=\"identifier_type\" name=\"identifier_type\" class=\"{SELECT}\">{types}</select>"
+        ),
+    ));
     let sensitive = check_field(
         "sensitive",
         visit.tr(Msg::DomainSensitive),
@@ -331,7 +370,7 @@ fn create_form(visit: &Visit) -> Html {
     disclosure(
         visit.tr(Msg::DomainCreate),
         Html::raw(format!(
-            "<form method=\"post\" action=\"{DOMAINS}\" class=\"fui-form\"><p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{}{}{kind}{}{}</div>{sensitive}<div class=\"fui-form-foot\">{}</div></form>",
+            "<form method=\"post\" action=\"{DOMAINS}\" class=\"fui-form\"><p class=\"fui-help\">{}</p><div class=\"fui-form-grid\">{}{}{kind}{types}{}{}</div>{sensitive}<div class=\"fui-form-foot\">{}</div></form>",
             Html::text(visit.tr(Msg::DomainAdminNote)),
             domain_field(visit, "system", Msg::ColSystem, true),
             domain_field(visit, "name", Msg::ColName, true),
@@ -406,6 +445,7 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
         Column::text("name", visit.tr(Msg::ColName)).role(Role::Title),
         Column::text("system", visit.tr(Msg::ColSystem)).role(Role::Sub),
         Column::text("kind", visit.tr(Msg::ColKind)),
+        Column::text("type", visit.tr(Msg::ColIdentifierType)).role(Role::Wide),
         Column::text("sensitive", visit.tr(Msg::ColSensitive)).role(Role::Wide),
         Column::text("source", visit.tr(Msg::ColSource)).role(Role::Wide),
         Column::text("records", visit.tr(Msg::ColRecords)).numeric(),
@@ -416,6 +456,7 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
         _,
         system,
         kind_column,
+        type_column,
         sensitive,
         source_column,
         records,
@@ -427,7 +468,7 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
         .iter()
         .map(|domain| {
             Html::raw(format!(
-                "<tr>{}{}{}{}{}{}{}{}</tr>",
+                "<tr>{}{}{}{}{}{}{}{}{}</tr>",
                 title_cell(
                     None,
                     Some(&format!("{DOMAINS}/{}", domain.id)),
@@ -436,6 +477,10 @@ fn domain_table(visit: &Visit, domains: &Domains) -> Html {
                 ),
                 cell(system, code_wrap(&domain.system)),
                 cell(kind_column, Html::text(kind(visit, domain.kind))),
+                cell(
+                    type_column,
+                    Html::text(identifier_type(visit, domain.identifier_type))
+                ),
                 cell(sensitive, Html::text(sealed(visit, domain.sensitive))),
                 cell(source_column, code(&domain.source_client_id)),
                 cell(records, Html::text(number(visit, domain.records))),
@@ -470,6 +515,10 @@ pub fn domain(visit: &Visit, page: &DomainPage, written: Option<&Read<()>>, admi
     let facts = definitions(vec![
         (visit.tr(Msg::ColSystem), code_wrap(&domain.system)),
         (visit.tr(Msg::ColKind), Html::text(kind(visit, domain.kind))),
+        (
+            visit.tr(Msg::ColIdentifierType),
+            Html::text(identifier_type(visit, domain.identifier_type)),
+        ),
         (
             visit.tr(Msg::ColSensitive),
             Html::text(sealed(visit, domain.sensitive)),

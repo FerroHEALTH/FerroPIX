@@ -19,6 +19,8 @@ mod iti83;
 mod reconnect;
 mod vendored;
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -63,6 +65,11 @@ fn seed(system: &str, kind: DomainKind, sensitive: bool) -> DomainSeed {
         system: system.to_owned(),
         name: system.to_owned(),
         kind,
+        identifier_type: if kind == DomainKind::Authoritative {
+            IdentifierType::Ni
+        } else {
+            IdentifierType::Pi
+        },
         source_client_id: SOURCE.to_owned(),
         sensitive,
     }

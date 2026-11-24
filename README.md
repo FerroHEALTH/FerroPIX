@@ -33,6 +33,11 @@
 [![PDQm 3.2.0 examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpdqm.json)](conformance/pdqm/pass-list.txt)
 [![PMIR 1.6.0 examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpmir.json)](conformance/pmir/pass-list.txt)
 [![Audit record examples](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Faudit.json)](conformance/audit/pass-list.txt)
+
+**EHDS, self-tested**<br>
+[![MyHealth@EU NCP API 9.1.1-ci Patient-minimal valid](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fncp-patient-minimal.json)](conformance/ncp-patient-minimal/pass-list.txt)
+[![EHDS identifier types (EEHRxF draft Annex X)](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fehds-identifier-types.json)](conformance/ehds-identifier-types/pass-list.txt)
+[![Xt-EHR D8.2 2026-05-19 Patient Match assertions](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fxtehr-patient-match.json)](conformance/xtehr-patient-match/pass-list.txt)
 <!-- badges:end -->
 
 </div>

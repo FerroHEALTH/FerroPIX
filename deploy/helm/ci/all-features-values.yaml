@@ -27,6 +27,7 @@ config:
     - system: "urn:oid:2.999.1.1"
       name: "Chart check hospital"
       kind: local
+      identifier_type: PI
       source_client_id: east-adt
   hl7v2:
     enabled: true

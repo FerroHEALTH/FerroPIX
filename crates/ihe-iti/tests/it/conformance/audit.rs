@@ -27,7 +27,9 @@ use secrecy::SecretString;
 use serde_json::Value;
 use url::Url;
 
-use super::{example, examples, is_audit, record, registry, verdict};
+use ferropix_conformance::{record, verdict};
+
+use super::{example, examples, is_audit, registry};
 use crate::audit::profile::{Kept, holds_to, like, written};
 
 /// The vendored packages whose audit examples the corpus reads.

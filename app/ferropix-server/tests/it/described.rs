@@ -3,16 +3,12 @@
 
 //! The issuer the SMART discovery document and the `CapabilityStatement`
 //! name, chosen by `ferrohealth-smart`'s `describe`: `[auth]
-//! described_issuer`, else the one issuer a user launch starts at, else, with
-//! only `machines` issuers trusted, the one `machines` issuer for SMART
-//! Backend Services; never by the order of the `[[auth.issuer]]` tables.
+//! described_issuer`, else the one SMART authorization server trusted, never
+//! a `federation` issuer unnamed and never by the order of the
+//! `[auth.issuer.<name>]` tables.
 //! SMART App Launch 2.2.0, Conformance, §Metadata, and Backend Services,
 //! §Retrieve `.well-known/smart-configuration`; which of several issuers is
 //! described is our own design.
-#![expect(
-    clippy::disallowed_types,
-    reason = "the test seam: the discovery document is read as a JSON value"
-)]
 
 use ferrohealth_secret::secret_url::SecretUrl;
 use ferrohealth_smart::kind::IssuerKind;
@@ -21,7 +17,7 @@ use ferropix_server::auth::{Smart, SmartError};
 use ferropix_server::config::settings::Settings;
 use http::{Method, StatusCode};
 
-use crate::auth::{Issuer, application, send, settings};
+use crate::auth::{AUDIENCE, Issuer, application, send, settings, settings_trusting};
 use crate::support::Secrets;
 
 /// The settings of a server trusting `issuers` in this order, each of its
@@ -69,30 +65,62 @@ async fn described(settings: Settings) -> Option<String> {
     smart.token_endpoint().map(str::to_owned)
 }
 
+/// The settings of a server trusting the SMART issuer `smart` and the
+/// `federation` issuer `federation`, the federation table written first when
+/// `federation_first`, with `[auth] described_issuer` naming `named`.
+fn beside_federation(
+    smart: &Issuer,
+    federation: &Issuer,
+    federation_first: bool,
+    named: Option<&Issuer>,
+    secrets: &Secrets,
+) -> Settings {
+    let smart_table = format!(
+        "[auth.issuer.idp]\nissuer = \"{}\"\naudience = [\"{AUDIENCE}\"]\n",
+        smart.uri()
+    );
+    let federation_table = format!(
+        "[auth.issuer.fed]\nissuer = \"{}\"\nkind = \"federation\"\naudience = [\"{AUDIENCE}\"]\n\n[auth.issuer.fed.federation]\ncontact_point = false\ncountries = [\"DE\"]\nissuing_authorities = [\"BAEK\"]\nprovider_identifier_prefixes = [\"urn:example:de:\"]\n",
+        federation.uri()
+    );
+    let described = named.map_or_else(String::new, |issuer| {
+        let name = if std::ptr::eq(issuer, federation) {
+            "fed"
+        } else {
+            "idp"
+        };
+        format!("[auth]\ndescribed_issuer = \"{name}\"\n")
+    });
+    let tables = if federation_first {
+        format!("{described}\n{federation_table}\n{smart_table}")
+    } else {
+        format!("{described}\n{smart_table}\n{federation_table}")
+    };
+    settings_trusting(smart, secrets, &tables, "")
+}
+
 #[tokio::test]
-async fn a_machines_issuer_written_first_is_never_described() {
-    let machines = Issuer::start().await;
-    let persons = Issuer::start().await;
+async fn a_federation_issuer_written_first_is_never_described() {
+    let federation = Issuer::start().await;
+    let smart = Issuer::start().await;
     let secrets = Secrets::new();
-    for order in [
-        [
-            (&machines, IssuerKind::Machines),
-            (&persons, IssuerKind::Persons),
-        ],
-        [
-            (&persons, IssuerKind::Persons),
-            (&machines, IssuerKind::Machines),
-        ],
-    ] {
+    for federation_first in [true, false] {
         assert_eq!(
-            Some(format!("{}/token", persons.uri())),
-            described(trusting(&order, None, &secrets)).await
+            Some(format!("{}/token", smart.uri())),
+            described(beside_federation(
+                &smart,
+                &federation,
+                federation_first,
+                None,
+                &secrets
+            ))
+            .await
         );
     }
 }
 
 #[tokio::test]
-async fn several_user_issuers_without_the_key_refuse_the_start() {
+async fn several_smart_issuers_without_the_key_refuse_the_start() {
     let persons = Issuer::start().await;
     let patients = Issuer::start().await;
     let secrets = Secrets::new();
@@ -100,18 +128,18 @@ async fn several_user_issuers_without_the_key_refuse_the_start() {
     sorted.sort();
     for order in [
         [
-            (&persons, IssuerKind::Persons),
-            (&patients, IssuerKind::Patients),
+            (&persons, IssuerKind::Smart),
+            (&patients, IssuerKind::Smart),
         ],
         [
-            (&patients, IssuerKind::Patients),
-            (&persons, IssuerKind::Persons),
+            (&patients, IssuerKind::Smart),
+            (&persons, IssuerKind::Smart),
         ],
     ] {
         let DescribeError::SeveralEligible { issuers } =
             refusal(trusting(&order, None, &secrets)).await
         else {
-            panic!("several user issuers are refused as such");
+            panic!("several SMART issuers are refused as such");
         };
         let named: Vec<&str> = issuers.iter().map(SecretUrl::expose).collect();
         assert_eq!(named, sorted, "the table order never shows");
@@ -124,8 +152,8 @@ async fn the_named_issuer_is_described_among_several() {
     let patients = Issuer::start().await;
     let secrets = Secrets::new();
     let issuers = [
-        (&persons, IssuerKind::Persons),
-        (&patients, IssuerKind::Patients),
+        (&persons, IssuerKind::Smart),
+        (&patients, IssuerKind::Smart),
     ];
     for named in [&persons, &patients] {
         assert_eq!(
@@ -136,20 +164,21 @@ async fn the_named_issuer_is_described_among_several() {
 }
 
 #[tokio::test]
-async fn a_named_machines_issuer_beside_a_user_issuer_refuses_the_start() {
-    let machines = Issuer::start().await;
-    let persons = Issuer::start().await;
+async fn a_named_federation_issuer_is_described_beside_a_smart_issuer() {
+    let federation = Issuer::start().await;
+    let smart = Issuer::start().await;
     let secrets = Secrets::new();
-    let issuers = [
-        (&persons, IssuerKind::Persons),
-        (&machines, IssuerKind::Machines),
-    ];
-    let DescribeError::MachinesIssuer { issuer } =
-        refusal(trusting(&issuers, Some(&machines), &secrets)).await
-    else {
-        panic!("a named machines issuer beside a user issuer is refused");
-    };
-    assert_eq!(issuer.expose(), machines.uri());
+    assert_eq!(
+        Some(format!("{}/token", federation.uri())),
+        described(beside_federation(
+            &smart,
+            &federation,
+            false,
+            Some(&federation),
+            &secrets
+        ))
+        .await
+    );
 }
 
 #[tokio::test]
@@ -158,7 +187,7 @@ async fn a_named_unknown_issuer_refuses_the_start() {
     let elsewhere = Issuer::start().await;
     let secrets = Secrets::new();
     let refused = refusal(trusting(
-        &[(&persons, IssuerKind::Persons)],
+        &[(&persons, IssuerKind::Smart)],
         Some(&elsewhere),
         &secrets,
     ))
@@ -172,10 +201,10 @@ async fn a_named_unknown_issuer_refuses_the_start() {
 // SMART App Launch 2.2.0, Backend Services, Retrieve
 // `.well-known/smart-configuration`: a backend client reads the token endpoint here.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_machines_only_server_is_described_for_backend_services() {
+async fn an_issuer_of_backend_services_alone_is_described_from_its_metadata() {
     let machines = Issuer::start().await;
     let secrets = Secrets::new();
-    let settings = trusting(&[(&machines, IssuerKind::Machines)], None, &secrets);
+    let settings = trusting(&[(&machines, IssuerKind::Smart)], None, &secrets);
     let (app, _smart, _spool) = application(settings).await;
     let discovery = send(
         &app,
@@ -195,7 +224,7 @@ async fn a_machines_only_server_is_described_for_backend_services() {
         document["grant_types_supported"]
     );
     assert_eq!(
-        serde_json::json!(["client-confidential-asymmetric", "permission-v1"]),
+        serde_json::json!(["permission-v1", "client-confidential-asymmetric"]),
         document["capabilities"]
     );
     let listed = document["scopes_supported"]
@@ -204,13 +233,6 @@ async fn a_machines_only_server_is_described_for_backend_services() {
     assert!(
         listed.contains(&serde_json::json!("system/Patient.rs")),
         "{listed:?}"
-    );
-    assert!(
-        listed
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .all(|scope| scope.starts_with("system/")),
-        "a Backend Services client requests system/ scopes: {listed:?}"
     );
     assert!(
         document.get("authorization_endpoint").is_none(),

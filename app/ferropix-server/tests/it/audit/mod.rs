@@ -67,7 +67,6 @@ pub(super) fn call(user: Option<&str>) -> Call {
             Some(String::from("east-lab")),
             "system/Patient.rs",
             None,
-            false,
             if user.is_some() {
                 CallerKind::Person
             } else {

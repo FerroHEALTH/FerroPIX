@@ -266,7 +266,6 @@ listen = "127.0.0.1:8080"
 
 [auth.issuer.dev]
 issuer = "http://127.0.0.1:8180/dev"
-kind = "machines"
 
 [[trust.issuer]]
 issuer = "dev"
@@ -591,14 +590,17 @@ fn the_old_issuer_shapes_fail_at_boot_naming_their_key() {
         ),
         (
             "an issuer array",
-            FULL.replacen("[auth.issuer.idp]\n", "[[auth.issuer]]\n", 1)
-                .replacen("[auth.issuer.idp.profile]\n", "", 1),
+            FULL.replacen("[auth.issuer.idp]\n", "[[auth.issuer]]\n", 1),
             "auth.issuer",
         ),
         (
             "a profile named as a string",
-            FULL.replacen("preset = \"rfc9068\"\n", "profile = \"rfc9068\"\n", 1)
-                .replacen("[auth.issuer.idp.profile]\n", "", 1),
+            FULL.replacen(
+                &format!("[auth.issuer.idp]\n{issuer}"),
+                &format!("[auth.issuer.idp]\n{issuer}profile = \"rfc9068\"\n"),
+                1,
+            )
+            .replacen("[auth.issuer.idp.profile]\nmax_actor_chain = 1\n", "", 1),
             "profile",
         ),
         (
@@ -641,14 +643,56 @@ fn the_hl7v2_face_needs_a_terminology_server() {
 }
 
 #[test]
-fn an_issuer_without_its_kind_fails_at_boot() {
+fn an_issuer_needs_no_kind_and_a_removed_kind_or_client_list_fails_at_boot() {
     let secrets = Secrets::new();
-    let text = FULL.replacen("kind = \"persons\"\n", "", 1);
-    assert_ne!(FULL, text);
-    let error = resolve(&text, &secrets).expect_err("kind has no default");
-    assert!(matches!(error, Error::Auth { .. }), "{error:?}");
-    let said = chain(&error);
-    assert!(said.contains("kind"), "{said}");
+    resolve(FULL, &secrets).expect("an issuer table names only its issuer");
+    let issuer = "issuer = \"https://idp.example.org/realms/pix\"\n";
+    for (key, added) in [
+        ("kind", "kind = \"persons\"\n"),
+        ("preset", "preset = \"rfc9068\"\n"),
+        (
+            "profile_file",
+            "profile_file = \"/etc/ferropix/idp.toml\"\n",
+        ),
+        (
+            "scopeless_subjects",
+            "scopeless_subjects = [\"east-lab\"]\n",
+        ),
+    ] {
+        let text = FULL.replacen(
+            &format!("[auth.issuer.idp]\n{issuer}"),
+            &format!("[auth.issuer.idp]\n{issuer}{added}"),
+            1,
+        );
+        assert_ne!(FULL, text, "{key}");
+        let error = resolve(&text, &secrets).expect_err("the key is no longer read");
+        assert!(matches!(error, Error::Load(_)), "{key}: {error:?}");
+        assert!(chain(&error).contains(key), "{key}: {}", chain(&error));
+    }
+    for key in [
+        "first_party_clients",
+        "delegates",
+        "audience_delegates",
+        "issuer_client_is_person",
+        "patient_context",
+        "fhir_user_patient",
+        "representation",
+        "act_represents_patient",
+        "guest",
+    ] {
+        let text = FULL.replacen(
+            "[auth.issuer.idp.profile]\n",
+            &format!("[auth.issuer.idp.profile]\n{key} = []\n"),
+            1,
+        );
+        assert_ne!(FULL, text, "{key}");
+        let error = resolve(&text, &secrets).expect_err("the profile key is no longer read");
+        assert!(matches!(error, Error::Load(_)), "{key}: {error:?}");
+        assert!(chain(&error).contains(key), "{key}: {}", chain(&error));
+    }
+    let text = format!("{FULL}\n[auth.idp]\n");
+    let error = resolve(&text, &secrets).expect_err("the idp table is no longer read");
+    assert!(chain(&error).contains("idp"), "{}", chain(&error));
 }
 
 #[test]

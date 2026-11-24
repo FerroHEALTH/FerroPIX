@@ -612,7 +612,6 @@ mod tests {
             Some(String::from("synthetic-client")),
             scope,
             None,
-            false,
             CallerKind::System,
         )))
     }

@@ -5,9 +5,10 @@
 //! the `[trust]` section beside it.
 //!
 //! `[auth]` names the issuers whose tokens the server accepts, each an
-//! `[auth.issuer.<name>]` table with its `kind`, its preset, its profile
-//! and its own token rules, its audience the public base URL unless set, verified against the issuer's key set or by its RFC 7662
-//! introspection endpoint, the trust roots and the Basic users of the
+//! `[auth.issuer.<name>]` table naming its `issuer`, a SMART App Launch 2.2
+//! authorization server unless it declares `kind = "federation"`, its
+//! audience the public base URL unless set, its tokens verified against the
+//! issuer's key set or by its RFC 7662 introspection endpoint, the trust roots and the Basic users of the
 //! development profile, each granted its scopes by `[basic_grants]`;
 //! `ferrohealth-smart` resolves it, with the issuer URL
 //! rule of RFC 8414 §2, the audience of RFC 9068 §4 and the asymmetric
@@ -28,7 +29,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ferrohealth_smart::basic::PasswordStore;
 use ferrohealth_smart::config::{AuthSection, BasicGrants, Resolved};
-use ferrohealth_smart::idp::section::IdpSection;
 use ferrohealth_smart::scope::{is_extension_scope, is_scope_token};
 use serde::{Deserialize, Serialize};
 
@@ -92,8 +92,8 @@ impl Auth {
     /// base URL, the audience of every issuer whose table names none.
     ///
     /// # Errors
-    /// Returns [`Error::Value`] for `enabled = false`, an `[auth.dpop]`,
-    /// `[auth.issuer.<name>.party]` or `[auth.idp]` table, a Basic user's
+    /// Returns [`Error::Value`] for `enabled = false`, an `[auth.dpop]` or
+    /// `[auth.issuer.<name>.party]` table, a Basic user's
     /// granted `roles` or an issuer's `role_claims`,
     /// which FerroPIX would never apply, a
     /// product scope in no
@@ -104,8 +104,7 @@ impl Auth {
     /// granted a `system/` scope; [`Error::BasicGrants`] for a grant naming a
     /// user `[[auth.basic.users]]` does not list; and [`Error::Auth`] for every rule
     /// `ferrohealth-smart` checks: no issuer and no Basic
-    /// user, an issuer name outside the name form, an issuer without `kind`
-    /// under a preset that names none, an issuer outside the URL
+    /// user, an issuer name outside the name form, an issuer outside the URL
     /// rule, a symmetric algorithm, a skew over the bound, a profile refused,
     /// an `[auth.issuer.introspection]` that breaks a rule, an `[auth.tls]` that
     /// is no PEM of certificates, and a Basic user it refuses.
@@ -177,8 +176,7 @@ impl Auth {
 /// its own replay store, and FerroPIX builds none: its callers are backend
 /// services and persons holding bearer tokens, and no IHE profile it serves
 /// asks for `DPoP`. `[auth.issuer.<name>.party]` binds a person's login to a
-/// party, and `[auth.idp]` holds the identity provider adapters only that
-/// binding reads; FerroPIX keeps no party. A Basic user's granted `roles` and
+/// party, and FerroPIX keeps no party. A Basic user's granted `roles` and
 /// an issuer's `role_claims` are refused too, since the permission table reads
 /// scopes. An issuer's `federation` and `attributes` tables are applied: the
 /// first classifies the tokens of a `federation` issuer, the second states the
@@ -186,21 +184,11 @@ impl Auth {
 fn unapplied(section: &AuthSection, grants: &BasicGrants) -> Result<(), Error> {
     // NOTE: no specification governs this: our own design; a key that would be read and
     // never applied is refused, so an operator never believes it is in force.
-    for (set, key, rule) in [
-        (
-            section.dpop.is_some(),
+    if section.dpop.is_some() {
+        return Err(value(
             "auth.dpop",
             "FerroPIX checks no DPoP proof (RFC 9449), so the table would never apply",
-        ),
-        (
-            section.idp != IdpSection::default(),
-            "auth.idp",
-            "FerroPIX binds no login to a party, the only reader of an identity provider adapter",
-        ),
-    ] {
-        if set {
-            return Err(value(key, rule));
-        }
+        ));
     }
     if let Some(user) = grants
         .users
@@ -327,7 +315,6 @@ mod tests {
     use ferrohealth_smart::config::{
         AuthSection, BasicGrant, BasicGrants, BasicSection, BasicUser, ConfigError, IssuerEntry,
     };
-    use ferrohealth_smart::kind::IssuerKind;
     use ferrohealth_smart::party::config::PartySection;
     use ferrohealth_smart::sender::proof::DpopSection;
     use secrecy::SecretString;
@@ -340,7 +327,7 @@ mod tests {
 
     const BASE: &str = "https://pix.example.org/fhir";
 
-    /// Returns the section with one machines issuer per URL of `issuers`,
+    /// Returns the section with one SMART issuer per URL of `issuers`,
     /// the first named `idp`, the next `idp1`, `idp2` and so on.
     fn auth(issuers: &[&str]) -> Auth {
         Auth(AuthSection {
@@ -352,7 +339,6 @@ mod tests {
                         name(index),
                         IssuerEntry {
                             issuer: SecretUrl::new(*issuer),
-                            kind: Some(IssuerKind::Machines),
                             ..IssuerEntry::default()
                         },
                     )
@@ -641,7 +627,6 @@ mod tests {
         dpop.0.dpop = Some(DpopSection::default());
         let mut party = auth(&[url]);
         if let Some(entry) = party.0.issuer.get_mut("idp") {
-            entry.kind = Some(IssuerKind::Persons);
             entry.party = Some(PartySection::default());
         }
         let mut roles = auth(&[url]);
@@ -670,12 +655,8 @@ mod tests {
     }
 
     #[test]
-    fn an_issuer_without_its_kind_is_refused() {
-        let mut kindless = auth(&["https://idp.example.org"]);
-        for entry in kindless.0.issuer.values_mut() {
-            entry.kind = None;
-        }
-        let error = kindless
+    fn an_issuer_naming_only_its_url_is_a_smart_issuer() {
+        let resolved = auth(&["https://idp.example.org"])
             .resolve(
                 Profile::Production,
                 &Trust::default(),
@@ -683,7 +664,7 @@ mod tests {
                 ADMIN,
                 BASE,
             )
-            .expect_err("kind has no default");
-        assert!(matches!(error, Error::Auth { .. }), "{error:?}");
+            .expect("an issuer table needs no kind");
+        assert_eq!(1, resolved.resolved.issuers.len());
     }
 }

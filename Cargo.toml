@@ -54,41 +54,20 @@ fhir-types = { version = "0.1.131", default-features = false }
 # The FHIR R4 search value grammar of FerroBRIDGE, which every search value
 # and token is read and written with.
 fhir-search = { version = "0.1.131", default-features = false }
-# The SMART and OAuth 2.0 crate of FerroHEALTH/FerroSMART: the RFC 8414
-# issuer rule and metadata location of the Nuts grant, without its HTTP
-# fetchers. The server pins it exactly, as a product pins every family crate;
-# the published crates take their own caret requirement on it. 0.26 is the
-# line ihe-iti, nl-generic-functions, ihe-atna 0.21, ferrohealth-session 0.21
-# and ferrobridge-term 0.11 take, so the lock holds one copy; it reads no TLS
-# material itself, and the server and the console hand it `server-tls`'s
-# builder over ferrohealth-server. Its `client::outbound::OutboundClient` is
-# the client of every outbound integration (#571); 0.17 types every endpoint
-# URL a table names as a SecretUrl (#591), 0.18 every issuer too (#624),
-# 0.19 the issuer every other `[auth]` table names (#636), 0.19.1 signs a
-# client assertion valid for 60 seconds (#640), 0.20 masks the issuer a
-# role-issuer refusal names (#643), 0.21 chooses the described SMART
-# issuer by one shared rule (#647), 0.22 drops `[auth.dpop]
-# external_url` for the product's public URL (#649), 0.23 leaves a Basic
-# user's scopes to the product's `[basic_grants]` and 0.24 asks a standing
-# source (#651), 0.26 builds on ferrohealth-server 0.10 (#669), 0.27
-# describes a machines-only deployment for SMART Backend Services (#646),
-# 0.28 takes a client assertion's `aud` and `typ` from the grant's
-# security profile, and 0.29 ships the `ferrosmart` issuer preset for
-# FerroSMART's tokens (#681), whose 0.29.1 refuses an issuer named in two
-# `[[auth.issuer]]` tables (FerroHEALTH/FerroSMART#591), 0.30 builds on
-# ferrohealth-server 0.11, 0.31 reads a patient's own FerroSMART token
-# as the person (`fhir_user_patient`, FerroHEALTH/FerroSMART#681), and 0.32
-# names every issuer (`[auth.issuer.<name>]`), takes its profile keys under
-# its `profile` table and a reason code on every refusal (#701). Verified
-# against crates.io on 2026-11-21 (0.32.0).
-ferrohealth-smart = { version = "=0.33.0", default-features = false }
+# The SMART and OAuth 2.0 crate of FerroHEALTH/FerroSMART: the resource
+# server, the outbound client of every integration and the RFC 8414 metadata
+# of the Nuts grant. The server pins it exactly, as a product pins every
+# family crate; the published crates take their own caret requirement on it.
+# 0.34 reads every SMART issuer's caller from the token's standard claims
+# (FerroHEALTH/FerroSMART#804, #805). Verified against crates.io on
+# 2026-11-24 (0.34.0).
+ferrohealth-smart = { version = "=0.34.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
-# page sits behind. Pinned exactly, as a product pins every family crate.
-# Verified against crates.io on 2026-11-21 (0.27.0, the release on
-# ferrohealth-smart 0.32).
-ferrohealth-session = { version = "=0.28.0", default-features = false }
+# page sits behind. Pinned exactly, as a product pins every family crate, at
+# the release on ferrohealth-smart 0.34.
+ferrohealth-session = { version = "=0.29.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and

@@ -245,7 +245,6 @@ mod tests {
                 Some(client.to_owned()),
                 "system/Patient.cud",
                 None,
-                false,
                 kind,
             )
             .with_issuer(issuer.to_owned()),
@@ -285,7 +284,7 @@ mod tests {
             "system/Patient.cud",
         )));
         let caller = basic.caller().expect("a Basic caller");
-        assert_eq!(&CallerKind::Person, caller.kind(), "never System");
+        assert_eq!(&CallerKind::User, caller.kind(), "never System");
         assert_eq!(
             None,
             sources.client(&basic),
@@ -302,9 +301,11 @@ mod tests {
         let sources = sources();
         let system = "urn:oid:2.999.1.1";
         for kind in [
+            CallerKind::Practitioner,
+            CallerKind::Patient,
+            CallerKind::RelatedPerson,
             CallerKind::Person,
-            CallerKind::Delegated { actor: None },
-            CallerKind::Guest(Box::new(CallerKind::System)),
+            CallerKind::User,
         ] {
             let person = bearer_of("east-lab", ISSUER, kind.clone());
             assert_eq!(None, sources.client(&person), "{kind:?}");

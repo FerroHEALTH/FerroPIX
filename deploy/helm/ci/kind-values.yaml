@@ -24,14 +24,7 @@ config:
     issuer:
       dev:
         issuer: "http://localhost:8180/ferropix"
-        kind: persons
-        preset: rfc9068
         audience: ["http://localhost:8080/fhir", "ferropix-console"]
-        profile:
-          token_types: ["JWT"]
-          required_claims: ["iss", "exp", "aud", "sub"]
-          client_claims: ["client_id", "azp"]
-          first_party_clients: ["ferropix-console"]
   trust:
     issuer:
       - issuer: dev
@@ -57,6 +50,17 @@ extraContainers:
     env:
       - name: SERVER_PORT
         value: "8180"
+      # The token callbacks of the compose quickstart's issuer service, each
+      # signing an RFC 9068 `at+jwt` access token.
+      - name: JSON_CONFIG
+        value: >-
+          {"interactiveLogin":true,"tokenCallbacks":[{"issuerId":"ferropix",
+          "requestMappings":[{"requestParam":"grant_type","match":"client_credentials",
+          "typeHeader":"at+jwt","claims":{"sub":"${clientId}","client_id":"${clientId}",
+          "aud":["http://localhost:8080/fhir"],"scope":"${scope}"}},
+          {"requestParam":"grant_type","match":"authorization_code|refresh_token",
+          "typeHeader":"at+jwt","claims":{"client_id":"${clientId}","aud":["${clientId}"],
+          "scope":"openid __ferropix.steward"}}]}]}
     securityContext:
       allowPrivilegeEscalation: false
       runAsNonRoot: true

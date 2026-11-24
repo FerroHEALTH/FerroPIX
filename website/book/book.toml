@@ -24,6 +24,9 @@ site-url = "/docs/"
 default-theme = "light"
 preferred-dark-theme = "navy"
 additional-css = ["theme/ferropix.css"]
+# The vendored mermaid bundle (vendor/mermaid/PROVENANCE.md) and the script
+# that draws every ```mermaid fence with it.
+additional-js = ["vendor/mermaid/mermaid.min.js", "theme/mermaid-init.js"]
 git-repository-url = "https://github.com/FerroHEALTH/FerroPIX"
 edit-url-template = "https://github.com/FerroHEALTH/FerroPIX/edit/main/website/book/{path}"
 smart-punctuation = true

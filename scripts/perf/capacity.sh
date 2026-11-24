@@ -149,7 +149,7 @@ up() {
   # The client credentials mapping of the issuer service of compose.yaml.
   # shellcheck disable=SC2016 # ${clientId} and ${scope} are the provider's own templates
   "$CONTAINER" run --detach --name "$ISSUER_NAME" --publish 127.0.0.1:8180:8180 --env SERVER_PORT=8180 \
-    --env JSON_CONFIG='{"interactiveLogin":false,"tokenCallbacks":[{"issuerId":"ferropix","requestMappings":[{"requestParam":"grant_type","match":"client_credentials","claims":{"sub":"${clientId}","client_id":"${clientId}","aud":["http://localhost:8080/fhir"],"scope":"${scope}"}}]}]}' \
+    --env JSON_CONFIG='{"interactiveLogin":false,"tokenCallbacks":[{"issuerId":"ferropix","requestMappings":[{"requestParam":"grant_type","match":"client_credentials","typeHeader":"at+jwt","claims":{"sub":"${clientId}","client_id":"${clientId}","aud":["http://localhost:8080/fhir"],"scope":"${scope}"}}]}]}' \
     "$issuer" > /dev/null
   wait_for "the OpenID Provider" 60 curl --fail --silent "$ISSUER/.well-known/openid-configuration"
   [[ -d "$WORK/terminology" ]] || packages "$WORK/terminology"

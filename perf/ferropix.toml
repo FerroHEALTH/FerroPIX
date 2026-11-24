@@ -29,10 +29,6 @@ listen = "127.0.0.1:8080"
 issuer = "http://localhost:8180/ferropix"
 audience = ["http://localhost:8080/fhir"]
 
-# TODO(#782): the gate's tokens serve the base too, which reads `typ` JWT alone.
-[auth.issuer.dev.profile]
-token_types = ["JWT"]
-
 [[trust.issuer]]
 issuer = "dev"
 clients = ["perf-source"]

@@ -95,28 +95,22 @@ backend-for-frontend that holds the operator's session and calls the server
 with the operator's own token. No specification governs the process model:
 our own design, after the siblings.
 
-```text
-   PIXm Source / PMIR Source          PIXm Consumer / PDQm Consumer
-   (ITI-104 feed, ITI-93 feed)        (ITI-83, ITI-78, ITI-119)
-             │                                     │
-             ▼                                     ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │ ferropix (the server)                                     │
-   │   /fhir       the PIXm Manager, PDQm Supplier, PMIR       │
-   │               Registry                                    │
-   │   :2575       the MLLP listener (ITI-8, ITI-9, ITI-21)    │
-   │   /operator   the steward's API (the console's only road) │
-   │   /health     liveness and readiness                      │
-   └───────────────┬──────────────────────────┬───────────────┘
-                   │                          │
-                   ▼                          ▼
-          PostgreSQL 19 (schema pix)     ATNA repository (BALP)
-                   ▲
-                   │  /operator, with the steward's token
-   ┌───────────────┴──────────────────────────────────────────┐
-   │ ferropix-console (the console): server-rendered FerroUI    │
-   │   OIDC sign-in, session on the console's server           │
-   └──────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    feeds["PIXm Source / PMIR Source<br/>(ITI-104 feed, ITI-93 feed)"]
+    queries["PIXm Consumer / PDQm Consumer<br/>(ITI-83, ITI-78, ITI-119)"]
+    subgraph server["ferropix (the server)"]
+        fhir["/fhir: the PIXm Manager, PDQm Supplier, PMIR Registry"]
+        mllp[":2575: the MLLP listener (ITI-8, ITI-9, ITI-21)"]
+        operator["/operator: the steward's API (the console's only road)"]
+        health["/health: liveness and readiness"]
+    end
+    console["ferropix-console (the console): server-rendered FerroUI<br/>OIDC sign-in, session on the console's server"]
+    feeds --> server
+    queries --> server
+    server --> pg["PostgreSQL 19 (schema pix)"]
+    server --> atna["ATNA repository (BALP)"]
+    console -- "/operator, with the steward's token" --> operator
 ```
 
 - **`app/ferropix-server`**, binary `ferropix`, image

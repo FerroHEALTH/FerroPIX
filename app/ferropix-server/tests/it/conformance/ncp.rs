@@ -55,7 +55,9 @@ fn packages() -> PackageSet<R4> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn conformance_the_pdqm_answers_hold_to_patient_minimal() {
-    if !e2e_enabled() {
+    // NOTE: no specification governs this: our own design; the package closure is
+    // fetched by scripts/checks/conformance.sh, which sets FERROPIX_CONFORMANCE_OUT.
+    if !e2e_enabled() || std::env::var_os("FERROPIX_CONFORMANCE_OUT").is_none() {
         return;
     }
     let set = Arc::new(packages());

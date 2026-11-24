@@ -23,6 +23,7 @@
 //! specification governs the journeys: our own design, after FerroBRIDGE's,
 //! FerroFED's and FerroTERM's.
 
+mod about;
 mod accessibility;
 mod browser;
 mod chromedriver;

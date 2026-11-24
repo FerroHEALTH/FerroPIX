@@ -530,3 +530,34 @@ async fn the_statement_renders_in_json_and_xml_and_refuses_any_other_format_406(
         assert_eq!("error", outcome["issue"][0]["severity"], "{uri}");
     }
 }
+
+/// The console journeys' copy of the statement, which their stand-in for
+/// the server answers `GET /fhir/metadata` with.
+const JOURNEY_STATEMENT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../tools/ferropix-testkit/fixtures/operator/capability-statement.json"
+);
+
+/// The issuer the journeys' copy names in place of the test issuer.
+const JOURNEY_ISSUER: &str = "http://localhost:8180";
+
+#[tokio::test]
+async fn the_console_journeys_serve_the_statement_the_server_declares() {
+    let issuer = Issuer::start().await;
+    let secrets = Secrets::new();
+    let (app, _, _spool) = application(settings(&issuer, &secrets)).await;
+    let (status, _, text) = get(&app, "/fhir/metadata", None).await;
+    assert_eq!(StatusCode::OK, status);
+    let journeys: Value = serde_json::from_str(
+        &std::fs::read_to_string(JOURNEY_STATEMENT).expect("the journeys' statement reads"),
+    )
+    .expect("the journeys' statement is JSON");
+    let mut served: Value = serde_json::from_str(&text.replace(&issuer.uri(), JOURNEY_ISSUER))
+        .expect("the served statement is JSON");
+    served["date"] = journeys["date"].clone();
+    served["software"]["version"] = journeys["software"]["version"].clone();
+    assert_eq!(
+        journeys, served,
+        "regenerate tools/ferropix-testkit/fixtures/operator/capability-statement.json from the served statement"
+    );
+}

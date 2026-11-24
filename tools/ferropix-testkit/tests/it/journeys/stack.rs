@@ -10,8 +10,10 @@
 //! [`Server::Refusing`] it refuses every other route with `404`, so every
 //! screen draws its refused state; with [`Server::Filled`] it answers the
 //! operator API routes the screens read with the synthetic documents under
-//! `fixtures/operator/`, so every screen draws its filled state. No
-//! specification governs the stack: our own design, after FerroBRIDGE's.
+//! `fixtures/operator/`, and `GET /fhir/metadata` with the server's own
+//! `CapabilityStatement` at the workspace version, so every screen draws its
+//! filled state. No specification governs the stack: our own design, after
+//! FerroBRIDGE's.
 
 use std::collections::BTreeMap;
 
@@ -98,6 +100,20 @@ pub(crate) fn document(name: &str) -> String {
     std::fs::read_to_string(&file).unwrap_or_else(|error| panic!("reading {file}: {error}"))
 }
 
+/// The `CapabilityStatement` the server declares, from
+/// `fixtures/operator/capability-statement.json` (held to the server's by
+/// its suite), naming the workspace version as the server does.
+#[expect(
+    clippy::disallowed_types,
+    reason = "the test seam: the statement is read as a JSON value to set its version"
+)]
+fn capability_statement() -> String {
+    let mut statement: serde_json::Value = serde_json::from_str(&document("capability-statement"))
+        .expect("the capability statement is JSON");
+    statement["software"]["version"] = serde_json::Value::from(env!("CARGO_PKG_VERSION"));
+    statement.to_string()
+}
+
 /// What the stand-in for the FerroPIX server answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Server {
@@ -165,6 +181,15 @@ impl Stack {
                     .mount(&server)
                     .await;
             }
+            Mock::given(method("GET"))
+                .and(path("/fhir/metadata"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/fhir+json")
+                        .set_body_string(capability_statement()),
+                )
+                .mount(&server)
+                .await;
         }
         let listener = TcpListener::bind("127.0.0.1:0")
             .await

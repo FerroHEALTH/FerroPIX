@@ -1,0 +1,231 @@
+{
+  "date": "2026-11-24",
+  "fhirVersion": "4.0.1",
+  "format": [
+    "application/fhir+json",
+    "application/fhir+xml"
+  ],
+  "implementation": {
+    "description": "FerroPIX, a Master Patient Index serving the PIXm Patient Identifier Cross-reference Manager, the PDQm Patient Demographics Supplier and the PMIR Patient Identity Registry",
+    "url": "http://localhost:8080/fhir"
+  },
+  "instantiates": [
+    "https://profiles.ihe.net/ITI/PIXm/CapabilityStatement/IHE.PIXm.Manager",
+    "https://profiles.ihe.net/ITI/PDQm/CapabilityStatement/IHE.PDQm.PatientDemographicsSupplier",
+    "https://profiles.ihe.net/ITI/PDQm/CapabilityStatement/IHE.PDQm.PatientDemographicsSupplierMatch",
+    "https://profiles.ihe.net/ITI/PMIR/CapabilityStatement/IHE.PMIR.PatientIdentityRegistry"
+  ],
+  "kind": "instance",
+  "messaging": [
+    {
+      "documentation": "For Mobile Patient Identity Feed [ITI-93]",
+      "supportedMessage": [
+        {
+          "definition": "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition",
+          "mode": "sender"
+        }
+      ]
+    },
+    {
+      "documentation": "For Mobile Patient Identity Feed [ITI-93]",
+      "supportedMessage": [
+        {
+          "definition": "https://profiles.ihe.net/ITI/PMIR/MessageDefinition/IHE.PMIR.MessageDefinition",
+          "mode": "receiver"
+        }
+      ]
+    }
+  ],
+  "resourceType": "CapabilityStatement",
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "conditionalDelete": "single",
+          "conditionalUpdate": true,
+          "interaction": [
+            {
+              "code": "update",
+              "documentation": "ITI-104: Add or Revise Patient and Resolve Duplicate Patient, by conditional update on identifier"
+            },
+            {
+              "code": "delete",
+              "documentation": "ITI-104: Remove Patient, by conditional delete on identifier (the Remove Patient Option)"
+            },
+            {
+              "code": "read",
+              "documentation": "ITI-78: Retrieve Patient Resource, one person by its id"
+            },
+            {
+              "code": "search-type",
+              "documentation": "ITI-78: Query Patient Resource, by GET or by POST of a form to _search"
+            }
+          ],
+          "operation": [
+            {
+              "definition": "https://profiles.ihe.net/ITI/PIXm/OperationDefinition/IHE.PIXm.pix",
+              "documentation": "ITI-83: by GET with the query of PIXm 3.1.0, or by POST of a Parameters body, which keeps the identifier out of the URL",
+              "name": "ihe-pix"
+            },
+            {
+              "definition": "https://profiles.ihe.net/ITI/PDQm/OperationDefinition/PDQmMatch",
+              "documentation": "ITI-119: by POST of the PDQm Match Input Parameters or of a bare Patient",
+              "name": "match"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "_id",
+              "type": "token"
+            },
+            {
+              "name": "active",
+              "type": "token"
+            },
+            {
+              "name": "family",
+              "type": "string"
+            },
+            {
+              "name": "family:exact",
+              "type": "string"
+            },
+            {
+              "name": "given",
+              "type": "string"
+            },
+            {
+              "name": "given:exact",
+              "type": "string"
+            },
+            {
+              "name": "identifier",
+              "type": "token"
+            },
+            {
+              "name": "telecom",
+              "type": "token"
+            },
+            {
+              "name": "birthdate",
+              "type": "date"
+            },
+            {
+              "name": "address",
+              "type": "string"
+            },
+            {
+              "name": "address:exact",
+              "type": "string"
+            },
+            {
+              "name": "address-city",
+              "type": "string"
+            },
+            {
+              "name": "address-city:exact",
+              "type": "string"
+            },
+            {
+              "name": "address-country",
+              "type": "string"
+            },
+            {
+              "name": "address-country:exact",
+              "type": "string"
+            },
+            {
+              "name": "address-postalcode",
+              "type": "string"
+            },
+            {
+              "name": "address-postalcode:exact",
+              "type": "string"
+            },
+            {
+              "name": "address-state",
+              "type": "string"
+            },
+            {
+              "name": "address-state:exact",
+              "type": "string"
+            },
+            {
+              "name": "gender",
+              "type": "token"
+            },
+            {
+              "definition": "http://hl7.org/fhir/SearchParameter/patient-extensions-Patient-mothersMaidenName|5.2.0",
+              "name": "mothersMaidenName",
+              "type": "string"
+            },
+            {
+              "definition": "http://hl7.org/fhir/SearchParameter/patient-extensions-Patient-mothersMaidenName|5.2.0",
+              "name": "mothersMaidenName:exact",
+              "type": "string"
+            }
+          ],
+          "supportedProfile": [
+            "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Patient",
+            "https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.Patient"
+          ],
+          "type": "Patient"
+        },
+        {
+          "interaction": [
+            {
+              "code": "create",
+              "documentation": "ITI-94: Subscribe to Patient Updates"
+            },
+            {
+              "code": "read",
+              "documentation": "ITI-94: Get Patient Subscription"
+            },
+            {
+              "code": "update",
+              "documentation": "ITI-94: Enable or Disable Patient Subscription"
+            },
+            {
+              "code": "delete",
+              "documentation": "ITI-94: Delete Patient Subscription"
+            }
+          ],
+          "supportedProfile": [
+            "https://profiles.ihe.net/ITI/PMIR/StructureDefinition/IHE.PMIR.Subscription.Request"
+          ],
+          "type": "Subscription"
+        }
+      ],
+      "security": {
+        "description": "SMART App Launch 2.x backend services: each request carries a bearer access token of the authorization server whose token endpoint is named here; discovery at [base]/.well-known/smart-configuration. The scopes FerroPIX enforces: system/Patient.rs system/Patient.cud system/Subscription.cruds ITI-83 ITI-104 ITI-78 ITI-119 __ferropix.steward __ferropix.admin",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "token",
+                "valueUri": "http://localhost:8180/token"
+              }
+            ],
+            "url": "http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris"
+          }
+        ],
+        "service": [
+          {
+            "coding": [
+              {
+                "code": "SMART-on-FHIR",
+                "system": "http://terminology.hl7.org/CodeSystem/restful-security-service"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "software": {
+    "name": "FerroPIX",
+    "version": "0.0.0"
+  },
+  "status": "active"
+}

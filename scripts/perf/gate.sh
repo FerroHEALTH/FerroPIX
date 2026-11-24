@@ -105,7 +105,7 @@ pin() {
 
 # placeholders PLAN: the @NAME@ placeholders of PLAN, sorted, one a line.
 placeholders() {
-  grep -oE '@[a-z_]+@' "$1" | sort -u | tr -d @
+  grep -oE '@[A-Z][A-Z0-9_]*@' "$1" | sort -u | tr -d @
 }
 
 # token_type CONFIG: the `typ` of the access tokens the server configured
@@ -421,14 +421,14 @@ run() {
   start
   local code=0 server side typ source consumer
   local -a vars=()
-  [[ "$(placeholders "$PLAN" | paste -sd ' ' -)" = "consumer_token source_token" ]] ||
+  [[ "$(placeholders "$PLAN" | paste -sd ' ' -)" = "CONSUMER_TOKEN SOURCE_TOKEN" ]] ||
     die "$PLAN holds a placeholder the gate does not fill"
   for side in head base; do
     if [[ "$side" = head ]]; then typ="$(token_type "$CONFIG")"; else typ="$(token_type "$BASE_TREE/src/$CONFIG")"; fi
     source="$(token perf-source system/Patient.cud "$typ")"
     consumer="$(token perf-consumer system/Patient.rs "$typ")"
     if [[ "$side" = head ]]; then seed "$HEAD_URL" "$source"; else seed "$BASE_URL" "$source"; fi
-    vars+=("--$side-var" "consumer_token=$consumer" "--$side-var" "source_token=$source")
+    vars+=("--$side-var" "CONSUMER_TOKEN=$consumer" "--$side-var" "SOURCE_TOKEN=$source")
     echo "perf-gate: the $side server reads $typ tokens"
   done
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
@@ -489,7 +489,7 @@ self_test() {
   check "a pin is read without its backticks" "postgres:1@sha256:00" "$(pin "PostgreSQL test image" "$work/matrix.md")"
   check "a missing row reads empty" "" "$(pin "Nothing" "$work/matrix.md")"
   check "the plan's placeholders are the two tokens the gate fills" \
-    $'consumer_token\nsource_token' "$(placeholders "$root/$PLAN")"
+    $'CONSUMER_TOKEN\nSOURCE_TOKEN' "$(placeholders "$root/$PLAN")"
   printf '[auth.issuer.dev]\nissuer = "x"\n\n[auth.issuer.dev.profile]\ntoken_types = ["JWT"]\n' > "$work/config.toml"
   check "a configuration that names JWT reads JWT" JWT "$(token_type "$work/config.toml")"
   printf '[auth.issuer.dev]\nissuer = "x"\ntoken_types = ["JWT"]\n' > "$work/config.toml"

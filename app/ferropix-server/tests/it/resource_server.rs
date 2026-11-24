@@ -111,9 +111,8 @@ async fn an_issuer_behind_a_private_authority_is_read_with_the_trusted_roots_and
     let secrets = Secrets::new();
     let table = |ca: &str| {
         format!(
-            "[auth]\n{ca}\n[auth.issuer.idp]\nissuer = \"{issuer}\"\nkind = \"persons\"\n\
-             preset = \"rfc9068\"\naudience = [\"{AUDIENCE}\"]\n\n\
-             [auth.issuer.idp.profile]\nfirst_party_clients = [\"console\"]\n"
+            "[auth]\n{ca}\n[auth.issuer.idp]\nissuer = \"{issuer}\"\n\
+             audience = [\"{AUDIENCE}\"]\n"
         )
     };
     let untrusted = settings(&table(""), &secrets);
@@ -174,9 +173,8 @@ async fn under_introspection_an_opaque_token_is_checked_at_the_configured_endpoi
     let secrets = Secrets::new();
     let settings = settings(
         &format!(
-            "[auth.issuer.idp]\nissuer = \"{uri}\"\nkind = \"persons\"\npreset = \"rfc9068\"\n\
+            "[auth.issuer.idp]\nissuer = \"{uri}\"\n\
              audience = [\"{AUDIENCE}\"]\nmode = \"introspection\"\n\n\
-             [auth.issuer.idp.profile]\nfirst_party_clients = [\"console\"]\n\n\
              [auth.issuer.idp.introspection]\nendpoint = \"{uri}/introspect\"\n\n\
              [auth.issuer.idp.introspection.client]\nclient_id = \"ferropix\"\nclient_secret = \"synthetic-secret\"\n"
         ),

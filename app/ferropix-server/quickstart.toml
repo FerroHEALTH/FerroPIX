@@ -21,27 +21,14 @@ data_key_file = "/run/secrets/ferropix-data-key"
 # The development OpenID Provider the compose quickstart runs beside the
 # server on the same loopback interface (compose.yaml, the `issuer` service).
 # It signs the client credentials tokens of the Sources and the logins of the
-# console, so it is a `persons` issuer: a token whose `sub` is its client is
-# a machine's (RFC 9068 §2.2), and a login is admitted through the console,
-# the one client `first_party_clients` lists. It signs its access tokens with
-# `typ` JWT rather than the `at+jwt` of RFC 9068, and names the client in
-# `client_id` or `azp`, so the issuer takes the claims it carries; an issuer
-# of RFC 9068 tokens keeps the profile's own `token_types`,
-# `required_claims` and `client_claims`. It signs a login's access token
-# with the ID Token's claims, so the console's own client id is the second
-# audience: a provider that audiences a login's access token to the server
-# needs only the first.
+# console as RFC 9068 `at+jwt` access tokens: a token whose `sub` is its
+# client is a machine's (RFC 9068 §2.2), and a login names the person who
+# signed in. It signs a login's access token with the ID Token's claims, so
+# the console's own client id is the second audience: a provider that
+# audiences a login's access token to the server needs only the first.
 [auth.issuer.dev]
 issuer = "http://localhost:8180/ferropix"
-kind = "persons"
-preset = "rfc9068"
 audience = ["http://localhost:8080/fhir", "ferropix-console"]
-
-[auth.issuer.dev.profile]
-token_types = ["JWT"]
-required_claims = ["iss", "exp", "aud", "sub"]
-client_claims = ["client_id", "azp"]
-first_party_clients = ["ferropix-console"]
 
 # The clients the development issuer, named by its table, may vouch for
 # as the Source of a domain (PIXm 3.1.0 §2:3.104.5).

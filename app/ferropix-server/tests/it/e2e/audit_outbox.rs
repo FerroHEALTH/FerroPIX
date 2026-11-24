@@ -51,7 +51,6 @@ fn call() -> Call {
             Some(SOURCE.to_owned()),
             "system/Patient.cud",
             None,
-            false,
             ferrohealth_smart::kind::CallerKind::System,
         ),
     ));

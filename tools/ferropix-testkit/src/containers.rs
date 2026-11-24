@@ -409,6 +409,8 @@ struct RequestMapping {
     /// The value it must carry.
     #[serde(rename = "match")]
     matches: &'static str,
+    /// The `typ` header of the signed token, `at+jwt` (RFC 9068 §2.1).
+    type_header: &'static str,
     /// The claims of the signed token.
     claims: Claims,
 }
@@ -436,6 +438,7 @@ fn provider_config(audience: &str) -> Result<String, HarnessError> {
             request_mappings: vec![RequestMapping {
                 request_param: "grant_type",
                 matches: "client_credentials",
+                type_header: "at+jwt",
                 claims: Claims {
                     sub: "${clientId}",
                     client_id: "${clientId}",

@@ -68,14 +68,13 @@ fn handled(status: StatusCode) -> bool {
 }
 
 /// The consoles the test issuer signs a steward's login for: a token of one
-/// of these is a person's, whose `sub` is [`PERSON`], and the issuer admits
-/// it through its `first_party_clients`. Every other client's token is a
-/// machine's, from the client credentials grant, whose `sub` is the client
-/// (RFC 9068 §2.2).
+/// of these is a user's, whose `sub` is [`PERSON`]. Every other client's
+/// token is a machine's, from the client credentials grant, whose `sub` is
+/// the client (RFC 9068 §2.2).
 pub(crate) const CONSOLES: [&str; 3] = ["console", "synthetic-console", "ferropix-console"];
 
-/// The Source client the test issuer also signs a person's login for, as a
-/// first-party client: a person through it is never the Source.
+/// The Source client the test issuer also signs a person's login for: a
+/// person through it is never the Source.
 pub(crate) const SOURCE_FIRST_PARTY: &str = "east-lab";
 
 /// The subject of a steward's login.
@@ -229,6 +228,19 @@ impl Issuer {
             .token_for(&self.server.uri(), client, subject, scope)
     }
 
+    /// Returns the token of [`Issuer::token_for`] with the claims of `extra`
+    /// beside or over its own.
+    pub(crate) fn token_with(
+        &self,
+        client: &str,
+        subject: &str,
+        scope: &str,
+        extra: serde_json::Map<String, serde_json::Value>,
+    ) -> String {
+        self.key
+            .token_with(&self.server.uri(), client, subject, scope, extra)
+    }
+
     /// Returns a valid token of `client` for `subject` with no `claim`.
     pub(crate) fn token_without(&self, client: &str, subject: &str, claim: &str) -> String {
         self.key
@@ -265,15 +277,8 @@ pub(crate) fn settings(issuer: &Issuer, secrets: &Secrets) -> Settings {
 /// Returns the settings of [`settings`] with the tables of `extra` after
 /// its own, each `{issuer}` in them naming `issuer`.
 pub(crate) fn settings_with(issuer: &Issuer, secrets: &Secrets, extra: &str) -> Settings {
-    let clients = CONSOLES
-        .iter()
-        .chain(&[SOURCE_FIRST_PARTY])
-        .map(|client| format!("\"{client}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let tables = format!(
-        "[auth.issuer.idp]\nissuer = \"{{issuer}}\"\nkind = \"persons\"\npreset = \"rfc9068\"\naudience = [\"{AUDIENCE}\"]\n\n[auth.issuer.idp.profile]\nfirst_party_clients = [{clients}]\n"
-    );
+    let tables =
+        format!("[auth.issuer.idp]\nissuer = \"{{issuer}}\"\naudience = [\"{AUDIENCE}\"]\n");
     settings_trusting(issuer, secrets, &tables, extra)
 }
 

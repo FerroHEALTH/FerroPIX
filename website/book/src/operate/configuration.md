@@ -86,10 +86,10 @@ information and its query replaced by `***`.
 `app/ferropix-server/quickstart.toml` is the smallest production
 configuration: the loopback base, one issuer, one identifier domain, and
 both `[db]` secrets read from files under `/run/secrets/`. Its issuer is
-the development OpenID Provider of the compose quickstart, a `persons`
-issuer: it signs the Sources' client credentials tokens and the console's
-logins, as plain JWT bearer tokens, so the entry sets `token_types =
-["JWT"]` and the claims those tokens carry. It signs a login's access token
+the development OpenID Provider of the compose quickstart, a SMART issuer:
+it signs the Sources' client credentials tokens and the console's logins
+as RFC 9068 `at+jwt` access tokens, so the entry names only the issuer and
+its audiences. It signs a login's access token
 with the claims of its ID Token, whose audience is the console's client id
 alone, so the entry lists `ferropix-console` as a second audience. The
 quickstart also mounts the operator API, which the console reads. The
@@ -262,8 +262,8 @@ one of the `[auth.issuer.<name>]` issuers signed, or, for an issuer under
 vouches for. `[auth]` is the section every FerroHEALTH server shares, read by
 `ferrohealth-smart`, the FerroHEALTH resource server: each issuer is an
 `https` URL (plain `http` on a loopback host, and never with a user or
-password in it, which refuses the start and appears in no output) with its
-`kind`, its audience is the FHIR base `{public_base_url}/fhir` unless the
+password in it, which refuses the start and appears in no output), its
+audience is the FHIR base `{public_base_url}/fhir` unless the
 table sets one, and only asymmetric algorithms are admitted. A section with
 no issuer and no Basic user is refused, and so is `enabled = false`:
 FerroPIX always authenticates its callers.
@@ -278,11 +278,10 @@ FerroPIX always authenticates its callers.
 | `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
 | `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
-| `auth.described_issuer` | none | The name of the issuer the SMART discovery document and the capability statement describe, when FerroPIX trusts several. Unset, FerroPIX describes the one issuer of kind `persons`, `patients` or `federation` whose metadata it holds, and with only `machines` issuers trusted the one `machines` issuer, for SMART Backend Services alone: the token endpoint, `private_key_jwt`, the client credentials grant and the `system/` scopes, with no authorization endpoint. Several such issuers without the key refuse the start, naming them, and so does a key naming an unknown issuer, an issuer without metadata, or a `machines` issuer beside one that serves a user launch. |
+| `auth.described_issuer` | none | The name of the issuer the SMART discovery document and the capability statement describe, when FerroPIX trusts several. Unset, FerroPIX describes the one SMART issuer whose metadata it holds; a `federation` issuer is never described unnamed. Several SMART issuers without the key refuse the start, naming them, and so does a key naming an unknown issuer or an issuer without metadata. |
 
 FerroPIX refuses the start on a table it would read and never apply, naming
-the key: an issuer's `party` table, `[auth.idp]` (the identity provider
-adapters only a party binding reads), `[auth.dpop]` (FerroPIX checks no
+the key: an issuer's `party` table, `[auth.dpop]` (FerroPIX checks no
 `DPoP` proof, RFC 9449), a Basic user's `roles` and an issuer's
 `role_claims`.
 
@@ -291,52 +290,33 @@ setting of its tokens: no section-level value stands in for one the table
 leaves out. The name is a lower-case letter, then lower-case letters, digits
 and `_`, at most 64; every other key that names an issuer
 (`auth.described_issuer`, `trust.issuer[].issuer`) names it by this name, and
-an unknown name refuses the start, listing the known ones. `kind` says whose
-tokens the issuer signs, and is required under a preset that names none:
+an unknown name refuses the start, listing the known ones.
 
-- `"persons"`: people signing in through the deployment's own clients,
-  each listed in `first_party_clients`, and the client credentials tokens
-  of its machines;
-- `"machines"`: machines, through the client credentials grant (RFC 6749
-  §4.4) only;
-- `"patients"` and `"federation"`, the other two kinds `ferrohealth-smart`
-  defines: a patient's token and another party's.
-
-The profile is how the issuer's tokens read: `preset` picks a shipped
-preset, `"rfc9068"` (the JWT access token profile of RFC 9068, the default),
-`"ferrosmart"` (the tokens of FerroSMART, the family's SMART authorization
-server: `typ` `at+jwt` alone and `scope` required, `kind` `"persons"`; see
-[Behind FerroSMART](behind-ferrosmart.md)), `"entra"`, `"keycloak"` or
-`"okta"`. `profile_file` names a profile file you supply in the same form,
-whose keys are set over the preset's, and every key of the
-`[auth.issuer.<name>.profile]` table wins over both. A token whose `sub` is
-its client is a machine's under `"rfc9068"` and `"ferrosmart"` (RFC 9068
-§2.2). Name each issuer URL in one table only: a second table of the same
+An issuer is a SMART App Launch 2.2 authorization server, FerroSMART among
+them, unless its table declares `kind = "federation"` for another party's
+authorization server. A SMART issuer's tokens are read from their standard
+claims: `typ` is `at+jwt` or `application/at+jwt` (RFC 9068 §2.1), `scope`
+is required, a token whose `sub` is its `client_id` is a machine's (RFC
+9068 §2.2), and a user is named by their `fhirUser` and its resource type
+(SMART App Launch 2.2.0, Scopes and Launch Context). The authorization
+server's registry is the one list of clients: a token whose `aud` names
+FerroPIX admits its client, and an RFC 8693 `act` names the actor beside the
+caller. Name each issuer URL in one table only: a second table of the same
 issuer refuses the start.
 
 ```toml
 [auth.issuer.sso]
 issuer = "https://idp.example.org/realms/pix"
-kind = "persons"
-preset = "keycloak"
 audience = ["https://pix.example.org/fhir"]
-scopeless_subjects = ["service-account-sync"]
-
-[auth.issuer.sso.profile]
-first_party_clients = ["ferropix-console"]
 
 [auth.issuer.partner]
 issuer = "https://partner.example.net"
-kind = "machines"
-preset = "rfc9068"
 ```
 
 | Key | Default | What it sets |
 |---|---|---|
 | `auth.issuer.<name>.issuer` | none, required | The issuer identifier every token's `iss` equals. |
-| `auth.issuer.<name>.kind` | the preset's | `"persons"`, `"machines"`, `"patients"` or `"federation"`; required under a preset that names none, `"rfc9068"` among them. |
-| `auth.issuer.<name>.preset` | `"rfc9068"` | The shipped preset the issuer's profile starts from: `"rfc9068"`, `"ferrosmart"`, `"entra"`, `"keycloak"` or `"okta"`. |
-| `auth.issuer.<name>.profile_file` | unset | A profile file in the form of the shipped presets, its keys set over the preset's. |
+| `auth.issuer.<name>.kind` | unset | `"federation"` for another party's authorization server; unset for a SMART issuer. |
 | `auth.issuer.<name>.audience` | `[]` | The audiences, of which a token's `aud` must contain one; empty for the FHIR base, `{public_base_url}/fhir`. |
 | `auth.issuer.<name>.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
 | `auth.issuer.<name>.clock_skew` | `"1min"` | The clock skew a token's times are checked with, at most `"5min"`. |
@@ -346,19 +326,16 @@ preset = "rfc9068"
 | `auth.issuer.<name>.timeout` | `"10s"` | How long one call to the authorization server may take. |
 | `auth.issuer.<name>.mode` | `"jwt"` | `"jwt"` checks a token against the issuer's key set; `"introspection"` posts it to the issuer's RFC 7662 introspection endpoint, for a token the server cannot read itself. |
 | `auth.issuer.<name>.sender_constraint` | `"none"` | `"required"` admits only a token bound to a `DPoP` key or a client certificate. |
-| `auth.issuer.<name>.scopeless_subjects` | `[]` | The subjects of this issuer granted system-wide access without a scope, since a `sub` is unique only within its issuer (RFC 7519 §4.1.2). An entry admits only a machine's token. |
 | `auth.issuer.<name>.federation` | unset | The table a `"federation"` issuer requires and no other kind takes: how the tokens of another party's authorization server are read and classified. |
-| `auth.issuer.<name>.attributes` | unset | Where the tokens of a `"persons"`, `"patients"` or `"machines"` issuer state the professional's attributes and the purpose of use, `mapping = "iua"` for the IHE IUA claims under `extensions.ihe_iua` (ITI TF-2 §3.71.4.2.2.1.1). A token that misstates them is refused, and the audit record writes the user's name, role, purpose of use, provider id and organisation on its user agent, as BALP 1.1.4 §3:5.7.5.4 maps them. |
+| `auth.issuer.<name>.attributes` | unset | Where the tokens of a SMART issuer state the professional's attributes and the purpose of use, `mapping = "iua"` for the IHE IUA claims under `extensions.ihe_iua` (ITI TF-2 §3.71.4.2.2.1.1). A token that misstates them is refused, and the audit record writes the user's name, role, purpose of use, provider id and organisation on its user agent, as BALP 1.1.4 §3:5.7.5.4 maps them. |
 | `auth.issuer.<name>.party` | unset | Refused when set: FerroPIX binds no login to a party. |
 | `auth.issuer.<name>.role_claims` | unset | Refused when set: the permission table reads scopes, so a role would never apply. |
-| `auth.issuer.<name>.profile.first_party_clients` | the profile's | The deployment's own clients, through which a person's token is admitted. |
-| `auth.issuer.<name>.profile.token_types` | the profile's | The `typ` header values admitted, `["at+jwt", "application/at+jwt"]` under `"rfc9068"`. |
-| `auth.issuer.<name>.profile.required_claims` | the profile's | The claims every token carries. |
-| `auth.issuer.<name>.profile.client_claims` | the profile's | The claims the client is read from, the first present. |
+| `auth.issuer.<name>.profile.max_actor_chain` | `1` | How deep a token's RFC 8693 `act` chain may nest. |
+| `auth.issuer.<name>.profile.token_types` | `["at+jwt", "application/at+jwt"]` | The `typ` header values admitted. |
+| `auth.issuer.<name>.profile.required_claims` | the RFC 9068 claims | The claims every token carries. |
 
-The other profile keys of `ferrohealth-smart` (`person_key`,
-`tenant_claim`, `app_only`, `guest`, `delegates`, `audience_delegates`,
-`scope_claim` and the rest) are set in the `profile` table the same way.
+The onward keys of `ferrohealth-smart`'s profile (`max_onward_lifetime`,
+`onward_grant` and the rest) are set in the `profile` table the same way.
 
 `[auth.issuer.<name>.introspection]` configures the introspection check of
 an issuer under `mode = "introspection"`. FerroPIX authenticates its call
@@ -380,12 +357,8 @@ in the issuer when it names neither `issuer` nor `token_endpoint`.
 | `auth.issuer.<name>.introspection.cache_max_age` | `"1min"` | How long an active answer is used before the endpoint is asked again; `"0s"` keeps none. |
 | `auth.issuer.<name>.introspection.cache_capacity` | `10000` | The most answers held at once. |
 
-A key of an earlier shape refuses the start as an unknown key or a wrong
-type, named with its section: an `[[auth.issuer]]` array, `profile` named as
-a string, a profile key on the issuer table itself, a section-level
-`scopeless_subjects`, `[[auth.federation]]`, `[[auth.attributes]]` or
-`[[auth.party]]`, the flat `auth.issuer = "…"`, a section-level issuer key
-and `token_profile`.
+Every other key refuses the start as an unknown key, named with its
+section.
 
 ### `[trust]`
 

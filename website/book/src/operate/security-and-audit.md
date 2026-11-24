@@ -33,10 +33,8 @@ records, and a patient index answers about every patient. A Source's
 §2:3.104.5).
 
 A Source is a machine. Its token comes from the client credentials grant
-(RFC 6749 §4.4), and the issuer's profile classifies it as app-only: under
-the `rfc9068` profile, its `sub` is its `client_id`. A person's token
-through the same client is refused, even when the issuer lists that client
-in `first_party_clients` for a login. To upgrade a Source that fed with a
+(RFC 6749 §4.4), so its `sub` is its `client_id` (RFC 9068 §2.2). A
+person's token through the same client is refused. To upgrade a Source that fed with a
 person's token, have it request a client credentials token for its
 `source_client_id` and send that.
 

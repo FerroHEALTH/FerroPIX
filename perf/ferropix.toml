@@ -23,18 +23,15 @@ public_base_url = "http://localhost:8080"
 listen = "127.0.0.1:8080"
 
 # The development provider signs any client credentials request with the
-# client as `sub` and `client_id` (compose.yaml, the issuer service), so
-# every token it signs is a machine's.
+# client as `sub` and `client_id` (scripts/perf/gate.sh), so every token it
+# signs is a machine's.
 [auth.issuer.dev]
 issuer = "http://localhost:8180/ferropix"
-kind = "machines"
-preset = "rfc9068"
 audience = ["http://localhost:8080/fhir"]
 
+# TODO(#782): the gate's tokens serve the base too, which reads `typ` JWT alone.
 [auth.issuer.dev.profile]
 token_types = ["JWT"]
-required_claims = ["iss", "exp", "aud", "sub"]
-client_claims = ["client_id", "azp"]
 
 [[trust.issuer]]
 issuer = "dev"

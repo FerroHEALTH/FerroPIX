@@ -12,16 +12,13 @@ state:
   existingClaim: ferropix-state
 config:
   auth:
+    described_issuer: idp
     issuer:
       idp:
         issuer: "https://idp.example.org"
-        kind: persons
         audience: ["https://pix.example.org/fhir", "ferropix-console"]
-        profile:
-          first_party_clients: ["ferropix-console"]
       machines:
         issuer: "https://machines.example.org"
-        kind: machines
   trust:
     issuer:
       - issuer: machines

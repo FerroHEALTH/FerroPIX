@@ -67,9 +67,8 @@ translates every v2 table value on; the server refuses to start without it
 
 An identifier domain and the one client that feeds it are values under
 `config`. Each `config.auth.issuer` entry is one `[auth.issuer.<name>]`
-table of the server, by its name: its `issuer` and its `kind` (`persons` for
-people signing in, `machines` for clients with the client credentials
-grant); a token's `aud` must contain `{public_base_url}/fhir` unless the
+table of the server, by its name: its `issuer`, a SMART authorization
+server unless the entry sets `kind: federation`; a token's `aud` must contain `{public_base_url}/fhir` unless the
 entry sets its own `audience`
 (https://ferropix.eu/docs/operate/configuration.html#auth). The `trust.issuer`
 entry naming that issuer lists the client in its `clients`, and the domain
@@ -82,7 +81,6 @@ config:
     issuer:
       care:
         issuer: "https://idp.example.org/realms/care"
-        kind: machines
   trust:
     issuer:
       - issuer: care

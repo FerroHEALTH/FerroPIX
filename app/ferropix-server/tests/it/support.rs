@@ -72,7 +72,7 @@ pub(crate) fn issuer_tables() -> [(&'static str, String); 4] {
         (
             "attributes.example.org",
             format!(
-                "\n[auth.issuer.attributes]\nissuer = \"https://pix:{PASSWORD}@attributes.example.org/realms/pix\"\nkind = \"persons\"\n\n[auth.issuer.attributes.attributes]\nmapping = \"iua\"\n"
+                "\n[auth.issuer.attributes]\nissuer = \"https://pix:{PASSWORD}@attributes.example.org/realms/pix\"\n\n[auth.issuer.attributes.attributes]\nmapping = \"iua\"\n"
             ),
         ),
         (
@@ -84,13 +84,13 @@ pub(crate) fn issuer_tables() -> [(&'static str, String); 4] {
         (
             "party.example.org",
             format!(
-                "\n[auth.issuer.party]\nissuer = \"https://pix:{PASSWORD}@party.example.org/realms/pix\"\nkind = \"persons\"\n\n[auth.issuer.party.party]\nidentifier_issuer = \"urn:example:people\"\nidentifier_type = \"guid\"\n"
+                "\n[auth.issuer.party]\nissuer = \"https://pix:{PASSWORD}@party.example.org/realms/pix\"\n\n[auth.issuer.party.party]\nidentifier_issuer = \"urn:example:people\"\nidentifier_type = \"guid\"\n"
             ),
         ),
         (
-            "scopeless.example.org",
+            "profile.example.org",
             format!(
-                "\n[auth.issuer.scopeless]\nissuer = \"https://pix:{PASSWORD}@scopeless.example.org/realms/pix\"\nkind = \"machines\"\nscopeless_subjects = [\"service\"]\n"
+                "\n[auth.issuer.profile]\nissuer = \"https://pix:{PASSWORD}@profile.example.org/realms/pix\"\n\n[auth.issuer.profile.profile]\nmax_actor_chain = 1\n"
             ),
         ),
     ]
@@ -128,8 +128,6 @@ scopes_supported = ["system/Patient.rs"]
 
 [auth.issuer.idp]
 issuer = "https://idp.example.org/realms/pix"
-kind = "persons"
-preset = "rfc9068"
 audience = ["https://pix.example.org/pix/fhir"]
 algorithms = ["PS256"]
 clock_skew = "10s"
@@ -139,7 +137,7 @@ jwks_file = ""
 timeout = "5s"
 
 [auth.issuer.idp.profile]
-first_party_clients = ["ferropix-console"]
+max_actor_chain = 1
 
 [[trust.issuer]]
 issuer = "idp"

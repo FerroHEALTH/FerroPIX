@@ -70,9 +70,11 @@ return Array.from(found).join('\n');
 /// stretched: the maker's legal name, the steward's name, which the
 /// provider sent and the console draws as it came, and the data the filled
 /// stand-in serves, drawn as the server sent it: names, a comparator's
-/// name and the scheme of an identifier system.
-const KEPT: [&str; 16] = [
+/// name, the scheme of an identifier system and the software name the
+/// server's `CapabilityStatement` declares.
+const KEPT: [&str; 17] = [
     "Cadasto B.V.",
+    "FerroPIX",
     STEWARD,
     "Ada Proefsma",
     "Synthetic hospital",

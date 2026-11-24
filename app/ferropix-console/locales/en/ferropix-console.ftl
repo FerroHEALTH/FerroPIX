@@ -286,7 +286,7 @@ documentation = The FerroPIX book
 # The `CapabilityStatement` card's title.
 capability-title = The CapabilityStatement
 # The `CapabilityStatement` card's line.
-capability-line = What the server declares at GET [base]/fhir/metadata, as every FHIR client reads it.
+capability-line = What the server declares at GET /fhir/metadata under its base, as every FHIR client reads it.
 # What the About page cannot show without the server.
 what-capability = its CapabilityStatement
 

@@ -3,8 +3,9 @@
 //
 // Draws every ```mermaid fence of the page with the vendored mermaid library.
 // The page's policy refuses inline styles, so the CSS mermaid writes into each
-// diagram is applied through a constructed stylesheet, which the policy allows,
-// and a diagram is laid out only once that sheet is in place.
+// diagram goes into a constructed stylesheet before the diagram is laid out,
+// and each style attribute is set again through the CSSOM, which the policy
+// allows.
 // No specification governs this: our own design.
 (async () => {
   const fences = [...document.querySelectorAll('pre > code.language-mermaid')];
@@ -27,8 +28,9 @@
   let css = '';
   for (const [i, source] of sources.entries()) {
     const { svg } = await mermaid.render(`mermaid-probe-${i}`, source);
-    for (const match of svg.matchAll(/<style>([\s\S]*?)<\/style>/g)) {
-      css += match[1].replaceAll(`#mermaid-probe-${i}`, `#mermaid-${i}`);
+    const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    for (const style of parsed.querySelectorAll('style')) {
+      css += style.textContent.replaceAll(`#mermaid-probe-${i}`, `#mermaid-${i}`);
     }
   }
   sheet.replaceSync(css);
@@ -37,6 +39,9 @@
     const figure = document.createElement('div');
     figure.className = 'mermaid';
     figure.innerHTML = svg;
+    for (const element of figure.querySelectorAll('[style]')) {
+      element.style.cssText = element.getAttribute('style');
+    }
     fences[i].parentElement.replaceWith(figure);
   }
   new MutationObserver(() => {

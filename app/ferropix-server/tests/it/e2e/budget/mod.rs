@@ -443,7 +443,8 @@ const CASES: [Case; 6] = [
             blocks: 47,
             wal: 0,
             audit: 2057,
-            answer: 1084,
+            // NOTE: #785, draft EEHRxF Annexes Table 26: every identifier carries its type (+534 bytes).
+            answer: 1618,
             allocations: 601,
             allocated: 147_255,
         },
@@ -458,7 +459,8 @@ const CASES: [Case; 6] = [
             blocks: 60,
             wal: 0,
             audit: 2728,
-            answer: 1067,
+            // NOTE: #785, draft EEHRxF Annexes Table 26: every identifier carries its type (+534 bytes).
+            answer: 1601,
             allocations: 1_927,
             allocated: 206_702,
         },

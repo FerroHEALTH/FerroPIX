@@ -180,7 +180,7 @@ render_block() {
   if [[ "${#ehds[@]}" -gt 0 ]]; then
     echo
     echo '**EHDS, self-tested**<br>'
-    for corpus in "${ehds[@]}"; do
+    for corpus in ${ehds[@]+"${ehds[@]}"}; do
       badge_link "$corpus"
     done
   fi

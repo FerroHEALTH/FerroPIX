@@ -29,11 +29,6 @@ listen = "127.0.0.1:8080"
 issuer = "http://localhost:8180/ferropix"
 audience = ["http://localhost:8080/fhir"]
 
-# TODO(#782): the gate signs `typ` JWT while a base it measures against reads JWT
-# alone; this tree reads RFC 9068 `at+jwt` too (RFC 9068 §2.1).
-[auth.issuer.dev.profile]
-token_types = ["JWT", "at+jwt"]
-
 [[trust.issuer]]
 issuer = "dev"
 clients = ["perf-source"]

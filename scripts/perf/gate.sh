@@ -23,9 +23,10 @@
 #       Starts PostgreSQL, the provider and both servers, the head on 8080
 #       and MLLP 2575 with perf/ferropix.toml, the base on 8081 and 2576
 #       with the base's own perf/ferropix.toml, seeds the
-#       two patients the request set feeds into each, renders perf/plan.toml
-#       with a Consumer's and the Source's token, and runs `ferrohealth-perf
-#       ab`: the head's idle phase, then pairs of load phases in turn. Then
+#       two patients the request set feeds into each, mints a Consumer's and
+#       the Source's token for each server in the `typ` its own
+#       perf/ferropix.toml reads, fills perf/plan.toml with them, and runs
+#       `ferrohealth-perf ab`: the head's idle phase, then pairs of load phases in turn. Then
 #       it plants an outbox poller that never waits, the FerroPIX #490 shape,
 #       and runs the idle phase of perf/busy-loop.toml against the head
 #       beside it, which must fail on idle transactions. Exit 0 when both
@@ -35,7 +36,8 @@
 #       sync, steal, I/O wait and the CPU clock. A breach on a runner whose
 #       sync p99 is over SLOW_SYNC_MS is not judged and exits 2.
 #   scripts/perf/gate.sh --self-test
-#       Proves the pin reader, the plan rendering, the base resolution, the
+#       Proves the pin reader, the plan's placeholders, the token type a
+#       configuration reads, the base resolution, the
 #       agreement of the two plans' idle limits and the runner summary
 #       offline.
 #
@@ -101,18 +103,18 @@ pin() {
     $2 == item { v = $3; gsub(/[[:space:]`]/, "", v); print v; exit }' "$matrix"
 }
 
-# render PLAN OUT CONSUMER SOURCE: PLAN with its token placeholders
-# replaced, refused when a placeholder is left.
-render() {
-  local text
-  text="$(< "$1")"
-  text="${text//\{consumer_token\}/$3}"
-  text="${text//\{source_token\}/$4}"
-  if grep -qE '\{[a-z_]+_token\}' <<< "$text"; then
-    echo "perf-gate: $1 holds a placeholder the gate does not fill" >&2
-    return 1
-  fi
-  printf '%s\n' "$text" > "$2"
+# placeholders PLAN: the @NAME@ placeholders of PLAN, sorted, one a line.
+placeholders() {
+  grep -oE '@[a-z_]+@' "$1" | sort -u | tr -d @
+}
+
+# token_type CONFIG: the `typ` of the access tokens the server configured
+# by CONFIG reads: the first of `[auth.issuer.dev.profile] token_types`, or
+# with none ferrohealth-smart's default, `at+jwt` (RFC 9068 §2.1).
+token_type() {
+  awk '/^\[/ { inside = ($0 == "[auth.issuer.dev.profile]"); next }
+       inside && /^token_types[[:space:]]*=/ { if (match($0, /"[^"]+"/)) { print substr($0, RSTART + 1, RLENGTH - 2); found = 1; exit } }
+       END { if (!found) print "at+jwt" }' "$1"
 }
 
 # idle_table PLAN: the [idle] table of PLAN, comments and blank lines off.
@@ -121,9 +123,10 @@ idle_table() {
        inside && !/^[[:space:]]*(#|$)/ { print }' "$1"
 }
 
-# token CLIENT SCOPE: a client credentials token of the stub provider.
+# token CLIENT SCOPE TYPE: a client credentials token of the stub provider
+# with the `typ` TYPE, `JWT` or `at+jwt`.
 token() {
-  curl --fail --silent --show-error -d grant_type=client_credentials \
+  curl --fail --silent --show-error -d grant_type=client_credentials --data-urlencode "typ=$3" \
     -d "client_id=$1" -d client_secret=perf -d "scope=$2" "$ISSUER/token" | jq -er .access_token
 }
 
@@ -338,10 +341,11 @@ start() {
       --command "GRANT CREATE ON DATABASE ${db} TO ferropix" > /dev/null
   done
 
-  # The client credentials mapping of the issuer service of compose.yaml.
+  # The client credentials mapping of the issuer service of compose.yaml, once
+  # for each `typ` a server of the gate may read, chosen by the request's `typ`.
   docker run --detach --name "$ISSUER_NAME" --publish 127.0.0.1:8180:8180 \
     --env SERVER_PORT=8180 \
-    --env JSON_CONFIG='{"interactiveLogin":false,"tokenCallbacks":[{"issuerId":"ferropix","requestMappings":[{"requestParam":"grant_type","match":"client_credentials","claims":{"sub":"${clientId}","client_id":"${clientId}","aud":["http://localhost:8080/fhir"],"scope":"${scope}"}}]}]}' \
+    --env JSON_CONFIG='{"interactiveLogin":false,"tokenCallbacks":[{"issuerId":"ferropix","requestMappings":[{"requestParam":"typ","match":"at+jwt","typeHeader":"at+jwt","claims":{"sub":"${clientId}","client_id":"${clientId}","aud":["http://localhost:8080/fhir"],"scope":"${scope}"}},{"requestParam":"typ","match":"JWT","typeHeader":"JWT","claims":{"sub":"${clientId}","client_id":"${clientId}","aud":["http://localhost:8080/fhir"],"scope":"${scope}"}}]}]}' \
     "$issuer_image" > /dev/null
   wait_for "the OpenID Provider" 60 curl --fail --silent "$ISSUER/.well-known/openid-configuration"
 
@@ -415,19 +419,25 @@ run() {
   command -v ferrohealth-perf > /dev/null || die "ferrohealth-perf is not on PATH"
   trap cleanup EXIT
   start
-  local source consumer code=0 server
-  source="$(token perf-source system/Patient.cud)"
-  consumer="$(token perf-consumer system/Patient.rs)"
-  seed "$HEAD_URL" "$source"
-  seed "$BASE_URL" "$source"
-  render "$PLAN" "$WORK/plan.toml" "$consumer" "$source" || exit 2
+  local code=0 server side typ source consumer
+  local -a vars=()
+  [[ "$(placeholders "$PLAN" | paste -sd ' ' -)" = "consumer_token source_token" ]] ||
+    die "$PLAN holds a placeholder the gate does not fill"
+  for side in head base; do
+    if [[ "$side" = head ]]; then typ="$(token_type "$CONFIG")"; else typ="$(token_type "$BASE_TREE/src/$CONFIG")"; fi
+    source="$(token perf-source system/Patient.cud "$typ")"
+    consumer="$(token perf-consumer system/Patient.rs "$typ")"
+    if [[ "$side" = head ]]; then seed "$HEAD_URL" "$source"; else seed "$BASE_URL" "$source"; fi
+    vars+=("--$side-var" "consumer_token=$consumer" "--$side-var" "source_token=$source")
+    echo "perf-gate: the $side server reads $typ tokens"
+  done
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf "The base is \`%s\`.\n\n" "$(< "$BASE_TREE/rev")" >> "$GITHUB_STEP_SUMMARY"
   fi
   mkdir -p target/perf
   sample target/perf/runner.tsv &
   sampler_pid=$!
-  ferrohealth-perf ab --plan "$WORK/plan.toml" \
+  ferrohealth-perf ab --plan "$PLAN" "${vars[@]}" \
     --base-url "$BASE_URL" --base-pid "$base_pid" --base-mllp-address "$BASE_MLLP" \
     --base-database-url "$(admin_url ferropix_base)" \
     --head-url "$HEAD_URL" --head-pid "$head_pid" --head-mllp-address "$HEAD_MLLP" \
@@ -478,11 +488,13 @@ self_test() {
   printf '| Item | Pin | Repeated in |\n|---|---|---|\n| PostgreSQL test image | `postgres:1@sha256:00` | x |\n' > "$work/matrix.md"
   check "a pin is read without its backticks" "postgres:1@sha256:00" "$(pin "PostgreSQL test image" "$work/matrix.md")"
   check "a missing row reads empty" "" "$(pin "Nothing" "$work/matrix.md")"
-  printf 'a = "Bearer {consumer_token}"\nb = "Bearer {source_token}"\n' > "$work/plan.toml"
-  render "$work/plan.toml" "$work/out.toml" c1 s1
-  check "both tokens are filled" $'a = "Bearer c1"\nb = "Bearer s1"' "$(< "$work/out.toml")"
-  printf 'a = "Bearer {other_token}"\n' > "$work/plan.toml"
-  check "a placeholder left is refused" 1 "$(render "$work/plan.toml" "$work/out.toml" c s 2> /dev/null && echo 0 || echo 1)"
+  check "the plan's placeholders are the two tokens the gate fills" \
+    $'consumer_token\nsource_token' "$(placeholders "$root/$PLAN")"
+  printf '[auth.issuer.dev]\nissuer = "x"\n\n[auth.issuer.dev.profile]\ntoken_types = ["JWT"]\n' > "$work/config.toml"
+  check "a configuration that names JWT reads JWT" JWT "$(token_type "$work/config.toml")"
+  printf '[auth.issuer.dev]\nissuer = "x"\ntoken_types = ["JWT"]\n' > "$work/config.toml"
+  check "a configuration with no profile reads at+jwt" at+jwt "$(token_type "$work/config.toml")"
+  check "this tree's configuration reads at+jwt" at+jwt "$(token_type "$root/$CONFIG")"
   printf '[idle]\n# a note\nmax = 1.0\n\n[load]\nrate = 2.0\n' > "$work/plan.toml"
   check "the idle table is read alone" "max = 1.0" "$(idle_table "$work/plan.toml")"
   check "the gate and the busy-loop plan hold the same idle limits" \

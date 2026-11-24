@@ -8,8 +8,9 @@
 # them (the FerroPIX #490 case); the load phase sends the hot paths of the
 # FHIR face and the HL7 v2 feed over MLLP to each server in turn. The gate
 # seeds the two patients of the testkit's ITI-104 fixtures first, so each
-# feed below is an update answered 200. The gate replaces {consumer_token}
-# and {source_token} with tokens of the stub OpenID Provider before the run.
+# feed below is an update answered 200. The gate fills @consumer_token@ and
+# @source_token@ for each server with tokens of the stub OpenID Provider of
+# the type that server's own perf/ferropix.toml reads.
 # No specification governs this: our own design.
 
 [idle]
@@ -39,7 +40,7 @@ group = "pixm-query"
 method = "GET"
 path = "/fhir/Patient/$ihe-pix?sourceIdentifier=urn%3Aoid%3A2.999.1.2%7CL-200001&targetSystem=urn%3Aoid%3A2.999.1.1"
 status = 200
-headers = { authorization = "Bearer {consumer_token}" }
+headers = { authorization = "Bearer @consumer_token@" }
 
 [[requests]]
 group = "pixm-query-post"
@@ -47,7 +48,7 @@ method = "POST"
 path = "/fhir/Patient/$ihe-pix"
 status = 200
 body = '{"resourceType":"Parameters","meta":{"profile":["https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Query.Parameters.In"]},"parameter":[{"name":"sourceIdentifier","valueString":"urn:oid:2.999.1.2|L-200001"},{"name":"targetSystem","valueString":"urn:oid:2.999.1.1"},{"name":"targetSystem","valueString":"http://fhir.nl/fhir/NamingSystem/bsn"}]}'
-headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }
+headers = { authorization = "Bearer @consumer_token@", content-type = "application/fhir+json" }
 
 # PIXm ITI-104, the patient feed, as a conditional update of a known patient.
 [[requests]]
@@ -56,7 +57,7 @@ method = "PUT"
 path = "/fhir/Patient?identifier=urn%3Aoid%3A2.999.1.1%7CH-100001"
 status = 200
 body = '{"resourceType":"Patient","meta":{"profile":["https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Patient"]},"identifier":[{"system":"urn:oid:2.999.1.1","value":"H-100001"},{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"999990007"}],"active":true,"name":[{"use":"official","family":"Proefsma","given":["Ada"]}],"gender":"female","birthDate":"1961-04-12","address":[{"use":"home","line":["Voorbeeldstraat 1"],"city":"Teststad","postalCode":"0000 AA","country":"NL"}]}'
-headers = { authorization = "Bearer {source_token}", content-type = "application/fhir+json" }
+headers = { authorization = "Bearer @source_token@", content-type = "application/fhir+json" }
 
 # PDQm ITI-78, a demographics search.
 [[requests]]
@@ -64,7 +65,7 @@ group = "pdqm-search"
 method = "GET"
 path = "/fhir/Patient?family=Proefsma&birthdate=1961-04-12"
 status = 200
-headers = { authorization = "Bearer {consumer_token}" }
+headers = { authorization = "Bearer @consumer_token@" }
 
 # PDQm ITI-119, the match.
 [[requests]]
@@ -73,7 +74,7 @@ method = "POST"
 path = "/fhir/Patient/$match"
 status = 200
 body = '{"resourceType":"Parameters","meta":{"profile":["https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchParametersIn"]},"parameter":[{"name":"resource","resource":{"resourceType":"Patient","meta":{"profile":["https://profiles.ihe.net/ITI/PDQm/StructureDefinition/IHE.PDQm.MatchInputPatient"]},"name":[{"family":"Proefsma","given":["Ada"]}],"gender":"female","birthDate":"1961-04-12"}},{"name":"onlyCertainMatches","valueBoolean":false},{"name":"count","valueInteger":5}]}'
-headers = { authorization = "Bearer {consumer_token}", content-type = "application/fhir+json" }
+headers = { authorization = "Bearer @consumer_token@", content-type = "application/fhir+json" }
 
 # ITI-8, the Patient Identity Feed over MLLP (#509): an ADT^A01 of one
 # clinic patient, so the first adds it and every later one revises it. The

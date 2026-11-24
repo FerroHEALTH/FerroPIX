@@ -12,7 +12,7 @@ state:
   existingClaim: ferropix-state
 config:
   auth:
-    described_issuer: "https://idp.example.org"
+    described_issuer: idp
     issuer:
       idp:
         issuer: "https://idp.example.org"

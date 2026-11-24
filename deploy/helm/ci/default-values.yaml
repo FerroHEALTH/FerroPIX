@@ -13,4 +13,3 @@ config:
     issuer:
       idp:
         issuer: "https://idp.example.org"
-        kind: machines

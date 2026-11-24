@@ -26,9 +26,9 @@ config:
   server:
     listen: "0.0.0.0:8080"
   # The issuers whose tokens the server accepts, by name, each an
-  # `[auth.issuer.<name>]` table with its `issuer` and its `kind` (`persons`
-  # or `machines`); its audience is `{public_base_url}/fhir` unless it sets
-  # `audience`. The chart refuses to render with none
+  # `[auth.issuer.<name>]` table naming its `issuer`, a SMART authorization
+  # server unless it sets `kind: federation`; its audience is
+  # `{public_base_url}/fhir` unless it sets `audience`. The chart refuses to render with none
   # (https://ferropix.eu/docs/operate/configuration.html#auth).
   auth:
     issuer: {}

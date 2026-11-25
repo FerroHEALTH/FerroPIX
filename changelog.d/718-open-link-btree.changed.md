@@ -1,1 +1,0 @@
-- The store finds a record's open link through a partial B-tree index on `pix.link (record_id)` where the link is open, which every PIX query, PDQm read and feed looks up, beside the GiST index that keeps a record in one person at a time.

@@ -1,1 +1,0 @@
-- Each feed writes less to the database log: the version and carried-identifier rows drop the primary keys nothing reads by, the identifier rotation (`db reseal`) walks the rows by their keys, and the steward history keeps only the indexes it reads. An ITI-104 revision writes 2,439 bytes of log in place of 2,898.

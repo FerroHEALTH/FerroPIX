@@ -12,6 +12,8 @@ mod contract;
 mod hygiene;
 #[cfg(feature = "pixm-server")]
 mod server;
+#[cfg(feature = "pixm-source")]
+pub(crate) mod source;
 
 use std::path::PathBuf;
 use std::time::Duration;

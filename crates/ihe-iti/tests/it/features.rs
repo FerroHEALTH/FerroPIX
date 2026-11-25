@@ -32,6 +32,7 @@ const FEATURES: &[&str] = &[
     "mcsd",
     "pmir",
     "xcpd",
+    "pixm-source",
     "pixm-server",
     "pdqm-server",
     "pmir-server",

@@ -9,7 +9,7 @@ change the pin in docs/VERSIONS.md and re-run the script.
 - Source: <https://packages.fhir.org/ihe.iti.pixm/3.1.0>, the FHIR package registry's copy of the IG published at
   <https://profiles.ihe.net/ITI/PIXm/3.1.0/>
 - Pin: package `ihe.iti.pixm` version `3.1.0`, tarball sha256 `19e2e8eaf3030ac7b4d809c5e1eeb8face02c8635318aeb6d35bc2bb889de0d0`
-- Fetched: 2026-10-24
+- Fetched: 2026-11-25
 - Upstream licence: Creative Commons Attribution 4.0 International
   (`CC-BY-4.0`, the `license` of the package manifest, listed under What is
   left out;
@@ -18,12 +18,13 @@ change the pin in docs/VERSIONS.md and re-run the script.
   Committee, *Patient Identifier Cross-referencing for Mobile (PIXm)* 3.1.0.
 - FHIR version: 4.0.1
 - Layout: the upstream paths inside the package, unchanged
-- Files: 32 of the package's 59, listed below
+- Files: 36 of the package's 59, listed below
 - Tree digest (sha256 over the sorted per-file `sha256  path` listing,
-  `PROVENANCE.md` excluded): `57e93a6d566348bb1cff2c40ef8f5ad34d992049e212ed6b38ba91e3e5ebf1c4`
-- Read by: the ITI-83 client of `crates/ihe-iti` (feature `pixm`), whose
-  tests decode the examples and hold the request and response to the
-  OperationDefinition, and the BALP audit of `app/ferropix-server`, whose
+  `PROVENANCE.md` excluded): `504cf0169557fa771ec5abafa30d8125f2717eb4ae6c29ac4dcbf8ab2f5b005b`
+- Read by: the ITI-83 and ITI-104 clients of `crates/ihe-iti` (feature
+  `pixm`), whose tests decode the examples, hold the request and response
+  to the OperationDefinition and the Source's ITI-104 records to their
+  profiles, and the BALP audit of `app/ferropix-server`, whose
   tests hold the Manager's ITI-83 and ITI-104 records to their profiles. The
   Patient profiles are kept for the PIX Manager's feed
 
@@ -39,8 +40,9 @@ example Patients. The audit record of ITI-83 as the Consumer records it
 (§2:3.83.5.1.1): the PIXm Query Consumer audit profile, built on the BALP
 Patient Query pattern, and its example. The audit records of the Manager
 (§2:3.83.5.1.2, §2:3.104.5.1.2): the Query, Feed Create, Feed Update and Feed
-Delete Manager audit profiles and their examples. The package's other files
-serve no reader here: the ITI-104 Source's BALP audit profiles and examples,
+Delete Manager audit profiles and their examples. The audit records of the
+Source (§2:3.104.5.1.1): the Feed Update and Feed Delete Source audit
+profiles and their examples. The package's other files serve no reader here:
 the Schematron renderings, the OpenAPI renderings and the registry's
 `.index.db`, a SQLite file. They are not taken.
 
@@ -53,7 +55,9 @@ the Schematron renderings, the OpenAPI renderings and the registry's
 | `package/OperationDefinition-IHE.PIXm.pix.json` | `d16827774e5f74fc5b53613963d8dc80cc935f898458db5a5d67b50b86ee8ad6` |
 | `package/StructureDefinition-IHE.PIXm.Feed.Create.Audit.Manager.json` | `d42e46a9c2abee852165e07c54fa5491b98116b7e2f6a8a197829c1c6f095de1` |
 | `package/StructureDefinition-IHE.PIXm.Feed.Delete.Audit.Manager.json` | `c98822b96b10a50e9b4e080693e9c4d49ee96f0f3f6e4f272c54b9319871979f` |
+| `package/StructureDefinition-IHE.PIXm.Feed.Delete.Audit.Source.json` | `95b6c20e5c4246f18eb75db3a036a9e769db75d14272681f1f7a2384cafe772c` |
 | `package/StructureDefinition-IHE.PIXm.Feed.Update.Audit.Manager.json` | `d85193f05f9dc1f687fcb115ee8c21bbbeb09ba69af9caffe1a7da3dc2cb263a` |
+| `package/StructureDefinition-IHE.PIXm.Feed.Update.Audit.Source.json` | `953fecad602ed9d182b245176b6664355da28afe44380773f164f07ff7b519a3` |
 | `package/StructureDefinition-IHE.PIXm.Patient.BirthDateRequired.json` | `c77538e1e297bb0d97e678562cbb7196a546333a6246909153be1d2ad8706386` |
 | `package/StructureDefinition-IHE.PIXm.Patient.json` | `e57717a364ddbd83045ca376a953ee71c3ff84c273a5dc9e4f616033e050b9cf` |
 | `package/StructureDefinition-IHE.PIXm.Query.Audit.Consumer.json` | `3cad9d2f3d38a21e5e9ebde120aade95326392f3ff8f542b187b1f225ced6a9d` |
@@ -62,7 +66,9 @@ the Schematron renderings, the OpenAPI renderings and the registry's
 | `package/StructureDefinition-IHE.PIXm.Query.Parameters.Out.json` | `3631ba3f4236026ad29a52e560bc54ea9ff52c63c2731255b655df29fa02eda0` |
 | `package/example/AuditEvent-ex-auditPixmFeed-create-manager.json` | `e82e41727cfdbd68c5a25145e33824f1d70bc626bca7551a5dbd63617529d73f` |
 | `package/example/AuditEvent-ex-auditPixmFeed-delete-manager.json` | `9fe492acbe48624d6d93edcdaab37fea502a2b4f05602b210d0e744d77258e46` |
+| `package/example/AuditEvent-ex-auditPixmFeed-delete-source.json` | `3be0ff46f94205b6bad69186117df8f4cf2b567fd7a43fb7dfc9fe2e4aced4e4` |
 | `package/example/AuditEvent-ex-auditPixmFeed-update-manager.json` | `2da175ce9cea1b34dcd6e27e938f698b31aee6930a6a2130f97eae50530aecd1` |
+| `package/example/AuditEvent-ex-auditPixmFeed-update-source.json` | `5bf82ca43c94fad7f4621715470d98925dc213fa60f5f1031e5d7360f034d7bb` |
 | `package/example/AuditEvent-ex-auditPixmQuery-consumer.json` | `196acb4772bfb87893d5a318c60e120af2437ff785a658a08d0b09dbfaecf8fe` |
 | `package/example/AuditEvent-ex-auditPixmQuery-manager.json` | `b700f644d5b6d723bc6c1517de84751f4a4a92d08c5a35674293a1fc902d1a4b` |
 | `package/example/OperationOutcome-pixm-response-error-not-found.json` | `6d12d0aff48a3672b7a859a33b0df7df0defd74c3b875a9af5a546b1b00f1e47` |

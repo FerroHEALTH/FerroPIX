@@ -59,7 +59,7 @@ pub(super) fn request(
 
 /// The `sourceIdentifier` value: `<system>|<value>`, a token whose parts
 /// escape the characters FHIR search gives a meaning to (§2:3.83.4.1.2.1).
-fn source_token(source: &SourceIdentifier) -> SecretString {
+pub(super) fn source_token(source: &SourceIdentifier) -> SecretString {
     SecretString::from(format!(
         "{}|{}",
         escape(source.system()),
@@ -90,7 +90,7 @@ fn query(endpoint: &Url, source: &SourceIdentifier, targets: &[TargetSystem]) ->
 /// encodes every byte but the unreserved set and writes a space as `+`
 /// (WHATWG URL, the `application/x-www-form-urlencoded` serializer), and a
 /// literal `+` as `%2B`, so each remaining `+` is a space and becomes `%20`.
-fn component(value: &str) -> String {
+pub(super) fn component(value: &str) -> String {
     url::form_urlencoded::byte_serialize(value.as_bytes())
         .collect::<String>()
         .replace('+', "%20")

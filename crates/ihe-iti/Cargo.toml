@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ihe-iti"
-description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile, with their audit records behind `balp` and `atna`"
+description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83, ITI-104), PDQm (ITI-78, ITI-119), mCSD (ITI-90, ITI-91), PMIR (ITI-93, ITI-94) and XCPD (ITI-55), one feature per profile, with their audit records behind `balp` and `atna`"
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.21.1"
+version = "0.21.2"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -70,6 +70,12 @@ pdqm = [
 # Patient those carry. The client of `pixm` comes with it, for the identifier
 # types the two sides share.
 pixm-server = ["pixm", "fhir-types/resources"]
+# The PIXm Patient Identity Source side (ITI-104): the HTTP client of the
+# conditional update and delete that add, revise, merge and remove a patient
+# identity, and the FHIR R4 `resources` root set for the Patient they carry.
+# The client of `pixm` comes with it, for the identifier types and the
+# transport the two clients share.
+pixm-source = ["pixm", "fhir-types/resources"]
 # The PDQm Supplier side (ITI-78, ITI-119) with no store and no HTTP server:
 # the search parameters and the `$match` input read, the search and the match
 # Bundles and each refusal written. The client of `pdqm` comes with it, for

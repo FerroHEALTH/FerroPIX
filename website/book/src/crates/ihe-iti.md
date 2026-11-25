@@ -18,10 +18,11 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 | `mcsd` | Mobile Care Services Discovery, mCSD | ITI-90, ITI-91 | Query Client and Update Client |
 | `xcpd` | Cross-Community Patient Discovery, XCPD | ITI-55 | Initiating Gateway, and the Responding Gateway's messages with no HTTP server |
 | `soap` | The SOAP 1.2 envelope of ITI TF-2 Appendix V, with no profile: its reader, which hands every element to a visitor the transaction supplies, its writer, its fault codes, and the HTTP post it travels on with the answer read to a bound | Appendix V | what `xcpd` and the Mitz question of `nl-generic-functions` send, read and write through |
-| `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side, and of the PIXm Manager and the PDQm Supplier |
+| `balp` | The BALP `AuditEvent` of each FHIR profile above | ITI-83, ITI-104, ITI-78, ITI-119, ITI-90, ITI-91, ITI-93, ITI-94 | the audit record of the client side, the PIXm Patient Identity Source included, and of the PIXm Manager and the PDQm Supplier |
 | `atna` | The DICOM audit message of `xcpd`, with no FHIR model | ITI-55 | the audit record of either gateway |
 | `rest` | The JSON media types of an answer, with no FHIR model, and the family's FHIR R4 search value grammar, `fhir-search` | FHIR R4 search, HTTP | what the FHIR clients and the NVI client of `nl-generic-functions` read their answers' media types with; every search value and token is escaped and read through `fhir-search`, the one grammar the FerroHEALTH FHIR servers share |
 | `outbound` | The send every client goes through, over the `OutboundClient` of `ferrohealth-smart` that an endpoint table builds, with no FHIR model | ITI-72 | what the clients here and the NVI and Mitz clients of `nl-generic-functions` send through, with the table's TLS, retry and credential |
+| `pixm-source` | The feed client of PIXm | ITI-104 | Patient Identity Source |
 | `pixm-server` | The server side of PIXm, with no store and no HTTP server | ITI-83, ITI-104 | Patient Identifier Cross-reference Manager |
 | `pdqm-server` | The server side of PDQm, with no store and no HTTP server | ITI-78, ITI-119 | Patient Demographics Supplier |
 | `pmir-server` | The server side of PMIR, with no store and no HTTP server | ITI-93, ITI-94 | Patient Identity Registry |
@@ -70,6 +71,28 @@ that the configured base is a FHIR server that answers. Every other outcome
 is a typed error: `Refused` with the status, `NotAFhirServer` for a `200`
 that is no FHIR R4 `CapabilityStatement`, and `Timeout`, `Transport` or
 `Unauthenticated` when no answer was had.
+
+## PIXm Patient Identity Source (`pixm-source`)
+
+`ihe_iti::pixm::source::PixmSourceClient` feeds a PIX Manager the patient
+identities of its own domain (ITI-104, PIXm 3.1.0), so the Manager can
+cross-reference them before a consumer asks ITI-83:
+
+- `feed` adds or revises a patient: `PUT
+  [base]/Patient?identifier=system|value` with the Patient as it now stands.
+- `resolve_duplicate` tells the Manager the Source merged two patients: the
+  same update on the subsumed identifier, the Patient carrying a
+  `replaced-by` link to the survivor.
+- `remove` removes a patient: the conditional `DELETE` on the identifier.
+
+A `201` is `Fed::Created` and a `200` `Fed::Updated`, each with the
+`Location` the Manager named; a delete answered `200` or `204` is
+`Removed::Deleted` and `202` `Removed::Accepted`. A `412` (the identifier
+matched more than one resource) and every other answer are typed errors
+with the status and the issue types of the `OperationOutcome`. A Patient
+that does not carry the identifier the message names is refused before
+anything is sent. With `balp`, each message is recorded as the PIXm Feed
+Update or Delete Source audit profile fixes it.
 
 ## PDQm (`pdqm`)
 

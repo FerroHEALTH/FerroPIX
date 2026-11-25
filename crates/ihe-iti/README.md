@@ -20,6 +20,7 @@ Patient Index, which adds the server sides of the profiles as features.
 | `atna` | The ITI-55 DICOM audit message of `xcpd`, in `ihe-atna`'s ATNA model, with no FHIR model | ITI-55 |
 | `rest` | The FHIR R4 search value escaping and the JSON media types of an answer every FHIR client here shares, with no FHIR model: what the NVI client of `nl-generic-functions` reads its answers with too | FHIR R4 search, HTTP |
 | `outbound` | The send every client goes through, over the `OutboundClient` of [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart) that an endpoint table builds, with no FHIR model: what the clients here and the NVI and Mitz clients of `nl-generic-functions` send through | ITI-72 |
+| `pixm-source` | The Patient Identity Source side of PIXm: the HTTP client of the Patient Identity Feed | ITI-104 |
 | `pixm-server` | The Patient Identifier Cross-reference Manager side of PIXm, typed, with no store and no HTTP server | ITI-83, ITI-104 |
 | `pdqm-server` | The Patient Demographics Supplier side of PDQm, typed, with no store and no HTTP server | ITI-78, ITI-119 |
 | `pmir-server` | The Patient Identity Registry side of PMIR, typed, with no store and no HTTP server | ITI-93, ITI-94 |
@@ -76,6 +77,27 @@ Manager's free text. The outbound client follows no redirect, so the source
 identifier goes nowhere the base does not name. The client's `Debug` shows
 its URL with the userinfo replaced by `***` and whether it carries a
 credential, never the credential.
+
+## PIXm Patient Identity Source (`pixm-source`)
+
+`ihe_iti::pixm::source::PixmSourceClient` is the Patient Identity Source of
+ITI-104 (PIXm 3.1.0), built from an endpoint table like every other client.
+`feed` sends Add or Revise Patient, the conditional update
+`PUT [base]/Patient?identifier=system|value` with the Patient as it now
+stands; `resolve_duplicate` sends the same update on the subsumed identifier,
+its Patient carrying a `replaced-by` link to the survivor in the same domain;
+`remove` sends Remove Patient, the conditional delete on the identifier. A
+Patient that breaks the PDQm Patient profile's constraints or does not carry
+the identifier the message names is refused before anything is sent.
+
+The answers are FHIR R4's conditional update and delete: `Fed::Created` for
+a `201`, `Fed::Updated` for a `200`, each with the `Location` the Manager
+named, `Removed::Deleted` for a `200` or `204` and `Removed::Accepted` for a
+`202`. A `412` is `SourceError::NotSelective`, every other answer
+`SourceError::Rejected` with its status and the issue types of its
+`OperationOutcome`, so a refusal or an outage never reads as an applied
+message. No error carries an identifier, a demographic or the Manager's
+free text.
 
 ## PDQm (`pdqm`)
 
@@ -302,7 +324,8 @@ and PMIR exchanges are always the system's own.
 With `balp`, every PIXm, PDQm, mCSD and PMIR client takes an
 `ihe_atna::balp::AuditRecorder` through `.audited(…)` and records the BALP
 `AuditEvent` its profile defines for each transaction: the PIXm Query
-Consumer of ITI-83, the PDQm Query and Match Consumers of ITI-78 and
+Consumer of ITI-83, the PIXm Feed Update and Delete Sources of ITI-104
+(`pixm-source`), the PDQm Query and Match Consumers of ITI-78 and
 ITI-119, the mCSD Query and Updates Clients of ITI-90 and ITI-91, and the
 PMIR Feed Consumer and Subscriber of ITI-93 and ITI-94. The client awaits
 the recorder before it returns, its `timeout` bounds the record too

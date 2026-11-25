@@ -11,6 +11,8 @@ mod mcsd;
 mod pdqm;
 #[cfg(feature = "pixm")]
 mod pixm;
+#[cfg(feature = "pixm-source")]
+mod pixm_source;
 #[cfg(feature = "pmir")]
 mod pmir;
 pub(crate) mod profile;

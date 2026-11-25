@@ -12,7 +12,6 @@
 use std::fmt;
 
 use fhir_types::codec::{Json, Path, Value};
-use fhir_types::r4::identifier::Identifier;
 use fhir_types::r4::operation_outcome::OperationOutcome;
 use fhir_types::r4::patient::Patient;
 use http::StatusCode;
@@ -20,13 +19,11 @@ use secrecy::{ExposeSecret, SecretString};
 
 use crate::outcome::IssueType;
 use crate::pixm::identifier::SourceIdentifier;
+use crate::pixm::patient;
 use crate::server::answer::{Answer, Severity};
 use crate::server::format::{BodyError, Format};
 use crate::server::token;
 use ihe_atna::redact::REDACTED;
-
-/// The `link.type` of a Resolve Duplicate Patient message (§2:3.104.4.2.2).
-const REPLACED_BY: &str = "replaced-by";
 
 /// One conditional update of ITI-104, as read.
 ///
@@ -70,22 +67,20 @@ impl Feed {
         }
         let patient = Patient::from_json(&object, &mut Path::root("Patient"))
             .map_err(|error| FeedError::Body(BodyError::decode(error)))?;
-        profile(&patient)?;
-        if !patient
-            .identifier
-            .iter()
-            .any(|identifier| same(identifier, &condition))
-        {
+        if !patient::holds_to_profile(&patient) {
+            return Err(FeedError::Profile);
+        }
+        if !patient::carries(&patient, &condition) {
             return Err(FeedError::ConditionNotCarried);
         }
-        let mut links = patient
-            .link
-            .iter()
-            .filter(|link| link.r#type.value.as_deref() == Some(REPLACED_BY));
-        let link = links.next();
-        if links.next().is_some() {
-            return Err(FeedError::SecondSurvivor);
-        }
+        let link = {
+            let mut links = patient::replaced_by(&patient);
+            let link = links.next();
+            if links.next().is_some() {
+                return Err(FeedError::SecondSurvivor);
+            }
+            link
+        };
         // NOTE: PIXm §2:3.104.4.2.2, the link points at the surviving identifier,
         // so a link without a domain and a value names no survivor and is refused.
         let survivor = link
@@ -243,31 +238,6 @@ fn condition(query: &str) -> Result<SourceIdentifier, FeedError> {
         }
     }
     found.ok_or(FeedError::NoCondition)
-}
-
-/// Holds `patient` to the constraints of the PDQm Patient profile: no
-/// `implicitRules` and no `modifierExtension`, and at least one identifier,
-/// each with a `system` and a `value` (§2:3.104.4.1.2.1).
-fn profile(patient: &Patient) -> Result<(), FeedError> {
-    if patient.implicit_rules.is_some() || !patient.modifier_extension.is_empty() {
-        return Err(FeedError::Profile);
-    }
-    let complete = |identifier: &Identifier| {
-        let present = |text: Option<&str>| text.is_some_and(|text| !text.is_empty());
-        present(identifier.system.as_ref().and_then(|s| s.value.as_deref()))
-            && present(identifier.value.as_ref().and_then(|v| v.value.as_deref()))
-    };
-    if patient.identifier.is_empty() || !patient.identifier.iter().all(complete) {
-        return Err(FeedError::Profile);
-    }
-    Ok(())
-}
-
-/// Whether `identifier` is `condition`.
-fn same(identifier: &Identifier, condition: &SourceIdentifier) -> bool {
-    identifier.system.as_ref().and_then(|s| s.value.as_deref()) == Some(condition.system())
-        && identifier.value.as_ref().and_then(|v| v.value.as_deref())
-            == Some(condition.value().expose_secret())
 }
 
 /// Why a message is no ITI-104 message the Manager applies.

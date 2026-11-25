@@ -20,6 +20,10 @@
 //! an ITI-104 feed by [`manager_feed`], as the PIXm Feed Create, Update or
 //! Delete Manager audit profile fixes it, with the fed identifier as the
 //! patient and the person it is cross-referenced to as the data.
+//!
+//! An audited [`PixmSourceClient`](super::source::PixmSourceClient) records
+//! each ITI-104 message it sent as the PIXm Feed Update or Delete Source
+//! audit profile fixes it ([`feed_source`], §2:3.104.5.1.1).
 
 use jiff::Timestamp;
 use secrecy::{ExposeSecret, SecretString};
@@ -216,6 +220,88 @@ pub fn manager_feed(
         query: None,
     };
     received.exchange(feed_manager(action), outcome, vec![data, patient(fed)])
+}
+
+/// What the PIXm Feed Source audit profile of `action` fixes: a Source
+/// cannot tell a create from an update, so it records an update or a delete
+/// (§2:3.104.5.1.1).
+///
+/// A delete names the client as the application and the Manager as the
+/// custodian, as BALP Patient Delete does, an update the source and the
+/// destination.
+#[cfg(feature = "pixm-source")]
+#[must_use]
+pub fn feed_source(action: FeedAction) -> EventKind {
+    let (profile, subtype, code, client, server) = match action {
+        FeedAction::Create | FeedAction::Update => (
+            "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Feed.Update.Audit.Source",
+            UPDATE,
+            "U",
+            SOURCE_ROLE,
+            DESTINATION_ROLE,
+        ),
+        FeedAction::Delete => (
+            "https://profiles.ihe.net/ITI/PIXm/StructureDefinition/IHE.PIXm.Feed.Delete.Audit.Source",
+            DELETE,
+            "D",
+            APPLICATION,
+            CUSTODIAN,
+        ),
+    };
+    EventKind {
+        profile,
+        event_type: REST,
+        subtypes: vec![subtype, ITI_104],
+        action: code,
+        client,
+        server,
+    }
+}
+
+/// The Source's record of one ITI-104 message sent to the Manager at
+/// `base`: it did `action` to `fed`, made for `on_behalf`, and ended in
+/// `result`, the Manager naming the Patient `location` when it did.
+#[cfg(feature = "pixm-source")]
+pub(super) fn source_feed(
+    base: &Url,
+    action: FeedAction,
+    fed: &SourceIdentifier,
+    location: Option<&super::identifier::PatientReference>,
+    on_behalf: &OnBehalfOf,
+    result: Result<(), &super::source::error::SourceError>,
+) -> Exchange {
+    use super::source::error::SourceError;
+    // NOTE: PIXm §2:3.104.5.1.1, the data entity names the Patient; a Source knows it
+    // only from a Location the Manager answered.
+    let reference = location
+        .map(|location| location.reference().expose_secret())
+        .filter(|reference| ihe_atna::balp::is_literal_reference(reference))
+        .map(str::to_owned);
+    let data = Entity::Resource {
+        reference,
+        resource_type: "Patient",
+        kind: SYSTEM_OBJECT,
+        role: Some(DOMAIN_RESOURCE),
+        name: None,
+        query: None,
+    };
+    let outcome = match result {
+        Ok(()) => Outcome::Success,
+        Err(SourceError::Timeout | SourceError::Transport(_)) => Outcome::SeriousFailure,
+        Err(_) => Outcome::MinorFailure,
+    };
+    Exchange {
+        kind: feed_source(action),
+        recorded: Timestamp::now(),
+        outcome,
+        outcome_description: None,
+        direction: Direction::Sent {
+            server: Peer::server(base),
+        },
+        on_behalf: on_behalf.clone(),
+        entities: vec![data, patient(fed)],
+        security: Vec::new(),
+    }
 }
 
 /// The patient entity of `identifier`.

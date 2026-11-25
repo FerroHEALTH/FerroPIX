@@ -285,6 +285,7 @@ pub(crate) fn user() -> OnBehalfOf {
             .with_purposes(vec![PurposeOfUse {
                 system: Some(ACT_REASON.to_owned()),
                 code: "TREAT".to_owned(),
+                text: None,
             }]),
     )
 }

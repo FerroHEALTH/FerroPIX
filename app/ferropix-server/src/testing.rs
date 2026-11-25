@@ -8,6 +8,7 @@
 
 use base64::Engine as _;
 use ferrohealth_secret::secret_url::SecretUrl;
+use ferropix_operator_api::patient::IdentifierType;
 use ferropix_testkit::containers::{Postgres, postgres};
 use ferropix_testkit::synthetic::{HOSPITAL_DOMAIN, LABORATORY_DOMAIN, PRACTICE_DOMAIN};
 use ihe_atna::balp::Exchange;
@@ -93,6 +94,11 @@ pub(crate) async fn start() -> Started {
         system: system.to_owned(),
         name: system.to_owned(),
         kind,
+        identifier_type: if kind == DomainKind::Authoritative {
+            IdentifierType::Ni
+        } else {
+            IdentifierType::Pi
+        },
         source_client_id: SOURCE.to_owned(),
         sensitive,
     };

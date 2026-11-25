@@ -20,7 +20,7 @@ use ferropix_operator_api::actions::ActionFilter;
 
 use ferrohealth_session::record::Held;
 use ferropix_operator_api::domain::{Domain, DomainChange, NewDomain};
-use ferropix_operator_api::patient::DomainKind;
+use ferropix_operator_api::patient::{DomainKind, IdentifierType};
 use ferropix_operator_api::pseudonym::{
     NewPseudonymDomain, PseudonymDomain, PseudonymDomainChange, Resolution, Resolve,
 };
@@ -537,10 +537,15 @@ async fn created(
         Some("authoritative") => DomainKind::Authoritative,
         _ => DomainKind::Local,
     };
+    let identifier_type = field(pairs, "identifier_type")
+        .as_deref()
+        .and_then(IdentifierType::from_code)
+        .unwrap_or(IdentifierType::Pi);
     let new = NewDomain {
         system: field(pairs, "system").unwrap_or_default(),
         name: field(pairs, "name").unwrap_or_default(),
         kind,
+        identifier_type,
         source_client_id: field(pairs, "source").unwrap_or_default(),
         sensitive: Some(field(pairs, "sensitive").is_some()),
         reason: field(pairs, "reason"),

@@ -17,7 +17,7 @@ use ferropix_operator_api::domain::{Domain, DomainPage, Domains, Feed, FeedOutco
 use ferropix_operator_api::health::{Dependencies, FEED_SENDER, MLLP_LISTENER};
 use ferropix_operator_api::overview::{DayCount, HourFeeds, Overview, Queue, QueueEntry};
 use ferropix_operator_api::patient::{
-    Channel, Demographics, DomainKind, DomainRef, Grade, Masked, Name, PersonStatus,
+    Channel, Demographics, DomainKind, DomainRef, Grade, IdentifierType, Masked, Name, PersonStatus,
 };
 use ferropix_operator_api::person::{
     HistoryEntry, HistoryEvent, IdentifierHandle, IdentifierRow, Link, LinkKind, Person,
@@ -462,6 +462,7 @@ async fn the_domains_and_a_domain_draw_their_definition_and_feeds_with_no_value(
         system: String::from("urn:oid:2.999.1.1"),
         name: String::from("Synthetic hospital"),
         kind: DomainKind::Local,
+        identifier_type: IdentifierType::Pi,
         sensitive: false,
         source_client_id: String::from("east-lab"),
         created_at: String::from("2026-10-20T08:00:00Z"),

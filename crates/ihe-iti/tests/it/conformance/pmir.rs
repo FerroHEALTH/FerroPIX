@@ -14,7 +14,9 @@ use ihe_iti::pmir::subscription::{Criteria, SubscriptionRequest, SubscriptionSta
 use serde_json::Value;
 use url::Url;
 
-use super::{example, examples, is_audit, record, registry, verdict};
+use ferropix_conformance::{record, verdict};
+
+use super::{example, examples, is_audit, registry};
 use crate::pmir::{FHIR_JSON, PROMPT, subscriber};
 
 /// The vendored package under `docs/specs/`.

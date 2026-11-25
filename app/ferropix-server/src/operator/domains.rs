@@ -26,7 +26,7 @@ use ferropix_operator_api::domain::{
     DEFAULT_LIMIT, Domain, DomainChange, DomainPage, DomainQuery, Domains, FEEDS, Feed,
     FeedOutcome, MAX_LIMIT, NewDomain,
 };
-use ferropix_operator_api::patient::DomainKind;
+use ferropix_operator_api::patient::{DomainKind, IdentifierType};
 use http::StatusCode;
 use ihe_atna::balp::Outcome;
 use sqlx::PgConnection;
@@ -44,7 +44,8 @@ use crate::store::seed;
 pub const NO_SUCH_DOMAIN: &str = "no identifier domain has this id";
 
 /// The columns of one domain row, each timestamp RFC 3339 UTC.
-const COLUMNS: &str = "d.id, d.system, d.name, d.kind, d.sensitive, d.source_client_id,
+const COLUMNS: &str =
+    "d.id, d.system, d.name, d.kind, d.identifier_type, d.sensitive, d.source_client_id,
      to_char(d.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
      to_char(d.retired_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS retired_at,
      (SELECT count(*) FROM pix.source_record r WHERE r.domain_id = d.id) AS records,
@@ -59,6 +60,7 @@ struct DomainRow {
     system: String,
     name: String,
     kind: String,
+    identifier_type: String,
     sensitive: bool,
     source_client_id: String,
     created_at: String,
@@ -75,6 +77,8 @@ impl DomainRow {
             system: self.system,
             name: self.name,
             kind: domain_kind(&self.kind)?,
+            identifier_type: IdentifierType::from_code(&self.identifier_type)
+                .ok_or(OperatorError::Unadmitted("identifier type"))?,
             sensitive: self.sensitive,
             source_client_id: self.source_client_id,
             created_at: self.created_at,
@@ -240,8 +244,9 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         operator,
         &IDENTIFIER_DOMAINS,
         sqlx::query_scalar(
-            "INSERT INTO pix.identifier_domain (system, name, kind, source_client_id, sensitive)
-             VALUES ($1, $2, $3, $4, $5)
+            "INSERT INTO pix.identifier_domain
+                 (system, name, kind, source_client_id, sensitive, identifier_type)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (system) DO NOTHING
              RETURNING id",
         )
@@ -249,7 +254,8 @@ pub async fn create(operator: &Operator, request: Request) -> Response {
         .bind(new.name.trim())
         .bind(kind)
         .bind(new.source_client_id.trim())
-        .bind(new.sensitive.unwrap_or(true)),
+        .bind(new.sensitive.unwrap_or(true))
+        .bind(new.identifier_type.code()),
         (&new.system, new.reason.as_deref()),
     )
     .await;

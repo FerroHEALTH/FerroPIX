@@ -189,6 +189,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+
+[[package]]
 name = "askama"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1235,6 +1241,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
+name = "ferrobridge-fhirpath"
+version = "0.1.137"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17572b6ddc6ebd25078461e4a891523c49288a610299cb7a6e78b5463d6b9f6f"
+dependencies = [
+ "base64 0.23.1",
+ "chumsky",
+ "fhir-types",
+ "jiff 0.2.46",
+ "logos",
+ "quick-xml",
+ "regex",
+ "rust_decimal",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "ferrobridge-hl7v2"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1277,6 +1302,24 @@ dependencies = [
  "thiserror",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "ferrobridge-validator"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1722515e4d5bb183d1b6998eea8a14f70b9c14e19c5cf3f4e50cbbff4fc84063"
+dependencies = [
+ "ferrobridge-fhirpath",
+ "ferrobridge-term",
+ "fhir-types",
+ "flate2",
+ "http",
+ "regex",
+ "serde",
+ "serde_json",
+ "tar",
+ "thiserror",
 ]
 
 [[package]]
@@ -1484,6 +1527,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferropix-conformance"
+version = "0.0.39"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "ferropix-console"
 version = "0.0.39"
 dependencies = [
@@ -1542,6 +1592,7 @@ dependencies = [
  "clap",
  "ferrobridge-hl7v2",
  "ferrobridge-term",
+ "ferrobridge-validator",
  "ferrohealth-config",
  "ferrohealth-health",
  "ferrohealth-secret",
@@ -1549,6 +1600,7 @@ dependencies = [
  "ferrohealth-smart",
  "ferrohealth-telemetry",
  "ferrohealth-usage-report",
+ "ferropix-conformance",
  "ferropix-console",
  "ferropix-operator-api",
  "ferropix-testkit",
@@ -1649,6 +1701,16 @@ checksum = "05b6fd29b43312f952c09f164aa1c18c603ffdbeb68cd1ba38b9571f567d9128"
 dependencies = [
  "fhir-types",
  "thiserror",
+]
+
+[[package]]
+name = "filetime"
+version = "0.2.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1255e7a9f1902190d4c10a75f2f7f495d3d3ce13e9ba26e6c48683a0f4dbed7"
+dependencies = [
+ "cfg-if",
+ "libc",
 ]
 
 [[package]]
@@ -2405,6 +2467,7 @@ dependencies = [
  "ferrohealth-config",
  "ferrohealth-secret",
  "ferrohealth-smart",
+ "ferropix-conformance",
  "fhir-search",
  "fhir-types",
  "http",
@@ -3839,6 +3902,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_decimal"
+version = "1.43.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7653272e75dcac41dc199fbea6f5797633994fafd339943c06c9af16bf29cd3a"
+dependencies = [
+ "arrayvec",
+ "borsh",
+ "bytes",
+ "num-traits",
+ "rand 0.8.8",
+ "rand 0.9.5",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4638,6 +4718,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
+]
+
+[[package]]
+name = "tar"
+version = "0.4.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+dependencies = [
+ "filetime",
+ "libc",
 ]
 
 [[package]]

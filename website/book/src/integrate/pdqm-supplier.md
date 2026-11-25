@@ -75,6 +75,16 @@ whether the store holds a thousand persons or a million. A merged person
 holds no records, since a merge moves them to the survivor, so only `_id`
 and `active` find it.
 
+### Identifier types
+
+Every identifier of a returned `Patient` carries `identifier.type`, the type
+its domain names (`identifier_type`). An HL7 Identifier Type code is a
+coding of `http://terminology.hl7.org/CodeSystem/v2-0203`. The EHDS codes
+`HI`, `HIN`, `REGPID` and `REGION` of the draft EEHRxF Annexes, Table 26,
+are written as `type.text`, because no published code system holds them
+yet. The persons' own identifier in the Master Patient Identification
+Domain is `PI`.
+
 ### The domain filter
 
 `identifier=system|` with no value names a domain whose identifiers you

@@ -30,3 +30,7 @@
 # secret files of the compose quickstart (compose.yaml).
 /dist/
 /secrets/
+
+# The dependency closure of the MyHealth@EU NCP API package, fetched by
+# scripts/vendor/myhealtheu-ncp-api.sh --closure and never committed.
+/docs/specs/myhealtheu-ncp-api/closure/

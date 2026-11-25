@@ -233,6 +233,27 @@ fn a_domain_without_its_kind_or_with_a_system_that_is_no_uri_is_refused() {
 }
 
 #[test]
+fn a_domain_without_its_identifier_type_or_with_one_outside_the_value_set_is_refused() {
+    let secrets = Secrets::new();
+    let typeless = FULL.replacen("identifier_type = \"PI\"\n", "", 1);
+    assert!(matches!(
+        resolve(&typeless, &secrets),
+        Err(Error::Missing { key }) if key == "domain[0].identifier_type"
+    ));
+    let unknown = FULL.replacen("identifier_type = \"PI\"", "identifier_type = \"XX\"", 1);
+    assert!(
+        resolve(&unknown, &secrets).is_err(),
+        "XX is no identifier type"
+    );
+    let ehds = FULL.replacen(
+        "identifier_type = \"PI\"",
+        "identifier_type = \"REGPID\"",
+        1,
+    );
+    assert!(resolve(&ehds, &secrets).is_ok(), "an EHDS code of Table 26");
+}
+
+#[test]
 fn the_dev_table_is_refused_under_production() {
     let secrets = Secrets::new();
     let text = format!("{FULL}\n[dev]\nloopback = false\n");
@@ -282,6 +303,7 @@ scopes = ["__ferropix.steward"]
 system = "urn:oid:2.999.1.1"
 name = "Development hospital"
 kind = "local"
+identifier_type = "PI"
 source_client_id = "dev-source"
 
 [dev]
@@ -410,6 +432,7 @@ scopes = ["__ferropix.steward"]
 system = "urn:oid:2.999.1.1"
 name = "Development hospital"
 kind = "local"
+identifier_type = "PI"
 source_client_id = "dev-source"
 
 [dev]

@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::patient::{Channel, DomainKind};
+use crate::patient::{Channel, DomainKind, IdentifierType};
 
 /// The domains a page holds when the request names no limit.
 pub const DEFAULT_LIMIT: u32 = 50;
@@ -32,6 +32,8 @@ pub struct Domain {
     pub name: String,
     /// What the domain is.
     pub kind: DomainKind,
+    /// The type of its identifiers.
+    pub identifier_type: IdentifierType,
     /// Whether its identifier values are sealed at rest.
     pub sensitive: bool,
     /// The client id of its one Patient Identity Source.
@@ -116,6 +118,8 @@ pub struct NewDomain {
     pub name: String,
     /// What the domain is: `local` or `authoritative`.
     pub kind: DomainKind,
+    /// The type of its identifiers.
+    pub identifier_type: IdentifierType,
     /// The client id of its one Patient Identity Source.
     pub source_client_id: String,
     /// Whether its identifier values are sealed at rest; `true` when absent.

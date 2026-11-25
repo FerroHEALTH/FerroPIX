@@ -12,6 +12,8 @@
     reason = "the test seam: the records are read as JSON values"
 )]
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
@@ -236,6 +238,7 @@ async fn start_mastered() -> Mastered {
         system: MASTER.to_owned(),
         name: String::from("Master Patient Identification Domain"),
         kind: DomainKind::Master,
+        identifier_type: IdentifierType::Pi,
         source_client_id: SOURCE.to_owned(),
         sensitive: false,
     });

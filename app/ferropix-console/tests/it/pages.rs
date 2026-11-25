@@ -417,7 +417,7 @@ async fn the_search_panel_offers_pages_and_domains_and_refuses_a_reader_with_no_
     Mock::given(method("GET"))
         .and(path("/operator/domains"))
         .respond_with(ResponseTemplate::new(200).set_body_string(
-            r#"{"domains":[{"id":"0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c","system":"urn:oid:2.999.1.1","name":"Synthetic hospital","kind":"local","sensitive":false,"source_client_id":"synthetic-source","created_at":"2026-10-20T08:00:00Z","records":1}]}"#,
+            r#"{"domains":[{"id":"0192a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c","system":"urn:oid:2.999.1.1","name":"Synthetic hospital","kind":"local","identifier_type":"PI","sensitive":false,"source_client_id":"synthetic-source","created_at":"2026-10-20T08:00:00Z","records":1}]}"#,
         ))
         .mount(&server)
         .await;

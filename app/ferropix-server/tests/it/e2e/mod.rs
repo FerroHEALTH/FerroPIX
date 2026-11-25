@@ -18,7 +18,7 @@ mod evidence;
 mod feed;
 mod feed_auth;
 mod feed_sender;
-mod feeds;
+pub(crate) mod feeds;
 mod gate;
 mod hl7v2;
 mod indicator;
@@ -39,11 +39,13 @@ mod reseal;
 mod schema;
 mod sealing;
 mod subscriptions;
-mod supplier;
+pub(crate) mod supplier;
 mod survival;
 mod xcpd;
 mod xcpd_examples;
 mod xcpd_mtls;
+
+use ferropix_operator_api::patient::IdentifierType;
 
 use base64::Engine as _;
 use ferrohealth_secret::secret_url::SecretUrl;
@@ -154,6 +156,7 @@ pub(crate) fn seeds() -> Vec<DomainSeed> {
             system: BSN_SYSTEM.to_owned(),
             name: String::from("BSN"),
             kind: DomainKind::Authoritative,
+            identifier_type: IdentifierType::Ni,
             source_client_id: String::from("synthetic-source"),
             sensitive: true,
         },
@@ -161,6 +164,7 @@ pub(crate) fn seeds() -> Vec<DomainSeed> {
             system: HOSPITAL_DOMAIN.to_owned(),
             name: String::from("Synthetic hospital"),
             kind: DomainKind::Local,
+            identifier_type: IdentifierType::Pi,
             source_client_id: String::from("synthetic-source"),
             sensitive: false,
         },

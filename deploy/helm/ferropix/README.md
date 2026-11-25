@@ -89,6 +89,7 @@ config:
     - system: "urn:oid:2.999.1.1"
       name: "Clinical domain"
       kind: local
+      identifier_type: PI
       source_client_id: ferroehr
 ```
 

@@ -16,6 +16,8 @@
     reason = "the test seam: the Bundles and answers are JSON values"
 )]
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::HOSPITAL_DOMAIN;
@@ -54,6 +56,7 @@ fn with_master() -> Vec<DomainSeed> {
         system: MASTER.to_owned(),
         name: String::from("Master Patient Identification Domain"),
         kind: DomainKind::Master,
+        identifier_type: IdentifierType::Pi,
         source_client_id: SOURCE.to_owned(),
         sensitive: false,
     });

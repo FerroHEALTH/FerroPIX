@@ -406,6 +406,8 @@ col-domains = Domains
 col-grade = Grade
 # The identifiers column.
 col-identifiers = Identifiers
+# The identifier type column.
+col-identifier-type = Identifier type
 # The kind column.
 col-kind = Kind
 # The last activity column.
@@ -506,6 +508,30 @@ history-empty = Nothing has happened to this person yet.
 history-truncated = Only the newest events are shown; the audit trail holds every one.
 # The empty identifiers tab.
 identifiers-empty = This person holds no identifier.
+# The identifier type NI.
+identifier-type-ni = NI: national unique individual identifier
+# The identifier type SS.
+identifier-type-ss = SS: social security number
+# The identifier type PI.
+identifier-type-pi = PI: patient internal identifier
+# The identifier type MR.
+identifier-type-mr = MR: medical record number
+# The identifier type PPN.
+identifier-type-ppn = PPN: passport number
+# The identifier type NH.
+identifier-type-nh = NH: national health plan identifier
+# The identifier type JHN.
+identifier-type-jhn = JHN: jurisdictional health number
+# The identifier type HC.
+identifier-type-hc = HC: health card number
+# The identifier type HI.
+identifier-type-hi = HI: health identifier
+# The identifier type HIN.
+identifier-type-hin = HIN: health insurance number
+# The identifier type REGPID.
+identifier-type-regpid = REGPID: regional person identifier
+# The identifier type REGION.
+identifier-type-region = REGION: region identifier
 # The authoritative domain kind.
 kind-authoritative = Authoritative
 # The local domain kind.

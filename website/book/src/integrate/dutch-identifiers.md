@@ -45,6 +45,7 @@ hospital ([Configuration](../operate/configuration.md)):
 system = "http://fhir.nl/fhir/NamingSystem/bsn"
 name = "BSN"
 kind = "authoritative"
+identifier_type = "NI"
 source_client_id = "quickstart-source"
 sensitive = true
 
@@ -52,6 +53,7 @@ sensitive = true
 system = "http://fhir.nl/fhir/NamingSystem/pseudo-bsn"
 name = "Pseudonymised BSN"
 kind = "authoritative"
+identifier_type = "NI"
 source_client_id = "quickstart-source"
 sensitive = true
 ```

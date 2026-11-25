@@ -327,6 +327,12 @@ pub enum StoreError {
         /// The domain's system.
         system: String,
     },
+    /// A stored domain names an identifier type the schema does not admit.
+    #[error("the stored domain {system} names an identifier type the schema does not admit")]
+    UnknownIdentifierType {
+        /// The domain's system.
+        system: String,
+    },
     /// `db reseal` was given an old key the store is not written under.
     #[error("the store is written under key {stored}, and the old key is key {old}")]
     OldKeyUnknown {

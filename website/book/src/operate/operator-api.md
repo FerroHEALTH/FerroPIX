@@ -121,11 +121,13 @@ reveal. The value never reaches a log line.
 Behind the administrator scope, `POST /operator/domains` adds a domain:
 
 ```json
-{"system": "urn:oid:2.999.1.9", "name": "Clinic", "kind": "local", "source_client_id": "clinic-feed", "reason": "a new clinic"}
+{"system": "urn:oid:2.999.1.9", "name": "Clinic", "kind": "local", "identifier_type": "PI", "source_client_id": "clinic-feed", "reason": "a new clinic"}
 ```
 
 The system is an absolute URI no other domain holds (`409` otherwise), the
-kind is `local` or `authoritative`, `sensitive` defaults to `true`, and the
+kind is `local` or `authoritative`, `identifier_type` is one of the codes
+`[[domain]]` takes (see the configuration reference), `sensitive` defaults to
+`true`, and the
 Source must be a client a `[[trust.issuer]]` lists in its `clients`
 (`422` otherwise); a Basic user is never one. The answer is `201` with the domain.
 

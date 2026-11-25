@@ -214,6 +214,7 @@ mod tests {
 
     use super::{Sources, Verdict, domains_of};
     use crate::config::section::domain::{DomainKind, DomainSeed};
+    use ferropix_operator_api::patient::IdentifierType;
 
     const ISSUER: &str = "https://idp.example.org";
 
@@ -222,6 +223,7 @@ mod tests {
             system: String::from("urn:oid:2.999.1.1"),
             name: String::from("East"),
             kind: DomainKind::Local,
+            identifier_type: IdentifierType::Pi,
             source_client_id: String::from("east-lab"),
             sensitive: true,
         };
@@ -324,6 +326,7 @@ mod tests {
             system: String::from("https://pix.example.org"),
             name: String::from("Master"),
             kind: DomainKind::Master,
+            identifier_type: IdentifierType::Pi,
             source_client_id: String::from("east-lab"),
             sensitive: false,
         }]);
@@ -348,6 +351,7 @@ mod tests {
             system: String::from("https://pix.example.org"),
             name: String::from("Master"),
             kind: DomainKind::Master,
+            identifier_type: IdentifierType::Pi,
             source_client_id: String::from("east-lab"),
             sensitive: false,
         }]);
@@ -368,6 +372,7 @@ mod tests {
             system: system.to_owned(),
             name: String::from("East"),
             kind: DomainKind::Local,
+            identifier_type: IdentifierType::Pi,
             source_client_id: String::from("west-lab"),
             sensitive: true,
         }]);

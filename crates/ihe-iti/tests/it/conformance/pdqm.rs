@@ -31,7 +31,9 @@ use url::Url;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{encoded, example, examples, is_audit, record, verdict_noted};
+use ferropix_conformance::{record, verdict_noted};
+
+use super::{encoded, example, examples, is_audit};
 use crate::pdqm::{DOMAIN, FHIR_JSON, PROMPT, client, entry, schmidt, supplier};
 
 /// The vendored package under `docs/specs/`.

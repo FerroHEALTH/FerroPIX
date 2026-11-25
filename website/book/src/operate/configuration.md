@@ -427,6 +427,7 @@ stays the record. A system named twice is refused.
 | `domain[].system` | none, required | The identifier system: a `urn:oid:` OID in the FHIR `oid` form, or another absolute URI. |
 | `domain[].name` | none, required | The name a steward reads. |
 | `domain[].kind` | none, required | `"local"` (a system's own numbers), `"authoritative"` (a national number the deterministic match links on) or `"master"` (FerroPIX's own). |
+| `domain[].identifier_type` | none, required | The type every `Patient.identifier` of the domain carries: an HL7 Identifier Type code (`"NI"`, `"SS"`, `"PI"`, `"MR"`, `"PPN"`, `"NH"`, `"JHN"`, `"HC"`), written as a coding of `http://terminology.hl7.org/CodeSystem/v2-0203`, or an EHDS code of the draft EEHRxF Annexes, Table 26 (`"HI"`, `"HIN"`, `"REGPID"`, `"REGION"`), written as `type.text` until a code system holds it. |
 | `domain[].source_client_id` | none, required | The client id of the domain's one Patient Identity Source. |
 | `domain[].sensitive` | `true` | Whether the domain's identifier values are sealed at rest. |
 

@@ -63,6 +63,7 @@ async fn hold_json(harness: &Harness, candidates: &[(Uuid, Evidence)], links: &[
     for statement in [
         "ALTER TABLE pix.link DROP CONSTRAINT link_evidence_packed",
         "ALTER TABLE pix.candidate DROP CONSTRAINT candidate_evidence_packed, ADD COLUMN evidence_json jsonb",
+        "ALTER TABLE pix.identifier_domain DROP COLUMN identifier_type",
         "DELETE FROM pix._sqlx_migrations WHERE version >= 45",
     ] {
         sqlx::query(statement)
@@ -122,7 +123,7 @@ async fn the_evidence_held_as_json_is_packed_a_batch_at_a_time_and_reads_as_it_w
     assert!(
         matches!(
             schema::check(&harness.store).await,
-            Err(StoreError::MigrationsPending { missing: 2 })
+            Err(StoreError::MigrationsPending { missing: 4 })
         ),
         "a server that does not migrate refuses to start"
     );

@@ -461,6 +461,7 @@ mod tests {
             system: _,
             name: _,
             kind: _,
+            identifier_type: _,
             sensitive: _,
             source_client_id: _,
             created_at: _,
@@ -546,6 +547,7 @@ mod tests {
                 system: _,
                 name: _,
                 kind: _,
+                identifier_type: _,
                 source_client_id: _,
                 sensitive: _,
                 reason: _,
@@ -648,7 +650,7 @@ mod tests {
             serde_json::from_str(r#"{"domains":[]}"#).expect("the domains read"),
             serde_json::from_str(
                 r#"{"domain":{"id":"d-1","system":"urn:oid:2.999.1.1","name":"Synthetic",
-                    "kind":"local","sensitive":false,"source_client_id":"east-lab",
+                    "kind":"local","identifier_type":"PI","sensitive":false,"source_client_id":"east-lab",
                     "created_at":"2026-10-24T10:00:00Z","records":0},"feeds":[]}"#,
             )
             .expect("the domain page reads"),
@@ -667,7 +669,7 @@ mod tests {
             ),
             (
                 serde_json::from_str(
-                    r#"{"system":"urn:oid:2.999.1.9","name":"Synthetic","kind":"local","source_client_id":"east-lab"}"#,
+                    r#"{"system":"urn:oid:2.999.1.9","name":"Synthetic","kind":"local","identifier_type":"PI","source_client_id":"east-lab"}"#,
                 )
                 .expect("a new domain reads"),
                 serde_json::from_str(r#"{"retire":true,"reason":"closed"}"#)

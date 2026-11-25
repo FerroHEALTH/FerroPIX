@@ -405,6 +405,7 @@ configs:
       system = "urn:oid:2.999.1.1"
       name = "Quickstart hospital"
       kind = "local"
+      identifier_type = "PI"
       source_client_id = "quickstart-source"
 
       # The BSN, the national number of the Netherlands (NL Generic Functions,
@@ -414,6 +415,7 @@ configs:
       system = "http://fhir.nl/fhir/NamingSystem/bsn"
       name = "BSN"
       kind = "authoritative"
+      identifier_type = "NI"
       source_client_id = "quickstart-source"
       sensitive = true
 
@@ -424,6 +426,7 @@ configs:
       system = "http://fhir.nl/fhir/NamingSystem/pseudo-bsn"
       name = "Pseudonymised BSN"
       kind = "authoritative"
+      identifier_type = "NI"
       source_client_id = "quickstart-source"
       sensitive = true
 

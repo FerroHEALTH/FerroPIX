@@ -9,6 +9,8 @@
 //! system. Each domain names its one Patient Identity Source (PIXm 3.1.0
 //! §2:3.104.4.1.3). No specification governs the seed: our own design.
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use crate::config::section::domain::{DomainKind, DomainSeed};
 use crate::store::{Store, StoreError};
 
@@ -41,8 +43,9 @@ pub async fn apply(store: &Store, seeds: &[DomainSeed]) -> Result<SeedReport, St
     let mut report = SeedReport::default();
     for seed in seeds {
         let inserted = sqlx::query(
-            "INSERT INTO pix.identifier_domain (system, name, kind, source_client_id, sensitive)
-             VALUES ($1, $2, $3, $4, $5)
+            "INSERT INTO pix.identifier_domain
+                 (system, name, kind, source_client_id, sensitive, identifier_type)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (system) DO NOTHING",
         )
         .bind(&seed.system)
@@ -50,6 +53,7 @@ pub async fn apply(store: &Store, seeds: &[DomainSeed]) -> Result<SeedReport, St
         .bind(kind_name(seed.kind))
         .bind(&seed.source_client_id)
         .bind(seed.sensitive)
+        .bind(seed.identifier_type.code())
         .execute(&mut *transaction)
         .await?
         .rows_affected();
@@ -61,6 +65,7 @@ pub async fn apply(store: &Store, seeds: &[DomainSeed]) -> Result<SeedReport, St
         report.kept = report.kept.saturating_add(1);
         let same: bool = sqlx::query_scalar(
             "SELECT name = $2 AND kind = $3 AND source_client_id = $4 AND sensitive = $5
+                    AND identifier_type = $6
              FROM pix.identifier_domain WHERE system = $1",
         )
         .bind(&seed.system)
@@ -68,6 +73,7 @@ pub async fn apply(store: &Store, seeds: &[DomainSeed]) -> Result<SeedReport, St
         .bind(kind_name(seed.kind))
         .bind(&seed.source_client_id)
         .bind(seed.sensitive)
+        .bind(seed.identifier_type.code())
         .fetch_one(&mut *transaction)
         .await?;
         if !same {
@@ -91,29 +97,36 @@ pub async fn apply(store: &Store, seeds: &[DomainSeed]) -> Result<SeedReport, St
 ///
 /// # Errors
 /// Returns [`StoreError::Query`] when the statement fails, and
-/// [`StoreError::UnknownDomainKind`] for a kind the schema does not admit.
+/// [`StoreError::UnknownDomainKind`] or [`StoreError::UnknownIdentifierType`]
+/// for a kind or an identifier type the schema does not admit.
 pub async fn stored(store: &Store) -> Result<Vec<DomainSeed>, StoreError> {
-    let rows: Vec<(String, String, String, String, bool)> = sqlx::query_as(
-        "SELECT system, name, kind, source_client_id, sensitive
+    let rows: Vec<(String, String, String, String, bool, String)> = sqlx::query_as(
+        "SELECT system, name, kind, source_client_id, sensitive, identifier_type
          FROM pix.identifier_domain WHERE retired_at IS NULL ORDER BY system",
     )
     .fetch_all(store.pool())
     .await?;
     rows.into_iter()
-        .map(|(system, name, kind, source_client_id, sensitive)| {
-            let kind = match kind.as_str() {
-                "local" => DomainKind::Local,
-                "authoritative" => DomainKind::Authoritative,
-                "master" => DomainKind::Master,
-                _ => return Err(StoreError::UnknownDomainKind { system }),
-            };
-            Ok(DomainSeed {
-                system,
-                name,
-                kind,
-                source_client_id,
-                sensitive,
-            })
-        })
+        .map(
+            |(system, name, kind, source_client_id, sensitive, identifier_type)| {
+                let kind = match kind.as_str() {
+                    "local" => DomainKind::Local,
+                    "authoritative" => DomainKind::Authoritative,
+                    "master" => DomainKind::Master,
+                    _ => return Err(StoreError::UnknownDomainKind { system }),
+                };
+                let Some(identifier_type) = IdentifierType::from_code(&identifier_type) else {
+                    return Err(StoreError::UnknownIdentifierType { system });
+                };
+                Ok(DomainSeed {
+                    system,
+                    name,
+                    kind,
+                    identifier_type,
+                    source_client_id,
+                    sensitive,
+                })
+            },
+        )
         .collect()
 }

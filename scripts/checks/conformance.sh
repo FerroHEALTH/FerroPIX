@@ -4,6 +4,10 @@
 # The conformance gate (#162; no specification governs it: our own design,
 # the model of FerroBRIDGE's gate). It runs the corpus tests of ihe-iti, which
 # read and write every example of the vendored PIXm, PDQm and PMIR packages,
+# and, behind FERROPIX_E2E over PostgreSQL, the server's EHDS corpora (#786):
+# the PDQm answers validated against MyHealth@EU Patient-minimal, the EHDS
+# identifier types and the Xt-EHR D8.2 patient match assertions, after it
+# fetches the validator's package closure,
 # compares what they measured with the committed pass lists under
 # conformance/, renders one shields.io endpoint badge per corpus
 # (https://shields.io/badges/endpoint-badge) under conformance/badges/, and
@@ -27,7 +31,11 @@
 # that disagrees with its list and a README block that disagrees with the
 # badges fail too.
 #
-# Needs cargo and cargo-nextest (the self-test needs neither). Exit 0 when
+# A badge label never claims a certification: one holding "certified",
+# "compliant" or "conformant" fails every mode, and a corpus with no pass list
+# and no result is left out of the README.
+#
+# Needs cargo, cargo-nextest and Docker (the self-test needs none). Exit 0 when
 # clean, 1 on a regression or (under --check) drift, 2 on a usage error or a
 # missing result.
 set -euo pipefail
@@ -37,6 +45,8 @@ set -euo pipefail
 
 readonly GRAMMAR="[--update | --check | --self-test]"
 readonly CORPORA=(pixm pdqm pmir audit)
+# The server's corpora, the README's EHDS row, each self-tested.
+readonly EHDS_CORPORA=(ncp-patient-minimal ehds-identifier-types xtehr-patient-match)
 readonly BADGES=conformance/badges
 # The shields.io endpoint prefix every conformance badge file is read through.
 readonly ENDPOINT='https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2F'
@@ -65,8 +75,19 @@ label_of() {
     pdqm) echo "PDQm 3.2.0 examples" ;;
     pmir) echo "PMIR 1.6.0 examples" ;;
     audit) echo "Audit record examples" ;;
+    ncp-patient-minimal) echo "MyHealth@EU NCP API 9.1.1-ci Patient-minimal valid" ;;
+    ehds-identifier-types) echo "EHDS identifier types (EEHRxF draft Annex X)" ;;
+    xtehr-patient-match) echo "Xt-EHR D8.2 2026-05-19 Patient Match assertions" ;;
     *) return 1 ;;
   esac
+}
+
+# Fails when the label $1 claims a certification.
+label_claims() {
+  if grep -qiE 'certified|compliant|conformant' <<<"$1"; then
+    echo "conformance: the badge label '$1' claims a certification; name the version and the count" >&2
+    return 1
+  fi
 }
 
 # The badge colour of $1 passing out of $2: the share in quarters.
@@ -152,6 +173,17 @@ render_block() {
   for corpus in "${CORPORA[@]}"; do
     badge_link "$corpus"
   done
+  local ehds=()
+  for corpus in "${EHDS_CORPORA[@]}"; do
+    [[ -f "conformance/$corpus/pass-list.txt" ]] && ehds+=("$corpus")
+  done
+  if [[ "${#ehds[@]}" -gt 0 ]]; then
+    echo
+    echo '**EHDS, self-tested**<br>'
+    for corpus in ${ehds[@]+"${ehds[@]}"}; do
+      badge_link "$corpus"
+    done
+  fi
   echo '<!-- badges:end -->'
 }
 
@@ -247,6 +279,12 @@ self_test() {
     echo "conformance: self-test failed: the rewrite touched text outside the block" >&2
     failed=1
   fi
+  expect 1 "a label that claims a certification" label_claims "PDQm 3.2.0 certified"
+  expect 1 "a label that claims compliance" label_claims "EHDS Compliant"
+  expect 1 "a label that claims conformance" label_claims "conformant to PIXm"
+  for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
+    expect 0 "the label of $corpus" label_claims "$(label_of "$corpus")"
+  done
   expect 1 "a missing badge under check" emit_badge "$work/badges/pixm.json" "$badge" check
   expect 0 "a badge written" emit_badge "$work/badges/pixm.json" "$badge" update
   expect 0 "a written badge under check" emit_badge "$work/badges/pixm.json" "$badge" check
@@ -287,15 +325,27 @@ else
 fi
 
 failed=0
+for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
+  label_claims "$(label_of "$corpus")" || failed=1
+done
 if ! cargo nextest run --locked -p ihe-iti --all-features --no-tests=fail --no-fail-fast \
   -E 'test(/^conformance::/)'; then
   echo "conformance: a corpus test failed; an example its list records no longer passes"
   failed=1
 fi
+bash scripts/vendor/myhealtheu-ncp-api.sh --closure
+if ! FERROPIX_E2E=1 cargo nextest run --locked -p ferropix-server --no-tests=fail --no-fail-fast \
+  -E 'test(/^conformance::/)'; then
+  echo "conformance: a server corpus test failed; a case its list records no longer passes"
+  failed=1
+fi
 
-for corpus in "${CORPORA[@]}"; do
+for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
   result="$OUT/$corpus.txt"
   list="conformance/$corpus/pass-list.txt"
+  if [[ ! -f "$result" && ! -f "$list" ]] && [[ " ${EHDS_CORPORA[*]} " = *" $corpus "* ]]; then
+    continue
+  fi
   if [[ ! -f "$result" ]]; then
     echo "conformance: no test reported $corpus ($result is missing)" >&2
     exit 2

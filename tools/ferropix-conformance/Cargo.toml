@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Cadasto B.V.
+# SPDX-License-Identifier: BUSL-1.1
+[package]
+name = "ferropix-conformance"
+version.workspace = true
+description = "The verdicts of the conformance corpora and their pass lists, shared by the corpus tests"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+# Depends on no workspace crate, so a corpus test of any crate takes it as a
+# path-only dev-dependency without pulling another workspace crate's features.
+[dependencies]
+tokio = { workspace = true, features = ["rt"] }
+
+[lints]
+workspace = true

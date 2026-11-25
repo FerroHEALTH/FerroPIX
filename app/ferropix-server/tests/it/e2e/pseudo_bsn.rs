@@ -9,6 +9,8 @@
 //! Every name and identifier is synthetic; the pseudonymised BSN is an
 //! opaque synthetic value, and no BSNk service is called.
 
+use ferropix_operator_api::patient::IdentifierType;
+
 use ferropix_server::config::section::domain::{DomainKind, DomainSeed};
 use ferropix_testkit::containers::e2e_enabled;
 use ferropix_testkit::synthetic::{HOSPITAL_DOMAIN, LABORATORY_DOMAIN};
@@ -30,6 +32,7 @@ fn with_pseudo_bsn() -> Vec<DomainSeed> {
         system: PSEUDO_BSN_SYSTEM.to_owned(),
         name: String::from("Pseudonymised BSN"),
         kind: DomainKind::Authoritative,
+        identifier_type: IdentifierType::Ni,
         source_client_id: SOURCE.to_owned(),
         sensitive: true,
     });

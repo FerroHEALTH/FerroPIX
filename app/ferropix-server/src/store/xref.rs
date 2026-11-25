@@ -30,6 +30,7 @@
 use std::collections::BTreeMap;
 use std::sync::{PoisonError, RwLock};
 
+use ferropix_operator_api::patient::IdentifierType;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
@@ -97,9 +98,9 @@ macro_rules! identified_cte {
              WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
                AND r.active AND r.removed_at IS NULL
          ),
-         identified (domain_id, system, sealed, plain, part, rid, hmac) AS (
+         identified (domain_id, system, sealed, plain, part, rid, hmac, itype) AS (
              SELECT h.domain_id, d.system, h.identifier_sealed, h.identifier_value,
-                    0, h.id, NULL::bytea
+                    0, h.id, NULL::bytea, d.identifier_type
              FROM held h
              JOIN pix.identifier_domain d ON d.id = h.domain_id
              WHERE d.retired_at IS NULL
@@ -107,7 +108,7 @@ macro_rules! identified_cte {
              SELECT * FROM (
                  SELECT DISTINCT ON (d.system, c.identifier_hmac)
                         c.domain_id, d.system, c.identifier_sealed, c.identifier_value,
-                        1, NULL::uuid, c.identifier_hmac
+                        1, NULL::uuid, c.identifier_hmac, d.identifier_type
                  FROM held h
                  JOIN pix.carried_identifier c
                    ON c.record_id = h.id AND c.version = h.head_version
@@ -289,6 +290,9 @@ impl DomainIds {
 /// plain value.
 type IdentifierRow = (Uuid, String, Option<Vec<u8>>, Option<String>);
 
+/// An identifier of the person as stored, with its domain's identifier type.
+type TypedRow = (Uuid, String, Option<Vec<u8>>, Option<String>, String);
+
 /// One row of [`QUERY`]: part, id, text, sealed, plain, client, flag, value.
 type QueryRow = (
     i32,
@@ -462,16 +466,42 @@ pub async fn identifiers(
     connection: &mut PgConnection,
     keys: &Sealer,
     person: Uuid,
-) -> Result<Vec<(String, IdentifierValue)>, StoreError> {
-    let rows: Vec<IdentifierRow> = sqlx::query_as(concat!(
+) -> Result<Vec<Held>, StoreError> {
+    let mut rows: Vec<TypedRow> = sqlx::query_as(concat!(
         "WITH pick (id) AS (SELECT $1::uuid), ",
         identified_cte!(),
-        " SELECT domain_id, system, sealed, plain FROM identified ORDER BY part, rid, hmac"
+        " SELECT domain_id, system, sealed, plain, itype FROM identified ORDER BY part, rid, hmac"
     ))
     .bind(person)
     .fetch_all(&mut *connection)
     .await?;
-    open(rows, keys)
+    rows.sort_by(|left, right| left.1.cmp(&right.1));
+    rows.into_iter()
+        .map(|(domain, system, sealed, plain, kind)| {
+            let kind = IdentifierType::from_code(&kind).ok_or_else(|| {
+                StoreError::UnknownIdentifierType {
+                    system: system.clone(),
+                }
+            })?;
+            let value = open_one(keys, domain, sealed, plain)?;
+            Ok(Held {
+                system,
+                kind,
+                value,
+            })
+        })
+        .collect()
+}
+
+/// One identifier of a person, with its domain's system and identifier type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Held {
+    /// The domain's system.
+    pub system: String,
+    /// The domain's identifier type.
+    pub kind: IdentifierType,
+    /// The value, opened.
+    pub value: IdentifierValue,
 }
 
 /// Opens each stored identifier of `rows`, ordered by system: the stable
@@ -481,14 +511,21 @@ fn open(
     keys: &Sealer,
 ) -> Result<Vec<(String, IdentifierValue)>, StoreError> {
     rows.sort_by(|left, right| left.1.cmp(&right.1));
-    let mut identifiers = Vec::with_capacity(rows.len());
-    for (domain, system, sealed, plain) in rows {
-        let value = match (sealed, plain) {
-            (Some(sealed), _) => keys.open(domain, &sealed)?,
-            (None, Some(plain)) => IdentifierValue::new(plain).ok_or(SealError::Malformed)?,
-            (None, None) => return Err(StoreError::Seal(SealError::Malformed)),
-        };
-        identifiers.push((system, value));
+    rows.into_iter()
+        .map(|(domain, system, sealed, plain)| Ok((system, open_one(keys, domain, sealed, plain)?)))
+        .collect()
+}
+
+/// Opens the identifier stored sealed or plain in `domain`.
+fn open_one(
+    keys: &Sealer,
+    domain: Uuid,
+    sealed: Option<Vec<u8>>,
+    plain: Option<String>,
+) -> Result<IdentifierValue, StoreError> {
+    match (sealed, plain) {
+        (Some(sealed), _) => Ok(keys.open(domain, &sealed)?),
+        (None, Some(plain)) => Ok(IdentifierValue::new(plain).ok_or(SealError::Malformed)?),
+        (None, None) => Err(StoreError::Seal(SealError::Malformed)),
     }
-    Ok(identifiers)
 }

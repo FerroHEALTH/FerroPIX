@@ -79,6 +79,8 @@ async fn check(package: &'static str, id: String) {
         "IHE.PIXm.Feed.Create.Audit.Manager" => (pixm_feed_manager(FeedAction::Create), true),
         "IHE.PIXm.Feed.Update.Audit.Manager" => (pixm_feed_manager(FeedAction::Update), true),
         "IHE.PIXm.Feed.Delete.Audit.Manager" => (pixm_feed_manager(FeedAction::Delete), true),
+        "IHE.PIXm.Feed.Update.Audit.Source" => (pixm_feed_source(false).await, true),
+        "IHE.PIXm.Feed.Delete.Audit.Source" => (pixm_feed_source(true).await, true),
         "IHE.PDQm.Query.Audit.Supplier" => (pdqm_supplier(SupplierSearch::Query), true),
         "IHE.PDQm.Match.Audit.Supplier" => (pdqm_supplier(SupplierSearch::Match), true),
         other => panic!("ihe-iti writes no record of the profile {other}"),
@@ -109,6 +111,38 @@ async fn pixm_query() -> Exchange {
         )
         .await
         .expect("a cross-reference");
+    only(&kept)
+}
+
+/// The record of the ITI-104 update, or with `delete` the remove, the PIXm
+/// Patient Identity Source sent.
+async fn pixm_feed_source(delete: bool) -> Exchange {
+    use crate::pixm::source::{alissa, manager, red, source};
+    let kept = Arc::new(Kept::default());
+    if delete {
+        let server = manager("DELETE", wiremock::ResponseTemplate::new(204)).await;
+        source(&server)
+            .audited(kept.clone())
+            .remove(
+                &red(crate::pixm::RED_VALUE),
+                &OnBehalfOf::System,
+                crate::pixm::PROMPT,
+            )
+            .await
+            .expect("removed");
+    } else {
+        let server = manager("PUT", wiremock::ResponseTemplate::new(200)).await;
+        source(&server)
+            .audited(kept.clone())
+            .feed(
+                &red(crate::pixm::RED_VALUE),
+                &alissa(),
+                &OnBehalfOf::System,
+                crate::pixm::PROMPT,
+            )
+            .await
+            .expect("applied");
+    }
     only(&kept)
 }
 

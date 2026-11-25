@@ -16,6 +16,7 @@ mod audit;
 #[cfg(all(
     feature = "balp",
     feature = "pixm-server",
+    feature = "pixm-source",
     feature = "pdqm-server",
     feature = "pmir"
 ))]

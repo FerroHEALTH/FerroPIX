@@ -17,10 +17,13 @@
 //!   FHIR client shares, with no FHIR model.
 //! - `outbound`: the send every HTTP client goes through, over
 //!   `ferrohealth-smart`'s outbound client, with no FHIR model.
-//! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-78, ITI-119, ITI-90,
-//!   ITI-91, ITI-93 and ITI-94 with `pixm`, `pdqm`, `mcsd` or `pmir`.
+//! - `balp`: the BALP `AuditEvent` of ITI-83, ITI-104, ITI-78, ITI-119,
+//!   ITI-90, ITI-91, ITI-93 and ITI-94 with `pixm`, `pixm-source`, `pdqm`,
+//!   `mcsd` or `pmir`.
 //! - `atna`: the DICOM audit message of ITI-55 with `xcpd`, with no FHIR
 //!   model.
+//! - `pixm-source`: the Patient Identity Source side of ITI-104, the HTTP
+//!   client of the Patient Identity Feed FHIR.
 //! - `pixm-server`: the Patient Identifier Cross-reference Manager side of
 //!   ITI-83 and ITI-104, typed and with no store and no HTTP server.
 //! - `pdqm-server`: the Patient Demographics Supplier side of ITI-78 and

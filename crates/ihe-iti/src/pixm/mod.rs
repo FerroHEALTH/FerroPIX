@@ -32,6 +32,10 @@
 //! `Debug`, none of them has `Display`, and no error this module returns
 //! carries a value, a request URL or body, or the Manager's free text.
 //!
+//! The Patient Identity Source side of ITI-104, which feeds the Manager the
+//! identities ITI-83 then cross-references, is [`source::PixmSourceClient`]
+//! (feature `pixm-source`).
+//!
 //! # Examples
 //!
 //! ```no_run
@@ -82,10 +86,14 @@ pub mod audit;
 pub mod capabilities;
 pub mod error;
 pub mod identifier;
+#[cfg(any(feature = "pixm-source", feature = "pixm-server"))]
+mod patient;
 mod request;
 mod response;
 #[cfg(feature = "pixm-server")]
 pub mod server;
+#[cfg(feature = "pixm-source")]
+pub mod source;
 
 use std::fmt;
 #[cfg(feature = "balp")]

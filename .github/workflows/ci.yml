@@ -1148,6 +1148,8 @@ jobs:
           - { package: ihe-iti, features: "mcsd,balp" }
           - { package: ihe-iti, features: "pmir,balp" }
           - { package: ihe-iti, features: "xcpd,atna" }
+          - { package: ihe-iti, features: pixm-source }
+          - { package: ihe-iti, features: "pixm-source,balp" }
           - { package: ihe-iti, features: pixm-server }
           - { package: ihe-iti, features: pdqm-server }
           - { package: ihe-iti, features: pmir-server }

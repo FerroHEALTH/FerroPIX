@@ -14,8 +14,8 @@
 #
 # A merge group runs the light set: tier 1, the manifest and fuzz-lockfile
 # reads, rustfmt, cargo-deny, the crate-version and chart-version guards and
-# the workspace's unit tests. The pull request ran the full suite on the same
-# change, so every other lane is skipped there.
+# every test target compiled with the unit tests run. The pull request ran the
+# full suite on the same change, so every other lane is skipped there.
 #
 # The `conclusion` job is the single required status check on main.
 name: CI
@@ -811,9 +811,13 @@ jobs:
       - if: github.event_name != 'merge_group'
         run: cargo test --doc --workspace --all-features --locked
       # The merge group's smoke set: the pull request ran every suite, so the
-      # queue builds the workspace and runs its unit tests only.
+      # queue compiles every test target with every feature and runs only the
+      # unit tests.
       - if: github.event_name == 'merge_group'
-        run: cargo nextest run --workspace --lib --bins --locked --no-tests=warn
+        run: |
+          set -euo pipefail
+          cargo nextest run --workspace --all-features --no-run --locked
+          cargo nextest run --workspace --lib --bins --all-features --locked --no-tests=warn
 
   # The conformance gate (#162): the corpus tests of ihe-iti over every
   # example of the vendored PIXm, PDQm and PMIR packages, held to the pass

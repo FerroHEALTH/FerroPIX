@@ -122,8 +122,10 @@ ran the full suite on the same change, and queues of about ten entries fell
 out at the 60-minute check timeout when every group ran it again. In a merge
 group `ci.yml` runs `lint`, `guards`, `manifest`, `fuzz-lockfile`,
 `rustfmt`, `cargo-deny`, the crate-version and chart-version guards, and
-`nextest` in smoke mode: the workspace built in the dev profile with its unit
-tests (`--lib --bins`), no integration suite, feature set or doctest.
+`nextest` in smoke mode: every test target of the workspace compiled with
+every feature in the dev profile, only the unit tests (`--lib --bins`) run,
+no integration suite or doctest. The compile stays in the queue: two pull
+requests that each passed alone can break a test binary together.
 Clippy, the journeys, conformance, e2e, the quickstart, rustdoc, the publish
 dry run, the feature matrix and the performance gate are skipped at job
 level, so they start no runner, and run on the pull request and on every

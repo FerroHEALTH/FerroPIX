@@ -34,7 +34,6 @@ The base is:
 - for a pull request, the merge base of the commit CI checks out with the
   pull request's base branch, which is `main` as the pull request was
   merged into it;
-- for a merge group, its base on `main`;
 - for a push to `main`, the commit before the push;
 - for the release commit and a manual dispatch, the previous release tag.
 

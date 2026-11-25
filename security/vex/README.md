@@ -39,6 +39,7 @@ OSV knows and RustSec does not carries its argument in that file.
 | File | Subject | Authored |
 |---|---|---|
 | `rust-advisories.openvex.json` | The Rust dependency advisories the advisory gate accepts. Each statement carries a `ferropix:reachability` block (our own extension; OpenVEX defines none) naming the crates the affected package is reached through. | **generated** |
+| `console-cookie.openvex.json` | GHSA-8wcq-xq25-7fhm (RUSTSEC-2026-0594), `cookie`'s private jar after a `fork()`, in the console image before 0.0.40, which never forks. | by hand |
 
 No document covers the server image yet, because no scan has found
 anything in it to judge. The release's vulnerability record

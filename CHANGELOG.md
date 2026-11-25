@@ -119,7 +119,8 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 Shipped with functional changes because: the `cookie` fix is a lockfile move on `main`, where the releases are cut and the unreleased changes above already sit, so a security-only patch has no tree of its own to come from.
 
 - The operator console takes `cookie` 0.18.3 in place of 0.18.2
-  (RUSTSEC-2026-0594, GHSA-8wcq-xq25-7fhm): in 0.14.0 up to 0.18.2 a private
+  (RUSTSEC-2026-0594, GHSA-8wcq-xq25-7fhm,
+  `security/vex/console-cookie.openvex.json`): in 0.14.0 up to 0.18.2 a private
   cookie added in more than one process after a `fork()` could reuse an
   AES-GCM nonce. The console does not fork, so no shipped build met the
   conditions; the upgrade closes the advisory (#777).

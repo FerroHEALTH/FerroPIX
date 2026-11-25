@@ -30,7 +30,10 @@ fn key(pem: &str, kid: &str) -> HolderKey {
 
 /// The PKCS#8 PEM of a fresh key `document` holds.
 fn pkcs8_pem(document: &[u8]) -> SecretString {
-    SecretString::from(pem::encode(&pem::Pem::new("PRIVATE KEY", document.to_vec())))
+    SecretString::from(pem::encode(&pem::Pem::new(
+        "PRIVATE KEY",
+        document.to_vec(),
+    )))
 }
 
 // RFC 7518 §3.4: a holder signs ES256 or ES384, so a P-521 key is another

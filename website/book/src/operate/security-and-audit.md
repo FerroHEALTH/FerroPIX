@@ -122,6 +122,19 @@ more than twice in all. A `DPoP` proof names the request URL without its
 query, so no identifier or search criterion reaches it, and a request no
 token can be had for is not sent.
 
+## Post-quantum key exchange
+
+The server and console listeners, every client FerroPIX builds and the
+PostgreSQL connection offer the hybrid group X25519MLKEM768 (RFC 10024)
+first in the TLS 1.3 key exchange, then X25519, P-256 and P-384 for a peer
+that lacks it. A session recorded today stays confidential against a later
+quantum computer, which a patient's identity needs: the EU coordinated
+implementation roadmap asks a high-risk use to complete the move by the end
+of 2030. Certificates and token signatures stay classical until their
+post-quantum forms are in use. The
+[post-quantum inventory](https://github.com/FerroHEALTH/FerroPIX/blob/main/docs/post-quantum.md)
+lists every cryptographic use with its algorithm and whether it is safe.
+
 ## The server's audit trail
 
 The server writes an `AuditEvent` for every transaction it answers or

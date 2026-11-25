@@ -77,10 +77,10 @@ ferrohealth-session = { version = "=0.29.0", default-features = false }
 # its unit, under a key that names none (#561); 0.8.1 adds the run path's
 # configuration refusal, `config check` and the telemetry installer (#571);
 # 0.9 builds on ferrohealth-telemetry 0.5.
-# Verified against crates.io on 2026-11-15.
+# Verified against crates.io on 2026-11-25.
 ferrohealth-config = "=0.4.5"
 ferrohealth-secret = "=0.2.2"
-ferrohealth-server = { version = "=0.12.2", default-features = false }
+ferrohealth-server = { version = "=0.12.4", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
 # console, the request log with `http.server.request.duration` and
 # `http.server.active_requests`, the OTLP export, the Prometheus exposition

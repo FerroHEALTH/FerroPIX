@@ -64,7 +64,7 @@ use crate::audit::Audit;
 use crate::audit::records::{self, Call, Identifier};
 use crate::audit::reserve::Place;
 use crate::config::section::matching::{BlockingKey, Matching};
-use crate::config::section::xcpd::XcpdSettings;
+use crate::config::section::xcpd::{Delivery, XcpdSettings};
 use crate::matching::scorer::{Grade, Scorer};
 use crate::mount::XCPD;
 use crate::outbox::{Backoff, HttpChannel};
@@ -110,6 +110,19 @@ pub enum GatewayError {
     Tls(#[from] ferrohealth_server::tls_client::TlsClientError),
 }
 
+/// The client that posts an asynchronous answer under `delivery`: no
+/// redirect, its timeout, and the outbound TLS material of `[xcpd.tls]`.
+///
+/// # Errors
+/// Returns [`GatewayError::Tls`] when the client refuses the TLS material,
+/// and [`GatewayError::Client`] when it cannot be built.
+fn delivery_client(delivery: &Delivery) -> Result<reqwest::Client, GatewayError> {
+    let builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(delivery.timeout);
+    Ok(delivery.tls.apply(builder)?.build()?)
+}
+
 impl Gateway {
     /// Returns the gateway over `store`, scoring with `matching`, answering
     /// as `settings` names it at `public_base_url`, recording to `audit`.
@@ -131,11 +144,7 @@ impl Gateway {
             |_| NetworkAddress::uri(public_base_url),
             |url| NetworkAddress::uri(&url),
         );
-        let mut builder = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(settings.delivery.timeout);
-        builder = settings.delivery.tls.apply(builder)?;
-        let client = builder.build()?;
+        let client = delivery_client(&settings.delivery)?;
         Ok(Self {
             store: store.clone(),
             scorer: Scorer::new(matching),
@@ -601,10 +610,21 @@ fn store(source: sqlx::Error) -> XcpdError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use ferrohealth_config::tls::TlsClientSection;
+    use ferrohealth_server::tls_client::TlsClient;
+    use ferropix_testkit::tls::KxPeer;
+    use http::StatusCode;
     use ihe_iti::xcpd::discovery::RequestedAttribute;
     use ihe_iti::xcpd::responding::query::Parameters;
+    use tokio_rustls::rustls::NamedGroup;
+    use tokio_rustls::rustls::crypto::aws_lc_rs::kx_group;
 
-    use super::requested;
+    use crate::config::section::xcpd::Delivery;
+
+    use super::{delivery_client, requested};
 
     #[test]
     fn the_vendored_soap_binding_holds_the_section_the_gateway_cites() {
@@ -642,6 +662,55 @@ mod tests {
                 RequestedAttribute::MothersMaidenName,
             ],
             requested(&full)
+        );
+    }
+
+    /// The delivery client, trusting the certificate of `peer`, after one
+    /// call to `peer`; returns the answer's status and the group it agreed on.
+    async fn agreed_by_the_delivery_client(peer: &KxPeer) -> (StatusCode, Option<NamedGroup>) {
+        let dir = tempfile::tempdir().expect("a directory");
+        let roots = dir.path().join("roots.pem");
+        std::fs::write(&roots, peer.certificate()).expect("the root is written");
+        let section = TlsClientSection {
+            trust_roots_file: Some(roots),
+            ..TlsClientSection::default()
+        };
+        let delivery = Delivery {
+            endpoints: Vec::new(),
+            attempts: 1,
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(1),
+            timeout: Duration::from_secs(10),
+            tls: Arc::new(TlsClient::read("xcpd.tls", &section).expect("the root reads")),
+        };
+        let answer = delivery_client(&delivery)
+            .expect("the client builds")
+            .post(format!("https://localhost:{}/", peer.address().port()))
+            .send()
+            .await
+            .expect("the peer answers");
+        (
+            answer.status(),
+            peer.agreed(0).expect("the connection is recorded"),
+        )
+    }
+
+    #[tokio::test]
+    async fn the_delivery_client_prefers_x25519mlkem768() {
+        let peer = KxPeer::start(vec![kx_group::X25519, kx_group::X25519MLKEM768])
+            .expect("the peer starts");
+        assert_eq!(
+            (StatusCode::NO_CONTENT, Some(NamedGroup::X25519MLKEM768)),
+            agreed_by_the_delivery_client(&peer).await
+        );
+    }
+
+    #[tokio::test]
+    async fn the_delivery_client_connects_to_a_classical_only_peer() {
+        let peer = KxPeer::start(vec![kx_group::X25519]).expect("the peer starts");
+        assert_eq!(
+            (StatusCode::NO_CONTENT, Some(NamedGroup::X25519)),
+            agreed_by_the_delivery_client(&peer).await
         );
     }
 }

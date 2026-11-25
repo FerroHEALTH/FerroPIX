@@ -21,6 +21,7 @@ mod filled;
 mod merge;
 mod pages;
 mod pair;
+mod post_quantum;
 mod preferences;
 mod pseudonyms;
 mod queue;

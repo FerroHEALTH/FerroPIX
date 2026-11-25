@@ -1360,9 +1360,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-server"
-version = "0.12.2"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26080981973ace77a850adbbba06131f6408d9e4ddc4e3e87903b6a7e6238d34"
+checksum = "b70fdd6d5e2c17d72b91fe98d92a66f6c37f9292867b3a3bf3a691084ea5dd4e"
 dependencies = [
  "axum",
  "clap",
@@ -1562,6 +1562,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tower",
  "tower-http 0.7.1",
  "tracing",
@@ -1654,6 +1655,7 @@ dependencies = [
  "jsonwebtoken",
  "nl-generic-functions",
  "opentelemetry-proto",
+ "rcgen",
  "reqwest",
  "rustix",
  "serde",
@@ -1664,6 +1666,7 @@ dependencies = [
  "thirtyfour",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tonic",
  "url",
@@ -4737,7 +4740,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

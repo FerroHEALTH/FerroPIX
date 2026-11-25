@@ -27,6 +27,7 @@
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/FerroHEALTH/FerroPIX/codeql.yml?branch=main&logo=github&label=CodeQL)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)
 [![Signed releases](https://img.shields.io/badge/releases-signed-brightgreen?logo=github)](https://ferropix.eu/docs/operate/deployment.html#verifying-an-image)
 [![SLSA Build L3](https://slsa.dev/images/gh-badge-level3.svg)](docs/release.md#the-build-legs)
+[![Post-quantum safe uses](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpost-quantum.json)](docs/post-quantum.md)
 
 **Conformance**<br>
 <sub>(self-tested and self-assessed counts; none is a certification)</sub><br>

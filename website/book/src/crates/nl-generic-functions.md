@@ -65,3 +65,9 @@ rendering. The authorization server's issuer is an `https` URL, or plain
 [`ferrohealth-smart`](https://crates.io/crates/ferrohealth-smart). An answer that is not JSON, repeats a name or has another shape is refused
 by its line and column alone, read through that crate's refusal type,
 which quotes no part of the answer.
+
+The holder's key is an EC private key in PKCS#8 or SEC 1 PEM: a P-256 key
+signs ES256 and a P-384 key ES384 (RFC 7518 §3.4), and a key of another
+curve or type is refused. The presentation is signed through the `jws`
+module of `ferrohealth-smart`, and the key's public half is the JWK of the
+holder's DID document.

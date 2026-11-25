@@ -16,7 +16,7 @@ use jsonwebtoken::{DecodingKey, Validation};
 use nl_generic_functions::nuts_auth::did_document::{
     DID_CONTEXT, DidDocument, DocumentError, JSON_WEB_KEY_2020, JWS_2020_CONTEXT,
 };
-use nl_generic_functions::nuts_auth::holder::{Did, HolderKey};
+use nl_generic_functions::nuts_auth::holder::{Did, HolderError, HolderKey};
 use secrecy::SecretString;
 use serde_json::Value;
 
@@ -26,6 +26,39 @@ use super::{Fixture, HOLDER, HOLDER_KID, PROMPT};
 fn key(pem: &str, kid: &str) -> HolderKey {
     let did = Did::new(HOLDER).expect("a DID");
     HolderKey::from_pem(&SecretString::from(pem), kid, &did).expect("a holder key")
+}
+
+/// The PKCS#8 PEM of a fresh key `document` holds.
+fn pkcs8_pem(document: &[u8]) -> SecretString {
+    SecretString::from(pem::encode(&pem::Pem::new(
+        "PRIVATE KEY",
+        document.to_vec(),
+    )))
+}
+
+// RFC 7518 §3.4: a holder signs ES256 or ES384, so a P-521 key is another
+// curve and an Ed25519 key, or text that holds no key, is no EC key.
+#[test]
+fn a_key_that_signs_neither_es256_nor_es384_is_refused() {
+    use aws_lc_rs::rand::SystemRandom;
+    use aws_lc_rs::signature::{ECDSA_P521_SHA512_FIXED_SIGNING, EcdsaKeyPair, Ed25519KeyPair};
+    let did = Did::new(HOLDER).expect("a DID");
+    let random = SystemRandom::new();
+    let p521 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P521_SHA512_FIXED_SIGNING, &random)
+        .expect("a P-521 key");
+    assert!(matches!(
+        HolderKey::from_pem(&pkcs8_pem(p521.as_ref()), HOLDER_KID, &did),
+        Err(HolderError::Curve(_))
+    ));
+    let ed25519 = Ed25519KeyPair::generate_pkcs8(&random).expect("an Ed25519 key");
+    assert!(matches!(
+        HolderKey::from_pem(&pkcs8_pem(ed25519.as_ref()), HOLDER_KID, &did),
+        Err(HolderError::Pem(_))
+    ));
+    assert!(matches!(
+        HolderKey::from_pem(&SecretString::from("no key"), HOLDER_KID, &did),
+        Err(HolderError::Pem(_))
+    ));
 }
 
 #[test]
@@ -130,7 +163,8 @@ async fn the_document_verifies_a_presentation_the_client_signed() {
     let mut validation = Validation::new(header.alg);
     validation.set_required_spec_claims(&["exp"]);
     validation.validate_aud = false;
-    let key = DecodingKey::from_jwk(method.public_key_jwk()).expect("a decoding key");
+    let published = serde_json::from_value(method.public_key_jwk().to_value()).expect("a JWK");
+    let key = DecodingKey::from_jwk(&published).expect("a decoding key");
     jsonwebtoken::decode::<Value>(&assertion, &key, &validation)
         .expect("the presentation verifies");
     let payload: Value =

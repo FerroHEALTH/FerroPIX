@@ -102,10 +102,10 @@ pub mod presentation;
 use std::fmt;
 use std::time::{Duration, Instant};
 
+use ferrohealth_smart::jws::compact::{self, Header};
 use ferrohealth_smart::metadata::repeats_no_name;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use http::{Method, StatusCode};
-use jsonwebtoken::Header;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -559,7 +559,8 @@ fn sign(holder: &Holder, grant: &Grant) -> Result<SecretString, NutsAuthError> {
     };
     let mut header = Header::new(holder.key().algorithm());
     header.kid = Some(holder.key().kid().to_owned());
-    jsonwebtoken::encode(&header, &claims, holder.key().private())
+    header.typ = Some(String::from("JWT"));
+    compact::encode(&header, &claims, holder.key().signing())
         .map(SecretString::from)
         .map_err(NutsAuthError::Sign)
 }

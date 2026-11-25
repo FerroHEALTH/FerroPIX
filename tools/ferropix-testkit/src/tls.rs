@@ -54,7 +54,8 @@ impl KxPeer {
     /// port cannot be made.
     pub fn start(groups: Vec<&'static dyn SupportedKxGroup>) -> Result<Self, PeerError> {
         let key = KeyPair::generate()?;
-        let certificate = CertificateParams::new(vec![String::from("localhost")])?.self_signed(&key)?;
+        let certificate =
+            CertificateParams::new(vec![String::from("localhost")])?.self_signed(&key)?;
         let provider = CryptoProvider {
             kx_groups: groups,
             ..aws_lc_rs::default_provider()
@@ -110,7 +111,11 @@ impl KxPeer {
     pub fn agreed(&self, index: usize) -> Result<Option<NamedGroup>, usize> {
         let deadline = Instant::now() + RECORD_WAIT;
         loop {
-            let seen = self.agreed.lock().unwrap_or_else(PoisonError::into_inner).clone();
+            let seen = self
+                .agreed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
             if let Some(group) = seen.get(index) {
                 return Ok(*group);
             }

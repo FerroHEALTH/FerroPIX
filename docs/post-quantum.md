@@ -6,8 +6,8 @@
 This page lists every cryptographic use in FerroPIX, its crates and its
 release workflows, the algorithm each uses, and whether it resists a
 cryptographically relevant quantum computer. The machine-readable copy is
-`conformance/post-quantum.tsv`, one row per use, with five tab-separated
-columns: `use`, `algorithm`, `safe` (`yes` or `no`), `pq_standard` (the
+`conformance/post-quantum.tsv`: after its `#` comment lines, one row per
+use with five tab-separated columns: `use`, `algorithm`, `safe` (`yes` or `no`), `pq_standard` (the
 standard that defines the post-quantum form, or `no standard yet`) and
 `location`. Every change that adds, removes or changes a cryptographic use
 updates the file in the same pull request, and

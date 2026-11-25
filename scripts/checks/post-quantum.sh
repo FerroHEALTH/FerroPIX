@@ -4,7 +4,7 @@
 # The post-quantum inventory gate (#810; no specification governs it: our own
 # design, over FerroSYS's inventory format). conformance/post-quantum.tsv
 # lists every cryptographic use, five tab-separated columns: use, algorithm,
-# safe (yes or no), pq_standard and location. The gate holds the file's
+# safe (yes or no), pq_standard and location, under its `#` comment lines. The gate holds the file's
 # shape, every repository path a location names to the tree, the table of
 # docs/post-quantum.md to the file, and the shields.io endpoint badge
 # conformance/badges/post-quantum.json to the count of safe rows.
@@ -39,7 +39,7 @@ readonly NO_STANDARD="no standard yet"
 # Prints each defect of inventory $1 under the tree $2; status 1 when any.
 shape_of() {
   local inventory="$1" tree="$2" failed=0 line=0 use algorithm safe standard location extra item path rest
-  if [[ "$(head -n 1 "$inventory")" != "$HEADER" ]]; then
+  if [[ "$(grep -v '^#' "$inventory" | head -n 1)" != "$HEADER" ]]; then
     echo "post-quantum: $inventory does not open with the header line" >&2
     failed=1
   fi
@@ -65,7 +65,7 @@ shape_of() {
         failed=1
       fi
     done
-  done <"$inventory"
+  done < <(grep -v '^#' "$inventory")
   if [[ "$line" -lt 2 ]]; then
     echo "post-quantum: $inventory lists no use" >&2
     failed=1
@@ -76,7 +76,8 @@ shape_of() {
 # The rows of inventory $1 that count as safe, and all its rows: "N M".
 count_of() {
   awk -F'\t' -v none="$NO_STANDARD" '
-    NR > 1 { total++; if ($3 == "yes" && $4 != none) safe++ }
+    /^#/ { next }
+    seen++ { total++; if ($3 == "yes" && $4 != none) safe++ }
     END { printf "%d %d\n", safe, total }
   ' "$1"
 }
@@ -94,7 +95,7 @@ badge_of() {
 table_of() {
   echo '| Use | Algorithm | Safe | Post-quantum standard | Location |'
   echo '|---|---|---|---|---|'
-  awk -F'\t' 'NR > 1 { printf "| %s | %s | %s | %s | `%s` |\n", $1, $2, $3, $4, $5 }' "$1"
+  awk -F'\t' '/^#/ { next } seen++ { printf "| %s | %s | %s | %s | `%s` |\n", $1, $2, $3, $4, $5 }' "$1"
 }
 
 # The table of page $1: the lines from its header row to the first line that
@@ -170,6 +171,7 @@ self_test() {
   mkdir -p "$work/tree/src"
   : >"$work/tree/src/kx.rs"
   {
+    printf '# SPDX-FileCopyrightText: Cadasto B.V.\n'
     printf '%s\n' "$HEADER"
     printf 'Key exchange\tX25519MLKEM768\tyes\tRFC 10024\tsrc/kx.rs (provider), a-crate tls\n'
     printf 'Record protection\tAES-256-GCM\tyes\tNIST IR 8547 4.1.3\ta-crate tls\n'
@@ -183,7 +185,7 @@ self_test() {
   expect 1 "a safe column that is neither yes nor no" shape_of "$work/maybe.tsv" "$work/tree"
   sed $'$s#\ta-crate resource$##' "$work/inventory.tsv" >"$work/short.tsv"
   expect 1 "a row of four columns" shape_of "$work/short.tsv" "$work/tree"
-  sed '1s#^use#purpose#' "$work/inventory.tsv" >"$work/header.tsv"
+  sed '2s#^use#purpose#' "$work/inventory.tsv" >"$work/header.tsv"
   expect 1 "a file without the header" shape_of "$work/header.tsv" "$work/tree"
   if [[ "$(count_of "$work/inventory.tsv")" != "2 4" ]]; then
     echo "post-quantum: self-test failed: a 'no standard yet' row counted as safe" >&2
@@ -199,13 +201,13 @@ self_test() {
   expect 0 "the badge carries a logo" badge_logo_check "$work/badge.json"
   expect 0 "the badge colour follows its count" badge_color_check "$work/badge.json"
   printf '%s\n' "$HEADER" >"$work/none.tsv"
-  awk -F'\t' 'NR > 1 && $3 == "no"' "$work/inventory.tsv" >>"$work/none.tsv"
+  awk -F'\t' '$3 == "no"' "$work/inventory.tsv" >>"$work/none.tsv"
   if [[ "$(badge_of "$work/none.tsv" | jq -r .color)" != red ]]; then
     echo "post-quantum: self-test failed: an inventory with no safe row is not red" >&2
     failed=1
   fi
   printf '%s\n' "$HEADER" >"$work/all.tsv"
-  sed -n '2p' "$work/inventory.tsv" >>"$work/all.tsv"
+  sed -n '3p' "$work/inventory.tsv" >>"$work/all.tsv"
   if [[ "$(badge_of "$work/all.tsv" | jq -r .color)" != brightgreen ]]; then
     echo "post-quantum: self-test failed: an inventory of safe rows only is not green" >&2
     failed=1

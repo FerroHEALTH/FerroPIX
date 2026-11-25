@@ -27,7 +27,10 @@ async fn agreed_by_the_console(peer: &KxPeer) -> Option<NamedGroup> {
     let probe = pix
         .probe(&AccessToken::new(SecretString::from("synthetic-token")))
         .await;
-    assert!(!probe.is_up(), "the peer's certificate is trusted by no root");
+    assert!(
+        !probe.is_up(),
+        "the peer's certificate is trusted by no root"
+    );
     peer.agreed(0).expect("the connection is recorded")
 }
 

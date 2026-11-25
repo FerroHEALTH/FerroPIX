@@ -552,7 +552,10 @@ mod tests {
             .get(format!("https://{}/", peer.address()))
             .send()
             .await;
-        assert!(answer.is_err(), "the peer's certificate is trusted by no root");
+        assert!(
+            answer.is_err(),
+            "the peer's certificate is trusted by no root"
+        );
         peer.agreed(0).expect("the connection is recorded")
     }
 
@@ -569,6 +572,9 @@ mod tests {
     #[tokio::test]
     async fn the_feed_client_agrees_on_x25519_with_a_classical_only_peer() {
         let peer = KxPeer::start(vec![kx_group::X25519]).expect("the peer starts");
-        assert_eq!(Some(NamedGroup::X25519), agreed_by_the_feed_client(&peer).await);
+        assert_eq!(
+            Some(NamedGroup::X25519),
+            agreed_by_the_feed_client(&peer).await
+        );
     }
 }

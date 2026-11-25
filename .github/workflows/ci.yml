@@ -12,6 +12,11 @@
 #      the publish dry run. Cargo refuses most commands on a workspace with no
 #      member, so until the first crate lands only the manifest is read.
 #
+# A merge group runs the light set: tier 1, the manifest and fuzz-lockfile
+# reads, rustfmt, cargo-deny, the crate-version and chart-version guards and
+# the workspace's unit tests. The pull request ran the full suite on the same
+# change, so every other lane is skipped there.
+#
 # The `conclusion` job is the single required status check on main.
 name: CI
 
@@ -491,24 +496,25 @@ jobs:
           export NO_CRATE_BUMP
           bash scripts/checks/crate-version-guard.sh "$BASE" "$HEAD"
       - uses: ./.github/actions/setup-rust
-        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        if: steps.guard-pr.outputs.judged != ''
         with:
           cache-save-if: "false"
       - id: semver-pin
         name: Read the cargo-semver-checks pin
-        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        if: steps.guard-pr.outputs.judged != ''
         run: echo "version=$(bash scripts/checks/semver.sh --pin)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
-        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        if: steps.guard-pr.outputs.judged != ''
         with:
           tool: cargo-semver-checks@${{ steps.semver-pin.outputs.version }}
       # The checkout is the change merged onto its base, so the judge compares
-      # the base's public API with the one the merge would leave.
+      # the base's public API with the one the merge would leave. The merge
+      # group runs the guard alone: the pull request ran the judge.
       - name: Each moved crate's version answers its change (cargo-semver-checks)
-        if: steps.guard-pr.outputs.judged != '' || steps.guard-queue.outputs.judged != ''
+        if: steps.guard-pr.outputs.judged != ''
         env:
-          JUDGED: ${{ steps.guard-pr.outputs.judged }}${{ steps.guard-queue.outputs.judged }}
-          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          JUDGED: ${{ steps.guard-pr.outputs.judged }}
+          BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           # shellcheck disable=SC2086 # one crate name per word by construction
@@ -609,8 +615,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The first parent of a pull request's merge commit and of a merge
-          # group's commit is its base, which the perf probe diffs against.
+          # The first parent of a pull request's merge commit is its base,
+          # which the perf probe diffs against.
           fetch-depth: 2
       - id: find
         run: |
@@ -630,15 +636,15 @@ jobs:
             echo "cargo=$cargo"
           } >> "$GITHUB_OUTPUT"
       # The performance gate runs on a push to main, on a dispatch, and on a
-      # pull request or merge group that changes what the server is built
-      # from or what the gate reads (#506).
+      # pull request that changes what the server is built from or what the
+      # gate reads (#506).
       - id: perf
         env:
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           perf=true
-          if [ "$EVENT" = "pull_request" ] || [ "$EVENT" = "merge_group" ]; then
+          if [ "$EVENT" = "pull_request" ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
             if ! grep -qE '^(app/ferropix-server/|app/ferropix-operator-api/|crates/|tools/ferropix-testkit/fixtures/|perf/|scripts/perf/|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$|docs/VERSIONS\.md$|\.github/workflows/(ci|perf)\.yml$|\.github/actions/setup-rust/)' <<< "$changed"; then
               perf=false
@@ -712,7 +718,7 @@ jobs:
   clippy:
     name: clippy
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -739,7 +745,7 @@ jobs:
   journeys:
     name: journeys
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -798,9 +804,16 @@ jobs:
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-nextest
-      - run: cargo nextest run --workspace --locked --no-tests=warn
-      - run: cargo nextest run --workspace --all-features --locked --no-tests=warn
-      - run: cargo test --doc --workspace --all-features --locked
+      - if: github.event_name != 'merge_group'
+        run: cargo nextest run --workspace --locked --no-tests=warn
+      - if: github.event_name != 'merge_group'
+        run: cargo nextest run --workspace --all-features --locked --no-tests=warn
+      - if: github.event_name != 'merge_group'
+        run: cargo test --doc --workspace --all-features --locked
+      # The merge group's smoke set: the pull request ran every suite, so the
+      # queue builds the workspace and runs its unit tests only.
+      - if: github.event_name == 'merge_group'
+        run: cargo nextest run --workspace --lib --bins --locked --no-tests=warn
 
   # The conformance gate (#162): the corpus tests of ihe-iti over every
   # example of the vendored PIXm, PDQm and PMIR packages, held to the pass
@@ -809,7 +822,7 @@ jobs:
   conformance:
     name: conformance
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -834,7 +847,7 @@ jobs:
   e2e:
     name: e2e
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -857,18 +870,16 @@ jobs:
   # build judged against the build of its base on the same runner, in
   # perf.yml, which the release lane calls on the release commit too. The
   # base is the pull request's base or the commit before a push; a dispatch
-  # takes the previous release. A merge group builds nothing for it and its
-  # verdict passes with a summary saying why (#551).
+  # takes the previous release.
   perf:
     name: perf
     needs: detect
-    if: needs.detect.outputs.cargo == 'true' && needs.detect.outputs.perf == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true' && needs.detect.outputs.perf == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/perf.yml
     with:
-      base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-      skip: ${{ github.event_name == 'merge_group' }}
+      base: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   # The quickstart, run as an operator runs it: the server built for the
   # static musl target, the image built from that binary through the staged
@@ -884,7 +895,7 @@ jobs:
   quickstart:
     name: quickstart
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -1032,7 +1043,7 @@ jobs:
   doc:
     name: rustdoc
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1088,7 +1099,7 @@ jobs:
   publish-dry-run:
     name: publish-dry-run
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1112,7 +1123,7 @@ jobs:
   features:
     name: features (${{ matrix.package }} ${{ matrix.features }})
     needs: detect
-    if: needs.detect.outputs.cargo == 'true'
+    if: github.event_name != 'merge_group' && needs.detect.outputs.cargo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

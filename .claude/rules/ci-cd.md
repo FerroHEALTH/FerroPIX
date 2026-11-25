@@ -117,18 +117,24 @@ placeholder tree). The
 
 ## The merge queue proves the merged tree
 
-Every pull-request run and every merge-group run of `ci.yml` finishes in
-under 20 minutes of wall time, runner queue included (owner, 2026-11-09).
-The functional gates (build, clippy, the tests, e2e, the journeys, the
-quickstart, the guards) run in the merge group. The performance gate runs
-on the pull request that reaches the server and on every push to `main`; in
-a merge group `perf.yml` builds nothing and its `perf verdict` job passes
-with a step summary that says why (#551). No gate is weakened: the
-thresholds, the phases and the retry rule are the same, and only the event
-the gate runs on changes. A regression two pull requests cause only
-together surfaces on the push to `main`, and its fix is a follow-up pull
-request. A new long non-functional job takes the same merge-group skip in
-the change that adds it.
+The merge-group run is light (owner, 2026-11-25): the pull request already
+ran the full suite on the same change, and queues of about ten entries fell
+out at the 60-minute check timeout when every group ran it again. In a merge
+group `ci.yml` runs `lint`, `guards`, `manifest`, `fuzz-lockfile`,
+`rustfmt`, `cargo-deny`, the crate-version and chart-version guards, and
+`nextest` in smoke mode: the workspace built in the dev profile with its unit
+tests (`--lib --bins`), no integration suite, feature set or doctest.
+Clippy, the journeys, conformance, e2e, the quickstart, rustdoc, the publish
+dry run, the feature matrix and the performance gate are skipped at job
+level, so they start no runner, and run on the pull request and on every
+push to `main`; cargo-semver-checks runs on the pull request.
+`conclusion` keeps its name and reads a skipped lane as a pass, so it judges
+the merge group on the light set and the pull request on the full one. No
+gate is weakened: only the event a lane runs on changes. A regression two
+pull requests cause only together surfaces on the push to `main`, and its
+fix is a follow-up pull request. A new lane that compiles, measures or
+starts a container or a browser is skipped in the merge group in the change
+that adds it.
 
 ## Workflow security (every workflow, no exceptions)
 

@@ -13,11 +13,13 @@ ihe-pdqm/example/AuditEvent-ex-auditPdqmQuery-consumer.json
 ihe-pdqm/example/AuditEvent-ex-auditPdqmQuery-supplier.json
 ihe-pixm/example/AuditEvent-ex-auditPixmFeed-create-manager.json
 ihe-pixm/example/AuditEvent-ex-auditPixmFeed-delete-manager.json
+ihe-pixm/example/AuditEvent-ex-auditPixmFeed-delete-source.json
 ihe-pixm/example/AuditEvent-ex-auditPixmFeed-update-manager.json
+ihe-pixm/example/AuditEvent-ex-auditPixmFeed-update-source.json
 ihe-pixm/example/AuditEvent-ex-auditPixmQuery-consumer.json
 ihe-pixm/example/AuditEvent-ex-auditPixmQuery-manager.json
 ihe-pmir/example/AuditEvent-ex-auditPmirFeed-consumer.json
 ihe-pmir/example/AuditEvent-ex-auditPmirSubscription-subscriber-create.json
 ihe-pmir/example/AuditEvent-ex-auditPmirSubscription-subscriber-delete.json
 ihe-pmir/example/AuditEvent-ex-auditPmirSubscription-subscriber-read.json
-total 13
+total 15

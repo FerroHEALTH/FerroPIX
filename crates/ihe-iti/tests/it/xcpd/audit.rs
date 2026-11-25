@@ -363,6 +363,7 @@ fn user() -> OnBehalfOf {
         .with_purposes(vec![PurposeOfUse {
             system: None,
             code: "TREAT".to_owned(),
+            text: None,
         }]),
     )
 }

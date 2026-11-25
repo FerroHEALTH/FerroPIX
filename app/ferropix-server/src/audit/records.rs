@@ -139,6 +139,7 @@ fn stated(user: User, attributes: Option<&Attributes>) -> User {
                 .map(|purpose| PurposeOfUse {
                     system: purpose.system.clone(),
                     code: purpose.code.clone(),
+                    text: None,
                 })
                 .collect(),
         )

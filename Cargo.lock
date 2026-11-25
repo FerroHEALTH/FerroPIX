@@ -2436,9 +2436,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d544ed26e17fac60c46b469097981478fc5231ef18cc29889d38da8437ee6f9c"
+checksum = "e80c1964088be423a90645f4c67b62b8b833238e7988f1f5eb4a42010ae003fc"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2460,7 +2460,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3001,7 +3001,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
@@ -4737,7 +4737,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

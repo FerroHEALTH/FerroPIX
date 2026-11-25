@@ -13,6 +13,25 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-11-25
+
+### Added
+
+- The server and console listeners, every client FerroPIX builds and the
+  PostgreSQL connection offer the hybrid key exchange X25519MLKEM768
+  (RFC 10024) first, through `ferrohealth-server` 0.12.4, and agree on
+  X25519, P-256 or P-384 with a peer that lacks it. `docs/post-quantum.md`
+  and `conformance/post-quantum.tsv` list every cryptographic use, and the
+  README badge counts the safe ones (#810).
+
+### Changed
+
+- `ihe-iti` 0.23.0 requires `ihe-atna` 0.28, whose `user::PurposeOfUse`
+  gains `text`, the purpose as the user stated it, and
+  `nl-generic-functions` 0.23.0 requires `ihe-iti` 0.23.0. Both are breaking
+  for a consumer that names `ihe-atna` types: move `ihe-atna` to 0.28 with
+  them and give every `PurposeOfUse` literal its `text` (#811).
+
 ## [0.0.41] - 2026-11-25
 
 ### Added

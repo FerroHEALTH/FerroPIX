@@ -31,6 +31,9 @@
 # that disagrees with its list and a README block that disagrees with the
 # badges fail too.
 #
+# The small caption under the README's conformance heading says once what the
+# badges count (owner decision, 2026-11-25); a README without it fails.
+#
 # Every badge, and every static badge in the README, carries a logo from
 # scripts/checks/badge-logos/: one without fails every mode.
 #
@@ -50,7 +53,7 @@ set -euo pipefail
 
 readonly GRAMMAR="[--update | --check | --self-test]"
 readonly CORPORA=(pixm pdqm pmir audit)
-# The server's corpora, the README's EHDS row, each self-tested.
+# The server's corpora, the README's EHDS row.
 readonly EHDS_CORPORA=(ncp-patient-minimal ehds-identifier-types xtehr-patient-match)
 readonly BADGES=conformance/badges
 # The shields.io endpoint prefix every conformance badge file is read through.
@@ -189,6 +192,8 @@ render_block() {
   printf '%s\n' "${QUALITY_BADGES[@]}"
   echo
   echo '**Conformance**<br>'
+  # shellcheck disable=SC2154 # badge-logos/logo.sh sets it
+  echo "$badge_caption<br>"
   for corpus in "${CORPORA[@]}"; do
     badge_link "$corpus"
   done
@@ -198,7 +203,7 @@ render_block() {
   done
   if [[ "${#ehds[@]}" -gt 0 ]]; then
     echo
-    echo '**EHDS, self-tested**<br>'
+    echo '**EHDS**<br>'
     for corpus in ${ehds[@]+"${ehds[@]}"}; do
       badge_link "$corpus"
     done
@@ -297,6 +302,10 @@ self_test() {
   expect 0 "a static badge with a logo" badge_logo_readme "$work/logos/README.md"
   printf '[![x](https://img.shields.io/badge/x-y-blue)](x)\n' >>"$work/logos/README.md"
   expect 1 "a static badge without a logo" badge_logo_readme "$work/logos/README.md"
+  printf '**Conformance**<br>\n%s<br>\n' "$badge_caption" >"$work/logos/caption.md"
+  expect 0 "a README with the conformance caption" badge_caption_check "$work/logos/caption.md"
+  printf '**Conformance**<br>\n' >"$work/logos/caption.md"
+  expect 1 "a README without the conformance caption" badge_caption_check "$work/logos/caption.md"
   for pair in "3 3 brightgreen" "3 4 green" "1 2 yellow" "1 4 orange" "0 5 red" "0 0 lightgrey"; do
     read -r passed total colour <<<"$pair"
     if [[ "$(colour_of "$passed" "$total")" != "$colour" ]]; then
@@ -397,5 +406,6 @@ done
 emit_block README.md "$mode" || failed=1
 badge_logo_check "$BADGES"/*.json || failed=1
 badge_logo_readme README.md || failed=1
+badge_caption_check README.md || failed=1
 
 exit "$failed"

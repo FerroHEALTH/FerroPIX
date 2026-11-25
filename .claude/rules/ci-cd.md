@@ -44,7 +44,10 @@ placeholder tree). The
   crate-version and book guards), so `conclusion` reports again in that run.
   It never waits for CI: a run still in flight is left to its own
   completion (#602). It decides nothing a merge depends on by itself.
-- `.github/workflows/codeql.yml`: CodeQL over the `actions` language and Rust.
+- `.github/workflows/codeql.yml`: CodeQL over the `actions` language and Rust,
+  on a push to `main`, weekly, and on a pull request that changes a Rust
+  source, a Cargo file or `.github/`; never on a merge group. `sonar.yml`
+  runs on a push to `main` and weekly only (owner decision, 2026-11-25).
 - `.github/workflows/scorecard.yml`: OpenSSF Scorecard, published to the
   OpenSSF API and to code scanning.
 - `.github/workflows/sonar.yml`: SonarQube Cloud over the Rust workspace,

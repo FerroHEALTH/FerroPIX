@@ -3,7 +3,7 @@
 
 # Machine review (SonarQube Cloud): advisory, never authority
 
-Every pull request and every push to `main` is analyzed by SonarQube Cloud
+Every push to `main`, and a weekly schedule, is analyzed by SonarQube Cloud
 (`.github/workflows/sonar.yml`; scope in `sonar-project.properties`; project
 `FerroHEALTH_FerroPIX`, organization `ferrohealth`, the built-in "Sonar way"
 quality gate). It is a second opinion beside the local gates and CodeQL, and
@@ -19,6 +19,13 @@ so a second copy of its findings would add scan time and no new finding.
 It is a second opinion. It is not authority, and it gates no merge: the
 `conclusion` job of `ci.yml`, the single required check on `main`, does not
 need it.
+
+Because it gates no merge, it runs on no pull request and no merge group
+(owner decision, 2026-11-25): the organisation shares 20 concurrent jobs,
+and an advisory analysis must not hold a runner a gate needs. A newer push
+to `main` cancels a running analysis. CodeQL, the security scanner, keeps
+its pull-request run, limited to changes under Rust sources, Cargo files or
+`.github/`, and runs on no merge group.
 
 ## Precedence: a finding never outranks the sources
 
@@ -44,8 +51,7 @@ never weaken, skip or delete a test because a finding suggested it.
 - **Automatic Analysis stays OFF.** CI-based analysis and SonarQube Cloud's
   Automatic Analysis cannot both run; `sonar.yml` is the analysis path.
 - **The lane skips without its token.** A run that cannot read the
-  `SONAR_TOKEN` secret (a fork, a Dependabot pull request, a repository where
-  it is not provisioned) skips the analysis and stays green.
+  `SONAR_TOKEN` secret (a repository where it is not provisioned) skips the analysis and stays green.
 - **A wrong finding is data, not a silent suppression:** record it on the
   tracker, or adjust `sonar-project.properties` when the scope is
   wrong, never to make a number go down.

@@ -67,7 +67,7 @@ and its transaction boundaries, the matching in three tiers with the steward
 in the middle, the FHIR face (PIXm, PDQm, PMIR) and the HL7 v2 face,
 pseudonyms, authorization and audit, the two images and the release, the CI
 lanes, and the console: its information architecture, every screen with its
-states, the wireframes, and the FerroUI component inventory with the gaps
+states and screenshots, and the FerroUI component inventory with the gaps
 filed on FerroUI. Every decision names its ground or says "no specification
 governs this: our own design"; keep that labelling in code and docs.
 

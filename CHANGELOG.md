@@ -13,6 +13,117 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-11-25
+
+### Changed
+
+- The performance gate installs ferrohealth-perf 0.15.0, and CI holds each hot transaction (ITI-104, ITI-83, ITI-78, ITI-119 and ITI-8) to a budget of statements, shared buffers, write-ahead log, audit bytes and answer bytes per request (#713).
+- The connection pool pings a connection only when it sat idle for a second or more, so a request on a busy server no longer sends a ping round trip before its first statement (#714).
+- An ITI-83 or ITI-9 query reads the cross-reference, the target domains it names and the person's pseudonyms in one statement under one snapshot, where it sent about seven, and the identifiers of a PDQm `Patient` are read in one statement, where they took two (#715).
+- A feed takes the advisory locks of its identifiers and persons in one statement, in the same key order, in place of one round trip per lock (#716).
+- A feed inserts the identifiers a version carries in one statement, where it sent one statement per identifier (#717).
+- The store finds a record's open link through a partial B-tree index on `pix.link (record_id)` where the link is open, which every PIX query, PDQm read and feed looks up, beside the GiST index that keeps a record in one person at a time (#718).
+- An ITI-78 or ITI-21 search reads each person's searchable values from an index FerroPIX keeps in step with every change, so its cost no longer grows with the number of persons; before, every search read every person's demographics (#722).
+- The two text blocking keys live beside each record's head (`pix.record_block`), written by the statement that moves the head version, instead of on every version. A feed's blocking read and an ITI-119 match touch only the current records that carry the key, so their cost no longer grows with each record's history. The migration fills the keys of every head in batches of 1,000 and drops the version columns and their indexes (#724).
+- Each feed writes less to the database log: the version and carried-identifier rows drop the primary keys nothing reads by, the identifier rotation (`db reseal`) walks the rows by their keys, and the steward history keeps only the indexes it reads. An ITI-104 revision writes 2,439 bytes of log in place of 2,898 (#730).
+- An ITI-8 message's HL7 v2 table values are translated in one FHIR `batch` request to the terminology server, where each value took a `ConceptMap/$translate` call of its own, on `ferrobridge-hl7v2` 0.25.1 and `ferrobridge-term` 0.17.1. The terminology server must accept a `batch` Bundle at its base (#734).
+- The audit spool writes the records that arrive together as one file with one flush to the disk, and sends them to the audit repository as one batch Bundle (ihe-atna 0.24.0), so an audited transaction no longer waits for a flush of its own. `ihe-iti` and `nl-generic-functions` move to 0.19.0 on it, and `ihe_atna::atna::feed::FeedClient::post` returns a `FeedAnswer`; a dependant moves ihe-atna to 0.24 with them. A spool directory an older FerroPIX wrote holds `.msg` files the server refuses at start: let the older server deliver them, or move them out, before you upgrade (#735).
+- Each record head keeps its scoring features, the normalised fields the scorer compares, beside its blocking keys in `pix.record_block`, written by the statement that moves the head. A feed and an ITI-119 match score each candidate from them, so no candidate's demographics are read or parsed into a `Patient`; a match over a block of 282 records takes 2.9 ms where it took 9.9 ms. `db migrate`, and `serve` while it migrates, fill the features of every head written under another normalisation, a thousand at a time; `serve` with `[db] migrate = false` refuses to start until `db migrate` has run (#747).
+- A feed writes the candidates of every pair it grades, with their steward actions and the steward's earlier not-a-match decisions checked, in one statement, and reads whether each graded pair's persons are master identities in one more, where it sent four statements for each pair; a revision over a block of 27 graded pairs sends 22 statements where it sent 101 (#752).
+- The feed's and ITI-119's blocking reads carry the identifiers each found record's head holds in `local` domains, read by one index scan over all of them in the same statement, where a second statement read them and joined every record again: an ITI-104 revision and an ITI-119 match send one statement fewer, and a revision over a block of 309 records reads 2,041 shared buffers where it read 2,358 (#752).
+- The audit spool comes from `ihe-atna` 0.24.3: one writer thread appends each batch of BALP records to one segment with one flush, where every record of a lookup cost a file, a task and two flushes, and a large backlog opens in seconds. At 5,000 records per second a segment holds about 3,600 records where it held one (FerroHEALTH/FerroAUDIT#264, #263, #267) (#752).
+- The store keeps each candidate's and probabilistic link's evidence in a versioned binary layout of its own, each name a code and each masked value as the count of the bullets it opens with and the characters it shows, where it kept JSON: an open candidate's row takes about 325 bytes where it took about 1,920, so the candidates of the million-person capacity store need about 5 GB where they took 27 GB. `ferropix db migrate`, and `serve` while it migrates, pack every stored evidence between two migrations a thousand rows at a time, and the next migration drops the JSON. The steward console shows the same evidence as before (#752).
+- `serve` with `[db] migrate = false` refuses to start while a migration of its set is not applied to the store, naming how many are missing (#752).
+- A revision that states the demographics of the record's head before it no longer rewrites the open candidates it scores to the same score, grade and evidence, and records no steward action for them; a revision over a block of 27 graded pairs sends 101 statements where it sent 128 and writes 4,799 bytes of WAL where it wrote 34,696. A steward's decision now stands when a record's head states the same demographics as the version the steward read, so a decision after a feed that changed only identifiers or other fields the matcher does not compare is accepted where it was refused `409` (`docs/architecture.md` §5.3) (#752).
+- The cross-reference statement behind ITI-83, ITI-78 and ITI-119 reads the person's open records once for their own and their carried identifiers, and checks for a record of an authoritative identifier from the chain it already read: an ITI-83 lookup reads 41 shared buffers where it read 76 (30 where it read 44 on a store of 1M persons), an ITI-78 search 45 where it read 76 and an ITI-119 match 57 where it read 88 (#762).
+- A read's audit record is written once, and the record of its refusal only when a late spool write withdraws it, with each record's bytes written straight from the typed resource (ihe-atna 0.25.0): one ITI-83 read's records cost 5.3 µs and 112 allocations in place of 22.8 µs and 734. The JSON console no longer formats span fields that no line writes (ferrohealth-telemetry 0.5.1). `ihe-iti` and `nl-generic-functions` move to 0.20.0 on ihe-atna 0.25, and `ihe_atna::atna::spool::withdraw::Withdrawable` builds through `Exchange::withdrawable` or `Withdrawable::new`; a dependant moves ihe-atna to 0.25 with them. The written records are byte for byte those of 0.24 (#766).
+- The quickstart's `hl7v2` profile runs FerroTERM 0.4.7, its latest release, in place of 0.4.2 (#768).
+- Breaking: FerroPIX takes `ferrohealth-smart` 0.34 and `ferrohealth-session`
+  0.29, and trusts a SMART authorization server, FerroSMART among them, with
+  an `[auth.issuer.<name>]` table that names only its `issuer`. The caller is
+  read from the token's standard claims: `typ` is `at+jwt`, `scope` is
+  required, a token whose `sub` is its `client_id` is a machine's, and a user
+  is named by their `fhirUser`. The authorization server's registry is the
+  one list of clients, so a token whose `aud` names FerroPIX admits its
+  client. The compose quickstart's development issuer signs `at+jwt` tokens (#779).
+- Breaking: `ihe-iti` 0.21.0 and `nl-generic-functions` 0.21.0 take
+  `ferrohealth-smart` 0.34, whose `OutboundClient`, `EndpointSection` and
+  `ServerTls` their public API exposes: a product moves to
+  `ferrohealth-smart` 0.34 with them (#779).
+- Breaking: every identifier domain names the type of its identifiers,
+  `identifier_type`, which `[[domain]]`, `POST /operator/domains` and the
+  console's domain form require. The value set is the HL7 Identifier Type
+  (`NI`, `SS`, `PI`, `MR`, `PPN`, `NH`, `JHN`, `HC`) extended with the EHDS
+  codes of the draft EEHRxF Annexes, Table 26 (`HI`, `HIN`, `REGPID`,
+  `REGION`). A migration gives every stored domain `PI`, or `NI` when it is
+  authoritative. Every `Patient` FerroPIX serves (PDQm ITI-78 and ITI-119,
+  the PMIR ITI-93 feed and XCPD) carries `identifier.type` on each
+  identifier: a coding of `http://terminology.hl7.org/CodeSystem/v2-0203`,
+  or, for the four EHDS codes, which no published code system holds yet, the
+  code as `type.text` (#785).
+- The README shows an EHDS row of self-tested conformance badges, each a
+  count that CI measures: the PDQm answers that validate against the
+  MyHealth@EU NCP API 9.1.1-ci Patient-minimal profile, the EHDS identifier
+  types served, and the Xt-EHR D8.2 (2026-05-19) patient match assertions
+  (TA-api-producer-patient-01 to -03). A badge label never says certified,
+  compliant or conformant (#786).
+- FerroPIX takes `ferrohealth-server` 0.12.2 and `ferrohealth-secret` 0.2.2,
+  with `ihe-iti` 0.21.1 and `nl-generic-functions` 0.21.1 on the same
+  secret line. A request past the overload bound is refused before the
+  request id, the request log and the body limit run, so the refusal reads
+  no body and leaves no request line. The refusals are logged at most once a
+  second with their count, and an admitted request costs no more than it did
+  before (#788).
+
+### Removed
+
+- Breaking: the issuer keys `kind` (other than `"federation"`), `preset`,
+  `profile_file` and `scopeless_subjects`, the `[auth.idp]` table, and the
+  profile keys `first_party_clients`, `delegates`, `audience_delegates`,
+  `issuer_client_is_person`, `patient_context`, `fhir_user_patient`,
+  `representation`, `act_represents_patient`, `guest`, `client_claims` and
+  the other vendor profile keys are removed. A configuration that sets one is
+  refused at start as an unknown key; remove the key, and register each
+  client at the authorization server (#779).
+
+### Fixed
+
+- The book's About screenshot of the operator console draws the server's
+  `CapabilityStatement` with the server and FHIR versions it declares. The
+  journeys' stand-in for the server now answers `GET /fhir/metadata` with
+  the statement the server serves, and a journey fails when About draws a
+  refusal there (#679).
+- A write's BALP record (ITI-104, ITI-93, ITI-94's writes, ITI-8, a
+  pseudonym minted on an ITI-83 ask, the operator writes) is inserted into
+  the new `pix.audit_outbox` table in the write's own transaction, so the
+  change and its record commit together or not at all: a crash before the
+  commit leaves neither, and a committed change is never answered `500`
+  because its record was late. The record is compressed and sealed under
+  the store's key, sent to the repository as a batch Bundle, deleted once
+  delivered, and moved to `pix.audit_quarantine` when refused; the readiness
+  indicator `audit_outbox` is down while the quarantine holds one. A write
+  refused before it changed anything keeps the record of its refusal there,
+  and writes no longer take a place in the audit spool (#742).
+- A read whose audit record the spool does not store within
+  `[audit] spool_write_timeout` is now recorded as refused (outcome `8`)
+  and answers `503`; before, its record of success landed later while the
+  client saw the refusal (#742).
+- The changes of one ITI-93 message commit together with its record. A
+  refused change is rolled back on its own; a store failure or contention
+  rolls back the whole message and answers `5xx`, and contention tries the
+  whole message again. A message of more than 100 changes is refused `413`
+  `too-costly` before any change runs (#742).
+
+### Security
+
+Shipped with functional changes because: the `cookie` fix is a lockfile move on `main`, where the releases are cut and the unreleased changes above already sit, so a security-only patch has no tree of its own to come from.
+
+- The operator console takes `cookie` 0.18.3 in place of 0.18.2
+  (RUSTSEC-2026-0594, GHSA-8wcq-xq25-7fhm): in 0.14.0 up to 0.18.2 a private
+  cookie added in more than one process after a `fork()` could reuse an
+  AES-GCM nonce. The console does not fork, so no shipped build met the
+  conditions; the upgrade closes the advisory (#777).
+
 ## [0.0.39] - 2026-11-21
 
 ### Changed

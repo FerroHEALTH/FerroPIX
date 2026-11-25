@@ -1,1 +1,0 @@
-- The performance gate installs ferrohealth-perf 0.15.0, and CI holds each hot transaction (ITI-104, ITI-83, ITI-78, ITI-119 and ITI-8) to a budget of statements, shared buffers, write-ahead log, audit bytes and answer bytes per request.

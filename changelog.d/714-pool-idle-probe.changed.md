@@ -1,1 +1,0 @@
-- The connection pool pings a connection only when it sat idle for a second or more, so a request on a busy server no longer sends a ping round trip before its first statement.

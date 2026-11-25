@@ -1,1 +1,0 @@
-- A feed takes the advisory locks of its identifiers and persons in one statement, in the same key order, in place of one round trip per lock.

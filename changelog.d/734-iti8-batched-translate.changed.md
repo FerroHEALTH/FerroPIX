@@ -1,1 +1,0 @@
-- An ITI-8 message's HL7 v2 table values are translated in one FHIR `batch` request to the terminology server, where each value took a `ConceptMap/$translate` call of its own, on `ferrobridge-hl7v2` 0.25.1 and `ferrobridge-term` 0.17.1. The terminology server must accept a `batch` Bundle at its base.

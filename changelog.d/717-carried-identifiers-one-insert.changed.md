@@ -1,1 +1,0 @@
-- A feed inserts the identifiers a version carries in one statement, where it sent one statement per identifier.

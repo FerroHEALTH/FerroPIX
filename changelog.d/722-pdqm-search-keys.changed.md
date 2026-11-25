@@ -1,1 +1,0 @@
-- An ITI-78 or ITI-21 search reads each person's searchable values from an index FerroPIX keeps in step with every change, so its cost no longer grows with the number of persons; before, every search read every person's demographics.

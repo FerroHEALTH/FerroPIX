@@ -151,7 +151,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
-          for guard in comment-style versions fast bash-compat file-length todo-issues crate-version-guard chart-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance vex-coverage; do
+          for guard in comment-style versions fast bash-compat file-length todo-issues crate-version-guard chart-version-guard semver changelog-guard changelog-released changelog-security changelog-structure docs-claims book-guard writing-style pin-freshness stray-literals usage-report-off conformance post-quantum vex-coverage; do
             bash "scripts/checks/$guard.sh" --self-test
           done
       - name: self-tests / The performance gate reads its pins, renders its plan, resolves its base and holds its two idle tables equal
@@ -351,6 +351,14 @@ jobs:
           set -euo pipefail
           bash scripts/checks/docs-claims.sh
           bash scripts/checks/writing-style.sh
+
+      # ---- post-quantum ------------------------------------------------
+      # The post-quantum inventory (#810): conformance/post-quantum.tsv in its
+      # five columns with every location it names in the tree, the table of
+      # docs/post-quantum.md and the README badge counted from it.
+      - name: post-quantum
+        if: ${{ !cancelled() }}
+        run: bash scripts/checks/post-quantum.sh --check
 
       # ---- site-links --------------------------------------------------
       - name: site-links

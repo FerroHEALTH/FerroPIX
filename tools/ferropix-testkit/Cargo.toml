@@ -50,6 +50,9 @@ ferrobridge-hl7v2.workspace = true
 bytes.workspace = true
 tokio = { workspace = true, features = ["time", "rt", "net", "sync", "io-util"] }
 tokio-util.workspace = true
+# The TLS peer of `tls`, which offers the key exchange groups a suite names.
+rcgen.workspace = true
+tokio-rustls.workspace = true
 
 [dev-dependencies]
 # The browser journeys run the console in process, against its release site

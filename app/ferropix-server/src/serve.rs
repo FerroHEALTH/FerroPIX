@@ -522,3 +522,53 @@ where
         shutdown,
     )))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use ferropix_testkit::tls::KxPeer;
+    use tokio_rustls::rustls::NamedGroup;
+    use tokio_rustls::rustls::crypto::aws_lc_rs::kx_group;
+
+    use super::pmir_channel;
+    use crate::config::section::profiles::PmirSettings;
+
+    /// The ITI-93 channel's client, which the certificate of `peer` does not
+    /// satisfy, after one call to `peer`; returns the group it agreed on.
+    async fn agreed_by_the_feed_client(peer: &KxPeer) -> Option<NamedGroup> {
+        let settings = PmirSettings {
+            enabled: true,
+            max_attempts: 1,
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(1),
+            consumers: Vec::new(),
+        };
+        let channel = pmir_channel(&settings)
+            .expect("the channel builds")
+            .expect("PMIR is on");
+        let answer = channel
+            .client
+            .get(format!("https://{}/", peer.address()))
+            .send()
+            .await;
+        assert!(answer.is_err(), "the peer's certificate is trusted by no root");
+        peer.agreed(0).expect("the connection is recorded")
+    }
+
+    #[tokio::test]
+    async fn the_feed_client_prefers_x25519mlkem768() {
+        let peer = KxPeer::start(vec![kx_group::X25519, kx_group::X25519MLKEM768])
+            .expect("the peer starts");
+        assert_eq!(
+            Some(NamedGroup::X25519MLKEM768),
+            agreed_by_the_feed_client(&peer).await
+        );
+    }
+
+    #[tokio::test]
+    async fn the_feed_client_agrees_on_x25519_with_a_classical_only_peer() {
+        let peer = KxPeer::start(vec![kx_group::X25519]).expect("the peer starts");
+        assert_eq!(Some(NamedGroup::X25519), agreed_by_the_feed_client(&peer).await);
+    }
+}

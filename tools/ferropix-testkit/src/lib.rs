@@ -18,7 +18,8 @@
 //! [`consumer`] the stub HL7 v2 consumer the ITI-10 notifications go to;
 //! [`book`] reads the book's fenced blocks, so a suite holds each
 //! configuration sample to its loader; [`spool`] reads the records an audit
-//! spool holds on disk.
+//! spool holds on disk; [`tls`] is the TLS peer that shows the key exchange
+//! group a client agrees on.
 //!
 //! No specification governs the test topology: our own design, after
 //! FerroFED's and FerroBRIDGE's testkits.
@@ -36,3 +37,4 @@ pub mod pins;
 pub mod spool;
 pub mod synthetic;
 pub mod terminology;
+pub mod tls;

@@ -1262,7 +1262,7 @@ results with the field pre-filled, so "find this patient" is one keystroke
 
 Each screen below names what it reads (the operator API), the FerroUI
 components it draws with, its empty, loading and error states, its keyboard
-path and how it reflows on a phone. The wireframes are in section 12.6.
+path and how it reflows on a phone. Section 12.6 shows the screens.
 
 **Sign-in** (`/login`). The library's `sign_in` card with the provider
 button and, under `[dev]`, the Basic form; the notice names a refused
@@ -1492,208 +1492,45 @@ domains. No specification governs this: our own design (#120, #121).
   under every field; absence is a mark with a `title`, never a sentence
   in every cell; a name leads and an identifier follows it, quieter.
 
-### 12.6 Wireframes
+### 12.6 The screens
 
-Low fidelity, the shell omitted after the first. `[ ]` is a control, `▒` a
-masked identifier, `✓` agree, `≠` differ, `–` absent.
+The screens as the console draws them, taken by the book's capture
+(`tools/ferropix-testkit/tests/it/journeys/screenshots.rs`) against the
+filled stand-in, at 1440 CSS pixels wide in the light theme. Every other
+screen, the dark theme and the sign-in pages are in the book's
+[operator console page](../website/book/src/operate/console.md).
 
-**Dashboard, 1440 px**
+**Dashboard**
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◆ FerroPIX   [ / Find a patient: identifier, name or birth date… ]  ● Serving │
-│                                                      ☾ theme   Sam Q ▾       │
-├────────────┬─────────────────────────────────────────────────────────────────┤
-│ WORK       │ Dashboard                                                        │
-│ ▸ Dashboard│                                                                  │
-│   Queue 38 │ ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐          │
-│ PATIENTS   │ │ 38 waiting│ │ 92 % auto │ │ 1,204 fed │ │ 0 in error│          │
-│   Search   │ │ 5 > 7 days│ │ linked 24h│ │ today     │ │ subscript.│          │
-│ REGISTRY   │ └───────────┘ └───────────┘ └───────────┘ └───────────┘          │
-│   Domains  │ ┌ Queue depth, 30 days ───────────┐ ┌ Feeds per hour ──────────┐ │
-│   Pseudonym│ │        ╱╲    ╱╲                 │ │ ▁▂▃▅▇▅▃▂▁▂▃▅▇▆▃▂ FHIR    │ │
-│   domains  │ │  ╱╲  ╱  ╲╱╲╱  ╲╱╲               │ │ ▁▁▂▂▃▃▂▂▁▁▂▂▃▃▂▂ v2      │ │
-│   Matching │ └─────────────────────────────────┘ └──────────────────────────┘ │
-│ TRAIL      │ ┌ Listeners ──────────────┐ ┌ Oldest in the queue ──── All ▸ ─┐ │
-│   Audit    │ │ HTTP  ● up  2 ms p50    │ │ Mohr, Alice  1958  probable 12d │ │
-│ CONSOLE    │ │ MLLP  ● up  last 09:41  │ │ Maiden, A.   1958  possible 11d │ │
-│   Settings │ │ Feeds ● 0 queued        │ │ Jansen, P.   1971  probable  9d │ │
-│   About    │ └─────────────────────────┘ └─────────────────────────────────┘ │
-└────────────┴─────────────────────────────────────────────────────────────────┘
-```
+![The dashboard screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/dashboard.png)
 
-**Dashboard, 390 px**
+**Search**
 
-```text
-┌──────────────────────────┐
-│ ☰  ◆ FerroPIX     Sam Q ▾│
-│ [ / Find a patient…     ]│
-├──────────────────────────┤
-│ Dashboard                │
-│ ▣ 38 waiting  5 > 7 days │
-│ ▣ 92 % auto-linked, 24 h │
-│ ▣ 1,204 fed today        │
-│ ▣ 0 subscriptions in err │
-│ ┌ Queue depth, 30 days ┐ │
-│ │  ╱╲  ╱╲╱╲            │ │
-│ └──────────────────────┘ │
-│ ┌ Listeners ───────────┐ │
-│ │ HTTP ● up            │ │
-│ │ MLLP ● up  09:41     │ │
-│ └──────────────────────┘ │
-│ ┌ Oldest in queue  All ▸│ │
-│ │ Mohr, Alice   12 d   │ │
-│ └──────────────────────┘ │
-└──────────────────────────┘
-```
+![The search screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/search.png)
 
-**Search, 1440 px**
+**Patient**
 
-```text
-│ Search                                                                       │
-│ ( By identifier ) ( By demographics )                                        │
-│ Domain [ BSN ▾ ]   Identifier [ ▒▒▒▒▒▒▒▒▒ ]  [ Search ]                      │
-│                                                                              │
-│ 3 patients                                                     1-3 of 3      │
-│ Name            Born        Identifiers                      Score  Grade    │
-│ Mohr, Alice     1958-01-30  BSN ▒▒▒▒▒▒123  MRN ▒▒▒▒994        –      –       │
-│ Mohr, Alissa    1958-01-30  MRN ▒▒▒▒m94                       –      –       │
-│ Maiden, Alice   1958-01-30  LAB ▒▒▒▒▒550                      –      –       │
-```
+![The patient screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/patient.png)
 
-**Patient, 1440 px**
+**Review queue**
 
-```text
-│ ‹ Search                                                                     │
-│ Mohr, Alice   1958-01-30   female            person 0199-…-7c3e [copy]       │
-│                                   [ Merge into… ] [ Unmerge ] [ Pseudonym ]  │
-│ ( Identifiers ) ( Records ) ( History ) ( Pseudonyms )                       │
-│ ┌ Records, side by side ─────────────────────────────────────────────────┐   │
-│ │ Field        │ BSN (leading)    │ Hospital MRN     │ Laboratory         │   │
-│ │ Identifier   │ ▒▒▒▒▒▒123 Reveal │ ▒▒▒▒994 Reveal   │ ▒▒▒▒▒550 Reveal    │   │
-│ │ Family name  │ Mohr             │ Mohr          ✓  │ Maiden          ≠  │   │
-│ │ Given        │ Alice            │ Alice         ✓  │ Alice           ✓  │   │
-│ │ Birth date   │ 1958-01-30       │ 1958-01-30    ✓  │ 1958-01-30      ✓  │   │
-│ │ Gender       │ female           │ female        ✓  │ –               –  │   │
-│ │ Postal code  │ 9999 XX          │ 9999 XX       ✓  │ 9998 XY         ≠  │   │
-│ │ Fed          │ 2026-10-20 09:41 │ 2026-10-19       │ 2026-09-02         │   │
-│ │ Linked by    │ feed             │ deterministic    │ steward: S. Q.     │   │
-│ └────────────────────────────────────────────────────────────────────────┘   │
-```
+![The review queue screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/queue.png)
 
-**Patient, 390 px (Records tab)**
+**Compare and decide**
 
-```text
-│ ‹ Mohr, Alice  1958  ♀   │
-│ [Merge][Unmerge][Pseud.] │
-│ (Ids)(Records)(Hist)(Ps) │
-│ Compare with: [ BSN ▾ ]  │
-│ Showing: ( MRN )( LAB )  │
-│ ┌ Laboratory ──────────┐ │
-│ │ Identifier ▒▒▒550 [R]│ │
-│ │ Family   Maiden    ≠ │ │
-│ │ Given    Alice     ✓ │ │
-│ │ Born     1958-01-30✓ │ │
-│ │ Gender   –         – │ │
-│ │ Postal   9998 XY   ≠ │ │
-│ └──────────────────────┘ │
-```
+![The compare and decide screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/queue-pair.png)
 
-**Review queue, 1440 px**
+**Merge preview**
 
-```text
-│ Review queue                      [ grade ▾ ] [ domain ▾ ] [ filter rows… ] │
-│ 38 candidates                                              1-50 of 38       │
-│   A                 B                 Domains    Score      Grade     Age   │
-│ ▸ Mohr, Alice 1958  Maiden, Alice 58  BSN · LAB  ████▌ 0.91 probable  12 d  │
-│   Jansen, Piet 1971 Janssen, P. 1971  MRN · MRN  ███▌  0.84 probable   9 d  │
-│   De Vries, A. 1990 Vries, Anna 1990  MRN · LAB  ██▌   0.67 possible   3 d  │
-│ j/k move · Enter open · o side panel · d defer · ? shortcuts                │
-```
+![The merge preview screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/patient-merge.png)
 
-**Compare and decide, 1440 px**
+**Identifier domains**
 
-```text
-│ ‹ Queue  ·  candidate 3 of 38                              [ ‹ ] [ › ]      │
-│ Mohr, Alice (BSN)  vs  Maiden, Alice (Laboratory)        blocked on 1958+MR │
-│ ┌ Fields ────────────────────────────────┐ ┌ Score 0.91, probable ───────┐  │
-│ │ Family name  Mohr        Maiden      ≠ │ │ Family   JW 0.71    ▬▬ -3.1 │  │
-│ │ Postal code  9999 XX     9998 XY     ≠ │ │ Postal   prefix     ▬  -0.8 │  │
-│ │ Given        Alice       Alice       ✓ │ │ Given    exact    ▬▬▬▬ +4.2 │  │
-│ │ Birth date   1958-01-30  1958-01-30  ✓ │ │ Born     exact   ▬▬▬▬▬ +6.0 │  │
-│ │ Gender       female      –           – │ │ Gender   absent          0  │  │
-│ │ Telephone    …4421       …4421       ✓ │ │ Phone    exact    ▬▬▬▬ +3.9 │  │
-│ │ Identifier   ▒▒▒123 [R]  ▒▒▒550 [R]    │ │ ───────────────────────────│  │
-│ └────────────────────────────────────────┘ │ total +10.2 → 0.91          │  │
-│                                            │ ├──possible──┼─probable─┼─certain│  │
-│                                            └─────────────────────────────┘  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Reason [ Maiden name; same phone and address history                     ]  │
-│ [ Link (l) ]  [ Not a match (n) ]  [ Defer (d) ]                   Next (]) │
-```
+![The identifier domains screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/domains.png)
 
-**Compare and decide, 390 px**
+**Audit trail**
 
-```text
-│ ‹ 3 of 38          [‹][›]│
-│ Mohr, Alice vs Maiden, A.│
-│ ( A )( B )               │
-│ ┌ Maiden, Alice (LAB) ─┐ │
-│ │ Family  Maiden     ≠ │ │
-│ │ Postal  9998 XY    ≠ │ │
-│ │ Given   Alice      ✓ │ │
-│ │ Born    1958-01-30 ✓ │ │
-│ └──────────────────────┘ │
-│ Score 0.91 · probable    │
-│ Born    ▬▬▬▬▬ +6.0       │
-│ Given   ▬▬▬▬  +4.2       │
-│ Family  ▬▬    -3.1       │
-│ …                        │
-├──────────────────────────┤
-│ Reason [              ]  │
-│ [Link] [Not match] [Defer]│
-```
-
-**Merge preview, 1440 px**
-
-```text
-│ Merge Maiden, Alice into Mohr, Alice                                        │
-│ Survivor  (•) Mohr, Alice, older, 3 identifiers  ( ) Maiden, Alice          │
-│ ┌ What changes ─────────────────────────────────────────────────────────┐   │
-│ │ Setting                  Before                    After              │   │
-│ │ LAB ▒▒▒▒▒550             Maiden, Alice             Mohr, Alice        │   │
-│ │ Pseudonym ferroehr-nl    person 0199-…-9a1f        resolves to …7c3e  │   │
-│ │ Subscriptions told       –                         2 (ITI-93 merge)   │   │
-│ │ Candidates closed        –                         1                  │   │
-│ └───────────────────────────────────────────────────────────────────────┘   │
-│ Reason [                                                                 ]  │
-│ [ Cancel ]                                        [ Merge 1 identifier ▲ ]  │
-│          ┌ Merge these patients? ───────────────────────────┐               │
-│          │ ⚠ 1 identifier moves to Mohr, Alice. Reversible   │               │
-│          │   from the patient's History until the next merge.│               │
-│          │                     [ Cancel ]  [ Merge ]         │               │
-│          └───────────────────────────────────────────────────┘               │
-```
-
-**Identifier domains, 1440 px**
-
-```text
-│ Identifier domains                                        [ New domain ]    │
-│ Name           System                       Kind      Source        Fed     │
-│ BSN            http://fhir.nl/…/bsn         authorit. brp-feed      09:41   │
-│ Hospital MRN   urn:oid:1.3.6.1.4.1.21367…   local     his-prod      09:40   │
-│ Laboratory     urn:oid:1.3.6.1.4.1.21367…   local     lab-lis       Sep 2   │
-```
-
-**Audit trail, 1440 px**
-
-```text
-│ Audit trail   [ actor ▾ ] [ kind ▾ ] [ from ] [ to ]            [ Export ]  │
-│ Time              Actor    Kind       Patient         Reason                │
-│ 10-21 09:42:10    S. Q.    link       Mohr, Alice     Maiden name; same …   │
-│ 10-21 09:41:55    S. Q.    reveal     Mohr, Alice     Phone call with lab   │
-│ 10-21 09:40:02    system   auto-link  Jansen, Piet    BSN agreed            │
-```
+![The audit trail screen of the operator console, over the synthetic documents](../website/book/src/operate/img/console/audit.png)
 
 ### 12.7 FerroUI component inventory and gaps
 

@@ -397,7 +397,8 @@ const CASES: [Case; 6] = [
             nested: 0,
             blocks: 43,
             wal: 0,
-            audit: 2188,
+            // NOTE: FerroHEALTH/FerroAUDIT#279, the XrequestId display the code system gives (+21 bytes).
+            audit: 2209,
             answer: 263,
             allocations: 362,
             allocated: 86_012,
@@ -412,7 +413,8 @@ const CASES: [Case; 6] = [
             nested: 0,
             blocks: 43,
             wal: 0,
-            audit: 2188,
+            // NOTE: FerroHEALTH/FerroAUDIT#279, the XrequestId display the code system gives (+21 bytes).
+            audit: 2209,
             answer: 263,
             allocations: 433,
             allocated: 89_381,
@@ -427,7 +429,8 @@ const CASES: [Case; 6] = [
             nested: 0,
             blocks: 42,
             wal: 0,
-            audit: 2433,
+            // NOTE: FerroHEALTH/FerroAUDIT#279, the XrequestId display the code system gives (+16 bytes).
+            audit: 2449,
             answer: 361,
             allocations: 1_186,
             allocated: 110_296,
@@ -442,7 +445,8 @@ const CASES: [Case; 6] = [
             nested: 0,
             blocks: 47,
             wal: 0,
-            audit: 2057,
+            // NOTE: FerroHEALTH/FerroAUDIT#279, the XrequestId display the code system gives (+23 bytes).
+            audit: 2080,
             // NOTE: #785, draft EEHRxF Annexes Table 26: every identifier carries its type (+534 bytes).
             answer: 1618,
             allocations: 601,
@@ -458,7 +462,8 @@ const CASES: [Case; 6] = [
             nested: 0,
             blocks: 60,
             wal: 0,
-            audit: 2728,
+            // NOTE: FerroHEALTH/FerroAUDIT#279, the XrequestId display the code system gives (+10 bytes).
+            audit: 2738,
             // NOTE: #785, draft EEHRxF Annexes Table 26: every identifier carries its type (+534 bytes).
             answer: 1601,
             allocations: 1_927,

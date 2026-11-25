@@ -20,8 +20,9 @@ use std::fmt;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use jsonwebtoken::jwk::Jwk;
-use jsonwebtoken::{Algorithm, EncodingKey};
+use ferrohealth_smart::jws::algorithm::Algorithm;
+use ferrohealth_smart::jws::jwk::Jwk;
+use ferrohealth_smart::jws::key::{KeyError, PrivateKey, SigningKey};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use serde::de::IgnoredAny;
@@ -44,12 +45,12 @@ pub enum HolderError {
     /// (Nuts RFC021 §4.2 item 4).
     #[error("the key id is not a DID URL of the holder's DID with a fragment")]
     KeyId,
-    /// The text is not an EC private key in PKCS#8 PEM.
-    #[error("the holder key is not an EC private key in PKCS#8 PEM")]
-    Pem(#[source] jsonwebtoken::errors::Error),
+    /// The text is not an EC private key in PEM.
+    #[error("the holder key is not an EC private key in PEM")]
+    Pem(#[source] KeyError),
     /// The key is on neither P-256 (ES256) nor P-384 (ES384) (RFC 7518 §3.4).
     #[error("the holder key is on neither P-256 (ES256) nor P-384 (ES384)")]
-    Curve(#[source] jsonwebtoken::errors::Error),
+    Curve(#[source] KeyError),
     /// The input descriptor a credential answers is empty.
     #[error("credential {index} names no input descriptor")]
     Descriptor {
@@ -183,20 +184,19 @@ fn segment(segment: &str) -> bool {
 /// `Debug` shows the DID URL and the algorithm alone.
 pub struct HolderKey {
     kid: String,
-    algorithm: Algorithm,
-    private: EncodingKey,
+    signing: SigningKey,
     public: Jwk,
 }
 
 impl HolderKey {
-    /// Reads the private key `pem` holds in PKCS#8 PEM, named by the DID URL
-    /// `kid` of `did`: a P-256 key signs ES256, a P-384 key ES384.
+    /// Reads the EC private key `pem` holds in PKCS#8 or SEC 1 PEM, named by
+    /// the DID URL `kid` of `did`: a P-256 key signs ES256, a P-384 key ES384.
     ///
     /// # Errors
     ///
     /// Returns [`HolderError::KeyId`] when `kid` is not `did` followed by `#`
     /// and a fragment, [`HolderError::Pem`] for text that is no EC private
-    /// key in PKCS#8 PEM, and [`HolderError::Curve`] for a key on another
+    /// key in PEM, and [`HolderError::Curve`] for a key on another
     /// curve.
     pub fn from_pem(pem: &SecretString, kid: &str, did: &Did) -> Result<Self, HolderError> {
         let fragment = kid
@@ -210,19 +210,25 @@ impl HolderKey {
         {
             return Err(HolderError::KeyId);
         }
-        let private =
-            EncodingKey::from_ec_pem(pem.expose_secret().as_bytes()).map_err(HolderError::Pem)?;
-        let (algorithm, public) = match Jwk::from_encoding_key(&private, Algorithm::ES256) {
-            Ok(public) => (Algorithm::ES256, public),
-            Err(_not_p256) => (
-                Algorithm::ES384,
-                Jwk::from_encoding_key(&private, Algorithm::ES384).map_err(HolderError::Curve)?,
-            ),
+        let private = PrivateKey::from_pem(pem.expose_secret().as_bytes()).map_err(|source| {
+            if source == KeyError::Curve {
+                HolderError::Curve(source)
+            } else {
+                HolderError::Pem(source)
+            }
+        })?;
+        let Some(algorithm @ (Algorithm::Es256 | Algorithm::Es384)) = private.algorithm() else {
+            return Err(HolderError::Pem(KeyError::Unsupported));
         };
+        let public = private
+            .public_jwk()
+            .clone()
+            .with_algorithm(algorithm)
+            .map_err(|_unfit| HolderError::Pem(KeyError::Algorithm { algorithm }))?;
+        let signing = SigningKey::new(private, algorithm).map_err(HolderError::Pem)?;
         Ok(Self {
             kid: kid.to_owned(),
-            algorithm,
-            private,
+            signing,
             public,
         })
     }
@@ -245,21 +251,17 @@ impl HolderKey {
     /// The JWS algorithm every presentation is signed with.
     #[must_use]
     pub fn algorithm(&self) -> Algorithm {
-        self.algorithm
+        self.signing.algorithm()
     }
 
     /// The algorithm's name as RFC 7518 §3.1 writes it, `ES256` or `ES384`.
     #[must_use]
     pub fn algorithm_name(&self) -> &'static str {
-        if self.algorithm == Algorithm::ES256 {
-            "ES256"
-        } else {
-            "ES384"
-        }
+        self.signing.algorithm().name()
     }
 
-    pub(super) fn private(&self) -> &EncodingKey {
-        &self.private
+    pub(super) fn signing(&self) -> &SigningKey {
+        &self.signing
     }
 }
 
@@ -267,7 +269,7 @@ impl fmt::Debug for HolderKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HolderKey")
             .field("kid", &self.kid)
-            .field("algorithm", &self.algorithm)
+            .field("algorithm", &self.signing.algorithm())
             .finish_non_exhaustive()
     }
 }

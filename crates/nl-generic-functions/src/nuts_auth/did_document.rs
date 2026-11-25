@@ -20,7 +20,7 @@
 //! that defines `JsonWebKey2020` (DID 1.0 §6.3.1), served as
 //! [`MEDIA_TYPE`].
 
-use jsonwebtoken::jwk::Jwk;
+use ferrohealth_smart::jws::jwk::Jwk;
 use serde::Serialize;
 
 use crate::nuts_auth::holder::{Did, HolderKey};

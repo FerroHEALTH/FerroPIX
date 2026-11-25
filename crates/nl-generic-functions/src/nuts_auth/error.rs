@@ -238,7 +238,7 @@ pub enum NutsAuthError {
     },
     /// The Verifiable Presentation could not be signed.
     #[error("the verifiable presentation could not be signed")]
-    Sign(#[source] jsonwebtoken::errors::Error),
+    Sign(#[source] ferrohealth_smart::jws::JwsError),
     /// The presentation submission could not be written.
     #[error("the presentation submission could not be written")]
     Submission(#[source] serde_json::Error),

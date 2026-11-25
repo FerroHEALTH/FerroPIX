@@ -1,4 +1,4 @@
-- `ihe-iti` 0.21.2 adds the PIXm Patient Identity Source (ITI-104) behind
+- `ihe-iti` adds the PIXm Patient Identity Source (ITI-104) behind
   the new `pixm-source` feature: `pixm::source::PixmSourceClient` sends Add
   or Revise Patient and Resolve Duplicate Patient as the conditional update
   `PUT [base]/Patient?identifier=system|value` and Remove Patient as the

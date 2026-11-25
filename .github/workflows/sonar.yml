@@ -22,32 +22,26 @@ name: SonarQube Cloud
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "41 4 * * 1" # Mondays 04:41 UTC
 
-# A new push to a pull request supersedes its running analysis, so that run is
-# cancelled. A run on main keeps going: each analyzes a distinct commit whose
-# result the dashboard keeps.
+# It runs on a push to main and weekly, never on a pull request or a merge
+# group: it gates no merge, and the org shares 20 concurrent jobs that the
+# gates need (owner decision, 2026-11-25). A newer push to main replaces a
+# running analysis.
 concurrency:
   group: sonar-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 permissions: {}
 
 jobs:
   scan:
     name: analyze
-    # Pull-request analysis authenticates with SONAR_TOKEN, which a fork pull
-    # request cannot read, and neither can a DEPENDABOT one: a dependabot-actor
-    # run reads Dependabot secrets rather than Actions secrets, so the scan
-    # would die on "Not authorized". A dependency bump has nothing to decorate
-    # anyway, and the post-merge push to main analyzes the merged result.
-    if: github.event_name == 'push' || (github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
-      pull-requests: read # PR decoration reads the pull-request metadata
     steps:
       # A repository without the SONAR_TOKEN secret skips the analysis and
       # says so, so the lane stays green until the token is provisioned.

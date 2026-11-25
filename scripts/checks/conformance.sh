@@ -32,7 +32,9 @@
 # badges fail too.
 #
 # The small caption under the README's conformance heading says once what the
-# badges count (owner decision, 2026-11-25); a README without it fails.
+# badges count (owner decision, 2026-11-25); a README without it fails. A
+# badge's colour follows its count: green when all pass, yellow when some do,
+# red when none do.
 #
 # Every badge, and every static badge in the README, carries a logo from
 # scripts/checks/badge-logos/: one without fails every mode.
@@ -110,20 +112,9 @@ label_claims() {
   fi
 }
 
-# The badge colour of $1 passing out of $2: the share in quarters.
+# The badge colour of $1 passing out of $2, by the shared rule.
 colour_of() {
-  local passed="$1" total="$2" share
-  if [[ "$total" -eq 0 ]]; then
-    echo lightgrey
-    return
-  fi
-  share=$((passed * 100 / total))
-  if [[ "$passed" -eq "$total" ]]; then echo brightgreen
-  elif [[ "$share" -ge 75 ]]; then echo green
-  elif [[ "$share" -ge 50 ]]; then echo yellow
-  elif [[ "$share" -ge 25 ]]; then echo orange
-  else echo red
-  fi
+  badge_count_color "$1" "$2"
 }
 
 # The passing examples of the pass list $1, sorted.
@@ -306,7 +297,15 @@ self_test() {
   expect 0 "a README with the conformance caption" badge_caption_check "$work/logos/caption.md"
   printf '**Conformance**<br>\n' >"$work/logos/caption.md"
   expect 1 "a README without the conformance caption" badge_caption_check "$work/logos/caption.md"
-  for pair in "3 3 brightgreen" "3 4 green" "1 2 yellow" "1 4 orange" "0 5 red" "0 0 lightgrey"; do
+  expect 0 "a counted badge in its colour" badge_color_check "$work/logos/pixm.json"
+  jq -c '.color = "blue"' "$work/logos/pixm.json" >"$work/logos/blue.json"
+  expect 1 "a counted badge in blue" badge_color_check "$work/logos/blue.json"
+  jq -c '.message = "0 / 3" | .color = "red"' "$work/logos/pixm.json" >"$work/logos/red.json"
+  expect 0 "a badge with nothing passing in red" badge_color_check "$work/logos/red.json"
+  jq -c '.message = "3 / 3"' "$work/logos/pixm.json" >"$work/logos/green.json"
+  expect 1 "a badge with every case passing in yellow" badge_color_check "$work/logos/green.json"
+  # The colours of the owner decision of 2026-11-25: all, some or none passing.
+  for pair in "3 3 brightgreen" "3 4 yellow" "1 2 yellow" "1 4 yellow" "0 5 red" "0 0 red"; do
     read -r passed total colour <<<"$pair"
     if [[ "$(colour_of "$passed" "$total")" != "$colour" ]]; then
       echo "conformance: self-test failed: $passed of $total is not $colour" >&2
@@ -407,5 +406,6 @@ emit_block README.md "$mode" || failed=1
 badge_logo_check "$BADGES"/*.json || failed=1
 badge_logo_readme README.md || failed=1
 badge_caption_check README.md || failed=1
+badge_color_check "$BADGES"/*.json || failed=1
 
 exit "$failed"

@@ -31,6 +31,9 @@
 # that disagrees with its list and a README block that disagrees with the
 # badges fail too.
 #
+# Every badge, and every static badge in the README, carries a logo from
+# scripts/checks/badge-logos/: one without fails every mode.
+#
 # A badge label never claims a certification: one holding "certified",
 # "compliant" or "conformant" fails every mode, and a corpus with no pass list
 # and no result is left out of the README.
@@ -42,6 +45,8 @@ set -euo pipefail
 
 # shellcheck disable=SC1091 # shellcheck is not run with -x; the library is checked on its own
 . "$(dirname "$0")/../lib/guard-args.sh"
+# shellcheck disable=SC1091 # shellcheck is not run with -x; the library is checked on its own
+. "$(dirname "$0")/badge-logos/logo.sh"
 
 readonly GRAMMAR="[--update | --check | --self-test]"
 readonly CORPORA=(pixm pdqm pmir audit)
@@ -54,13 +59,13 @@ readonly ENDPOINT='https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubu
 readonly PROJECT_BADGES=(
   '[![Release](https://img.shields.io/github/v/release/FerroHEALTH/FerroPIX?sort=semver&logo=github&label=release)](https://github.com/FerroHEALTH/FerroPIX/releases/latest)'
   '[![CI](https://img.shields.io/github/actions/workflow/status/FerroHEALTH/FerroPIX/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/ci.yml)'
-  '[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue)](LICENSE)'
+  '[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZD0iTTEyIDN2MThNNyAyMWgxME00IDdoMTZNNCA3TDEgMTRhMyAzIDAgMCAwIDYgMFpNMjAgN2wtMyA3YTMgMyAwIDAgMCA2IDBaIi8%2BPC9zdmc%2B)](LICENSE)'
   '[![Docs](https://img.shields.io/badge/docs-ferropix.eu-6B21A8?logo=mdbook)](https://ferropix.eu/docs/)'
   '[![GHCR](https://img.shields.io/badge/ghcr.io-ferropix-2496ED?logo=docker&logoColor=white)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
   '[![Image pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FFerroHEALTH%2FFerroPIX%2Fferropix&query=downloadCount&label=image%20pulls&logo=github)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
 )
 readonly QUALITY_BADGES=(
-  '[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/FerroHEALTH/FerroPIX/badge)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)'
+  '[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/FerroHEALTH/FerroPIX?label=openssf%20scorecard&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZD0iTTEyIDJsOCAzdjZjMCA1LTMuNSA5LjUtOCAxMS00LjUtMS41LTgtNi04LTExVjVaTTguNSAxMmwyLjUgMi41IDQuNS01Ii8%2BPC9zdmc%2B)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)'
   '[![Quality gate](https://img.shields.io/sonar/quality_gate/FerroHEALTH_FerroPIX?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&label=quality%20gate)](https://sonarcloud.io/summary/overall?id=FerroHEALTH_FerroPIX)'
   '[![Coverage](https://img.shields.io/sonar/coverage/FerroHEALTH_FerroPIX?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&label=coverage)](https://sonarcloud.io/summary/new_code?id=FerroHEALTH_FerroPIX)'
   '[![CodeQL](https://img.shields.io/github/actions/workflow/status/FerroHEALTH/FerroPIX/codeql.yml?branch=main&logo=github&label=CodeQL)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)'
@@ -78,6 +83,18 @@ label_of() {
     ncp-patient-minimal) echo "MyHealth@EU NCP API 9.1.1-ci Patient-minimal valid" ;;
     ehds-identifier-types) echo "EHDS identifier types (EEHRxF draft Annex X)" ;;
     xtehr-patient-match) echo "Xt-EHR D8.2 2026-05-19 Patient Match assertions" ;;
+    *) return 1 ;;
+  esac
+}
+
+# The badge logo of a corpus: the EU emblem for an EU act, else a pictogram
+# of the FerroHEALTH badge set.
+logo_of() {
+  case "$1" in
+    pixm | pmir) echo id-card ;;
+    pdqm) echo magnifier ;;
+    audit) echo log ;;
+    ncp-patient-minimal | ehds-identifier-types | xtehr-patient-match) echo eu ;;
     *) return 1 ;;
   esac
 }
@@ -120,12 +137,14 @@ total_of() {
 
 # The badge JSON of corpus $1 that the pass list $2 implies.
 badge_of() {
-  local corpus="$1" list="$2" passed total
+  local corpus="$1" list="$2" passed total logo
   passed="$(passes_of "$list" | sed '/^$/d' | wc -l | tr -d ' ')"
   total="$(total_of "$list")"
   [[ -n "$total" ]] || { echo "conformance: $list has no total line" >&2; return 2; }
-  printf '{"schemaVersion":1,"label":"%s","message":"%s / %s","color":"%s"}\n' \
-    "$(label_of "$corpus")" "$passed" "$total" "$(colour_of "$passed" "$total")"
+  logo="$(badge_logo_fields "$(logo_of "$corpus")")"
+  jq -cn --arg label "$(label_of "$corpus")" --arg message "$passed / $total" \
+    --arg color "$(colour_of "$passed" "$total")" --argjson logo "$logo" \
+    '{schemaVersion: 1, label: $label, message: $message, color: $color} + $logo'
 }
 
 # Compares the result $2 of corpus $1 with its pass list $3 under mode $4 and
@@ -257,10 +276,27 @@ self_test() {
   expect 1 "a changed reason under check" compare_corpus pixm "$work/reason" "$work/list" check
   local badge
   badge="$(badge_of pixm "$work/list")"
-  if [[ "$badge" != '{"schemaVersion":1,"label":"PIXm 3.1.0 examples","message":"2 / 3","color":"yellow"}' ]]; then
+  if [[ "$(jq -c 'del(.logoSvg)' <<<"$badge")" != '{"schemaVersion":1,"label":"PIXm 3.1.0 examples","message":"2 / 3","color":"yellow"}' ]]; then
     echo "conformance: self-test failed: the badge of two passes of three is $badge" >&2
     failed=1
   fi
+  if [[ "$(jq -r .logoSvg <<<"$badge")" != "<svg "* ]]; then
+    echo "conformance: self-test failed: the PIXm badge carries no pictogram" >&2
+    failed=1
+  fi
+  if [[ "$(badge_of xtehr-patient-match "$work/list" | jq -r '.namedLogo + .labelColor')" != 'europeanunion#003399' ]]; then
+    echo "conformance: self-test failed: the Xt-EHR badge carries no EU emblem on EU blue" >&2
+    failed=1
+  fi
+  mkdir -p "$work/logos"
+  printf '%s\n' "$badge" >"$work/logos/pixm.json"
+  expect 0 "a badge with a logo" badge_logo_check "$work/logos/pixm.json"
+  jq -c 'del(.logoSvg)' <<<"$badge" >"$work/logos/bare.json"
+  expect 1 "a badge without a logo" badge_logo_check "$work/logos/bare.json"
+  printf '[![x](https://img.shields.io/badge/x-y-blue?logo=github)](x)\n' >"$work/logos/README.md"
+  expect 0 "a static badge with a logo" badge_logo_readme "$work/logos/README.md"
+  printf '[![x](https://img.shields.io/badge/x-y-blue)](x)\n' >>"$work/logos/README.md"
+  expect 1 "a static badge without a logo" badge_logo_readme "$work/logos/README.md"
   for pair in "3 3 brightgreen" "3 4 green" "1 2 yellow" "1 4 orange" "0 5 red" "0 0 lightgrey"; do
     read -r passed total colour <<<"$pair"
     if [[ "$(colour_of "$passed" "$total")" != "$colour" ]]; then
@@ -359,5 +395,7 @@ for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
   emit_badge "$BADGES/$corpus.json" "$(badge_of "$corpus" "$list")" "$mode" || failed=1
 done
 emit_block README.md "$mode" || failed=1
+badge_logo_check "$BADGES"/*.json || failed=1
+badge_logo_readme README.md || failed=1
 
 exit "$failed"

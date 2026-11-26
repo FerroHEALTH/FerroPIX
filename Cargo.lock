@@ -1242,9 +1242,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrobridge-fhirpath"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae57087f92814880ff00a60cca4b4388369e12835760bfcf8cf16d34c69a7328"
+checksum = "794428610b08154e3a649b9cfa13f37d36c191aef39cae07d3ac3c59e93921e4"
 dependencies = [
  "base64 0.23.1",
  "chumsky",
@@ -1261,9 +1261,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.35.0"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbd47b5256bc067c33a192c03a449f6f95ca8675390d0ea8b888a99483a20d47"
+checksum = "fd2b90caf24d7b6b507db0a20f05a75cdfba712952f5998f40a3b4e6b776f217"
 dependencies = [
  "bytes",
  "chumsky",
@@ -1287,9 +1287,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-term"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c4f28366d020a44e46c733c5555920d0f4143a76adfcb9e48850df773c51d14"
+checksum = "34f429423133b3ff8d7cd0535d6d292b57ad02f898bf7e19f10a5423eddca76a"
 dependencies = [
  "async-trait",
  "backon",
@@ -1306,9 +1306,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-validator"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "288ae166065967873fd0df4e54f84900628dccefc3a0fda62213e05773701192"
+checksum = "823b9527f8cf34563b216af9356bfda938809901cef49e53c2ada66f6f0f1116"
 dependencies = [
  "ferrobridge-fhirpath",
  "ferrobridge-term",
@@ -1685,9 +1685,9 @@ dependencies = [
 
 [[package]]
 name = "fhir-types"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dc799c13c2e292fbaae7c6aee40daf46d2e0ba4ead0275f6b51b67eeecdd524"
+checksum = "6fb0d50e751cfb35de7aaf6f4a7652488faf6f2511b9c22c2f92831571060eb1"
 dependencies = [
  "quick-xml",
  "regex",
@@ -1697,9 +1697,9 @@ dependencies = [
 
 [[package]]
 name = "fhirconnect"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97bfd0c6eba5da3d59a374709bc2f5948ff268da731a393d3377bdf2e2fd9535"
+checksum = "8f48a7f8eb196633fa01346fd7d77f5a291740132df2ec01920cc04c1be3b99f"
 dependencies = [
  "fhir-types",
  "thiserror",
@@ -2438,9 +2438,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e80c1964088be423a90645f4c67b62b8b833238e7988f1f5eb4a42010ae003fc"
+checksum = "8d2336f698e982694f0be37d9930046ecca8578400a8d2a382bbd1d67256a87c"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2462,7 +2462,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3003,7 +3003,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nl-generic-functions"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",

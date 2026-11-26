@@ -30,7 +30,9 @@ does and what it checks. The version on `main` is {{version:ihe-iti}}.
 Only `soap` and `xcpd` carry the SOAP 1.2 stack, and only `xcpd` HL7 v3 and
 SAML XUA; a build without them compiles none of it. The FHIR features decode FHIR R4 through
 [`fhir-types`](https://crates.io/crates/fhir-types), the model FerroBRIDGE
-generates from the HL7 packages.
+generates from the HL7 packages, and turn on only its R4 features (`r4` with
+`terminology`, or `r4-resources`), so a product that enables another FHIR
+release for itself compiles no other release's resources through this crate.
 
 ## PIXm (`pixm`)
 

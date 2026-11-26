@@ -244,3 +244,59 @@ fn the_server_sides_compile_no_http_server_store_or_database() {
         assert!(reached.is_empty(), "{feature} compiles {reached:?}");
     }
 }
+
+/// The fhir-types features R4 needs: `fhir-types` gates the resources of
+/// every release it compiles behind `resources`, so a feature that turned it
+/// on would compile them all in a product that enables another release.
+const R4_ONLY: &[&str] = &["r4", "r4-resources", "terminology"];
+
+/// The features of `fhir-types` the build of `feature` turns on itself.
+fn fhir_types_features(feature: &str) -> BTreeSet<String> {
+    let home = private_cargo_home();
+    let output = Command::new(env!("CARGO"))
+        .env("CARGO_HOME", home.path())
+        .env("CARGO_CACHE_AUTO_CLEAN_FREQUENCY", "never")
+        .arg("tree")
+        .arg("--manifest-path")
+        .arg(Path::new(ROOT).join("Cargo.toml"))
+        .args(["--package", "ihe-iti"])
+        .args(["--edges", "features,normal", "--invert", "fhir-types"])
+        .args(["--depth", "1", "--prefix", "none"])
+        .args(["--no-default-features", "--features", feature, "--frozen"])
+        .output()
+        .expect("cargo tree runs");
+    assert!(
+        output.status.success(),
+        "cargo tree failed for {feature}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .expect("UTF-8 output")
+        .lines()
+        .filter_map(|line| line.strip_prefix("fhir-types feature \""))
+        .filter_map(|rest| rest.split('"').next())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn every_fhir_feature_asks_fhir_types_for_r4_only() {
+    for feature in FEATURES {
+        if !tree(feature, None).contains("fhir-types") {
+            continue;
+        }
+        let enabled = fhir_types_features(feature);
+        assert!(
+            enabled.contains("r4"),
+            "{feature} lists no fhir-types feature, so its output was not read: {enabled:?}"
+        );
+        let beyond: Vec<&String> = enabled
+            .iter()
+            .filter(|name| !R4_ONLY.contains(&name.as_str()))
+            .collect();
+        assert!(
+            beyond.is_empty(),
+            "{feature} turns on fhir-types {beyond:?}"
+        );
+    }
+}

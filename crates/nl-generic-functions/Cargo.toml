@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.25.0"
+version = "0.26.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -25,7 +25,7 @@ include = ["src/**", "README.md", "LICENSE"]
 # application.
 [features]
 # GF-Localization through the national index (NVI): the HTTP client of the
-# Localization Service search, the FHIR R4 `resources` root set for the
+# Localization Service search, the FHIR R4 `r4-resources` root set for the
 # Bundle of DocumentReference records it answers with, each request sent
 # through `ferrohealth-smart`'s outbound client and the send of `ihe-iti`,
 # which carry its credential (the IG's GFI-005), and the redacting secret
@@ -38,8 +38,7 @@ nvi = [
   "ihe-iti/rest",
   "dep:fhir-search",
   "dep:fhir-types",
-  "fhir-types/r4",
-  "fhir-types/resources",
+  "fhir-types/r4-resources",
   "dep:http",
   "dep:reqwest",
   "dep:secrecy",
@@ -67,14 +66,13 @@ mitz = [
   "dep:uuid",
 ]
 # GF-Addressing through the national address book (LRZa): the URA of an
-# NL-GF Organization, over the FHIR R4 `resources` root set, its identifiers
+# NL-GF Organization, over the FHIR R4 `r4-resources` root set, its identifiers
 # read as the mCSD directory of `ihe-iti` reads them.
 lrza = [
   "dep:ihe-iti",
   "ihe-iti/mcsd",
   "dep:fhir-types",
-  "fhir-types/r4",
-  "fhir-types/resources",
+  "fhir-types/r4-resources",
   "dep:thiserror",
 ]
 # GF-Authentication on the Nuts profile: the client side of the access token
@@ -106,7 +104,7 @@ jiff = { workspace = true, optional = true }
 # held to, and the send the NVI client and the Mitz client go through;
 # the international crate sits below the national one, and a caret
 # requirement, as a shared crate takes on another family shared crate.
-ihe-iti = { version = "0.25.0", path = "../ihe-iti", default-features = false, optional = true }
+ihe-iti = { version = "0.26.0", path = "../ihe-iti", default-features = false, optional = true }
 # The outbound client the NVI and Mitz clients are built from, and the RFC
 # 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
@@ -132,7 +130,7 @@ base64 = { workspace = true }
 pem = { workspace = true }
 rcgen = { workspace = true }
 tempfile = { workspace = true }
-fhir-types = { workspace = true, features = ["r4", "resources"] }
+fhir-types = { workspace = true, features = ["r4-resources"] }
 http = { workspace = true }
 jiff = { workspace = true }
 jsonschema = { workspace = true }

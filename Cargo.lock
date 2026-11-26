@@ -1261,9 +1261,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-hl7v2"
-version = "0.36.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd2b90caf24d7b6b507db0a20f05a75cdfba712952f5998f40a3b4e6b776f217"
+checksum = "72884c13243ae2eb47a7c450ca32763b90164589a4db6615653ec88832540dd6"
 dependencies = [
  "bytes",
  "chumsky",
@@ -1287,9 +1287,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-term"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34f429423133b3ff8d7cd0535d6d292b57ad02f898bf7e19f10a5423eddca76a"
+checksum = "8b95aecb2c98c01c62bc16f4de30cd3baff2f4558dd0c4d47a278e0322a41ac0"
 dependencies = [
  "async-trait",
  "backon",
@@ -1306,9 +1306,9 @@ dependencies = [
 
 [[package]]
 name = "ferrobridge-validator"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "823b9527f8cf34563b216af9356bfda938809901cef49e53c2ada66f6f0f1116"
+checksum = "8b3b180061ac239198ab454fdadaa7d7994f73a1b60ec033b1b432a0ea620b8e"
 dependencies = [
  "ferrobridge-fhirpath",
  "ferrobridge-term",
@@ -1395,9 +1395,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-session"
-version = "0.30.0"
+version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47fd4ed091afd320036146bea3048691a24bafef58af70f4a2d9d8211772c5cd"
+checksum = "289d6401c6884756c041b3904592b2916ecf02151e103bd7b1629d02a8bb7b7a"
 dependencies = [
  "aws-lc-rs",
  "axum",

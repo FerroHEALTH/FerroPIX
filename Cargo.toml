@@ -50,7 +50,7 @@ base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 # required by a caret range with its floor at the release this tree needs
 # (#543): two family crates on different patches of one then build together.
 # The generated FHIR model of FerroBRIDGE.
-fhir-types = { version = "0.2.0", default-features = false }
+fhir-types = { version = "0.3.0", default-features = false }
 # The FHIR R4 search value grammar of FerroBRIDGE, which every search value
 # and token is read and written with.
 fhir-search = { version = "0.1.131", default-features = false }
@@ -103,20 +103,20 @@ ferrohealth-usage-report = { version = "=0.5.0", default-features = false }
 # parser, the original-mode acknowledgment and the message writer, over the
 # generated v2 tables, by a caret range as every FerroBRIDGE crate above.
 # The server adds `map`, the generated v2-to-FHIR structure maps a PID runs
-# through. Verified against crates.io on 2026-11-25.
-ferrobridge-hl7v2 = { version = "0.35.0", default-features = false }
+# through. Verified against crates.io on 2026-11-26.
+ferrobridge-hl7v2 = { version = "0.36.0", default-features = false }
 hl7v2-types = "0.1.129"
 # FerroBRIDGE's FHIR R4 profile validator, which the conformance corpora hold
 # the PDQm answers to the MyHealth@EU Patient-minimal and PDQm Patient profiles
 # with, on the fhir-types line above. Verified against crates.io on
-# 2026-11-25.
-ferrobridge-validator = { version = "0.22.0", default-features = false }
+# 2026-11-26.
+ferrobridge-validator = { version = "0.23.0", default-features = false }
 # FerroBRIDGE's FHIR terminology client, the one `ferrobridge-hl7v2` translates
 # every v2 table value through (`ConceptMap/$translate`), with `smart` for
 # the client built from `[terminology.endpoint]` over ferrohealth-smart's
 # outbound client, at the version that crate pins. Verified against
-# crates.io on 2026-11-25.
-ferrobridge-term = { version = "0.21.0", default-features = false, features = ["client", "r4", "smart"] }
+# crates.io on 2026-11-26.
+ferrobridge-term = { version = "0.22.0", default-features = false, features = ["client", "r4", "smart"] }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product

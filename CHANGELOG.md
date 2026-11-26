@@ -13,6 +13,12 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.44] - 2026-11-26
+
+### Changed
+
+- `ihe-iti` 0.25.0 and `nl-generic-functions` 0.25.0 build on `fhir-types` 0.3, so the FHIR resources they take and return are 0.3's, and a product on `fhir-types` 0.2 moves with them. `fhir-types` 0.3 puts `NamingSystem` in its `terminology` root set, a new `Resource` variant that breaks an exhaustive match. The server moves to `fhir-types` 0.3.0, with `ferrobridge-term` 0.22, `ferrobridge-hl7v2` 0.36, `ferrobridge-validator` 0.23 and `ihe-atna` on it (#820).
+
 ## [0.0.43] - 2026-11-25
 
 ### Changed

@@ -13,6 +13,12 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.45] - 2026-11-26
+
+### Changed
+
+- `ihe-iti` 0.26.0 and `nl-generic-functions` 0.26.0 ask `fhir-types` for R4's resources only (`r4-resources`) where their FHIR features asked for `resources`, which compiles the resources of every FHIR release a build enables. A product that enables STU3, R4B, R5 or R6 for itself no longer compiles those releases' resources through these crates. A product that took another release's resources from them turns on `fhir-types/<release>-resources` itself (#823).
+
 ## [0.0.44] - 2026-11-26
 
 ### Changed

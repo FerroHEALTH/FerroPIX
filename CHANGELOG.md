@@ -13,6 +13,30 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.46] - 2026-11-27
+
+### Added
+
+- The book explains how FerroPIX manages patient identity on one page: the identity sources, the cross-reference the PIXm, PDQm, PMIR, HL7 v2 and XCPD faces share, merge and unmerge, and pseudonyms with their forward-only translation, each rule cited to its IHE section or labelled as FerroPIX's own design (#830).
+- The book has an upgrade page (the checks before, the migrations and images, rolling back, the checks after) and a table of what FerroPIX stores and how each store is kept (#833).
+- The book has a tutorial, Your first integration, whose requests a test sends to the server and PostgreSQL in CI, a command-line reference for `ferropix` and `ferropix-console` generated from their `clap` definitions, and a problem type table generated from the server's problem types, each held to the code by a drift test (#834).
+- Post-quantum JOSE signatures (RFC 9964). `[trust] post_quantum_only = true` verifies access tokens with ML-DSA-44, ML-DSA-65 or ML-DSA-87 alone: every issuer `algorithms` list left at the default becomes the three ML-DSA parameter sets, and a list naming another algorithm stops the start. The console's sign-in now accepts an ID Token signed with ML-DSA beside the classical algorithms, and its `[jose] post_quantum_only = true` accepts ML-DSA alone. A Nuts holder key may be an ML-DSA key, which signs the presentation with its parameter set where the Authorization Server lists it in `vp_formats` (the holder took only P-256 and P-384 keys before). The configuration page shows a `private_key_jwt` client with an ML-DSA-65 key. The post-quantum inventory states what `ferrohealth-smart` 0.35.0 accepts and signs on each JOSE row, counts those rows in the post-quantum configuration, and cites RFC 9881 and draft-ietf-tls-mldsa-06 for the TLS certificate row (#843).
+
+### Changed
+
+- The book is organised as tutorials, how-to guides, reference and explanation, opens on a page that sends each reader to their first page, and splits the Helm chart, running the console and the audit trail onto pages of their own; every published address stays (#831).
+- `ihe-iti` 0.27.0 and `nl-generic-functions` 0.27.0 are built on `ihe-atna` 0.30, the FerroAUDIT release whose `user` and BALP types `ihe-iti` takes in its public API (`received::Received`, the mCSD audit), and the server pins `ihe-atna` `=0.30.0`. A product that depends on `ihe-iti` and on `ihe-atna` or `ehds-logging` 0.30 now builds with one `ihe-atna` crate. The move is breaking for a caller that names `ihe-atna` 0.29 types, hence the minor step of both crates (#850).
+
+### Removed
+
+- The book no longer narrates past incidents, dated measurements or one-time upgrade steps inside its pages, says the POST rule for identifier lookups once, and types no version that moves (#832).
+
+### Fixed
+
+- The book's configuration page counts the quickstart's three identifier domains and lists `ferropix matching estimate`, the deployment page's Helm example names an issuer without the `kind` the server refuses, and the console page's configuration table renders whole (#829).
+- The `source-not-admitted` problem type's title names only issuers, since a Basic user is never a Source, and `ferropix --help` names every profile the server serves (#841).
+- The server image's description label and its GHCR package description name every profile the server serves: PIXm, PDQm, PMIR, XCPD and the HL7 v2 PIX and PDQ transactions (#845).
+
 ## [0.0.45] - 2026-11-26
 
 ### Changed

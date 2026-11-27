@@ -1,1 +1,0 @@
-- The book is organised as tutorials, how-to guides, reference and explanation, opens on a page that sends each reader to their first page, and splits the Helm chart, running the console and the audit trail onto pages of their own; every published address stays.

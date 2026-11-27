@@ -3,8 +3,8 @@
 
 # Releases, upgrades and support
 
-This page says what each release publishes, how you move a server or a
-crate to a newer one, and which releases receive fixes.
+This page says what each release publishes, how you move a crate to a
+newer one, and which releases receive fixes.
 
 ## What a release publishes
 
@@ -34,26 +34,8 @@ waiting for a product release ([The published crates](../crates/index.md#version
 
 ## Upgrading the server
 
-1. Read the changelog's sections for every version you skip. A change that
-   asks something of you (a configuration key renamed or removed, a
-   behaviour that changed) says what to change.
-2. Run `ferropix config check` of the new version over your configuration
-   ([Configuration](configuration.md#commands)). A key a release renamed or
-   removed is refused by name in that one release;
-   from the next release on it is refused as an unknown key. So upgrade one
-   release at a time when you skip several, or read each section's Removed
-   entries.
-3. Apply the migrations. `serve` applies the pending migrations at start
-   unless `db.migrate = false`; with it, run `ferropix db migrate` of the
-   new version first, as the role that may create in the schema
-   ([The store](configuration.md#the-store)). The migrations only move
-   forward.
-4. Start the new version. With the chart, `helm upgrade` to the chart of
-   the release; with compose, set `FERROPIX_VERSION` or check out the
-   release's `compose.yaml`.
-
-The sealing key and the audit spool carry across an upgrade untouched;
-[rotating the key](configuration.md#the-store) is its own step.
+[Upgrading the server](upgrades.md) is its own page: the checks before, the
+migrations and the images, rolling back, and what to look at after.
 
 ## Upgrading a crate
 

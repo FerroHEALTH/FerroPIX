@@ -1,0 +1,1 @@
+- The book has an upgrade page (the checks before, the migrations and images, rolling back, the checks after) and a table of what FerroPIX stores and how each store is kept.

@@ -50,7 +50,7 @@ base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 # required by a caret range with its floor at the release this tree needs
 # (#543): two family crates on different patches of one then build together.
 # The generated FHIR model of FerroBRIDGE.
-fhir-types = { version = "0.3.0", default-features = false }
+fhir-types = { version = "0.4.0", default-features = false }
 # The FHIR R4 search value grammar of FerroBRIDGE, which every search value
 # and token is read and written with.
 fhir-search = { version = "0.1.131", default-features = false }
@@ -60,13 +60,13 @@ fhir-search = { version = "0.1.131", default-features = false }
 # family crate; the published crates take their own caret requirement on it.
 # 0.35 signs and verifies every JWS through its one `jws` module (#817).
 # Verified against crates.io on 2026-11-25 (0.35.0).
-ferrohealth-smart = { version = "=0.35.0", default-features = false }
+ferrohealth-smart = { version = "=0.36.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate, at
 # the release on ferrohealth-smart 0.35.
-ferrohealth-session = { version = "=0.30.0", default-features = false }
+ferrohealth-session = { version = "=0.33.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -104,25 +104,25 @@ ferrohealth-usage-report = { version = "=0.5.0", default-features = false }
 # generated v2 tables, by a caret range as every FerroBRIDGE crate above.
 # The server adds `map`, the generated v2-to-FHIR structure maps a PID runs
 # through. Verified against crates.io on 2026-11-26.
-ferrobridge-hl7v2 = { version = "0.36.0", default-features = false }
+ferrobridge-hl7v2 = { version = "0.38.3", default-features = false }
 hl7v2-types = "0.1.129"
 # FerroBRIDGE's FHIR R4 profile validator, which the conformance corpora hold
 # the PDQm answers to the MyHealth@EU Patient-minimal and PDQm Patient profiles
 # with, on the fhir-types line above. Verified against crates.io on
 # 2026-11-26.
-ferrobridge-validator = { version = "0.23.0", default-features = false }
+ferrobridge-validator = { version = "0.24.2", default-features = false }
 # FerroBRIDGE's FHIR terminology client, the one `ferrobridge-hl7v2` translates
 # every v2 table value through (`ConceptMap/$translate`), with `smart` for
 # the client built from `[terminology.endpoint]` over ferrohealth-smart's
 # outbound client, at the version that crate pins. Verified against
 # crates.io on 2026-11-26.
-ferrobridge-term = { version = "0.22.0", default-features = false, features = ["client", "r4", "smart"] }
+ferrobridge-term = { version = "0.23.1", default-features = false, features = ["client", "r4", "smart"] }
 http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
 # Verified against crates.io on 2026-11-27.
-ihe-atna = { version = "=0.30.0", default-features = false }
+ihe-atna = { version = "=0.31.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.62.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

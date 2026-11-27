@@ -193,7 +193,8 @@ declared.
 The server needs at least one issuer, so the chart refuses to render
 without a `config.auth.issuer` entry. Each entry is one
 `[auth.issuer.<name>]` table ([`[auth]`](configuration.md#auth)) by its
-name, with its `issuer` and its `kind`:
+name, with its `issuer`, and `kind: federation` only for another party's
+authorization server:
 
 ```yaml
 config:
@@ -201,7 +202,6 @@ config:
     issuer:
       care:
         issuer: "https://idp.example.org/realms/care"
-        kind: machines
 ```
 
 A token's audience is the FHIR base, `{public_base_url}/fhir`, unless the

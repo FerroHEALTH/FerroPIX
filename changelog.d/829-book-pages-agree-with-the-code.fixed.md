@@ -1,0 +1,1 @@
+- The book's configuration page counts the quickstart's three identifier domains and lists `ferropix matching estimate`, the deployment page's Helm example names an issuer without the `kind` the server refuses, and the console page's configuration table renders whole.

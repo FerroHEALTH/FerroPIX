@@ -30,6 +30,7 @@ server reads.
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, over TLS when `[server.tls]` is set, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down, or from a server that is draining, exits 1. Use it as the container health check. |
 | `ferropix db migrate` | Applies the pending migrations, rewrites the stored scoring fields of every record written under an older normalisation, packs the evidence of every candidate and link stored as JSON into the compact form between two of the migrations, applies the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
+| `ferropix matching estimate` | Counts how often each value of each field occurs over the current version of every record and prints, for each field at least 100 records state, the `[matching.fields.<field>]` table that would set its `u`, beside the `m` the configuration holds ([Estimating `u`](matching.md#estimating-u)). The output holds counts and probabilities, never a value. |
 
 Every command takes `--config <PATH>` and any number of `--set key=value`
 arguments. A refused configuration exits 78
@@ -84,8 +85,10 @@ information and its query replaced by `***`.
 ### The quickstart
 
 `app/ferropix-server/quickstart.toml` is the smallest production
-configuration: the loopback base, one issuer, one identifier domain, and
-both `[db]` secrets read from files under `/run/secrets/`. Its issuer is
+configuration: the loopback base, one issuer, three identifier domains (a
+synthetic hospital, the BSN and the pseudonymised BSN) with one Source
+client for all three, the HL7 v2 face's sender switched off, and both
+`[db]` secrets read from files under `/run/secrets/`. Its issuer is
 the development OpenID Provider of the compose quickstart, a SMART issuer:
 it signs the Sources' client credentials tokens and the console's logins
 as RFC 9068 `at+jwt` access tokens, so the entry names only the issuer and

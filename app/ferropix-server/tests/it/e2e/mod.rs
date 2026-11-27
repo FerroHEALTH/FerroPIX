@@ -11,6 +11,7 @@
 mod audit_outbox;
 mod autolink;
 mod blocking;
+mod book_tutorial;
 mod budget;
 mod cli;
 mod decisions;

@@ -144,6 +144,8 @@ containers.
 
 ## Next
 
+- [Your first integration](../tutorials/first-integration.md): link two
+  records through a BSN, resolve a duplicate and match by demographics.
 - [The PIXm Manager](pixm-manager.md), [the PDQm Supplier](pdqm-supplier.md)
   and the other pages under Integrate: every transaction, case by case.
 - [Configuration](../operate/configuration.md): your own domains, issuers

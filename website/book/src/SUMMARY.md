@@ -8,6 +8,7 @@
 # Tutorials
 
 - [Quickstart](integrate/getting-started.md)
+- [Your first integration](tutorials/first-integration.md)
 
 # How-to guides: integrate
 
@@ -39,6 +40,7 @@
 # Reference
 
 - [Configuration](operate/configuration.md)
+- [Command-line reference](reference/cli.md)
 - [The operator API](operate/operator-api.md)
 - [Problem types](operate/problems.md)
 - [Conformance and specification pins](evaluate/conformance.md)

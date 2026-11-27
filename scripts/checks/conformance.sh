@@ -69,6 +69,10 @@ readonly PROJECT_BADGES=(
   '[![GHCR](https://img.shields.io/badge/ghcr.io-ferropix-2496ED?logo=docker&logoColor=white)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
   '[![Image pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2FFerroHEALTH%2FFerroPIX%2Fferropix&query=downloadCount&label=image%20pulls&logo=github)](https://github.com/FerroHEALTH/FerroPIX/pkgs/container/ferropix)'
 )
+# The security and compliance badges, the last group of the README block.
+readonly SECURITY_BADGES=(
+  '[![Post-quantum safe uses](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpost-quantum.json)](docs/post-quantum.md)'
+)
 readonly QUALITY_BADGES=(
   '[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/FerroHEALTH/FerroPIX?label=openssf%20scorecard&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZD0iTTEyIDJsOCAzdjZjMCA1LTMuNSA5LjUtOCAxMS00LjUtMS41LTgtNi04LTExVjVaTTguNSAxMmwyLjUgMi41IDQuNS01Ii8%2BPC9zdmc%2B)](https://scorecard.dev/viewer/?uri=github.com/FerroHEALTH/FerroPIX)'
   '[![Quality gate](https://img.shields.io/sonar/quality_gate/FerroHEALTH_FerroPIX?server=https%3A%2F%2Fsonarcloud.io&logo=sonarqubecloud&label=quality%20gate)](https://sonarcloud.io/summary/overall?id=FerroHEALTH_FerroPIX)'
@@ -76,7 +80,6 @@ readonly QUALITY_BADGES=(
   '[![CodeQL](https://img.shields.io/github/actions/workflow/status/FerroHEALTH/FerroPIX/codeql.yml?branch=main&logo=github&label=CodeQL)](https://github.com/FerroHEALTH/FerroPIX/actions/workflows/codeql.yml)'
   '[![Signed releases](https://img.shields.io/badge/releases-signed-brightgreen?logo=github)](https://ferropix.eu/docs/operate/deployment.html#verifying-an-image)'
   '[![SLSA Build L3](https://slsa.dev/images/gh-badge-level3.svg)](docs/release.md#the-build-legs)'
-  '[![Post-quantum safe uses](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FFerroHEALTH%2FFerroPIX%2Fmain%2Fconformance%2Fbadges%2Fpost-quantum.json)](docs/post-quantum.md)'
 )
 
 # The badge label of a corpus.
@@ -193,9 +196,9 @@ render_block() {
   echo '**Quality and security**<br>'
   printf '%s\n' "${QUALITY_BADGES[@]}"
   echo
-  echo '**Conformance**<br>'
   # shellcheck disable=SC2154 # badge-logos/logo.sh sets it
   echo "$badge_caption<br>"
+  echo '**IHE**<br>'
   for corpus in "${CORPORA[@]}"; do
     badge_link "$corpus"
   done
@@ -210,6 +213,9 @@ render_block() {
       badge_link "$corpus"
     done
   fi
+  echo
+  echo '**Security and compliance**<br>'
+  printf '%s\n' "${SECURITY_BADGES[@]}"
   echo '<!-- badges:end -->'
 }
 
@@ -432,5 +438,7 @@ badge_caption_check README.md || failed=1
 badge_color_check "$BADGES"/*.json || failed=1
 badge_length_check "$BADGES"/*.json || failed=1
 badge_length_readme README.md || failed=1
+badge_block_check README.md || failed=1
+badge_render_check README.md || failed=1
 
 exit "$failed"

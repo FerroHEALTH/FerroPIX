@@ -348,6 +348,9 @@ self_test() {
   jq -c '.message = "2 / 3, 1 failed: see the list"' "$work/logos/pixm.json" >"$work/logos/long.json"
   expect 1 "a message past the limit" badge_length_check "$work/logos/long.json"
   expect 0 "the shared length cases" badge_length_self_test
+  expect 0 "the shared colour cases" badge_count_color_self_test
+  printf '[![x](https://img.shields.io/badge/CRA-information%%20for%%20all%%20users-blue?logo=x)](x)\n' >"$work/logos/long.md"
+  expect 1 "a static badge past the limit" badge_length_readme "$work/logos/long.md"
   expect 1 "a missing badge under check" emit_badge "$work/badges/pixm.json" "$badge" check
   expect 0 "a badge written" emit_badge "$work/badges/pixm.json" "$badge" update
   expect 0 "a written badge under check" emit_badge "$work/badges/pixm.json" "$badge" check
@@ -428,5 +431,6 @@ badge_logo_readme README.md || failed=1
 badge_caption_check README.md || failed=1
 badge_color_check "$BADGES"/*.json || failed=1
 badge_length_check "$BADGES"/*.json || failed=1
+badge_length_readme README.md || failed=1
 
 exit "$failed"

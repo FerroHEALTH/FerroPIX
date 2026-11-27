@@ -86,9 +86,9 @@ label_of() {
     pdqm) echo "PDQm 3.2.0 examples" ;;
     pmir) echo "PMIR 1.6.0 examples" ;;
     audit) echo "Audit record examples" ;;
-    ncp-patient-minimal) echo "MyHealth@EU NCP API 9.1.1-ci Patient-minimal valid" ;;
-    ehds-identifier-types) echo "EHDS identifier types (EEHRxF draft Annex X)" ;;
-    xtehr-patient-match) echo "Xt-EHR D8.2 2026-05-19 Patient Match assertions" ;;
+    ncp-patient-minimal) echo "MyHealth@EU NCP API 9.1.1-ci" ;;
+    ehds-identifier-types) echo "EEHRxF Annex X identifiers" ;;
+    xtehr-patient-match) echo "Xt-EHR D8.2 Patient Match" ;;
     *) return 1 ;;
   esac
 }
@@ -109,6 +109,16 @@ logo_of() {
 label_claims() {
   if grep -qiE 'certified|compliant|conformant' <<<"$1"; then
     echo "conformance: the badge label '$1' claims a certification; name the version and the count" >&2
+    return 1
+  fi
+}
+
+# Fails when the label $1 runs past the shared length limit; the pass list
+# the badge links to holds the detail.
+label_fits() {
+  # shellcheck disable=SC2154 # badge-logos/logo.sh sets it
+  if [[ "${#1}" -gt "$badge_label_max" ]]; then
+    echo "conformance: the badge label '$1' runs past $badge_label_max characters" >&2
     return 1
   fi
 }
@@ -330,6 +340,14 @@ self_test() {
   for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
     expect 0 "the label of $corpus" label_claims "$(label_of "$corpus")"
   done
+  for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
+    expect 0 "the label length of $corpus" label_fits "$(label_of "$corpus")"
+  done
+  expect 1 "a label past the limit" label_fits "MyHealth@EU NCP API 9.1.1-ci Patient-minimal valid"
+  expect 0 "a rendered badge within the limits" badge_length_check "$work/logos/pixm.json"
+  jq -c '.message = "2 / 3, 1 failed: see the list"' "$work/logos/pixm.json" >"$work/logos/long.json"
+  expect 1 "a message past the limit" badge_length_check "$work/logos/long.json"
+  expect 0 "the shared length cases" badge_length_self_test
   expect 1 "a missing badge under check" emit_badge "$work/badges/pixm.json" "$badge" check
   expect 0 "a badge written" emit_badge "$work/badges/pixm.json" "$badge" update
   expect 0 "a written badge under check" emit_badge "$work/badges/pixm.json" "$badge" check
@@ -372,6 +390,7 @@ fi
 failed=0
 for corpus in "${CORPORA[@]}" "${EHDS_CORPORA[@]}"; do
   label_claims "$(label_of "$corpus")" || failed=1
+  label_fits "$(label_of "$corpus")" || failed=1
 done
 if ! cargo nextest run --locked -p ihe-iti --all-features --no-tests=fail --no-fail-fast \
   -E 'test(/^conformance::/)'; then
@@ -408,5 +427,6 @@ badge_logo_check "$BADGES"/*.json || failed=1
 badge_logo_readme README.md || failed=1
 badge_caption_check README.md || failed=1
 badge_color_check "$BADGES"/*.json || failed=1
+badge_length_check "$BADGES"/*.json || failed=1
 
 exit "$failed"

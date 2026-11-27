@@ -9,7 +9,8 @@ probabilistic scorer on this page compares demographics and grades a pair.
 A data steward decides the pairs the scorer is unsure of. No IHE profile
 governs how a Manager cross-references: PIXm leaves it to the Manager, and
 PDQm asks only that a match carry a score and a grade. The rules below are
-FerroPIX's own.
+FerroPIX's own; [How FerroPIX manages patient identity](../explanation/patient-identity.md)
+places them in the whole model.
 
 A Source's feed runs the first two tiers in its own transaction, whether it
 arrives as ITI-104 ([The PIXm Manager](../integrate/pixm-manager.md)) or as

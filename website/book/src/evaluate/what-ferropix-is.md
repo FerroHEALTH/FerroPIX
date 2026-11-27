@@ -21,6 +21,9 @@ FerroPIX also mints pseudonyms: one per patient and pseudonymisation
 domain, so a clinical store names a patient by a value that identifies no
 one on its own, and only the steward resolves it back
 ([Pseudonyms](../integrate/pseudonyms.md)).
+[How FerroPIX manages patient identity](../explanation/patient-identity.md)
+explains the model behind both, and which of its rules are the IHE
+profiles' and which are FerroPIX's own.
 
 ## What it implements
 

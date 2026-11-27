@@ -1,0 +1,1 @@
+- The book explains how FerroPIX manages patient identity on one page: the identity sources, the cross-reference the PIXm, PDQm, PMIR, HL7 v2 and XCPD faces share, merge and unmerge, and pseudonyms with their forward-only translation, each rule cited to its IHE section or labelled as FerroPIX's own design.

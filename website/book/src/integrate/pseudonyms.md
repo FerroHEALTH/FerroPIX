@@ -77,17 +77,11 @@ answers `400`, "sourceIdentifier Assigning Authority not found".
 
 ## Why the clinical domain never resolves back
 
-A pseudonym is pseudonymised data in the sense of the GDPR: it can no
-longer be attributed to a person "without the use of additional
-information, provided that such additional information is kept
-separately" (Regulation (EU) 2016/679, Art. 4(5)). FerroPIX is where that
-additional information is kept. A clinical store holds only the pseudonym
-of its own domain: it translates a real identifier forward through ITI-83
-with its namespace as `targetSystem`, and it has no call that translates a
-pseudonym back. The one way back is the steward's reverse resolution above,
-with a reason and a disclosure record, which keeps the separation the
-GDPR asks for when pseudonymisation is used as a measure of data
-protection by design (Art. 25(1)).
+A clinical store translates a real identifier forward through ITI-83 and
+has no call that translates a pseudonym back; the steward's reverse
+resolution, with a reason and a disclosure record, is the one way back.
+[How FerroPIX manages patient identity](../explanation/patient-identity.md#pseudonyms-and-the-forward-only-translation)
+explains why, on the GDPR's terms.
 
 ## The console
 

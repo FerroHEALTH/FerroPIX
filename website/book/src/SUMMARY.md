@@ -39,6 +39,10 @@
 - [Operations](operate/operations.md)
 - [Releases, upgrades and support](operate/releases.md)
 
+# Explanation
+
+- [How FerroPIX manages patient identity](explanation/patient-identity.md)
+
 # Contribute
 
 - [Contributing](contribute/contributing.md)

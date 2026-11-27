@@ -1,0 +1,1 @@
+- The book no longer narrates past incidents, dated measurements or one-time upgrade steps inside its pages, says the POST rule for identifier lookups once, and types no version that moves.

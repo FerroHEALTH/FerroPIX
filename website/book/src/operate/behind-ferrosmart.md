@@ -57,7 +57,7 @@ issuer = "https://smart.example.org"
   ([Configuration](configuration.md)).
 - **One table per issuer.** Name FerroSMART in this one table. A second
   `[auth.issuer.<name>]` table of the same issuer refuses the start, naming
-  the issuer (FerroHEALTH/FerroSMART#591).
+  the issuer.
 
 The scopes a token grants still meet FerroPIX's permission table: the
 `system/` scopes and the steward and administrator scopes

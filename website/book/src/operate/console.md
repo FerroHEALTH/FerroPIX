@@ -153,7 +153,7 @@ The audit trail. [Dark theme](img/console/audit-dark.png).
 
 About. [Dark theme](img/console/about-dark.png). It names the server's
 software and FHIR version as its `CapabilityStatement` declares them, and the
-FerroUI release the console is built on (`ferrohealth-ui` 0.6.11), and it
+FerroUI release the console is built on, and it
 offers that `CapabilityStatement` for download.
 
 ![Your preferences](img/console/preferences.png)

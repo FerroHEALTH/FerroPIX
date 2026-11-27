@@ -20,7 +20,7 @@ use ferrohealth_server::cli::{Common, ConfigArgs, ConfigCommand};
 #[command(
     name = "ferropix",
     version,
-    about = "The FerroPIX Master Patient Index over IHE PIXm and PDQm"
+    about = "The FerroPIX Master Patient Index over IHE PIXm, PDQm, PMIR, XCPD and the HL7 v2 PIX and PDQ transactions"
 )]
 pub struct Cli {
     /// `--config`, the file to read in place of the one `FERROPIX_CONFIG`

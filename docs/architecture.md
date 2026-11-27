@@ -81,7 +81,7 @@ console are that open part, and they are FerroPIX's own design.
 | `ihe-atna` | the FerroAUDIT line, pinned exactly | the BALP `AuditEvent` builder, the audit spool and the forwarder over the audit outbox |
 | `ferrohealth-smart` | the FerroSMART line, pinned exactly | the resource-server side of SMART App Launch and OAuth 2.0: token checks, issuer metadata, Basic users; and the console's OpenID Connect relying-party client |
 | `ferrohealth-ui` | the FerroUI line, pinned exactly | every component the console draws (`.claude/memory/ferroui-lockstep.md`) |
-| PostgreSQL | 18 | the one store (section 4); `uuidv7()` for every database-minted id, `UNIQUE … WITHOUT OVERLAPS` for the temporal link table |
+| PostgreSQL | 19 | the one store (section 4); `uuidv7()` for every database-minted id, `UNIQUE … WITHOUT OVERLAPS` for the temporal link table |
 | Netherlands Generic Functions | `fhir.nl.gf` 0.3.0 | the BSN, the pseudonymised BSN and the NVI (section 8) |
 
 ## 2. The shape
@@ -198,8 +198,8 @@ store must answer (PIXm 3.1.0 §2:3.83.4.1.3: the identifiers that match a
 source identifier, by target domain) and what the feed does to it (§2:3.104.4.1.3,
 §2:3.104.4.2.3, §2:3.104.4.3.3), and the design follows FerroEHR's storage
 discipline: write-once history rows, one mutable head row per object, and a
-temporal link table under PostgreSQL 18's `UNIQUE … WITHOUT OVERLAPS`, so a
-change closes a row and never deletes one.
+temporal link table under `UNIQUE … WITHOUT OVERLAPS`, which PostgreSQL has
+had since version 18, so a change closes a row and never deletes one.
 
 ### 4.1 The model
 

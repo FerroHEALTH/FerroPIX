@@ -1553,14 +1553,14 @@ dependencies = [
 
 [[package]]
 name = "ferropix-conformance"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "ferropix-console"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1599,7 +1599,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-operator-api"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "ferrohealth-health",
  "serde",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-server"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "allocation-counter",
  "async-trait",
@@ -1666,7 +1666,7 @@ dependencies = [
 
 [[package]]
 name = "ferropix-testkit"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "async-trait",
  "aws-lc-rs",
@@ -1880,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "forwarders"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "anyhow",
  "proc-macro2",

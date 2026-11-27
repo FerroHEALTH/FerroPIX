@@ -21,7 +21,7 @@ use ferrohealth_config::removed::Retired;
 /// fails the test below until every refusal of the release just cut is
 /// deleted. A test holds it to the workspace version or the release after
 /// it, so it cannot fall behind.
-pub const PREPARING: &str = "0.0.46";
+pub const PREPARING: &str = "0.0.47";
 
 /// Every key refused by name.
 pub const ALL: [Retired; 0] = [];

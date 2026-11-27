@@ -9,7 +9,7 @@ identifier domains, the sources, the matching configuration and the audit
 trail. It is
 mounted under `{base}/operator` when `[operator] enabled = true`, and every
 route needs a bearer token with a product scope
-([Security and audit](security-and-audit.md)). No specification governs the
+([Security](security-and-audit.md)). No specification governs the
 API; its shape is FerroPIX's own design.
 
 The documents are JSON, defined once in the `ferropix-operator-api` crate

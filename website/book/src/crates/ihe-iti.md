@@ -228,5 +228,5 @@ a `DPoP` token with a proof of the request for a grant bound to a `DPoP` key
 (RFC 9449 §7.1); after a `401` that demands a `DPoP` nonce the token is kept
 and the request sent once more with a proof carrying the nonce (§9), and
 after any other `401` the refused token is dropped and the request sent once
-more with a new one. [Security and audit](../operate/security-and-audit.md)
+more with a new one. [Security](../operate/security-and-audit.md)
 describes both.

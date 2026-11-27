@@ -61,7 +61,7 @@ issuer = "https://smart.example.org"
 
 The scopes a token grants still meet FerroPIX's permission table: the
 `system/` scopes and the steward and administrator scopes
-([Security and audit](security-and-audit.md)).
+([Security](security-and-audit.md)).
 
 ## The discovery document describes FerroSMART
 

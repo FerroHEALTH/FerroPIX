@@ -33,19 +33,20 @@ This book documents `main`, which is FerroPIX {{version:ferropix}} when the
 book is built. The [changelog](changelog.md) says what each release
 changed.
 
-## How this book is organised
+## Where to start
 
-- **Evaluate:** what FerroPIX is and where it sits in the family, the
-  specification versions it follows, and the licence.
-- **Integrate:** the [quickstart](integrate/getting-started.md), then every
-  transaction a system sends FerroPIX, with what it reads, what it answers
-  and the section of the profile behind each answer, and the published
-  crates.
-- **Operate:** configuration, deployment by image, compose and chart,
-  matching, the console and its API, security and audit, operations, and
-  the release and support policy.
-- **Contribute:** how the work is organised and how this book stays in step
-  with the code.
+| You are | Start with | Then |
+|---|---|---|
+| An integrator connecting a system | [Quickstart](integrate/getting-started.md) | the transaction you send: [PIXm](integrate/pixm-manager.md), [PDQm](integrate/pdqm-supplier.md), [PMIR](integrate/pmir-registry.md), [HL7 v2](integrate/hl7v2-face.md) or [XCPD](integrate/xcpd-gateway.md); [the published crates](crates/index.md) for a Rust client |
+| An operator running FerroPIX | [Deployment](operate/deployment.md) | [Configuration](operate/configuration.md), [the Helm chart](operate/helm-chart.md), [Security](operate/security-and-audit.md), [Operations](operate/operations.md), [Releases, upgrades and support](operate/releases.md) |
+| A data steward | [The steward's guide](operate/steward-guide.md) | [The operator console](operate/console.md), [Matching](operate/matching.md), [Pseudonyms](integrate/pseudonyms.md) |
+| Deciding whether FerroPIX fits | [What FerroPIX is](evaluate/what-ferropix-is.md) | [How FerroPIX manages patient identity](explanation/patient-identity.md), [Conformance and specification pins](evaluate/conformance.md), [Licensing](evaluate/licensing.md) |
+| A contributor | [Contributing](contribute/contributing.md) | [Keeping this book current](contribute/keeping-the-book-current.md) |
+
+The book has four kinds of page. A tutorial walks you through a first run.
+A how-to guide does one task, to integrate a system or to deploy and
+operate the server. A reference page lists every key, route or type. An
+explanation page says why FerroPIX works the way it does.
 
 This book covers FerroPIX alone. What every FerroHEALTH product shares is in
 the [family book](https://ferrohealth.eu/docs/):

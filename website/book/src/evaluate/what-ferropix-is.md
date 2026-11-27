@@ -40,8 +40,8 @@ pinned specification that governs the transaction
 | XCPD Responding Gateway | ITI-55, synchronous and asynchronous | ITI TF-2 §3.55 | [The XCPD Responding Gateway](../integrate/xcpd-gateway.md) |
 | Pseudonym minting | a UUID per patient and pseudonymisation domain, answered through ITI-83 | no specification governs the pseudonym: FerroPIX's own design | [Pseudonyms](../integrate/pseudonyms.md) |
 | The BSN and the pseudonymised BSN | identifier domains under the naming systems of the Dutch Generic Functions | the Netherlands Generic Functions guide, `fhir.nl.gf` | [The Dutch identifiers](../integrate/dutch-identifiers.md) |
-| Authorization | SMART and OAuth 2.0 access tokens on every request, with the IUA scope of each transaction | IUA ITI-72 §3.72, RFC 9068 | [Security and audit](../operate/security-and-audit.md) |
-| Audit | a BALP `AuditEvent` for every transaction and every steward action, sent over the FHIR feed | BALP 1.1.4, each profile's audit section | [Security and audit](../operate/security-and-audit.md#the-servers-audit-trail) |
+| Authorization | SMART and OAuth 2.0 access tokens on every request, with the IUA scope of each transaction | IUA ITI-72 §3.72, RFC 9068 | [Security](../operate/security-and-audit.md) |
+| Audit | a BALP `AuditEvent` for every transaction and every steward action, sent over the FHIR feed | BALP 1.1.4, each profile's audit section | [The audit trail](../operate/audit-trail.md#the-servers-audit-trail) |
 | The data steward's tools | the review queue, search, the patient record, merge and unmerge, domains, sources and the audit trail | no specification governs them: FerroPIX's own design | [The operator console](../operate/console.md), [The operator API](../operate/operator-api.md) |
 
 The HL7 v2 face does not answer ITI-22, the demographics and visit query:

@@ -12,7 +12,7 @@ and `[pdqm] deprecated` chooses how a merged patient is answered
 ([Configuration](../operate/configuration.md)).
 
 Every request needs an access token or, on a development surface, a Basic
-user ([Security and audit](../operate/security-and-audit.md)). A Consumer
+user ([Security](../operate/security-and-audit.md)). A Consumer
 holds `system/Patient.rs`, or the IUA scope `ITI-78` for the search and the
 read and `ITI-119` for `$match`. A read of one patient needs the `r`
 permission, a search the `s` permission.
@@ -167,7 +167,7 @@ compared by their HMAC. The answer is the PDQm Match Output Bundle:
 - Every search, read and match writes the PDQm Supplier BALP record, one per
   person in the answer, or one naming no patient when the answer names none,
   before the answer is sent
-  ([Security and audit](../operate/security-and-audit.md#the-servers-audit-trail)).
+  ([The audit trail](../operate/audit-trail.md#the-servers-audit-trail)).
   The request log records the matched route and never the query, the body,
   a name or an identifier ([Operations](../operate/operations.md)).
 

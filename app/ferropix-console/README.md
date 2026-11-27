@@ -21,5 +21,7 @@ Build the binary with cargo, from the repository root:
 cargo build --release -p ferropix-console
 ```
 
-The operator documentation, the subcommands and the configuration are the
-book's [operator console page](https://ferropix.eu/docs/operate/console.html).
+The subcommands, the image and the configuration are the book's
+[Running the console](https://ferropix.eu/docs/operate/console-deployment.html)
+page, and what a steward does with it is the
+[operator console page](https://ferropix.eu/docs/operate/console.html).

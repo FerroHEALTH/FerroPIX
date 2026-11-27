@@ -381,7 +381,7 @@ its credential alone; what it is granted is set in
 [`[basic_grants]`](#basic_grants). A machine, a Source
 among them, signs in with a client credentials token of an
 `[auth.issuer.<name>]` issuer. Who needs which scope is on the
-[Security and audit](security-and-audit.md#who-may-call-the-server) page.
+[Security](security-and-audit.md#who-may-call-the-server) page.
 
 | Key | Default | What it sets |
 |---|---|---|
@@ -633,7 +633,7 @@ is open to its group or to other users, cannot be written, or holds a file
 the server did not write. Without `audit.endpoint.url` the records stay in the spool
 until you name a repository, and the server warns at start. A request whose
 record has no room in the spool is refused with `503`, as the
-[Security and audit](security-and-audit.md#the-servers-audit-trail) page
+[The audit trail](audit-trail.md#the-servers-audit-trail) page
 says.
 
 ### `[operator]`
@@ -713,7 +713,7 @@ reference on docs.rs has each constructor and builder method.
 |---|---|---|
 | The endpoint table | the constructor, as the `OutboundClient` of `ferrohealth-smart` built from it | Its `url` is the FHIR base of the Manager, Supplier, Registry or directory, or the SOAP endpoint of Mitz or an XCPD gateway; its userinfo, if any, is shown as `***` in `Debug`. It carries the TLS and the mutual TLS identity where the profile asks for one (XCPD, Mitz), the timeouts, the `retry` table and the credential, and follows no redirect. |
 | A timeout per exchange | each call, as a `Duration` | The bound of the whole exchange; with an audit feature it bounds the audit record as well. |
-| Access tokens | the table's `credentials` | HTTP Basic, or the client credentials grant whose token each request carries (IUA ITI-72); see [Security and audit](security-and-audit.md#access-tokens). |
-| The audit recorder | `.audited(…)`, with `balp` or `atna` | The recorder that routes each record to your audit repository; see [Security and audit](security-and-audit.md#the-crates-audit-trail). |
+| Access tokens | the table's `credentials` | HTTP Basic, or the client credentials grant whose token each request carries (IUA ITI-72); see [Security](security-and-audit.md#access-tokens). |
+| The audit recorder | `.audited(…)`, with `balp` or `atna` | The recorder that routes each record to your audit repository; see [The audit trail](audit-trail.md#the-crates-audit-trail). |
 | The PIXm invocation | `.invoked_by(Invocation::Post)` | `POST`, as every FerroHEALTH client calls a Manager, so the identifier stays out of the URL; leave the `GET` default only for a Manager that refuses the `POST` form ([Lookups use POST](../crates/ihe-iti.md#lookups-by-a-patient-identifier-use-post)). |
 | The mCSD budget | `budget::Budget` | The deadline and the caps on pages, bytes and entries of one walk; by default 200 pages, 64 MiB and 50,000 entries. |

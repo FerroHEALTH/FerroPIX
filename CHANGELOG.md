@@ -13,6 +13,12 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.47] - 2026-11-27
+
+### Changed
+
+- `ihe-iti` 0.28.0 and `nl-generic-functions` 0.28.0 are built on `fhir-types` 0.4, `ihe-atna` 0.31 and `ferrohealth-smart` 0.36, the line the FerroHEALTH family moves to in this round of releases. Their public API carries those crates' types, so a caller moves with them. The server and the console stay on the published 0.27.0 crates and on `ferrohealth-smart` 0.35 until FerroBRIDGE's terminology client moves to 0.36 (#853).
+
 ## [0.0.46] - 2026-11-27
 
 ### Added

@@ -38,7 +38,7 @@ changed.
 | You are | Start with | Then |
 |---|---|---|
 | An integrator connecting a system | [Quickstart](integrate/getting-started.md) | the transaction you send: [PIXm](integrate/pixm-manager.md), [PDQm](integrate/pdqm-supplier.md), [PMIR](integrate/pmir-registry.md), [HL7 v2](integrate/hl7v2-face.md) or [XCPD](integrate/xcpd-gateway.md); [the published crates](crates/index.md) for a Rust client |
-| An operator running FerroPIX | [Deployment](operate/deployment.md) | [Configuration](operate/configuration.md), [the Helm chart](operate/helm-chart.md), [Security](operate/security-and-audit.md), [Operations](operate/operations.md), [Releases, upgrades and support](operate/releases.md) |
+| An operator running FerroPIX | [Deployment](operate/deployment.md) | [Configuration](operate/configuration.md), [the Helm chart](operate/helm-chart.md), [Security](operate/security-and-audit.md), [Operations](operate/operations.md), [Upgrading the server](operate/upgrades.md) |
 | A data steward | [The steward's guide](operate/steward-guide.md) | [The operator console](operate/console.md), [Matching](operate/matching.md), [Pseudonyms](integrate/pseudonyms.md) |
 | Deciding whether FerroPIX fits | [What FerroPIX is](evaluate/what-ferropix-is.md) | [How FerroPIX manages patient identity](explanation/patient-identity.md), [Conformance and specification pins](evaluate/conformance.md), [Licensing](evaluate/licensing.md) |
 | A contributor | [Contributing](contribute/contributing.md) | [Keeping this book current](contribute/keeping-the-book-current.md) |

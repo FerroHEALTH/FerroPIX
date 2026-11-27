@@ -33,6 +33,7 @@
 - [Security](operate/security-and-audit.md)
 - [The audit trail](operate/audit-trail.md)
 - [Operations](operate/operations.md)
+- [Upgrading the server](operate/upgrades.md)
 - [Releases, upgrades and support](operate/releases.md)
 
 # Reference

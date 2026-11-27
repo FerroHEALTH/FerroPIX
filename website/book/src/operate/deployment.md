@@ -82,6 +82,20 @@ every route at the same moment.
 Do not put the spool on `tmpfs`: a record must survive a restart until the
 repository has it (ITI TF-2 §3.20.4.1.1).
 
+## What FerroPIX stores
+
+The server keeps its state in two places, and the console keeps none.
+
+| Store | What it holds | How you keep it |
+|---|---|---|
+| PostgreSQL, schema `pix` | The cross-reference and its history: identifier domains, source records and their versions, the identifiers each version carries, persons, links, candidates, merges, pseudonymisation domains and pseudonyms, the steward actions, the PMIR subscriptions, the HL7 v2 receipts, the outbox of ITI-93, ITI-10 and XCPD messages, the write audit records waiting in `audit_outbox` and the refused ones in `audit_quarantine`, and the id of the sealing key | Back it up with `pg_dump --schema=pix`. Every sensitive identifier in it is sealed, so a dump opens only with the sealing key ([The store](configuration.md#the-store)). |
+| The sealing key, the file `db.data_key_file` names | The key the identifiers and the sealed rows are written under | Keep it in your secret store, apart from the dumps. Losing it loses every sealed identifier; `db reseal` rotates it. |
+| `/var/lib/ferropix` (`[audit] spool_dir` and `[usage_report] state_dir`) | The audit records of reads waiting for the repository, and the usage report's instance id | A persistent volume on a disk with short flushes, never `tmpfs` ([Disk latency](#disk-latency)). It carries across a restart and an upgrade. |
+
+The console keeps its sessions in its own memory, or in a sealed cookie with
+`[session] store = "sealed"`, and writes no file
+([Running the console](console-deployment.md)).
+
 ## Verifying an image
 
 Each image index and both platform manifests carry SLSA provenance, and

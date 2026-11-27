@@ -7,24 +7,15 @@ Every pull request that changes what the server is built from runs the
 `perf` job of CI, a required part of `conclusion`. It also runs on every
 push to `main`, and the release workflow runs it on the release commit
 before the release is drafted. The job measures the release build of
-`ferropix` with
-[`ferrohealth-perf`](https://github.com/FerroHEALTH/FerroSYS/issues/249),
-the performance gate every FerroHEALTH server shares. It fails when the
+`ferropix` with `ferrohealth-perf`, the performance gate every FerroHEALTH server shares. It fails when the
 server is busy at rest, or slower, heavier or busier under load than the
 build of its base, measured beside it on the same runner in the same job.
-
-The gate exists because of
-[FerroPIX #490](https://github.com/FerroHEALTH/FerroPIX/issues/490): the
-outbox sender polled PostgreSQL about 8,000 times a second while it had
-nothing to send, and no check caught it before it shipped.
 
 ## Why the head is judged against its base
 
 GitHub's hosted runners differ: two runners that report the same CPU model
-and memory measured one commit 25 to 45 % apart in p50 latency and CPU per
-request
-([FerroEHR #5095](https://github.com/FerroHEALTH/FerroEHR/issues/5095)).
-A baseline stored from one machine failed unchanged code on another, so the
+and memory can measure one commit 25 to 45 % apart in p50 latency and CPU
+per request. A baseline stored from one machine failed unchanged code on another, so the
 gate keeps none. It builds the base of the change and the change itself,
 the head, runs both on one runner, and judges the head over the base. The
 difference between machines reaches both alike and cancels.
@@ -63,13 +54,12 @@ over `perf/plan.toml`:
    both arms see the same runner, whose speed can move by a third from one
    minute to the next. The arrivals go over PIXm ITI-83 by `GET`
    and by `POST`, the ITI-104 feed, PDQm ITI-78, the ITI-119 match, and
-   the HL7 v2 feed, ITI-8, as an `ADT^A01` over MLLP
-   ([#509](https://github.com/FerroHEALTH/FerroPIX/issues/509)). Every
+   the HL7 v2 feed, ITI-8, as an `ADT^A01` over MLLP. Every
    request must be answered with the status the plan names, and every
    ITI-8 message with an `AA` acknowledgment of its own MSH-10.
 
 Then the script plants an outbox poller that never waits beside the head,
-the shape of #490, and runs the idle phase of `perf/busy-loop.toml` again.
+a sender that polls PostgreSQL while it has nothing to send, and runs the idle phase of `perf/busy-loop.toml` again.
 That run must fail on idle transactions, or the job fails: it proves the
 gate still catches the case it was built for.
 
@@ -106,14 +96,10 @@ stalled, and a base that fell behind the schedule.
 ## Retries
 
 Some runners stall every route for a whole job: the tails reach 100 to
-500 ms while the p50 holds
-([FerroPIX #511](https://github.com/FerroHEALTH/FerroPIX/issues/511)). The
-cause is the runner's disk. Every audited request waits until its record is
+500 ms while the p50 holds. The cause is the runner's disk. Every audited request waits until its record is
 synced to disk ([Deployment](../operate/deployment.md#disk-latency)), and on
-those runners a sync takes up to hundreds of milliseconds. On 2026-11-09 one
-job measured a sync p99 of 270 ms on an AMD EPYC 9V74 runner that stalled,
-and 8 ms on an EPYC 7763 runner that did not. Neither runner showed steal,
-and both CPU clocks held.
+those runners a sync takes up to hundreds of milliseconds, where a steady
+runner syncs in about 8 ms.
 
 So the script samples the runner four times a second while the tool runs,
 into `target/perf/runner.tsv`, part of the attempt's artifact. Each sample
@@ -141,8 +127,7 @@ retry ran.
 
 The gate compares the head with its base under load. The budget holds each
 hot transaction to fixed ceilings, so a change that adds work fails in CI's
-`e2e` job without a load run
-([#713](https://github.com/FerroHEALTH/FerroPIX/issues/713)). The cases
+`e2e` job without a load run. The cases
 under `app/ferropix-server/tests/it/e2e/budget/` send 20 requests of each
 of ITI-104 (a revision of a known patient), ITI-83 by `GET` and by `POST`,
 ITI-78, ITI-119 and ITI-8 over MLLP, over a store of about 200 persons.
@@ -165,8 +150,7 @@ its ceiling in the same pull request, and no ceiling is raised.
 
 The gate compares a change with its base, and the budget holds each
 request's cost; neither says how far the server goes. `scripts/perf/capacity.sh`
-measures that on a quiet host
-([#740](https://github.com/FerroHEALTH/FerroPIX/issues/740)). `up` starts
+measures that on a quiet host. `up` starts
 PostgreSQL, the stub OpenID Provider, the terminology server and the release
 server of the checkout; `seed N` feeds N synthetic patients over ITI-104;
 `snapshot` and `restore` keep the seeded store so every step starts from the

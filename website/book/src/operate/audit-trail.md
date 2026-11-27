@@ -60,10 +60,7 @@ spool: when the spool is full, the request is refused with `503` and a
 `transient` issue. A record the spool does not store within
 `audit.spool_write_timeout` is withdrawn and the record of the read
 refused, with the outcome `8`, takes its place; the read answers `503`, so
-the trail says what the client got. A spool directory an older FerroPIX
-wrote holds one `.msg` file per record, which this server refuses at
-start: let the older server deliver them, or move them out, before you
-upgrade.
+the trail says what the client got.
 
 Both are sent to `audit.endpoint.url` over the FHIR Feed, several at once
 as one batch Bundle, each judged by its entry of the answer. A delivered

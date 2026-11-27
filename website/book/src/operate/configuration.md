@@ -28,7 +28,7 @@ server reads.
 | `ferropix serve` | Starts the store ([The store](#the-store)), reads the metadata and key set of every `[auth.issuer.<name>]`, then serves until `SIGTERM` or `SIGINT`. On the signal readiness answers `503` at once, the listener keeps accepting for `server.drain_delay`, then closes, and the requests in flight get `server.shutdown_timeout` to finish. An issuer that cannot be read, or issuers none of whose metadata names a `token_endpoint`, stop the start. |
 | `ferropix config check` | Reads and resolves the configuration, secret files included, prints every key as `key = value  # source` (the file, the default, the environment variable or the `--set` argument that set it, with every secret shown as `***`), and exits 0 when the server would start on it. Otherwise it prints the refusals on one line, each naming its key, and exits 78. |
 | `ferropix healthcheck` | Asks `GET {base}/health/readiness` of the server on this host, over TLS when `[server.tls]` is set, with a three-second timeout, and exits 0 only on `200`; a `503` from a readiness indicator that is down, or from a server that is draining, exits 1. Use it as the container health check. |
-| `ferropix db migrate` | Applies the pending migrations, rewrites the stored scoring fields of every record written under an older normalisation, packs the evidence of every candidate and link stored as JSON into the compact form between two of the migrations, applies the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
+| `ferropix db migrate` | Applies the pending migrations, rewrites the stored scoring fields of every record written under an older normalisation, applies the `[[domain]]` and `[[pseudonym_domain]]` seeds, checks the sealing key, and exits 0. It does not apply the boot gate, so it can run as a role with more rights than the one `serve` connects as. |
 | `ferropix db reseal --old-key-file <PATH>` | Rewrites every identifier column under the key `db.data_key_file` names, reading the key the store is written under now from `<PATH>`, and exits 0 when no row is left under the old key. |
 | `ferropix matching estimate` | Counts how often each value of each field occurs over the current version of every record and prints, for each field at least 100 records state, the `[matching.fields.<field>]` table that would set its `u`, beside the `m` the configuration holds ([Estimating `u`](matching.md#estimating-u)). The output holds counts and probabilities, never a value. |
 
@@ -566,7 +566,7 @@ A feed whose table values the server cannot translate, because it refuses
 the call or cannot be reached, is answered `AR` with no receipt, so the
 same message is applied when sent again; an ITI-21 query is answered `AR`
 the same way. A code the server's map translates to nothing is left out of
-the `Patient`, as a code with no FHIR equivalent always was.
+the `Patient`.
 
 ### `[xcpd]`
 

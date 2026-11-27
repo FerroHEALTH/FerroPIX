@@ -78,8 +78,7 @@ is recorded as refused and answers `503`.
 
 Put the spool on a disk whose flushes are short and steady, such as a local
 SSD. A network disk whose flush latency spikes shows up as a long tail on
-every route at the same moment
-([FerroPIX #511](https://github.com/FerroHEALTH/FerroPIX/issues/511)).
+every route at the same moment.
 Do not put the spool on `tmpfs`: a record must survive a restart until the
 repository has it (ITI TF-2 §3.20.4.1.1).
 

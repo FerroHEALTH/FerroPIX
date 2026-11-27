@@ -41,9 +41,8 @@ facility = "NORTH"
   connection idle past `idle_timeout` closes.
 - **Character sets:** MSH-18 names the set a message is read in; a message
   with an empty MSH-18 is read in `default_charset`. The answer is written
-  in the set the message came in, by `ferrobridge-hl7v2`'s writer: the
-  acknowledgment by `ack::render`, and the RSP^K23 checked against its
-  structure before it leaves, so a response that does not conform is
+  in the set the message came in, by `ferrobridge-hl7v2`'s writer, and an
+  RSP^K23 is checked against its structure before it leaves, so a response that does not conform is
   answered `AE` instead.
 - **Senders:** each `[[hl7v2.senders]]` entry names a sending application
   (MSH-3) and facility (MSH-4), matched by namespace id or universal id.

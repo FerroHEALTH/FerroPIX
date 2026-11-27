@@ -37,9 +37,7 @@ records, and a patient index answers about every patient. A Source's
 
 A Source is a machine. Its token comes from the client credentials grant
 (RFC 6749 §4.4), so its `sub` is its `client_id` (RFC 9068 §2.2). A
-person's token through the same client is refused. To upgrade a Source that fed with a
-person's token, have it request a client credentials token for its
-`source_client_id` and send that.
+person's token through the same client is refused.
 
 The answers:
 
@@ -95,16 +93,11 @@ the user, and a machine signs in with a client credentials token (RFC 6749 §4.4
 - Every client is built from the `OutboundClient` of `ferrohealth-smart`,
   which follows no redirect: the request carries the identifier, and a
   redirect would send it on.
-- **Use `POST` for every lookup by a patient identifier.** A PDQm query
-  sends its criteria in the request body. Call a PIXm Manager by `POST`
-  with a `Parameters` body (`ihe_iti::pixm::Invocation::Post`, FHIR R4
-  Operations §3.2.0.1), as every FerroHEALTH client does, so a BSN never
-  appears in a URL. FerroPIX's PIX Manager accepts `$ihe-pix` by `GET`
-  (ITI-83) and by `POST` with the same answers, and its request log, spans
-  and errors hold neither the query nor the body
-  ([The PIXm Manager](../integrate/pixm-manager.md)). A proxy in front of
-  any Manager must not log query strings, because a client that uses the
-  `GET` puts the identifier there.
+- **Use `POST` for every lookup by a patient identifier,** so a BSN never
+  appears in a URL, and keep query strings out of the logs of any proxy in
+  front of a Manager, because a client that uses the `GET` of ITI-83 puts
+  the identifier there
+  ([Lookups use POST](../crates/ihe-iti.md#lookups-by-a-patient-identifier-use-post)).
 - The PMIR feed drops every demographic as it reads an ITI-93 message.
 - The server's store seals every identifier of a sensitive domain at rest
   and finds it by a keyed HMAC, so a database dump shows no identifier

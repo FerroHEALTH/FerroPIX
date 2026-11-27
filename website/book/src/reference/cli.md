@@ -16,7 +16,7 @@ every command reads, and a refused configuration exits 78 (`EX_CONFIG`).
 ### `ferropix`
 
 ```text
-The FerroPIX Master Patient Index over IHE PIXm and PDQm
+The FerroPIX Master Patient Index over IHE PIXm, PDQm, PMIR, XCPD and the HL7 v2 PIX and PDQ transactions
 
 Usage: ferropix [OPTIONS] <COMMAND>
 

@@ -52,7 +52,7 @@ pub enum Kind {
     AlreadyHeld,
     /// `422`: the identifier domain is unknown or retired.
     UnknownDomain,
-    /// `422`: no issuer and no Basic user admits the Source.
+    /// `422`: no issuer lists the Source among its clients.
     SourceNotAdmitted,
     /// `503`: the cross-reference store could not be read.
     StoreUnavailable,
@@ -134,7 +134,7 @@ impl Kind {
             ),
             Self::SourceNotAdmitted => (
                 "source-not-admitted",
-                "No issuer and no Basic user admits this Source",
+                "No issuer lists this Source among its clients",
                 StatusCode::UNPROCESSABLE_ENTITY,
             ),
             Self::StoreUnavailable => (

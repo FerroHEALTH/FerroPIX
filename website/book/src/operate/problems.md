@@ -56,7 +56,7 @@ when you report it. Every problem answer carries `Cache-Control: no-store`.
 | [`retired`](#retired) | `409` | The domain is retired |
 | [`already-held`](#already-held) | `409` | Another domain holds this system or namespace |
 | [`unknown-domain`](#unknown-domain) | `422` | The identifier domain is unknown or retired |
-| [`source-not-admitted`](#source-not-admitted) | `422` | No issuer and no Basic user admits this Source |
+| [`source-not-admitted`](#source-not-admitted) | `422` | No issuer lists this Source among its clients |
 | [`store-unavailable`](#store-unavailable) | `503` | The cross-reference store could not be read |
 | [`audit-unavailable`](#audit-unavailable) | `503` | The audit record of the request could not be stored |
 | [`authorization-unavailable`](#authorization-unavailable) | `503` | The access token could not be checked |

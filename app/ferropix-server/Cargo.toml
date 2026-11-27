@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 [package]
 name = "ferropix-server"
-description = "The FerroPIX server: the Master Patient Index over IHE PIXm and PDQm, with its cross-reference in PostgreSQL"
+description = "The FerroPIX server: the Master Patient Index over IHE PIXm, PDQm, PMIR, XCPD and the HL7 v2 PIX and PDQ transactions, with its cross-reference in PostgreSQL"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

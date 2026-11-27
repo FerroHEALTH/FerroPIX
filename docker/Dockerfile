@@ -67,7 +67,7 @@ CMD ["serve"]
 # and created labels at build time and mirrors every label as an index
 # annotation, which is what GHCR reads for the package page.
 LABEL org.opencontainers.image.title="FerroPIX" \
-      org.opencontainers.image.description="A Master Patient Index over IHE PIXm and PDQm, with the cross-reference in PostgreSQL" \
+      org.opencontainers.image.description="A Master Patient Index over IHE PIXm, PDQm, PMIR, XCPD and the HL7 v2 PIX and PDQ transactions, with the cross-reference in PostgreSQL" \
       org.opencontainers.image.url="https://ferropix.eu" \
       org.opencontainers.image.documentation="https://ferropix.eu/docs/operate/deployment.html" \
       org.opencontainers.image.source="https://github.com/FerroHEALTH/FerroPIX" \

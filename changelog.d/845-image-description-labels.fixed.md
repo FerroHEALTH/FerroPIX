@@ -1,0 +1,1 @@
+- The server image's description label and its GHCR package description name every profile the server serves: PIXm, PDQm, PMIR, XCPD and the HL7 v2 PIX and PDQ transactions.

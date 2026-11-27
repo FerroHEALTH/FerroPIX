@@ -35,6 +35,8 @@ mod operator;
 #[cfg(test)]
 mod outbound_ml_dsa;
 #[cfg(test)]
+mod post_quantum;
+#[cfg(test)]
 mod reference_pages;
 #[cfg(test)]
 mod resource_server;

@@ -58,7 +58,7 @@ const SERVED: [&str; 6] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119", "ITI-93", "
 
 /// Returns whether `status` is an answer of the route's handler: neither a
 /// refusal of the guard nor the pending handler's `501`.
-fn handled(status: StatusCode) -> bool {
+pub(crate) fn handled(status: StatusCode) -> bool {
     ![
         StatusCode::UNAUTHORIZED,
         StatusCode::FORBIDDEN,
@@ -200,9 +200,10 @@ impl Issuer {
     }
 
     /// Starts an issuer as [`Issuer::start`] that publishes the ML-DSA-65
-    /// key of [`ml_dsa_key`] as `ml` beside its ES256 key.
+    /// key of [`crate::post_quantum::ml_dsa_key`] as `ml` beside its ES256
+    /// key.
     pub(crate) async fn start_with_ml_dsa() -> Self {
-        let ml_dsa = ml_dsa_key()
+        let ml_dsa = crate::post_quantum::ml_dsa_key()
             .public_jwk()
             .clone()
             .with_kid("ml")
@@ -536,7 +537,7 @@ pub(crate) async fn send(
 }
 
 /// Returns the request URI of `route`, a Source route naming the domain.
-fn uri_of(route: &Route) -> String {
+pub(crate) fn uri_of(route: &Route) -> String {
     let path = route.path.replace("{id}", "p-1");
     match route.need {
         Need::Fhir {
@@ -553,7 +554,7 @@ fn uri_of(route: &Route) -> String {
 }
 
 /// Returns every route a credential is needed for.
-fn guarded() -> impl Iterator<Item = &'static Route> {
+pub(crate) fn guarded() -> impl Iterator<Item = &'static Route> {
     ROUTES.iter().filter(|route| route.need != Need::Public)
 }
 
@@ -936,87 +937,4 @@ scopes = ["__ferropix.steward"]
     .await;
     assert_eq!(StatusCode::UNAUTHORIZED, wrong.status);
     assert_eq!("security", wrong.issue());
-}
-
-/// The ML-DSA-65 key of the post-quantum cases (RFC 9964 §5), from a fixed
-/// seed.
-fn ml_dsa_key() -> ferrohealth_smart::jws::key::SigningKey {
-    let algorithm = ferrohealth_smart::jws::algorithm::Algorithm::MlDsa65;
-    let private = ferrohealth_smart::jws::key::PrivateKey::from_ml_dsa_seed(algorithm, &[3; 32])
-        .expect("a 32-octet seed");
-    ferrohealth_smart::jws::key::SigningKey::new(private, algorithm)
-        .expect("an ML-DSA-65 key signs ML-DSA-65")
-}
-
-/// The claims of the ES256 `token`, signed again with the ML-DSA-65 key as
-/// `ml`.
-fn ml_dsa_token(token: &str) -> String {
-    let payload = token.split('.').nth(1).expect("a JWS");
-    let claims: serde_json::Value = serde_json::from_slice(
-        &base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload)
-            .expect("base64url"),
-    )
-    .expect("the claims");
-    let mut header = ferrohealth_smart::jws::compact::Header::new(
-        ferrohealth_smart::jws::algorithm::Algorithm::MlDsa65,
-    );
-    header.kid = Some(String::from("ml"));
-    header.typ = Some(String::from("at+jwt"));
-    ferrohealth_smart::jws::compact::encode(&header, &claims, &ml_dsa_key())
-        .expect("the token signs")
-}
-
-// RFC 9964 §5: under `[trust] post_quantum_only` an issuer's default list is
-// the ML-DSA parameter sets, so an ML-DSA-65 token is admitted and an ES256
-// one refused; off, the default list is classical.
-#[tokio::test]
-async fn trust_post_quantum_only_admits_an_ml_dsa_token_and_refuses_an_es256_one() {
-    let issuer = Issuer::start_with_ml_dsa().await;
-    let secrets = Secrets::new();
-    let route = guarded()
-        .find(|route| route.interaction != "operator-dependencies")
-        .expect("a guarded route");
-    for on in [false, true] {
-        let extra = if on {
-            "[trust]\npost_quantum_only = true\n"
-        } else {
-            ""
-        };
-        let (app, _, _spool) = application(settings_with(&issuer, &secrets, extra)).await;
-        let classical = issuer.token("east-lab", EVERY_SCOPE);
-        let quantum = ml_dsa_token(&classical);
-        let es256 = send(
-            &app,
-            route.method.clone(),
-            &uri_of(route),
-            Some(&bearer(&classical)),
-        )
-        .await;
-        let ml_dsa = send(
-            &app,
-            route.method.clone(),
-            &uri_of(route),
-            Some(&bearer(&quantum)),
-        )
-        .await;
-        if on {
-            assert_eq!(
-                StatusCode::UNAUTHORIZED,
-                es256.status,
-                "ES256 under the switch"
-            );
-            assert!(
-                handled(ml_dsa.status),
-                "ML-DSA-65 under the switch: {}",
-                ml_dsa.status
-            );
-        } else {
-            assert!(handled(es256.status), "ES256 by default: {}", es256.status);
-            assert_eq!(
-                StatusCode::UNAUTHORIZED,
-                ml_dsa.status,
-                "ML-DSA-65 by default"
-            );
-        }
-    }
 }

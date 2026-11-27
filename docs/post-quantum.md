@@ -52,12 +52,50 @@ and on X25519 with a peer that offers only that.
 
 The key exchange protects what a session carries against an attacker who
 records it now and decrypts it later, the risk the roadmap gives first
-place. The certificate signatures that authenticate a peer stay classical:
-no TLS 1.3 signature scheme for ML-DSA is published as an RFC yet, and the
-operator's certificates decide the algorithm. The JOSE signatures of the
-access tokens, the client assertions, the console sign-in and the Nuts
-presentations stay classical until the issuers and wallets FerroPIX works
-with sign with ML-DSA (RFC 9964).
+place. The certificate signatures that authenticate a peer stay classical.
+RFC 9881 (October 2025, Proposed Standard) defines ML-DSA keys and
+signatures in X.509 certificates. The TLS 1.3 signature schemes for ML-DSA
+(`mldsa44` 0x0904, `mldsa65` 0x0905, `mldsa87` 0x0906) are defined by
+draft-ietf-tls-mldsa-06, which the IESG approved and which waits in the RFC
+Editor queue, not yet an RFC
+(<https://datatracker.ietf.org/doc/draft-ietf-tls-mldsa/>, read
+2026-11-27). The row stays `no` while that document is a draft and the
+operator's certificates decide the algorithm.
+
+## JOSE signatures
+
+`ferrohealth-smart` 0.35.0 signs and verifies every JWS in its `jws` module,
+ML-DSA-44, ML-DSA-65 and ML-DSA-87 (RFC 9964, `AKP` keys) among the
+algorithms. What it accepts on a verification is the list it is given:
+
+- **Access tokens:** an issuer's `algorithms` defaults to RS256, RS384,
+  PS256, PS384, ES256 and ES384. An ML-DSA parameter set is accepted where
+  the list names it. FerroPIX checks no DPoP proof: it refuses an
+  `[auth.dpop]` table.
+- **The console's sign-in ID Token:** the relying party's default is RS256
+  to PS512, ES256, ES384 and EdDSA; the console adds the three ML-DSA
+  parameter sets to it.
+- **Client assertions:** a key signs with the algorithm of its kind, an
+  ML-DSA key (RFC 9881 §6) with its parameter set and an RSA key with RS384.
+- **Nuts presentations:** Nuts RFC021 §4.2 requires a JWT under the
+  Verifiable Credentials Data Model 1.1 §6.3.1, which requires an `alg` and
+  names none; the Authorization Server lists the algorithms it takes in its
+  `vp_formats`. A holder with an ML-DSA key signs its presentation with the
+  key's parameter set, and a holder with a P-256 or P-384 key signs ES256 or
+  ES384.
+
+`[trust] post_quantum_only = true` in the server's configuration narrows
+every JWT issuer's `algorithms` left at its default to the three ML-DSA
+parameter sets, and stops the start when a list names another algorithm.
+The console's `[jose] post_quantum_only = true` accepts an ID Token signed
+with ML-DSA alone. Both are off by default, for the issuers that still sign
+classically.
+
+The badge counts the JOSE rows in that configuration: both settings on and
+ML-DSA keys for the client assertions and the Nuts holder. A deployment
+that leaves the settings off, or keeps classical keys, uses the classical
+algorithms the rows name, and those rows are then not post-quantum safe for
+it.
 
 ## The inventory
 
@@ -68,13 +106,13 @@ with sign with ML-DSA (RFC 9964).
 | TLS 1.3 key exchange of the family clients: the audit repository, the terminology server, the PMIR Consumers, the OpenID Provider and the OTLP export | X25519MLKEM768 first; X25519, P-256, P-384 for a peer without it | yes | RFC 10024 | `ferrohealth-server tls_client, ferrohealth-smart client, app/ferropix-server/src/config/section/audit.rs, app/ferropix-server/src/config/section/profiles.rs` |
 | TLS 1.3 key exchange of the PostgreSQL connection | X25519MLKEM768 first (rustls prefer-post-quantum) | yes | RFC 10024 | `app/ferropix-server/Cargo.toml (sqlx tls-rustls-aws-lc-rs)` |
 | TLS 1.2 key exchange where min_version lowers the minimum | ECDHE over X25519, P-256 or P-384 | no | no standard yet | `ferrohealth-server tls (protocol_versions)` |
-| TLS server and client certificate authentication | ECDSA, RSA or Ed25519, as the operator's certificates hold | no | no standard yet | `ferrohealth-server tls, ferrohealth-server tls_client` |
+| TLS server and client certificate authentication | ECDSA, RSA or Ed25519, as the operator's certificates hold | no | RFC 9881; draft-ietf-tls-mldsa-06 in the RFC Editor queue | `ferrohealth-server tls, ferrohealth-server tls_client` |
 | TLS record protection | AES-128-GCM, AES-256-GCM, ChaCha20-Poly1305 | yes | NIST IR 8547 4.1.3 | `ferrohealth-server tls` |
-| Access token and DPoP proof verification | RS256, RS384, PS256, PS384, ES256, ES384 | no | RFC 9964 | `ferrohealth-smart resource, app/ferropix-server/src/auth` |
-| Client assertions FerroPIX signs (private_key_jwt) | RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA, as the key holds | no | RFC 9964 | `ferrohealth-smart client assertion, app/ferropix-server/src/config/section/audit.rs` |
-| Console sign-in ID token verification | RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, EdDSA | no | RFC 9964 | `ferrohealth-smart oidc, app/ferropix-console/src/config/settings.rs` |
+| Access token verification with [trust] post_quantum_only = true (FerroPIX checks no DPoP proof) | ML-DSA-44, ML-DSA-65 or ML-DSA-87 (AKP) alone; off (the default), RS256, RS384, PS256, PS384, ES256 and ES384, and an ML-DSA parameter set where an algorithms list names it | yes | RFC 9964 | `ferrohealth-smart resource, app/ferropix-server/src/config/section/auth.rs, app/ferropix-server/src/auth` |
+| Client assertions FerroPIX signs (private_key_jwt) with an ML-DSA key, as the example configures it | ML-DSA-44, ML-DSA-65 or ML-DSA-87, the parameter set of the key (ML-DSA-65 in the example); with a classical key RS384 (RSA) by default, RS256 to PS512, ES256, ES384 or EdDSA | yes | RFC 9964 | `ferrohealth-smart client assertion, app/ferropix-server/src/config/section/audit.rs, app/ferropix-server/tests/it/outbound_ml_dsa.rs` |
+| Console sign-in ID token verification with [jose] post_quantum_only = true | ML-DSA-44, ML-DSA-65 or ML-DSA-87 alone; off (the default), those beside RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 and EdDSA | yes | RFC 9964 | `ferrohealth-smart oidc, app/ferropix-console/src/config/mod.rs, app/ferropix-console/src/server/mod.rs` |
 | Identifier sealing at rest | AES-256-GCM, HMAC-SHA-256, HKDF-SHA-256 | yes | NIST IR 8547 4.1.3 | `app/ferropix-server/src/store/seal.rs` |
-| Nuts verifiable presentations FerroPIX signs | ES256 or ES384 | no | RFC 9964 | `crates/nl-generic-functions/src/nuts_auth/holder.rs` |
+| Nuts verifiable presentations FerroPIX signs with an ML-DSA holder key | ML-DSA-44, ML-DSA-65 or ML-DSA-87, the parameter set of the key, where the Authorization Server lists it in vp_formats; with an EC key ES256 or ES384 | yes | RFC 9964 | `crates/nl-generic-functions/src/nuts_auth/holder.rs, crates/nl-generic-functions/src/nuts_auth/mod.rs` |
 | Basic password hashing | Argon2id | yes | NIST IR 8547 4.1.3 | `ferrohealth-smart basic, app/ferropix-server/src/config/section/auth.rs` |
 | crates.io publishing | Trusted Publishing (OIDC token from GitHub, RS256) | no | no standard yet | `.github/workflows/release.yml, .github/workflows/publish-crates.yml` |
 | Release provenance and SBOM attestations | Sigstore attestation (ECDSA P-256) | no | no standard yet | `.github/workflows/release-build.yml, .github/workflows/release-image.yml, .github/workflows/release-console.yml, .github/workflows/release-crate.yml` |

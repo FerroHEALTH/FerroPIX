@@ -28,12 +28,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ferrohealth_smart::basic::PasswordStore;
-use ferrohealth_smart::config::{AuthSection, BasicGrants, Resolved};
+use ferrohealth_smart::config::{AuthMode, AuthSection, BasicGrants, IssuerEntry, Resolved};
+use ferrohealth_smart::jws::algorithm::Algorithm;
 use ferrohealth_smart::scope::{is_extension_scope, is_scope_token};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
+
+/// The ML-DSA parameter sets of JOSE (RFC 9964 §5), the algorithms
+/// `[trust] post_quantum_only` admits.
+pub const ML_DSA: [Algorithm; 3] = [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87];
 
 /// The steward scope when `[auth] product_scope` is empty.
 pub const STEWARD_SCOPE: &str = "__ferropix.steward";
@@ -49,6 +54,11 @@ pub struct Auth(pub AuthSection);
 pub struct Trust {
     /// What each issuer's tokens are honoured for (`[[trust.issuer]]`).
     pub issuer: Vec<TrustedIssuer>,
+    /// Whether access token signatures verify with ML-DSA alone (RFC 9964
+    /// §5): every JWT issuer's `algorithms` left at the default becomes
+    /// ML-DSA-44, ML-DSA-65 and ML-DSA-87, and a list naming any other
+    /// algorithm stops the start.
+    pub post_quantum_only: bool,
 }
 
 /// One `[[trust.issuer]]` entry.
@@ -99,7 +109,9 @@ impl Auth {
     /// product scope in no
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
     /// names no `[auth.issuer.<name>]` table or one named twice, or a client id
-    /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
+    /// outside RFC 6749 Appendix A.1, or under `[trust] post_quantum_only` an
+    /// issuer `algorithms` naming an algorithm that is no ML-DSA parameter
+    /// set; [`Error::DevelopmentOnly`] for Basic
     /// users under production; [`Error::BasicSystemScope`] for a Basic user
     /// granted a `system/` scope; [`Error::BasicGrants`] for a grant naming a
     /// user `[[auth.basic.users]]` does not list; and [`Error::Auth`] for every rule
@@ -155,7 +167,8 @@ impl Auth {
                 "it must differ from the steward scope, auth.product_scope",
             ));
         }
-        let mut resolved = section
+        let narrowed = post_quantum(section, trust.post_quantum_only)?;
+        let mut resolved = narrowed
             .resolve_with_tls(&ferrohealth_smart::config::ServerTls, &[base])
             .map_err(|source| Error::Auth { source })?;
         resolved.basic = granted(resolved.basic.take(), grants)?;
@@ -167,6 +180,37 @@ impl Auth {
             clients,
         })
     }
+}
+
+/// Returns `section` with every JWT issuer's `algorithms` held to ML-DSA
+/// when `post_quantum_only`: a list at its default becomes [`ML_DSA`], and
+/// a list naming any other algorithm is refused. An issuer under
+/// `mode = "introspection"` keeps its list, since its authorization server
+/// checks the token.
+fn post_quantum(section: &AuthSection, post_quantum_only: bool) -> Result<AuthSection, Error> {
+    let mut section = section.clone();
+    if !post_quantum_only {
+        return Ok(section);
+    }
+    let default = IssuerEntry::default().algorithms;
+    for (name, entry) in &mut section.issuer {
+        if entry.mode == AuthMode::Introspection {
+            continue;
+        }
+        if entry.algorithms == default {
+            entry.algorithms = ML_DSA.to_vec();
+        } else if entry
+            .algorithms
+            .iter()
+            .any(|algorithm| !algorithm.is_ml_dsa())
+        {
+            return Err(value(
+                &format!("auth.issuer.{name}.algorithms"),
+                "trust.post_quantum_only = true admits ML-DSA-44, ML-DSA-65 and ML-DSA-87 alone",
+            ));
+        }
+    }
+    Ok(section)
 }
 
 /// Refuses each table of `section` FerroPIX would read and never apply, as
@@ -319,9 +363,10 @@ mod tests {
     use ferrohealth_smart::sender::proof::DpopSection;
     use secrecy::SecretString;
 
-    use super::{Auth, STEWARD_SCOPE, Trust, TrustedIssuer, is_client_id};
+    use super::{Auth, ML_DSA, STEWARD_SCOPE, Trust, TrustedIssuer, is_client_id};
     use crate::config::Profile;
     use crate::config::error::Error;
+    use ferrohealth_smart::jws::algorithm::Algorithm;
 
     const ADMIN: &str = "__ferropix.admin";
 
@@ -391,6 +436,7 @@ mod tests {
                     clients: clients.iter().map(|client| (*client).to_owned()).collect(),
                 })
                 .collect(),
+            ..Trust::default()
         }
     }
 
@@ -438,6 +484,74 @@ mod tests {
             .expect_err("FerroPIX is never open");
         assert!(
             matches!(&error, Error::Value { key, .. } if key == "auth.enabled"),
+            "{error:?}"
+        );
+    }
+
+    /// Resolves `auth` under `[trust] post_quantum_only = true`.
+    fn post_quantum(auth: &Auth) -> Result<super::AuthSettings, Error> {
+        let trust = Trust {
+            post_quantum_only: true,
+            ..Trust::default()
+        };
+        auth.resolve(
+            Profile::Production,
+            &trust,
+            &BasicGrants::default(),
+            ADMIN,
+            BASE,
+        )
+    }
+
+    #[test]
+    fn post_quantum_only_narrows_the_default_list_and_keeps_an_ml_dsa_one() {
+        let narrowed = post_quantum(&auth(&["https://idp.example.org"])).expect("resolves");
+        let algorithms: Vec<_> = narrowed
+            .resolved
+            .issuers
+            .iter()
+            .map(|settings| settings.algorithms.clone())
+            .collect();
+        assert_eq!(vec![ML_DSA.to_vec()], algorithms);
+        let mut chosen = auth(&["https://idp.example.org"]);
+        if let Some(entry) = chosen.0.issuer.get_mut("idp") {
+            entry.algorithms = vec![Algorithm::MlDsa87];
+        }
+        let kept = post_quantum(&chosen).expect("resolves");
+        assert_eq!(
+            Some(&vec![Algorithm::MlDsa87]),
+            kept.resolved
+                .issuers
+                .first()
+                .map(|settings| &settings.algorithms)
+        );
+        let off = auth(&["https://idp.example.org"])
+            .resolve(
+                Profile::Production,
+                &Trust::default(),
+                &BasicGrants::default(),
+                ADMIN,
+                BASE,
+            )
+            .expect("resolves");
+        assert_eq!(
+            Some(&IssuerEntry::default().algorithms),
+            off.resolved
+                .issuers
+                .first()
+                .map(|settings| &settings.algorithms)
+        );
+    }
+
+    #[test]
+    fn post_quantum_only_refuses_an_issuer_listing_a_classical_algorithm() {
+        let mut classical = auth(&["https://idp.example.org"]);
+        if let Some(entry) = classical.0.issuer.get_mut("idp") {
+            entry.algorithms = vec![Algorithm::MlDsa65, Algorithm::Es256];
+        }
+        let error = post_quantum(&classical).expect_err("ES256 under post_quantum_only");
+        assert!(
+            matches!(&error, Error::Value { key, .. } if key == "auth.issuer.idp.algorithms"),
             "{error:?}"
         );
     }

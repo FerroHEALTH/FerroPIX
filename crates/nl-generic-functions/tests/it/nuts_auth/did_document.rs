@@ -36,8 +36,9 @@ fn pkcs8_pem(document: &[u8]) -> SecretString {
     )))
 }
 
-// RFC 7518 §3.4: a holder signs ES256 or ES384, so a P-521 key is another
-// curve and an Ed25519 key, or text that holds no key, is no EC key.
+// RFC 7518 §3.4 and RFC 9964 §5: a holder signs ES256, ES384 or ML-DSA, so a
+// P-521 key is another curve and an Ed25519 key, or text that holds no key,
+// is no key a holder signs with.
 #[test]
 fn a_key_that_signs_neither_es256_nor_es384_is_refused() {
     use aws_lc_rs::rand::SystemRandom;
@@ -59,6 +60,25 @@ fn a_key_that_signs_neither_es256_nor_es384_is_refused() {
         HolderKey::from_pem(&SecretString::from("no key"), HOLDER_KID, &did),
         Err(HolderError::Pem(_))
     ));
+}
+
+// RFC 9964 §5 and RFC 9881 §6: an ML-DSA key in PKCS#8 signs its parameter
+// set, and the DID document carries it as an `AKP` key naming that `alg`.
+#[test]
+fn an_ml_dsa_key_signs_its_parameter_set_and_publishes_an_akp_key() {
+    use aws_lc_rs::signature::{ML_DSA_65_SIGNING, PqdsaKeyPair};
+    let did = Did::new(HOLDER).expect("a DID");
+    let pkcs8 = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING)
+        .expect("an ML-DSA-65 key")
+        .to_pkcs8v1()
+        .expect("its PKCS#8 form");
+    let key = HolderKey::from_pem(&pkcs8_pem(pkcs8.as_ref()), HOLDER_KID, &did)
+        .expect("an ML-DSA-65 holder key");
+    assert_eq!("ML-DSA-65", key.algorithm_name());
+    let public = key.public().to_value();
+    assert_eq!(Some("AKP"), public.get("kty").and_then(Value::as_str));
+    assert_eq!(Some("ML-DSA-65"), public.get("alg").and_then(Value::as_str));
+    assert!(public.get("priv").is_none(), "no private member");
 }
 
 #[test]

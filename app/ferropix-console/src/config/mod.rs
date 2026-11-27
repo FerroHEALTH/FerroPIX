@@ -47,6 +47,7 @@ use ferrohealth_config::loader::{Loaded, Loader};
 use ferrohealth_config::units::Duration as Span;
 use ferrohealth_server::cli::ConfigArgs;
 use ferrohealth_session::config::{OidcSection, SessionSection};
+use ferrohealth_smart::jws::algorithm::Algorithm;
 use ferrohealth_telemetry::section::TelemetrySection;
 use serde::{Deserialize, Serialize};
 
@@ -110,6 +111,32 @@ pub struct Config {
     /// console offers no sign-in.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oidc: Option<OidcSection>,
+    /// `[jose]`: whether the sign-in's ID Token verifies with ML-DSA alone.
+    pub jose: Jose,
+}
+
+/// `[jose]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Jose {
+    /// Whether the console accepts an ID Token signed with ML-DSA alone
+    /// (RFC 9964 §5): ML-DSA-44, ML-DSA-65 or ML-DSA-87. Off, it accepts
+    /// those beside the classical algorithms.
+    pub post_quantum_only: bool,
+}
+
+impl Jose {
+    /// The algorithms an ID Token of the sign-in may be signed with: the
+    /// three ML-DSA parameter sets under `post_quantum_only`, else every
+    /// asymmetric algorithm `ferrohealth-smart` verifies, ML-DSA among them.
+    #[must_use]
+    pub fn id_token_algorithms(&self) -> Vec<Algorithm> {
+        Algorithm::all()
+            .iter()
+            .copied()
+            .filter(|algorithm| !self.post_quantum_only || algorithm.is_ml_dsa())
+            .collect()
+    }
 }
 
 /// `[server]`.

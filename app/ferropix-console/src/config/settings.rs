@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use ferrohealth_session::config::{OidcSection, SessionSettings};
+use ferrohealth_smart::jws::algorithm::Algorithm;
 use ferrohealth_ui::i18n::Locale;
 use url::Url;
 
@@ -28,6 +29,8 @@ pub struct Settings {
     pub session: SessionSettings,
     /// The OpenID Provider operators sign in with, when one is configured.
     pub oidc: Option<OidcSettings>,
+    /// The algorithms the sign-in's ID Token may be signed with (`[jose]`).
+    pub id_token_algorithms: Vec<Algorithm>,
 }
 
 /// The resolved `[pix]`.
@@ -135,6 +138,7 @@ impl Config {
             },
             session,
             oidc,
+            id_token_algorithms: self.jose.id_token_algorithms(),
         })
     }
 }

@@ -121,15 +121,18 @@ impl ConsoleState {
     /// Returns the errors of [`ConsoleState::new`].
     pub async fn with_clock(settings: Settings, clock: Clock) -> Result<Self, StateError> {
         let pix = Pix::new(&settings.pix)?;
-        let party =
-            match &settings.oidc {
-                Some(oidc) => Some(oidc.checked.relying_party().await.map_err(|source| {
-                    StateError::Provider {
+        let party = match &settings.oidc {
+            Some(oidc) => Some(
+                oidc.checked
+                    .relying_party()
+                    .await
+                    .map_err(|source| StateError::Provider {
                         source: Box::new(source),
-                    }
-                })?),
-                None => None,
-            };
+                    })?
+                    .with_algorithms(settings.id_token_algorithms.clone()),
+            ),
+            None => None,
+        };
         let sessions = Sessions::with_clock(
             settings.session.clone(),
             CookieNames::for_console(COOKIES),

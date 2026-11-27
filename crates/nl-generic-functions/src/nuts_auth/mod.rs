@@ -620,3 +620,68 @@ fn token(answer: &Answer) -> Result<AccessToken, NutsAuthError> {
         status,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use aws_lc_rs::signature::{ML_DSA_65_SIGNING, PqdsaKeyPair};
+    use base64::Engine as _;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use ferrohealth_smart::jws::algorithm::Algorithm;
+    use secrecy::{ExposeSecret as _, SecretString};
+
+    use super::holder::{Did, Holder, HolderKey};
+    use super::{Grant, sign};
+
+    /// The holder's DID.
+    const DID: &str = "did:web:holder.example.org";
+
+    // Nuts RFC021 §4.2 and RFC 9964 §5: a holder with an ML-DSA-65 key signs
+    // its presentation with ML-DSA-65 under its DID URL, and it verifies
+    // against the key its DID document publishes.
+    #[test]
+    fn an_ml_dsa_holder_signs_its_presentation_with_ml_dsa_65() {
+        let pkcs8 = PqdsaKeyPair::generate(&ML_DSA_65_SIGNING)
+            .expect("an ML-DSA-65 key")
+            .to_pkcs8v1()
+            .expect("its PKCS#8 form");
+        let pem = SecretString::from(pem::encode(&pem::Pem::new(
+            "PRIVATE KEY",
+            pkcs8.as_ref().to_vec(),
+        )));
+        let did = Did::new(DID).expect("a DID");
+        let kid = format!("{DID}#key-1");
+        let key = HolderKey::from_pem(&pem, &kid, &did).expect("an ML-DSA-65 holder key");
+        let segment = |json: &str| URL_SAFE_NO_PAD.encode(json);
+        let credential = format!(
+            "{}.{}.c2ln",
+            segment(r#"{"alg":"ES256"}"#),
+            segment(&format!(
+                r#"{{"iss":"did:web:issuer.example.org","sub":"{DID}","vc":{{}}}}"#
+            )),
+        );
+        let holder = Holder::new(
+            did,
+            key,
+            vec![(String::from("descriptor"), SecretString::from(credential))],
+        )
+        .expect("a holder");
+        let grant = Grant::new("https://as.example.org", "scope").expect("a grant");
+        let assertion = sign(&holder, &grant).expect("the presentation signs");
+        let token = ferrohealth_smart::jws::compact::decode(assertion.expose_secret())
+            .expect("a compact JWS");
+        assert_eq!(Algorithm::MlDsa65, token.header().alg);
+        assert_eq!(Some(kid.as_str()), token.header().kid.as_deref());
+        let payload = token
+            .verify(holder.key().public())
+            .expect("the presentation verifies against the holder's public key");
+        let claims: Issued = serde_json::from_slice(payload).expect("the presentation's claims");
+        assert_eq!(DID, claims.iss);
+    }
+
+    /// The claim of the presentation the test reads.
+    #[derive(serde::Deserialize)]
+    struct Issued {
+        /// The holder's DID.
+        iss: String,
+    }
+}

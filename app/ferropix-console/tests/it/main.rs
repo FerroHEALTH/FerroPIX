@@ -18,6 +18,7 @@ mod boundary;
 mod captures;
 mod config;
 mod filled;
+mod id_token_ml_dsa;
 mod merge;
 mod pages;
 mod pair;

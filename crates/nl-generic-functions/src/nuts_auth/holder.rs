@@ -45,10 +45,11 @@ pub enum HolderError {
     /// (Nuts RFC021 §4.2 item 4).
     #[error("the key id is not a DID URL of the holder's DID with a fragment")]
     KeyId,
-    /// The text is not an EC private key in PEM.
-    #[error("the holder key is not an EC private key in PEM")]
+    /// The text is not an EC or ML-DSA private key in PEM.
+    #[error("the holder key is not an EC or ML-DSA private key in PEM")]
     Pem(#[source] KeyError),
-    /// The key is on neither P-256 (ES256) nor P-384 (ES384) (RFC 7518 §3.4).
+    /// The EC key is on neither P-256 (ES256) nor P-384 (ES384) (RFC 7518
+    /// §3.4).
     #[error("the holder key is on neither P-256 (ES256) nor P-384 (ES384)")]
     Curve(#[source] KeyError),
     /// The input descriptor a credential answers is empty.
@@ -189,15 +190,17 @@ pub struct HolderKey {
 }
 
 impl HolderKey {
-    /// Reads the EC private key `pem` holds in PKCS#8 or SEC 1 PEM, named by
-    /// the DID URL `kid` of `did`: a P-256 key signs ES256, a P-384 key ES384.
+    /// Reads the private key `pem` holds, named by the DID URL `kid` of
+    /// `did`: an EC key in PKCS#8 or SEC 1 PEM, a P-256 key signing ES256 and
+    /// a P-384 key ES384, or an ML-DSA key in PKCS#8 (RFC 9881 §6) signing
+    /// its parameter set (RFC 9964 §5).
     ///
     /// # Errors
     ///
     /// Returns [`HolderError::KeyId`] when `kid` is not `did` followed by `#`
-    /// and a fragment, [`HolderError::Pem`] for text that is no EC private
-    /// key in PEM, and [`HolderError::Curve`] for a key on another
-    /// curve.
+    /// and a fragment, [`HolderError::Pem`] for text that is no EC or ML-DSA
+    /// private key in PEM, and [`HolderError::Curve`] for an EC key on
+    /// another curve.
     pub fn from_pem(pem: &SecretString, kid: &str, did: &Did) -> Result<Self, HolderError> {
         let fragment = kid
             .strip_prefix(did.as_str())
@@ -217,7 +220,11 @@ impl HolderKey {
                 HolderError::Pem(source)
             }
         })?;
-        let Some(algorithm @ (Algorithm::Es256 | Algorithm::Es384)) = private.algorithm() else {
+        // NOTE: Nuts RFC021 §4.2 and VC Data Model 1.1 §6.3.1 name no algorithm; the
+        // Authorization Server's `vp_formats` decides, and RFC 9964 §5 registers ML-DSA.
+        let Some(algorithm) = private.algorithm().filter(|algorithm| {
+            algorithm.is_ml_dsa() || matches!(algorithm, Algorithm::Es256 | Algorithm::Es384)
+        }) else {
             return Err(HolderError::Pem(KeyError::Unsupported));
         };
         let public = private
@@ -254,7 +261,9 @@ impl HolderKey {
         self.signing.algorithm()
     }
 
-    /// The algorithm's name as RFC 7518 §3.1 writes it, `ES256` or `ES384`.
+    /// The algorithm's name as its registry writes it: `ES256` or `ES384`
+    /// (RFC 7518 §3.1), or `ML-DSA-44`, `ML-DSA-65` or `ML-DSA-87` (RFC 9964
+    /// §5).
     #[must_use]
     pub fn algorithm_name(&self) -> &'static str {
         self.signing.algorithm().name()

@@ -58,7 +58,7 @@ const SERVED: [&str; 6] = ["ITI-83", "ITI-104", "ITI-78", "ITI-119", "ITI-93", "
 
 /// Returns whether `status` is an answer of the route's handler: neither a
 /// refusal of the guard nor the pending handler's `501`.
-fn handled(status: StatusCode) -> bool {
+pub(crate) fn handled(status: StatusCode) -> bool {
     ![
         StatusCode::UNAUTHORIZED,
         StatusCode::FORBIDDEN,
@@ -196,6 +196,25 @@ pub(crate) struct Issuer {
 impl Issuer {
     /// Starts an issuer serving its RFC 8414 metadata and its key set.
     pub(crate) async fn start() -> Self {
+        Self::start_publishing(Vec::new()).await
+    }
+
+    /// Starts an issuer as [`Issuer::start`] that publishes the ML-DSA-65
+    /// key of [`crate::post_quantum::ml_dsa_key`] as `ml` beside its ES256
+    /// key.
+    pub(crate) async fn start_with_ml_dsa() -> Self {
+        let ml_dsa = crate::post_quantum::ml_dsa_key()
+            .public_jwk()
+            .clone()
+            .with_kid("ml")
+            .with_signature_use()
+            .to_value();
+        Self::start_publishing(vec![ml_dsa]).await
+    }
+
+    /// Starts an issuer serving its RFC 8414 metadata and a key set of its
+    /// ES256 key and the keys of `more`.
+    async fn start_publishing(more: Vec<serde_json::Value>) -> Self {
         let server = MockServer::start().await;
         let key = signing_key();
         let uri = server.uri();
@@ -212,10 +231,9 @@ impl Issuer {
             .await;
         Mock::given(matchers::method("GET"))
             .and(matchers::path("/jwks"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({ "keys": [key.jwk.clone()] })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "keys": std::iter::once(key.jwk.clone()).chain(more).collect::<Vec<_>>()
+            })))
             .mount(&server)
             .await;
         Self { server, key }
@@ -519,7 +537,7 @@ pub(crate) async fn send(
 }
 
 /// Returns the request URI of `route`, a Source route naming the domain.
-fn uri_of(route: &Route) -> String {
+pub(crate) fn uri_of(route: &Route) -> String {
     let path = route.path.replace("{id}", "p-1");
     match route.need {
         Need::Fhir {
@@ -536,7 +554,7 @@ fn uri_of(route: &Route) -> String {
 }
 
 /// Returns every route a credential is needed for.
-fn guarded() -> impl Iterator<Item = &'static Route> {
+pub(crate) fn guarded() -> impl Iterator<Item = &'static Route> {
     ROUTES.iter().filter(|route| route.need != Need::Public)
 }
 

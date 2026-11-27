@@ -322,7 +322,7 @@ issuer = "https://partner.example.net"
 | `auth.issuer.<name>.issuer` | none, required | The issuer identifier every token's `iss` equals. |
 | `auth.issuer.<name>.kind` | unset | `"federation"` for another party's authorization server; unset for a SMART issuer. |
 | `auth.issuer.<name>.audience` | `[]` | The audiences, of which a token's `aud` must contain one; empty for the FHIR base, `{public_base_url}/fhir`. |
-| `auth.issuer.<name>.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]` | The signature algorithms admitted. |
+| `auth.issuer.<name>.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]`, the three ML-DSA parameter sets under `trust.post_quantum_only` | The signature algorithms admitted: `RS256` to `PS512`, `ES256`, `ES384`, `EdDSA`, and `ML-DSA-44`, `ML-DSA-65` and `ML-DSA-87` (RFC 9964). |
 | `auth.issuer.<name>.clock_skew` | `"1min"` | The clock skew a token's times are checked with, at most `"5min"`. |
 | `auth.issuer.<name>.jwks_max_age` | `"10min"` | How long a fetched key set is used. |
 | `auth.issuer.<name>.jwks_refresh_interval` | `"1min"` | The shortest time between two fetches of the key set. |
@@ -355,6 +355,19 @@ default, `"client_secret_post"`, `"private_key_jwt"`, `"tls_client_auth"`,
 `tls` table (`trust_roots_file`, `client_identity_file`, `min_version`). `client` stands
 in the issuer when it names neither `issuer` nor `token_endpoint`.
 
+A client that authenticates with `private_key_jwt` signs its assertion with
+the algorithm of its key. An ML-DSA-65 key (RFC 9964), made with OpenSSL 3.5
+or later as `openssl genpkey -algorithm ML-DSA-65 -out introspection.pem`,
+signs ML-DSA-65; register its public half at the authorization server as an
+`AKP` key:
+
+```toml
+[auth.issuer.idp.introspection.client]
+client_id = "ferropix"
+client_auth = "private_key_jwt"
+private_key_file = "/run/secrets/introspection.pem"
+```
+
 | Key | Default | What it sets |
 |---|---|---|
 | `auth.issuer.<name>.introspection.endpoint` | `""` | The introspection endpoint; empty for the one the issuer's metadata names. |
@@ -374,6 +387,7 @@ whose `source_client_id` no entry lists is refused.
 |---|---|---|
 | `trust.issuer[].issuer` | none, required | The name of an `[auth.issuer.<name>]` table; each issuer at most once. |
 | `trust.issuer[].clients` | `[]` | The client ids this issuer may vouch for as a Patient Identity Source. |
+| `trust.post_quantum_only` | `false` | Verify access tokens with ML-DSA-44, ML-DSA-65 or ML-DSA-87 (RFC 9964) alone. Every JWT issuer's `algorithms` left at the default becomes those three, an explicit list of ML-DSA parameter sets is kept, and a list naming any other algorithm refuses the start. An issuer under `mode = "introspection"` keeps its list, because its authorization server checks the token. Set it once every issuer signs with ML-DSA. |
 
 `[auth.basic]` holds Basic users, for the development profile only, and
 only beside the `[dev]` table. A Basic user is a person, a steward or an

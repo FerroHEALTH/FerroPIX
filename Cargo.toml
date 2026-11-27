@@ -121,8 +121,8 @@ http = "1.5.0"
 # The audit trail of FerroHEALTH/FerroAUDIT (ITI-20 and BALP), whose `user`
 # model the identity profiles share. The server pins it exactly, as a product
 # pins every family crate; `ihe-iti` takes its own caret requirement on it.
-# Verified against crates.io on 2026-11-26.
-ihe-atna = { version = "=0.29.0", default-features = false }
+# Verified against crates.io on 2026-11-27.
+ihe-atna = { version = "=0.30.0", default-features = false }
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 jsonschema = { version = "0.62.0", default-features = false }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }

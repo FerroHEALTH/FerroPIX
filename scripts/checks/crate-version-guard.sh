@@ -57,11 +57,18 @@ package_version() {
        p && /^version[[:space:]]*=/{gsub(/.*=[[:space:]]*"|".*/, ""); print; exit}'
 }
 
-# The version of the package $1 in a Cargo.lock read on stdin.
+# The version of the workspace member $1 in a Cargo.lock read on stdin: the
+# entry of that name with no `source`, so a registry copy of the same crate
+# that a member still depends on is never read for it.
 locked_version() {
   local package="$1"
-  awk -v name="$package" '$0 == "name = \"" name "\"" {p=1; next}
-       p && /^version = /{gsub(/version = "|"/, ""); print; exit}'
+  awk -v name="$package" '
+    function flush() { if (named && !sourced && version != "") { print version; found = 1; exit } }
+    /^\[\[package\]\]$/ { flush(); named = 0; sourced = 0; version = ""; next }
+    $0 == "name = \"" name "\"" { named = 1; next }
+    /^version = / { v = $0; gsub(/version = "|"/, "", v); version = v; next }
+    /^source = / { sourced = 1; next }
+    END { if (!found) flush() }'
 }
 
 # The names the `[workspace.dependencies]` table of a Cargo.toml on stdin
@@ -103,6 +110,11 @@ semver_step() {
 self_test() {
   local script status
   local serde_one='serde = "1"'
+  local mixed=$'[[package]]\nname = "kit"\nversion = "0.1.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n\n[[package]]\nname = "kit"\nversion = "0.2.0"\n'
+  if [[ "$(locked_version kit <<< "$mixed")" != 0.2.0 ]]; then
+    echo "crate-version-guard self-test: a registry copy of a member is read for the member" >&2
+    exit 1
+  fi
   # Global, so the EXIT trap still sees it after the function returns.
   work="$(mktemp -d)"
   trap 'chmod -R u+w "$work" && rm -r -- "$work"' EXIT

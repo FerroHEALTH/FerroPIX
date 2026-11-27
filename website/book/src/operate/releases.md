@@ -74,7 +74,7 @@ names.
   says with the Cyber Resilience Act articles behind it.
 - **A vulnerability is reported privately** through GitHub's
   [private vulnerability reporting](https://github.com/FerroHEALTH/FerroPIX/security/advisories/new),
-  never in a public issue ([Security and audit](security-and-audit.md#reporting-a-vulnerability)).
+  never in a public issue ([Security](security-and-audit.md#reporting-a-vulnerability)).
 - **Any other defect is an issue** on the
   [tracker](https://github.com/FerroHEALTH/FerroPIX/issues/new/choose)
   ([Operations](operations.md#reporting-a-defect)).

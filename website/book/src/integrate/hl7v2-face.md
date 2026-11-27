@@ -198,7 +198,7 @@ Record event of ITI-8 (`C`, `U`, and for an A40 `U` for the survivor and `D`
 for the subsumed identifier) and the Query event of ITI-9 and ITI-21 with
 the whole query message, each with the sender as its source at the
 connection's own network address
-([Security and audit](../operate/security-and-audit.md)). An audit spool
+([Security](../operate/security-and-audit.md)). An audit spool
 without room refuses the message with `AR`.
 
 ## ITI-10, the PIX update notification

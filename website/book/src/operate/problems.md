@@ -82,7 +82,7 @@ State why, in at most 500 characters.
 The request carries no access token, or one the server does not accept:
 expired, signed by an issuer it does not know, or addressed to another
 audience. The answer carries a `WWW-Authenticate` challenge. Get a token
-from the authorization server ([Security and audit](security-and-audit.md)).
+from the authorization server ([Security](security-and-audit.md)).
 
 ### `not-permitted`
 

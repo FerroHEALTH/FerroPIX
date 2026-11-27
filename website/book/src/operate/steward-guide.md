@@ -78,4 +78,4 @@ reverts unwind in order (the local unmerge policy PMIR 1.6.0 §2:3.93.4.1.3
 admits). The revert, too, asks in a dialog with your reason.
 
 The patient's History tab shows the merge and its revert, and the audit
-trail lists both with their reasons ([Security and audit](security-and-audit.md)).
+trail lists both with their reasons ([Security](security-and-audit.md)).

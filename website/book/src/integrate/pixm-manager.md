@@ -11,7 +11,7 @@ on (the default) and `[pixm] remove_patient` adds the Remove Patient
 Option ([Configuration](../operate/configuration.md)).
 
 Every request needs an access token or, on a development surface, a Basic
-user ([Security and audit](../operate/security-and-audit.md)). A Consumer
+user ([Security](../operate/security-and-audit.md)). A Consumer
 holds `system/Patient.rs` or the IUA scope `ITI-83`; a Source holds
 `system/Patient.cud` or `ITI-104`, is a machine with a client credentials
 token, and must be its domain's `source_client_id`.
@@ -98,7 +98,7 @@ success, or one `error` issue:
   anything is read, or a feed whose record cannot be kept, in which case
   nothing is changed: a feed and its record commit together.
 - Every query and every feed writes its PIXm BALP record
-  ([Security and audit](../operate/security-and-audit.md#the-servers-audit-trail)). The
+  ([The audit trail](../operate/audit-trail.md#the-servers-audit-trail)). The
   request log records the matched route and never the query, the body or
   the identifier ([Operations](../operate/operations.md)).
 

@@ -1,0 +1,1 @@
+- The book has a tutorial, Your first integration, whose requests a test sends to the server and PostgreSQL in CI, a command-line reference for `ferropix` and `ferropix-console` generated from their `clap` definitions, and a problem type table generated from the server's problem types, each held to the code by a drift test.

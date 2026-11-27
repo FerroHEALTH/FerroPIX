@@ -33,6 +33,8 @@ mod matching;
 #[cfg(test)]
 mod operator;
 #[cfg(test)]
+mod reference_pages;
+#[cfg(test)]
 mod resource_server;
 #[cfg(test)]
 mod secrets;

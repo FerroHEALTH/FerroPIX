@@ -8,3 +8,6 @@
 # normalization, and collapsed in diffs and language statistics.
 docs/specs/** linguist-vendored -text
 website/book/vendor/** linguist-vendored -text
+
+# The book pages a test renders from the code, collapsed in diffs.
+website/book/src/reference/cli.md linguist-generated

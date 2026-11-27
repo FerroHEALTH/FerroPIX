@@ -33,7 +33,8 @@ server reads.
 | `ferropix matching estimate` | Counts how often each value of each field occurs over the current version of every record and prints, for each field at least 100 records state, the `[matching.fields.<field>]` table that would set its `u`, beside the `m` the configuration holds ([Estimating `u`](matching.md#estimating-u)). The output holds counts and probabilities, never a value. |
 
 Every command takes `--config <PATH>` and any number of `--set key=value`
-arguments. A refused configuration exits 78
+arguments; the [command-line reference](../reference/cli.md) prints each
+command's help. A refused configuration exits 78
 (`EX_CONFIG`), so an orchestrator can tell a bad configuration from a server
 that failed to serve.
 

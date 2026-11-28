@@ -42,10 +42,10 @@ const CEILING: Ceiling = Ceiling {
 };
 
 /// The terminology requests one ITI-8 revision sends: its translations go
-/// in one `batch` (#734), and its one PID-3 assigning authority with no ISO
-/// or UUID universal id is searched once as an identifier `NamingSystem`
-/// (`ferrobridge-hl7v2` 0.39, #853).
-const TRANSLATIONS: u64 = 2;
+/// in one `batch` (#734). Its PID-3 assigning authority's `NamingSystem`
+/// search is answered once, in the warm-up, and held across messages
+/// (`ferrobridge-hl7v2` 0.40, FerroHEALTH/FerroBRIDGE#2411).
+const TRANSLATIONS: u64 = 1;
 
 /// The revision with control id `control`.
 fn revision(control: &str) -> String {

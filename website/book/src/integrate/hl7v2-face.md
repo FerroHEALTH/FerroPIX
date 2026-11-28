@@ -142,7 +142,10 @@ and the `uri` unique id of the one `NamingSystem` that holds the authority as
 a unique id becomes the system. Register one such `NamingSystem` for each
 assigning authority your senders use. An authority the server registers
 none for, or more than one for, leaves that identifier's system unwritten;
-a search the server refuses is answered `AR`.
+a search the server refuses is answered `AR`. The answer for an authority is
+held for 10 minutes across messages, so a steady feed searches once per
+authority in that period and a registration changed on the server is in
+force within it; a refused search is never held.
 
 ## ITI-9, the PIX query
 

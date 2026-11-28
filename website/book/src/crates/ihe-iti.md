@@ -107,7 +107,12 @@ Update or Delete Source audit profile fixes it.
   the Supplier's own origin only.
 - **ITI-119, the demographics match:** `match_patient` posts a `MatchInput`
   to `[base]/Patient/$match` and reads the matched Patients, most likely
-  first, each with its score between 0 and 1 and its `match-grade`.
+  first, each with its score between 0 and 1 and its `match-grade`. The
+  input Patient carries identifiers, a name, a birth date, a gender, a
+  place of birth (the `patient-birthPlace` extension) and nationalities
+  (`patient-nationality`, ISO 3166-1 codes), in any combination with at
+  least one of them; `Debug` shows none of them. The audit record names the
+  patient by identifier only when the input carries exactly one.
 
 The criteria travel in the request body, never the URL, so a PDQm search
 needs no choice of invocation: like a PIXm lookup from a FerroHEALTH client,
@@ -123,8 +128,10 @@ The Patient Identity Subscriber and Consumer sides of PMIR 1.6.0:
 
 - **ITI-94, Subscribe to Patient Updates:** `ihe_iti::pmir::PmirSubscriber`
   creates a `Subscription` at the Patient Identity Registry, reads its status
-  and deletes it. `Subscribed::at` rebuilds the handle from a stored
-  `Location`, refusing one off the Registry's base.
+  and deletes it. `find` searches the subscriptions on the channel endpoint,
+  and reads a `400`, `404` or `405` as a Registry that does not search them.
+  `Subscribed::at` rebuilds the handle from a stored `Location`, refusing
+  one off the Registry's base.
 - **ITI-93, Mobile Patient Identity Feed:** `ihe_iti::pmir::feed::Feed::read`
   reads a message the Registry sends to the subscription's channel into
   typed creates, updates, deletes and merges, and `acknowledgement` writes the

@@ -63,7 +63,11 @@ written in the format the subscription's `channel.payload` names. Every
 `Patient` in a message states `active` and carries its current links, so a
 subscriber reads the patient's state from the message alone. A merged
 patient is sent as the deprecated `Patient`, `active` false with its
-`replaced-by` link. A steward's revert of a merge is one message that sends
+`replaced-by` link, carrying beside its master identifier the identifiers
+its records held before the merge, each in its domain's system. A deleted
+patient's entry carries the deleted `Patient` with the identifiers it held.
+A subscriber that keys its state by source identifier reads from the
+message which identifiers now resolve elsewhere. A steward's revert of a merge is one message that sends
 both patients as they now stand: each `active` true, with no `replaced-by`
 link.
 

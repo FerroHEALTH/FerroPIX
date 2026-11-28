@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Cadasto B.V.
 // SPDX-License-Identifier: BUSL-1.1
 
-//! A FHIR R4 terminology server stub answering `ConceptMap/$translate`.
+//! A FHIR R4 terminology server stub answering `ConceptMap/$translate` and
+//! the identifier `NamingSystem` search.
 //!
 //! The HL7 v2 face translates every v2 table value on a terminology server
 //! loaded with the HL7 v2-to-FHIR table maps and FerroBRIDGE's value
@@ -10,17 +11,24 @@
 //! `$translate` `Parameters` (FHIR R4 `conceptmap-operation-translate`):
 //! `result` true with one `equivalent` match, or `result` false for a pair
 //! it does not hold, alone or as the entries of a `batch`. It records every
-//! pair asked, so a suite can assert what reached the server.
+//! pair asked, so a suite can assert what reached the server. The search
+//! `NamingSystem?kind=identifier&value=<authority>` (FHIR R4 namingsystem.html)
+//! answers a `searchset` with one identifier `NamingSystem` for each
+//! assigning authority it registers, whose `uri` unique id is the system the
+//! HL7 v2 face writes, and an empty `searchset` for any other.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 /// The base of the HL7 v2-to-FHIR 1.0.0 `ConceptMap` canonical urls.
 const GUIDE: &str = "http://hl7.org/fhir/uv/v2mappings/ConceptMap/";
+
+/// The assigning authority of the synthetic hospital's PID-3 identifiers.
+const EAST: &str = "EAST";
 
 /// The base of FerroBRIDGE's value package's `ConceptMap` canonical urls.
 const VALUES: &str = "https://ferrobridge.eu/fhir/v2mappings/ConceptMap/";
@@ -174,6 +182,7 @@ pub type Asked = (String, String);
 #[derive(Debug, Clone, Default)]
 pub struct Translations {
     answers: BTreeMap<Asked, (String, String)>,
+    registry: BTreeMap<String, String>,
     asked: Arc<Mutex<Vec<Asked>>>,
 }
 
@@ -191,7 +200,16 @@ impl Translations {
                 }
             }
         }
-        stub
+        stub.register(EAST, crate::synthetic::HOSPITAL_DOMAIN)
+    }
+
+    /// Registers the assigning authority `authority` as an identifier
+    /// `NamingSystem` whose `uri` unique id is `system`.
+    #[must_use]
+    pub fn register(mut self, authority: &str, system: &str) -> Self {
+        self.registry
+            .insert(authority.to_owned(), system.to_owned());
+        self
     }
 
     /// Adds the answer to `code` through the map at `url`.
@@ -227,6 +245,12 @@ impl Translations {
                 .mount(&server)
                 .await;
         }
+        Mock::given(method("GET"))
+            .and(path("/r4/NamingSystem"))
+            .and(query_param("kind", "identifier"))
+            .respond_with(Registry(self.registry.clone()))
+            .mount(&server)
+            .await;
         let base = url::Url::parse(&format!("{}/r4", server.uri()))?;
         Ok((server, base))
     }
@@ -427,4 +451,93 @@ struct Answered {
 #[derive(Debug, Serialize)]
 struct Status {
     status: &'static str,
+}
+
+/// The identifier `NamingSystem` registry the stub answers searches from:
+/// each assigning authority with the `uri` of its system.
+#[derive(Debug, Clone)]
+struct Registry(BTreeMap<String, String>);
+
+/// The `searchset` a `NamingSystem` search answers.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Searchset {
+    resource_type: &'static str,
+    r#type: &'static str,
+    total: usize,
+    // NOTE: FHIR R4 json.html §2.6.2, an empty array is never written, so a search with no match carries no entry.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    entry: Vec<Found>,
+}
+
+/// One entry of the `searchset`.
+#[derive(Debug, Serialize)]
+struct Found {
+    resource: Naming,
+}
+
+/// An identifier `NamingSystem` (FHIR R4 namingsystem.html).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Naming {
+    resource_type: &'static str,
+    name: String,
+    status: &'static str,
+    kind: &'static str,
+    date: &'static str,
+    unique_id: Vec<UniqueId>,
+}
+
+/// One unique id of a `NamingSystem`.
+#[derive(Debug, Serialize)]
+struct UniqueId {
+    r#type: &'static str,
+    value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preferred: Option<bool>,
+}
+
+impl Respond for Registry {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let value = request
+            .url
+            .query_pairs()
+            .find(|(name, _)| name == "value")
+            .map(|(_, value)| value.into_owned())
+            .unwrap_or_default();
+        let entry: Vec<Found> = self
+            .0
+            .get(&value)
+            .map(|system| Found {
+                resource: Naming {
+                    resource_type: "NamingSystem",
+                    name: value.clone(),
+                    status: "active",
+                    kind: "identifier",
+                    date: "2026-11-01",
+                    unique_id: vec![
+                        UniqueId {
+                            r#type: "other",
+                            value: value.clone(),
+                            preferred: None,
+                        },
+                        UniqueId {
+                            r#type: "uri",
+                            value: system.clone(),
+                            preferred: Some(true),
+                        },
+                    ],
+                },
+            })
+            .into_iter()
+            .collect();
+        ResponseTemplate::new(200)
+            .insert_header("content-type", "application/fhir+json")
+            .set_body_json(Searchset {
+                resource_type: "Bundle",
+                r#type: "searchset",
+                total: entry.len(),
+                entry,
+            })
+    }
 }

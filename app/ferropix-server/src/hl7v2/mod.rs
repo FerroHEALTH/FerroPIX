@@ -104,8 +104,9 @@ pub struct Face {
     master: String,
     /// The usage report's window each message is counted in.
     usage: Option<Arc<Window>>,
-    /// The terminology server every v2 table value is translated on.
-    terminology: ferrobridge_term::client::Client,
+    /// The terminology server every v2 table value is translated on, with
+    /// the PID-3 assigning authorities it resolved held across messages.
+    terminology: ferrobridge_hl7v2::map::terminology::Terminology,
 }
 
 impl Face {
@@ -133,7 +134,9 @@ impl Face {
             endpoint: NetworkAddress::Ip(settings.listen.ip()),
             master: public_base_url.as_str().trim_end_matches('/').to_owned(),
             usage: None,
-            terminology: settings.terminology.clone(),
+            terminology: ferrobridge_hl7v2::map::terminology::Terminology::new(
+                settings.terminology.clone(),
+            ),
         }
     }
 

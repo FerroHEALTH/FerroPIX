@@ -97,8 +97,7 @@ nuts-auth = [
 base64 = { workspace = true, optional = true }
 # The FHIR search value grammar the NVI search escapes its values with.
 fhir-search = { workspace = true, optional = true }
-# TODO(#853): back to the workspace pin once the server takes fhir-types 0.4 and ferrohealth-smart 0.36.
-fhir-types = { version = "0.4.0", default-features = false, optional = true }
+fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 # The SOAP 1.2 envelope of ITI TF-2 Appendix V, which the Mitz question is
@@ -124,16 +123,14 @@ uuid = { workspace = true, optional = true }
 # The endpoint tables the tests build each client's outbound client from.
 ferrohealth-config = { workspace = true }
 ferrohealth-secret = { workspace = true }
-# TODO(#853): back to the workspace pin once the server takes fhir-types 0.4 and ferrohealth-smart 0.36.
-ferrohealth-smart = { version = "0.36.0", default-features = false, features = ["fetch", "server-tls"] }
+ferrohealth-smart = { workspace = true, features = ["fetch", "server-tls"] }
 # The synthetic keys and the Nuts node the tests run against.
 aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
 pem = { workspace = true }
 rcgen = { workspace = true }
 tempfile = { workspace = true }
-# TODO(#853): back to the workspace pin once the server takes fhir-types 0.4 and ferrohealth-smart 0.36.
-fhir-types = { version = "0.4.0", default-features = false, features = ["r4-resources"] }
+fhir-types = { workspace = true, features = ["r4-resources"] }
 http = { workspace = true }
 jiff = { workspace = true }
 jsonschema = { workspace = true }

@@ -13,6 +13,16 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.49] - 2026-11-28
+
+### Changed
+
+- `ihe-iti` and `nl-generic-functions` 0.30.0 build on `fhir-types` 0.5, `ihe-atna` 0.32, `ferrohealth-smart` 0.38 and `ferrohealth-config` 0.5, with `ferrohealth-server` 0.14 beneath, whose outbound TLS verifies a chain to a root of `trust_roots_file` by webpki and opens a connection only once a revocation check cleared it, and trusts one to a root of `trust_roots_without_revocation_file` with no revocation check. The server and the console stay on the published 0.29.0 until FerroBRIDGE publishes its crates on that set (#869).
+
+### Removed
+
+- The refusal by name of `trust.post_quantum_only`, kept for 0.0.48, is removed. A configuration that still sets it is refused at start as an unknown key in `[trust]`; the switch is `[auth] post_quantum_only` (#853).
+
 ## [0.0.48] - 2026-11-28
 
 ### Added

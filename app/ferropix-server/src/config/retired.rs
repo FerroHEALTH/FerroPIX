@@ -20,18 +20,10 @@ use ferrohealth_config::removed::Retired;
 /// fails the test below until every refusal of the release just cut is
 /// deleted. A test holds it to the workspace version or the release after
 /// it, so it cannot fall behind.
-pub const PREPARING: &str = "0.0.48";
-
-/// `trust.post_quantum_only`, which `ferrohealth-smart` 0.36's
-/// `auth.post_quantum_only` replaces.
-pub const TRUST_POST_QUANTUM_ONLY: Retired = Retired::replaced(
-    "trust.post_quantum_only",
-    "auth.post_quantum_only, the switch ferrohealth-smart reads in [auth]",
-    "0.0.48",
-);
+pub const PREPARING: &str = "0.0.49";
 
 /// Every key refused by name.
-pub const ALL: [Retired; 1] = [TRUST_POST_QUANTUM_ONLY];
+pub const ALL: [Retired; 0] = [];
 
 #[cfg(test)]
 mod tests {

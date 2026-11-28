@@ -27,7 +27,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ferrohealth_config::removed::{Removals, Removed};
 use ferrohealth_smart::basic::PasswordStore;
 use ferrohealth_smart::config::{AuthSection, BasicGrants, Resolved};
 use ferrohealth_smart::scope::{is_extension_scope, is_scope_token};
@@ -35,7 +34,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Profile;
 use crate::config::error::Error;
-use crate::config::retired;
 
 /// The steward scope when `[auth] product_scope` is empty.
 pub const STEWARD_SCOPE: &str = "__ferropix.steward";
@@ -51,9 +49,6 @@ pub struct Auth(pub AuthSection);
 pub struct Trust {
     /// What each issuer's tokens are honoured for (`[[trust.issuer]]`).
     pub issuer: Vec<TrustedIssuer>,
-    /// `trust.post_quantum_only`, replaced by `ferrohealth-smart`'s
-    /// `auth.post_quantum_only` and refused by name for this release.
-    pub post_quantum_only: Removed,
 }
 
 /// One `[[trust.issuer]]` entry.
@@ -104,8 +99,7 @@ impl Auth {
     /// product scope in no
     /// extension form, two equal product scopes, a `[[trust.issuer]]` that
     /// names no `[auth.issuer.<name>]` table or one named twice, or a client id
-    /// outside RFC 6749 Appendix A.1; [`Error::Removed`] for the retired
-    /// `trust.post_quantum_only`; [`Error::DevelopmentOnly`] for Basic
+    /// outside RFC 6749 Appendix A.1; [`Error::DevelopmentOnly`] for Basic
     /// users under production; [`Error::BasicSystemScope`] for a Basic user
     /// granted a `system/` scope; [`Error::BasicGrants`] for a grant naming a
     /// user `[[auth.basic.users]]` does not list; and [`Error::Auth`] for every rule
@@ -125,9 +119,6 @@ impl Auth {
         base: &str,
     ) -> Result<AuthSettings, Error> {
         let section = &self.0;
-        let mut removals = Removals::new();
-        removals.check(trust.post_quantum_only, &retired::TRUST_POST_QUANTUM_ONLY);
-        removals.finish().map_err(Error::Removed)?;
         // NOTE: no specification governs this: our own design; every route but
         // health carries identity data, so the surface is never open.
         if !section.enabled {
@@ -403,7 +394,6 @@ mod tests {
                     clients: clients.iter().map(|client| (*client).to_owned()).collect(),
                 })
                 .collect(),
-            ..Trust::default()
         }
     }
 
@@ -526,25 +516,6 @@ mod tests {
                 } if key == "auth.issuer.idp.algorithms"
             ),
             "{error:?}"
-        );
-    }
-
-    #[test]
-    fn the_retired_trust_post_quantum_only_is_refused_naming_its_replacement() {
-        let trust: Trust =
-            toml::from_str("post_quantum_only = true\n").expect("the retired key reads");
-        let error = auth(&["https://idp.example.org"])
-            .resolve(
-                Profile::Production,
-                &trust,
-                &BasicGrants::default(),
-                ADMIN,
-                BASE,
-            )
-            .expect_err("the retired key is refused");
-        assert!(
-            error.to_string().contains("auth.post_quantum_only"),
-            "{error}"
         );
     }
 

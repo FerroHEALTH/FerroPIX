@@ -6,7 +6,7 @@ description = "The Dutch Generic Functions for health data exchange: GF-Localiza
 # The crate's own version line, continued from FerroFED's 0.0.24 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.30.0"
+version = "0.30.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -97,8 +97,7 @@ nuts-auth = [
 base64 = { workspace = true, optional = true }
 # The FHIR search value grammar the NVI search escapes its values with.
 fhir-search = { workspace = true, optional = true }
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-fhir-types = { version = "0.5.0", default-features = false, optional = true }
+fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 # The SOAP 1.2 envelope of ITI TF-2 Appendix V, which the Mitz question is
@@ -110,7 +109,7 @@ ihe-iti = { version = "0.30.0", path = "../ihe-iti", default-features = false, o
 # 8414 issuer URL rule and metadata location the Nuts grant holds its
 # authorization server to; a caret requirement, as a shared crate takes on
 # another family shared crate.
-ferrohealth-smart = { version = "0.38.0", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.38.2", default-features = false, optional = true }
 quick-xml = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true, features = ["rustls"] }
 secrecy = { workspace = true, optional = true }
@@ -122,19 +121,16 @@ uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The endpoint tables the tests build each client's outbound client from.
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-ferrohealth-config = "0.5.0"
+ferrohealth-config = { workspace = true }
 ferrohealth-secret = { workspace = true }
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-ferrohealth-smart = { version = "0.38.0", default-features = false, features = ["fetch", "server-tls"] }
+ferrohealth-smart = { workspace = true, features = ["fetch", "server-tls"] }
 # The synthetic keys and the Nuts node the tests run against.
 aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
 pem = { workspace = true }
 rcgen = { workspace = true }
 tempfile = { workspace = true }
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-fhir-types = { version = "0.5.0", default-features = false, features = ["r4-resources"] }
+fhir-types = { workspace = true, features = ["r4-resources"] }
 http = { workspace = true }
 jiff = { workspace = true }
 jsonschema = { workspace = true }

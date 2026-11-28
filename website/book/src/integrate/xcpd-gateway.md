@@ -89,7 +89,10 @@ the request's `MessageID` and `To` naming the endpoint.
   that certificate to the reply endpoint, as the mutual TLS of an ATNA
   Secure Node asks. `[xcpd.tls] trust_roots_file` adds the PEM certificates
   of a community's own authority to the platform roots the delivery trusts
-  for the endpoint's server certificate. The delivery speaks TLS 1.3 unless
+  for the endpoint's server certificate, and the server keeps every reply
+  endpoint under it cleared for revocation; an authority that publishes no
+  revocation service goes in `[xcpd.tls] trust_roots_without_revocation_file`
+  instead. The delivery speaks TLS 1.3 unless
   `[xcpd.tls] min_version = "1.2"`.
 
 ## Audit

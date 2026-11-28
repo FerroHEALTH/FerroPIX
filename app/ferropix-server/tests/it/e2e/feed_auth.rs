@@ -291,7 +291,7 @@ fn tls_consumer(base: &str, pki: &Pki, dir: &tempfile::TempDir, identity: bool) 
         )
     });
     consumer(base, |table| {
-        table.tls.trust_roots_file = Some(roots);
+        table.tls.trust_roots_without_revocation_file = Some(roots);
         table.tls.client_identity_file = client;
     })
 }

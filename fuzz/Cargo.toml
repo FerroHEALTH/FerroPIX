@@ -20,7 +20,6 @@ cargo-fuzz = true
 # the build. The versions are the root manifest's, so the readers are fuzzed
 # against the dependency set they ship with.
 [dependencies]
-# TODO(#869): the root manifest's fhir-types again once the server takes 0.5; ihe-iti is already on it.
 fhir-types = { version = "0.5.0", default-features = false, features = ["r4-resources"] }
 ihe-iti = { path = "../crates/ihe-iti", default-features = false, features = ["pixm-server", "pdqm-server"] }
 libfuzzer-sys = "0.4.13"

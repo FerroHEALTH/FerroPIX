@@ -178,7 +178,7 @@ own design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| ferrohealth-perf | `0.19.0` | `.github/workflows/perf.yml` |
+| ferrohealth-perf | `0.20.0` | `.github/workflows/perf.yml` |
 
 ## The duplication guard
 

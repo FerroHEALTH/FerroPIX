@@ -18,7 +18,7 @@
 # resolves; docs/VERSIONS.md pins it, scripts/checks/versions.sh holds this
 # line to that row and scripts/checks/pin-freshness.sh reads the tag's digest
 # every week. https://github.com/GoogleContainerTools/distroless
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 
 # The platform of the manifest being built, set by buildx per platform.
 # https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope

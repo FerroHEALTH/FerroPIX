@@ -1,1 +1,0 @@
-- ihe-iti's `PmirSubscriber::find` reads a `405` answer to the `Subscription?url=` search as `Search::Unsupported`, as it reads `400` and `404`, so a subscriber adopting by search goes on to create its subscription against a Registry that serves only the ITI-94 create, read, update and delete PMIR §2:3.94 defines, FerroPIX's own among them.

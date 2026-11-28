@@ -50,7 +50,7 @@ base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 # required by a caret range with its floor at the release this tree needs
 # (#543): two family crates on different patches of one then build together.
 # The generated FHIR model of FerroBRIDGE.
-fhir-types = { version = "0.4.0", default-features = false }
+fhir-types = { version = "0.5.0", default-features = false }
 # The FHIR R4 search value grammar of FerroBRIDGE, which every search value
 # and token is read and written with.
 fhir-search = { version = "0.1.131", default-features = false }
@@ -60,13 +60,13 @@ fhir-search = { version = "0.1.131", default-features = false }
 # family crate; the published crates take their own caret requirement on it.
 # 0.35 signs and verifies every JWS through its one `jws` module (#817).
 # Verified against crates.io on 2026-11-25 (0.35.0).
-ferrohealth-smart = { version = "=0.36.0", default-features = false }
+ferrohealth-smart = { version = "=0.38.0", default-features = false }
 # The console sign-in and session of FerroHEALTH/FerroSMART: the `[oidc]`
 # and `[session]` sections, the session store with its lifetimes and its
 # refresh, and with `axum` the four sign-in routes and the middleware every
 # page sits behind. Pinned exactly, as a product pins every family crate, at
 # the release on ferrohealth-smart 0.35.
-ferrohealth-session = { version = "=0.33.0", default-features = false }
+ferrohealth-session = { version = "=0.34.0", default-features = false }
 # The configuration loader and the secret types of FerroHEALTH/FerroSYS: the
 # defaults, the TOML file, the `<PREFIX>__` overrides and `--set`, with
 # provenance and the key-or-file rule for secrets, and the `--config` and
@@ -77,7 +77,7 @@ ferrohealth-session = { version = "=0.33.0", default-features = false }
 # configuration refusal, `config check` and the telemetry installer (#571);
 # 0.9 builds on ferrohealth-telemetry 0.5.
 # Verified against crates.io on 2026-11-25.
-ferrohealth-config = "=0.4.5"
+ferrohealth-config = "=0.5.0"
 ferrohealth-secret = "=0.2.2"
 ferrohealth-server = { version = "=0.12.4", default-features = false }
 # The telemetry of FerroHEALTH/FerroSYS: the `[telemetry]` section, the
@@ -88,7 +88,7 @@ ferrohealth-server = { version = "=0.12.4", default-features = false }
 # crate beside the subscriber; 0.5.1 renders no span fields in the JSON
 # console, which no line writes (FerroHEALTH/FerroSYS#416). Verified against
 # crates.io on 2026-11-22 (0.5.1).
-ferrohealth-telemetry = { version = "=0.5.1", default-features = false }
+ferrohealth-telemetry = { version = "=0.6.0", default-features = false }
 # The health family of FerroHEALTH/FerroSYS: the readiness document, which
 # the operator console's browser half reads too, and with `registry` the
 # indicators and the lifecycle the server runs. Pinned exactly at the version
@@ -97,7 +97,7 @@ ferrohealth-health = { version = "=0.1.1", default-features = false }
 # The installation report of FerroHEALTH/FerroSYS to FerroPULSE: the
 # `[usage_report]` section, envelope v2, the instance id, the window and the
 # reporter. Pinned exactly. Verified against crates.io on 2026-11-15.
-ferrohealth-usage-report = { version = "=0.5.0", default-features = false }
+ferrohealth-usage-report = { version = "=0.6.0", default-features = false }
 # FerroBRIDGE's HL7 v2 face (docs/architecture.md section 7): the MLLP
 # Release 1 codec, listener and sender, the MSH-18 decoder, the positional
 # parser, the original-mode acknowledgment and the message writer, over the

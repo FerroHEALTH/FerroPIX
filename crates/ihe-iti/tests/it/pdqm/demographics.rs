@@ -268,7 +268,10 @@ fn no_debug_names_a_demographic() {
         .nationality("NL")
         .expect("a code");
     let shown = format!("{input:?}");
-    for value in [SENTINEL, "1970-01-02", "female", "NL"] {
-        assert!(!shown.contains(value), "{value} in {shown}");
+    for (index, value) in [SENTINEL, "1970-01-02", "female", "NL"].iter().enumerate() {
+        assert!(
+            !shown.contains(value),
+            "demographic {index} shows in the Debug output"
+        );
     }
 }

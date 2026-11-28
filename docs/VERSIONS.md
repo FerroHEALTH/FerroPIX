@@ -165,21 +165,20 @@ plan install this version through `taiki-e/install-action` (#586).
 `.github/workflows/perf.yml` installs `ferrohealth-perf`, the family's
 performance gate (FerroHEALTH/FerroSYS#249), from crates.io at this exact
 version, and `scripts/perf/gate.sh` starts PostgreSQL and the stub OpenID
-Provider from the two test image rows above. 0.5.1 makes the count of A/B
-pairs even, four by default (FerroHEALTH/FerroSYS#283), and 0.5.2 runs the
-two phases of a pair at once, each server at the plan's rate, so a runner
-whose speed moves from one phase to the next no longer favours either side
-(FerroHEALTH/FerroSYS#287). 0.9.0 judges a pair steady by the head's drift
-over the base's and measures a spare pair in place of one it cannot judge,
-0.13.0 reports the generator's lag at p50 and its largest value, 0.15.0
-builds on ferrohealth-server 0.12, the line the server runs on (#713), and
-0.16.0 draws per-arrival variables, which the capacity plans use to send
-each feed a patient of its own (#712); the gate's plan keeps its keys. No
-specification governs the choice: our own design.
+Provider from the two test image rows above. The gate runs an even count of
+A/B pairs, four by default, with the two phases of a pair at once and each
+server at the plan's rate; it judges a pair steady by the head's drift over
+the base's, measures a spare pair in place of one it cannot judge, reports
+the generator's lag, and draws per-arrival variables, which the capacity
+plans use to send each feed a patient of its own (#712). 0.19.0 builds on
+`ferrohealth-server` 0.14, the line the server runs on, and verifies its
+targets by root as the server's outbound clients do (FerroHEALTH/FerroSYS#470);
+the gate's plans keep their keys. No specification governs the choice: our
+own design.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| ferrohealth-perf | `0.16.0` | `.github/workflows/perf.yml` |
+| ferrohealth-perf | `0.19.0` | `.github/workflows/perf.yml` |
 
 ## The duplication guard
 

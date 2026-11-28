@@ -319,9 +319,9 @@ dependencies = [
 
 [[package]]
 name = "fhir-types"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e429b0ef22fa5cf6de35f4832f0e90a383e82a5e7a4785072778ef2d489e3ead"
+checksum = "98a31f7a837d45e8e763db614ef686b80e938f799737fb9761ebbf062c00ff87"
 dependencies = [
  "quick-xml",
  "regex",
@@ -661,9 +661,9 @@ dependencies = [
 
 [[package]]
 name = "ihe-atna"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a285d95d746425377d91a814017ff63a7521a7c5b86cb38087c0359d63fe40fa"
+checksum = "e977c3861b17acb36a4cb4e4c79ebbd7bc8b9dd3b2d50700fe5b913a1e5542c6"
 dependencies = [
  "ferrohealth-secret",
  "url",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.30.2"
+version = "0.31.0"
 dependencies = [
  "ferrohealth-smart",
  "fhir-search",

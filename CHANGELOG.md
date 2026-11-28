@@ -13,6 +13,23 @@ Entries wait as fragments under `changelog.d/` until a release assembles them.
 
 ## [Unreleased]
 
+## [0.0.48] - 2026-11-28
+
+### Added
+
+- ihe-iti 0.29.0 matches a patient by demographics in ITI-119: `MatchInput` carries the input Patient's name, birth date, gender, birth place (the core `patient-birthPlace` extension) and nationalities (`patient-nationality`) beside or without an identifier (IHE PDQm §2:3.119.4.1.2), refuses a country that is no ISO 3166-1 code, a birth date that is no FHIR date and a name or place that names nothing, and shows none of them in `Debug`. A match without exactly one identifier records no patient entity in its audit record. nl-generic-functions 0.29.0 builds on it (#865).
+
+### Changed
+
+- The server and the console move to `ferrohealth-smart` 0.36, `ferrohealth-session` 0.33, `fhir-types` 0.4, `ihe-atna` 0.31 and FerroBRIDGE's `ferrobridge-term` 0.24, `ferrobridge-hl7v2` 0.40 and `ferrobridge-validator` 0.25, and build `ihe-iti` and `nl-generic-functions` from the workspace again; `ihe-iti` and `nl-generic-functions` 0.29.0 carry the manifest without the temporary pins (#853).
+- `[trust] post_quantum_only` is replaced by `[auth] post_quantum_only`, which `ferrohealth-smart` reads and applies when it resolves `[auth]`. A configuration that still sets `trust.post_quantum_only` is refused at start with a message naming `auth.post_quantum_only`; move the switch into `[auth]` (#853).
+- The HL7 v2 face writes the system of a PID-3 identifier whose assigning authority has no ISO or UUID universal id from the identifier `NamingSystem` the terminology server registers for that authority (`NamingSystem?kind=identifier&value=<authority>`). Register one per assigning authority your senders use; an unregistered authority leaves the identifier's system unwritten, and a refused search is answered `AR`. Each authority's answer is held for 10 minutes across messages, so a steady feed searches once per authority in that period (#853).
+- The ITI-93 message of a merge names the deprecated Patient by the identifiers its records held before the merge, in each domain's system, beside its master identifier (PMIR 1.6.0 §2:3.93.4.1.2.4, the Merged Patient Profile leaves `Patient.identifier` at 0..*), and the delete entry of a deleted master identity carries the deleted Patient with the identifiers it held (the History Bundle Profile's `PMIREntryDelete.resource`, 0..1). A Patient Identity Consumer that keys its state by source identifier learns from the message which identifiers the change concerns. In ihe-iti 0.29.0, `pmir::server::notification::Notice::Deleted` carries that `Patient` in place of its id (#868).
+
+### Fixed
+
+- ihe-iti's `PmirSubscriber::find` reads a `405` answer to the `Subscription?url=` search as `Search::Unsupported`, as it reads `400` and `404`, so a subscriber adopting by search goes on to create its subscription against a Registry that serves only the ITI-94 create, read, update and delete PMIR §2:3.94 defines, FerroPIX's own among them (#870).
+
 ## [0.0.47] - 2026-11-27
 
 ### Changed

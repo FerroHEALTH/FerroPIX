@@ -196,11 +196,7 @@ impl PatientQuery {
     /// (<http://hl7.org/fhir/R4/datatypes.html#date>): a year, a month or a
     /// day of the calendar, read by the FHIR search grammar.
     pub fn birthdate(self, prefix: Prefix, date: &SecretString) -> Result<Self, InvalidInput> {
-        let read =
-            SearchDate::parse(date.expose_secret()).map_err(|_not_a_date| InvalidInput::Date)?;
-        if read.precision() > Precision::Day {
-            return Err(InvalidInput::Date);
-        }
+        let read = fhir_date(date)?;
         // NOTE: FHIR R4 search.html §3.1.1.4.5, a value with no prefix is `eq`, so
         // the query writes none for it.
         let code = if prefix == Prefix::Eq {
@@ -372,6 +368,16 @@ fn absolute_uri(text: &str) -> Result<&str, InvalidInput> {
         return Err(InvalidInput::System);
     }
     Ok(text)
+}
+
+/// `date` read as a FHIR `date` (<http://hl7.org/fhir/R4/datatypes.html#date>):
+/// a year, a month or a day of the calendar, read by the FHIR search grammar.
+pub(super) fn fhir_date(date: &SecretString) -> Result<SearchDate, InvalidInput> {
+    let read = SearchDate::parse(date.expose_secret()).map_err(|_not_a_date| InvalidInput::Date)?;
+    if read.precision() > Precision::Day {
+        return Err(InvalidInput::Date);
+    }
+    Ok(read)
 }
 
 #[cfg(test)]

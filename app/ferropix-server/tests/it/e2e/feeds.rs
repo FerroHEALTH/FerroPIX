@@ -202,6 +202,17 @@ impl Fed {
         self.message(system, step, context).await
     }
 
+    /// An ITI-93 message deleting the master identity `id`.
+    pub(crate) async fn delete(
+        &self,
+        system: &str,
+        id: PersonId,
+        context: &Context,
+    ) -> Result<Applied, FeedError> {
+        self.message(system, MasterStep::Delete { id }, context)
+            .await
+    }
+
     /// An ITI-93 message of the one change `step`.
     async fn message(
         &self,

@@ -351,7 +351,7 @@ fn the_outbound_message_reads_back_through_the_subscriber() {
             Notice::Created(patient("a")),
             Notice::Updated(patient("b")),
             Notice::Merged(merged),
-            Notice::Deleted(String::from("c")),
+            Notice::Deleted(patient("c")),
         ],
         &Addressing {
             message_id: "7f4b3c2a-0000-4000-8000-000000000093",

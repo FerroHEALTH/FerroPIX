@@ -280,3 +280,37 @@ async fn a_search_and_a_match_the_system_makes_on_its_own_behalf_name_no_user() 
         names_no_user(&written(exchange));
     }
 }
+
+#[tokio::test]
+async fn a_match_by_demographics_alone_records_no_patient_entity() {
+    let server = matcher().await;
+    let kept = Arc::new(Kept::default());
+    let input = MatchInput::named(Some(&SecretString::from("Proefsma")), &[])
+        .expect("an input")
+        .birth_date(&SecretString::from("1970-01-02"))
+        .expect("a date");
+    client(&server)
+        .audited(kept.clone())
+        .match_patient(&input, &OnBehalfOf::System, PROMPT)
+        .await
+        .expect("a match");
+    let [exchange] = kept.taken().try_into().expect("one record");
+    let record = written(&exchange);
+    holds_to(
+        &record,
+        &vendored(
+            "ihe-pdqm",
+            "package/StructureDefinition-IHE.PDQm.Match.Audit.Consumer.json",
+        ),
+    );
+    let entities = record["entity"].as_array().expect("entities");
+    assert_eq!(
+        entities.len(),
+        1,
+        "the query entity only: entity:patient is 0..1 and the input names no patient by identifier"
+    );
+    assert!(
+        !record.to_string().contains("Proefsma"),
+        "the name stays in the query's request text"
+    );
+}

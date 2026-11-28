@@ -88,15 +88,35 @@ macro_rules! persons_ctes {
 /// The identifiers of the person in the CTE `pick`, as the CTE `identified`:
 /// its records' own (`part` 0, by record id) and the authoritative ones they
 /// carry with no record of their own (`part` 1, by HMAC), both from the
-/// person's open records read once as `held`.
+/// records read once as `held`: the person's open records, or with `closed`
+/// the records whose links to it the last action that ended one of them
+/// closed, a removed record among them.
 macro_rules! identified_cte {
     () => {
-        "held AS MATERIALIZED (
+        identified_cte!(
+            "WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
+               AND r.active AND r.removed_at IS NULL"
+        )
+    };
+    (closed) => {
+        identified_cte!(
+            "WHERE l.person_id = (SELECT id FROM pick)
+               AND l.ended_by_action = (
+                   SELECT e.ended_by_action FROM pix.link e
+                   WHERE e.person_id = (SELECT id FROM pick) AND NOT upper_inf(e.valid)
+                   ORDER BY upper(e.valid) DESC LIMIT 1
+               )"
+        )
+    };
+    ($held:literal) => {
+        concat!(
+            "held AS MATERIALIZED (
              SELECT r.id, r.domain_id, r.identifier_sealed, r.identifier_value, r.head_version
              FROM pix.link l
              JOIN pix.source_record r ON r.id = l.record_id
-             WHERE l.person_id = (SELECT id FROM pick) AND upper_inf(l.valid)
-               AND r.active AND r.removed_at IS NULL
+             ",
+            $held,
+            "
          ),
          identified (domain_id, system, sealed, plain, part, rid, hmac, itype) AS (
              SELECT h.domain_id, d.system, h.identifier_sealed, h.identifier_value,
@@ -122,6 +142,7 @@ macro_rules! identified_cte {
                  ORDER BY d.system, c.identifier_hmac
              ) carried
          )"
+        )
     };
 }
 
@@ -467,14 +488,37 @@ pub async fn identifiers(
     keys: &Sealer,
     person: Uuid,
 ) -> Result<Vec<Held>, StoreError> {
-    let mut rows: Vec<TypedRow> = sqlx::query_as(concat!(
-        "WITH pick (id) AS (SELECT $1::uuid), ",
-        identified_cte!(),
-        " SELECT domain_id, system, sealed, plain, itype FROM identified ORDER BY part, rid, hmac"
-    ))
-    .bind(person)
-    .fetch_all(&mut *connection)
-    .await?;
+    held(
+        connection,
+        keys,
+        person,
+        concat!(
+            "WITH pick (id) AS (SELECT $1::uuid), ",
+            identified_cte!(),
+            " SELECT domain_id, system, sealed, plain, itype FROM identified ORDER BY part, rid, hmac"
+        ),
+    )
+    .await
+}
+
+/// Runs `statement`, one of the `identified` reads of `person`, and opens
+/// each identifier it reads.
+async fn held(
+    connection: &mut PgConnection,
+    keys: &Sealer,
+    person: Uuid,
+    statement: &'static str,
+) -> Result<Vec<Held>, StoreError> {
+    let rows: Vec<TypedRow> = sqlx::query_as(statement)
+        .bind(person)
+        .fetch_all(&mut *connection)
+        .await?;
+    opened(keys, rows)
+}
+
+/// Opens each of `rows`, ordered by system: the stable sort keeps a record's
+/// own identifier before the carried ones of the same system.
+fn opened(keys: &Sealer, mut rows: Vec<TypedRow>) -> Result<Vec<Held>, StoreError> {
     rows.sort_by(|left, right| left.1.cmp(&right.1));
     rows.into_iter()
         .map(|(domain, system, sealed, plain, kind)| {
@@ -491,6 +535,36 @@ pub async fn identifiers(
             })
         })
         .collect()
+}
+
+/// Reads the identifiers `person` held before the last action that closed
+/// one of its links.
+///
+/// They are the identifiers of every record whose link that action ended,
+/// and the authoritative ones those records carry with no record of their
+/// own, ordered by system. After a merge they are the identifiers the merged
+/// person's records held, now the survivor's; after a removal, the removed
+/// record's.
+///
+/// # Errors
+/// Returns [`StoreError::Query`] when the statement fails, and
+/// [`StoreError::Seal`] when a sealed value does not open under `keys`.
+pub async fn closed_identifiers(
+    connection: &mut PgConnection,
+    keys: &Sealer,
+    person: Uuid,
+) -> Result<Vec<Held>, StoreError> {
+    held(
+        connection,
+        keys,
+        person,
+        concat!(
+            "WITH pick (id) AS (SELECT $1::uuid), ",
+            identified_cte!(closed),
+            " SELECT domain_id, system, sealed, plain, itype FROM identified ORDER BY part, rid, hmac"
+        ),
+    )
+    .await
 }
 
 /// One identifier of a person, with its domain's system and identifier type.

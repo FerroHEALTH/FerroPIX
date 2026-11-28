@@ -81,6 +81,58 @@
 //! # }
 //! ```
 
+// NOTE: no specification governs this: our own design; ITI-83 and ITI-104 errors
+// declare the PIX Manager exchange outcomes they share through this one macro.
+macro_rules! manager_error {
+    (
+        $(#[$attr:meta])*
+        pub enum $name:ident {
+            $(#[$rejected:meta])*
+            Rejected;
+            $($variants:tt)*
+        }
+    ) => {
+        $(#[$attr])*
+        pub enum $name {
+            $(#[$rejected])*
+            #[error("the PIX Manager answered {status}")]
+            Rejected {
+                /// The HTTP status.
+                status: ::http::StatusCode,
+                /// The issue types of the `OperationOutcome`, in order.
+                issues: Vec<crate::outcome::IssueType>,
+            },
+            /// No answer arrived within the timeout.
+            #[error("the PIX Manager did not answer within the timeout")]
+            Timeout,
+            /// The request could not be sent or the answer could not be read.
+            #[error("the PIX Manager could not be reached")]
+            Transport(#[source] reqwest::Error),
+            /// No token could be obtained for the request, or a refused one renewed
+            /// (IUA ITI-72 §3.72.4.3).
+            #[error("the request to the PIX Manager could not be authenticated")]
+            Unauthenticated(#[source] ::ferrohealth_smart::client::outbound::SendError),
+            $($variants)*
+        }
+
+        impl crate::exchange::Unanswered for $name {
+            fn timeout() -> Self {
+                Self::Timeout
+            }
+
+            fn transport(source: reqwest::Error) -> Self {
+                Self::Transport(source)
+            }
+        }
+
+        impl crate::outbound::Unauthenticated for $name {
+            fn unauthenticated(source: ::ferrohealth_smart::client::outbound::SendError) -> Self {
+                Self::Unauthenticated(source)
+            }
+        }
+    };
+}
+
 #[cfg(feature = "balp")]
 pub mod audit;
 pub mod capabilities;

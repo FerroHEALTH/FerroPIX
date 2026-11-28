@@ -73,11 +73,11 @@ it, all four taken that way here on 2026-11-03.
 | Item | Pin | Repeated in |
 |---|---|---|
 | thirtyfour | `0.38.1` | `Cargo.toml` |
-| Chrome for Testing (Chrome and chromedriver) | `157.0.8103.38` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `8cdeb344e9b2cefe59f4aea8d1d93d5d93054c03cde217665c16fc1f62e72a66` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `3406b38b52b7d341d74450eb7b369be038c9fec9894c8b8a9e9e9f97333caf2f` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `329525fa0bf02be19794de1e9475772ef64695e0456f142888bd70df3147dc1e` | `scripts/release/journey-tools.sh` |
-| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `e59394fda6a05067362c225678e185e46e473cebea1593025deb2b2641b75688` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing (Chrome and chromedriver) | `158.0.8127.88` | `.github/workflows/ci.yml`, `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-linux64.zip` SHA-256 | `59e3b43f8b3aaa292238fbdcfb36a93127debd53e212510dcdc2cc8812b4b57e` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chrome-mac-arm64.zip` SHA-256 | `6caf16b007aafaf6d4a4db252262be8ebbf0d91a2af005257e388996dbe463d6` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-linux64.zip` SHA-256 | `afabc2d0f866af4d9e209389f930ce34b5f2d365fb1b6c83874845cc123b0e2e` | `scripts/release/journey-tools.sh` |
+| Chrome for Testing, `chromedriver-mac-arm64.zip` SHA-256 | `7f9653f99ff26c4649dd7dc771c0c5a28248d836dd8bae6e71227b3d35cfd642` | `scripts/release/journey-tools.sh` |
 
 `scripts/checks/versions.sh` reads each pin back from the files its row
 names.
@@ -99,7 +99,7 @@ and cargo-fuzz against its newest release. Nothing built there ships.
 
 The images the testkit (`tools/ferropix-testkit`) starts behind
 `FERROPIX_E2E`, each pinned by tag and by the digest of its image index,
-resolved on 2026-10-24 and the stub OpenID Provider's on 2026-11-03. The suite holds each `PinnedImage` constant of
+resolved on 2026-10-24 and the stub OpenID Provider's on 2026-11-28. The suite holds each `PinnedImage` constant of
 `tools/ferropix-testkit/src/containers.rs` to its row here, and the
 pin-freshness lane reads each row against its registry. PostgreSQL is the
 official image at the store's major version; the stub OpenID Provider is
@@ -110,14 +110,14 @@ design.
 | Item | Pin | Repeated in |
 |---|---|---|
 | PostgreSQL test image | `postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60` | the `POSTGRES` constant in `tools/ferropix-testkit/src/containers.rs` |
-| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
+| Stub OpenID Provider image | `ghcr.io/navikt/mock-oauth2-server:7.0.2@sha256:95966a61e512c003daa3c884623665c2bbf04f46f85ce97d7ee659384d804202` | the `STUB_PROVIDER` constant in `tools/ferropix-testkit/src/containers.rs` |
 
 ## The images and the release lanes
 
 The images' base, the images of the compose quickstart, the
 Dockerfile linter and the tools the release lanes install. Each image is
 pinned by tag and by the digest of its image index, resolved on 2026-10-24
-and the distroless base and the issuer on 2026-11-03;
+and the distroless base and the issuer on 2026-11-28;
 the pin-freshness lane reads each against its registry, and the distroless
 base, whose `nonroot` tag names no version, against the digest that tag
 resolves to now. The quickstart's PostgreSQL is the testkit's pin, and its
@@ -134,9 +134,9 @@ choice: our own design, FerroBRIDGE's set.
 
 | Item | Pin | Repeated in |
 |---|---|---|
-| distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329` | `docker/Dockerfile`, `docker/console/Dockerfile` |
+| distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5` | `docker/Dockerfile`, `docker/console/Dockerfile` |
 | PostgreSQL quickstart image | `postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60` | `compose.yaml` |
-| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | `compose.yaml` |
+| Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:7.0.2@sha256:95966a61e512c003daa3c884623665c2bbf04f46f85ce97d7ee659384d804202` | `compose.yaml` |
 | Quickstart terminology server image | `ghcr.io/ferrohealth/ferroterm:0.4.9@sha256:101080ef2c4378a9a55569726e058d76b8aa2541c58fca8b543601ff9d254065` | `compose.yaml` |
 | hadolint image | `v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d` | `.github/workflows/ci.yml` |
 | Trivy | `0.76.2` | `.github/workflows/release.yml`, `.github/workflows/scan-and-tag.yml`, `.github/workflows/image-scan.yml`, `scripts/release/install-trivy.sh` |

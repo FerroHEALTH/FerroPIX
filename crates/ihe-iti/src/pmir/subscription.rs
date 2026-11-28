@@ -280,7 +280,10 @@ pub enum Search {
     /// none.
     Found(Vec<Listed>),
     /// The Registry does not search `Subscription` by `url`: it answered `400`
-    /// or `404` (FHIR R4 search, Handling Errors).
+    /// or `404` (FHIR R4 search, Handling Errors), or `405`, as a Registry
+    /// that serves only the create, read, update and delete PMIR §2:3.94
+    /// defines does for a search (FHIR R4 http.html, `405` for an interaction
+    /// the server does not support).
     Unsupported,
 }
 

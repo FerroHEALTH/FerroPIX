@@ -203,8 +203,8 @@ impl PmirSubscriber {
     /// are the request's are listed.
     ///
     /// # Errors
-    /// [`SubscribeError::Rejected`] for any status but `200`, `400` and `404`,
-    /// the last two being [`subscription::Search::Unsupported`];
+    /// [`SubscribeError::Rejected`] for any status but `200`, `400`, `404`
+    /// and `405`, the last three being [`subscription::Search::Unsupported`];
     /// [`SubscribeError::Malformed`] for an answer that is no searchset of
     /// `Subscription`s with ids and statuses; and [`SubscribeError::Timeout`]
     /// or [`SubscribeError::Transport`] when no answer arrives.
@@ -233,7 +233,7 @@ impl PmirSubscriber {
         let answer = self.exchange(&Method::GET, url, timeout).await?;
         if matches!(
             answer.status,
-            StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND
+            StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
         ) {
             return Ok(subscription::Search::Unsupported);
         }

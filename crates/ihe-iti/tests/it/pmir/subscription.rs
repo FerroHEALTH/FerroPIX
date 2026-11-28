@@ -325,7 +325,9 @@ async fn a_search_lists_only_the_requests_own_subscriptions() {
 
 #[tokio::test]
 async fn a_registry_that_cannot_search_by_url_is_unsupported() {
-    for status in [400, 404] {
+    // NOTE: PMIR 1.6.0 §2:3.94 defines no ITI-94 search, so a Registry with no
+    // search route answers it `405`, which reads as `400` and `404` do.
+    for status in [400, 404, 405] {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(status))

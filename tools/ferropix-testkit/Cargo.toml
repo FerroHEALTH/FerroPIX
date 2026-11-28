@@ -34,7 +34,8 @@ wiremock.workspace = true
 fhir-types = { workspace = true, features = ["r4-resources"] }
 # The naming systems of the BSN the fixture guard holds to the synthetic
 # range (`identification`, built with `nvi`).
-nl-generic-functions = { path = "../../crates/nl-generic-functions", features = ["nvi"] }
+# TODO(#869): the path dependency returns once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
+nl-generic-functions = { version = "=0.29.0", features = ["nvi"] }
 # The readiness probe of the stub provider and its token request, a form
 # post (RFC 6749 §4.4.2).
 reqwest = { workspace = true, features = ["form"] }

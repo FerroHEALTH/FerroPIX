@@ -7,11 +7,6 @@
 //! demographic, or text the Manager wrote: the URL holds the identifier, the
 //! body the Patient, and the Manager's `OperationOutcome` may quote either.
 
-use ferrohealth_smart::client::outbound::SendError;
-use http::StatusCode;
-
-use crate::exchange::Unanswered;
-use crate::outbound::Unauthenticated;
 use crate::outcome::IssueType;
 
 /// A message the Source refuses to send, because ITI-104 does not admit it.
@@ -40,10 +35,14 @@ pub enum InvalidFeed {
     SurvivorIsSubsumed,
 }
 
+manager_error! {
 /// Why an ITI-104 message did not end in the Manager applying it.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum SourceError {
+    /// The Manager answered a status that does not apply the message, with
+    /// the issue types its `OperationOutcome` carried, if it sent one.
+    Rejected;
     /// The message was refused before anything was sent.
     #[error("the ITI-104 message is not admitted")]
     Invalid(#[from] InvalidFeed),
@@ -57,44 +56,10 @@ pub enum SourceError {
         /// The issue types of the `OperationOutcome`, in order.
         issues: Vec<IssueType>,
     },
-    /// The Manager answered a status that does not apply the message, with
-    /// the issue types its `OperationOutcome` carried, if it sent one.
-    #[error("the PIX Manager answered {status}")]
-    Rejected {
-        /// The HTTP status.
-        status: StatusCode,
-        /// The issue types of the `OperationOutcome`, in order.
-        issues: Vec<IssueType>,
-    },
-    /// No answer arrived within the timeout.
-    #[error("the PIX Manager did not answer within the timeout")]
-    Timeout,
-    /// The request could not be sent or the answer could not be read.
-    #[error("the PIX Manager could not be reached")]
-    Transport(#[source] reqwest::Error),
-    /// No token could be obtained for the request, or a refused one renewed
-    /// (IUA ITI-72 §3.72.4.3).
-    #[error("the request to the PIX Manager could not be authenticated")]
-    Unauthenticated(#[source] SendError),
     /// The audit recorder could not accept the exchange's audit record, so
     /// its outcome is not used (feature `balp`, §2:3.104.5.1.1).
     #[cfg(feature = "balp")]
     #[error("the ITI-104 audit record could not be recorded")]
     Audit(#[source] ihe_atna::balp::AuditError),
 }
-
-impl Unanswered for SourceError {
-    fn timeout() -> Self {
-        Self::Timeout
-    }
-
-    fn transport(source: reqwest::Error) -> Self {
-        Self::Transport(source)
-    }
-}
-
-impl Unauthenticated for SourceError {
-    fn unauthenticated(source: SendError) -> Self {
-        Self::Unauthenticated(source)
-    }
 }

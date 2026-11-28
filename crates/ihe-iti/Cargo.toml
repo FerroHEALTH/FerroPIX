@@ -6,7 +6,7 @@ description = "The IHE IT Infrastructure (ITI) identity profiles: PIXm (ITI-83, 
 # The crate's own version line, continued from FerroFED's 0.0.38 and apart
 # from the product version (.claude/rules/crates-publishing.md; no
 # specification governs this: our own design).
-version = "0.30.0"
+version = "0.30.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -185,10 +185,9 @@ atna = ["dep:ihe-atna", "ihe-atna/atna"]
 async-trait = { workspace = true, optional = true }
 # A shared crate takes a caret requirement on another family shared crate
 # (crates-publishing rule), so a patch of either reaches a product's lockfile.
-ferrohealth-smart = { version = "0.38.0", default-features = false, optional = true }
+ferrohealth-smart = { version = "0.38.2", default-features = false, optional = true }
 fhir-search = { workspace = true, optional = true }
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-fhir-types = { version = "0.5.0", default-features = false, optional = true }
+fhir-types = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 ihe-atna = { version = "0.32.0", default-features = false, optional = true }
 jiff = { workspace = true, optional = true }
@@ -206,11 +205,9 @@ base64 = { workspace = true }
 # The verdicts and pass lists of the conformance corpora.
 ferropix-conformance = { path = "../../tools/ferropix-conformance" }
 # The endpoint tables the tests build each client's outbound client from.
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-ferrohealth-config = "0.5.0"
+ferrohealth-config = { workspace = true }
 ferrohealth-secret = { workspace = true }
-# TODO(#869): back to the workspace pin once the server takes fhir-types 0.5, ferrohealth-smart 0.38 and ferrohealth-config 0.5.
-ferrohealth-smart = { version = "0.38.0", default-features = false, features = ["fetch", "server-tls"] }
+ferrohealth-smart = { workspace = true, features = ["fetch", "server-tls"] }
 fhir-search = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true }

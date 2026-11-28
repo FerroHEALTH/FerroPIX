@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! The `[auth]` keys of `ferrohealth-smart` the server honours beyond the
-//! issuer list: `[auth.tls] trust_roots_file`, the roots an issuer behind a private
-//! certificate authority is read with, and `mode = "introspection"`, the
+//! issuer list: `[auth.tls] trust_roots_without_revocation_file`, the roots
+//! an issuer behind a private certificate authority with no revocation
+//! service is read with, and `mode = "introspection"`, the
 //! RFC 7662 check of an opaque token. Every key and certificate is generated
 //! when the case runs.
 
@@ -122,7 +123,7 @@ async fn an_issuer_behind_a_private_authority_is_read_with_the_trusted_roots_and
     assert!(matches!(refused, SmartError::Issuer { .. }), "{refused:?}");
     let trusted = settings(
         &table(&format!(
-            "[auth.tls]\ntrust_roots_file = \"{}\"\n",
+            "[auth.tls]\ntrust_roots_without_revocation_file = \"{}\"\n",
             authority.display()
         )),
         &secrets,

@@ -272,9 +272,9 @@ dependencies = [
 
 [[package]]
 name = "ferrohealth-smart"
-version = "0.38.1"
+version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d77682de79270a1d995728bf7702c9e59ab461e39f4fb3dcb685cc241163a2ac"
+checksum = "84c042bad90a0d7eab503bc818157d0eb8d6bbb6f9092ff5c683bc5593b42b2d"
 dependencies = [
  "argon2",
  "aws-lc-rs",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "ihe-iti"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "ferrohealth-smart",
  "fhir-search",

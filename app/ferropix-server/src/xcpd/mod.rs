@@ -60,6 +60,8 @@ use secrecy::{ExposeSecret as _, SecretString};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
+use ferrohealth_server::revocation::{Clearing, RevocationCheck};
+
 use crate::audit::Audit;
 use crate::audit::records::{self, Call, Identifier};
 use crate::audit::reserve::Place;
@@ -95,6 +97,9 @@ pub struct Gateway {
     endpoint: NetworkAddress,
     /// The client that posts an asynchronous answer.
     client: reqwest::Client,
+    /// The revocation clearing of the reply endpoints under
+    /// `[xcpd.tls] trust_roots_file`, held while the client is used.
+    clearing: Option<Arc<Clearing>>,
     /// What wakes the outbox sender once an answer is written.
     wake: Wake,
 }
@@ -111,21 +116,48 @@ pub enum GatewayError {
 }
 
 /// The client that posts an asynchronous answer under `delivery`: no
-/// redirect, its timeout, and the outbound TLS material of `[xcpd.tls]`.
+/// redirect, its timeout, and the outbound TLS material of `[xcpd.tls]`,
+/// with the revocation check of its `trust_roots_file` roots.
 ///
 /// # Errors
 /// Returns [`GatewayError::Tls`] when the client refuses the TLS material,
 /// and [`GatewayError::Client`] when it cannot be built.
-fn delivery_client(delivery: &Delivery) -> Result<reqwest::Client, GatewayError> {
+fn delivery_client(
+    delivery: &Delivery,
+) -> Result<(reqwest::Client, Option<RevocationCheck>), GatewayError> {
+    let platform = delivery.tls.platform_config()?;
+    if let Some(roots) = platform.unchecked_roots() {
+        tracing::warn!(
+            roots,
+            "the XCPD delivery trusts these roots with no revocation check"
+        );
+    }
     let builder = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(delivery.timeout);
-    Ok(delivery.tls.apply(builder)?.build()?)
+    let client = platform.apply(builder).build()?;
+    Ok((client, platform.check().cloned()))
+}
+
+/// Keeps the `https` origins of the reply endpoints in `delivery` cleared
+/// with `check`, each round within the delivery's timeout, in a task of the
+/// current runtime; a delivery to an endpoint no round has cleared fails and
+/// is tried again.
+fn clearing(check: RevocationCheck, delivery: &Delivery) -> Clearing {
+    let endpoints = delivery
+        .endpoints
+        .iter()
+        .filter(|endpoint| endpoint.scheme() == "https")
+        .cloned()
+        .collect();
+    Clearing::spawn(check, endpoints, delivery.timeout)
 }
 
 impl Gateway {
     /// Returns the gateway over `store`, scoring with `matching`, answering
     /// as `settings` names it at `public_base_url`, recording to `audit`.
+    /// It runs inside the Tokio runtime, where the revocation clearing of
+    /// the reply endpoints starts.
     ///
     /// # Errors
     /// Returns [`GatewayError::Client`] when the HTTP client that posts an
@@ -144,7 +176,8 @@ impl Gateway {
             |_| NetworkAddress::uri(public_base_url),
             |url| NetworkAddress::uri(&url),
         );
-        let client = delivery_client(&settings.delivery)?;
+        let (client, check) = delivery_client(&settings.delivery)?;
+        let clearing = check.map(|check| Arc::new(clearing(check, &settings.delivery)));
         Ok(Self {
             store: store.clone(),
             scorer: Scorer::new(matching),
@@ -154,6 +187,7 @@ impl Gateway {
             audit: audit.clone(),
             endpoint,
             client,
+            clearing,
             wake,
         })
     }
@@ -164,6 +198,7 @@ impl Gateway {
     pub fn channel(&self) -> HttpChannel {
         HttpChannel {
             client: self.client.clone(),
+            clearing: self.clearing.clone(),
             backoff: Backoff {
                 initial: self.settings.delivery.initial_backoff,
                 max: self.settings.delivery.max_backoff,
@@ -665,14 +700,15 @@ mod tests {
         );
     }
 
-    /// The delivery client, trusting the certificate of `peer`, after one
+    /// The delivery client, trusting the certificate of `peer` with no
+    /// revocation check (the test CA publishes no revocation service), after one
     /// call to `peer`; returns the answer's status and the group it agreed on.
     async fn agreed_by_the_delivery_client(peer: &KxPeer) -> (StatusCode, Option<NamedGroup>) {
         let dir = tempfile::tempdir().expect("a directory");
         let roots = dir.path().join("roots.pem");
         std::fs::write(&roots, peer.certificate()).expect("the root is written");
         let section = TlsClientSection {
-            trust_roots_file: Some(roots),
+            trust_roots_without_revocation_file: Some(roots),
             ..TlsClientSection::default()
         };
         let delivery = Delivery {
@@ -683,8 +719,12 @@ mod tests {
             timeout: Duration::from_secs(10),
             tls: Arc::new(TlsClient::read("xcpd.tls", &section).expect("the root reads")),
         };
-        let answer = delivery_client(&delivery)
-            .expect("the client builds")
+        let (client, check) = delivery_client(&delivery).expect("the client builds");
+        assert!(
+            check.is_none(),
+            "the test CA is trusted with no revocation check"
+        );
+        let answer = client
             .post(format!("https://localhost:{}/", peer.address().port()))
             .send()
             .await

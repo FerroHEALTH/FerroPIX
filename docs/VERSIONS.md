@@ -137,7 +137,7 @@ choice: our own design, FerroBRIDGE's set.
 | distroless static base | `gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329` | `docker/Dockerfile`, `docker/console/Dockerfile` |
 | PostgreSQL quickstart image | `postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60` | `compose.yaml` |
 | Quickstart issuer image | `ghcr.io/navikt/mock-oauth2-server:6.1.5@sha256:d88e445d55c4ff6eed59b02d86adfece47d985233b1616fb712669b98328c8a2` | `compose.yaml` |
-| Quickstart terminology server image | `ghcr.io/ferrohealth/ferroterm:0.4.7@sha256:52411e76ea664f9470fda0a7a08202a0ad6f7c39069322f42a754d971cf37a82` | `compose.yaml` |
+| Quickstart terminology server image | `ghcr.io/ferrohealth/ferroterm:0.4.9@sha256:101080ef2c4378a9a55569726e058d76b8aa2541c58fca8b543601ff9d254065` | `compose.yaml` |
 | hadolint image | `v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d` | `.github/workflows/ci.yml` |
 | Trivy | `0.76.2` | `.github/workflows/release.yml`, `.github/workflows/scan-and-tag.yml`, `.github/workflows/image-scan.yml`, `scripts/release/install-trivy.sh` |
 | cargo-auditable | `0.7.7` | `.github/workflows/release-build.yml`, `.github/workflows/release-console.yml` |

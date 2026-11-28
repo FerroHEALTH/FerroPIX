@@ -271,7 +271,7 @@ services:
   # so the server reaches it on loopback (http://localhost:8280/r4), the one
   # place FerroPIX admits a plain `http` terminology server.
   terminology:
-    image: ghcr.io/ferrohealth/ferroterm:0.4.7@sha256:52411e76ea664f9470fda0a7a08202a0ad6f7c39069322f42a754d971cf37a82
+    image: ghcr.io/ferrohealth/ferroterm:0.4.9@sha256:101080ef2c4378a9a55569726e058d76b8aa2541c58fca8b543601ff9d254065
     profiles: [hl7v2]
     restart: unless-stopped
     network_mode: service:issuer

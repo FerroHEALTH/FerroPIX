@@ -113,10 +113,7 @@ impl Config {
         let timeout =
             positive("pix.timeout", self.pix.timeout.as_millis()).map(Duration::from_millis)?;
         let oidc = self.oidc.as_ref().map(resolve_oidc).transpose()?;
-        let session = match &oidc {
-            Some(oidc) => self.session.check(&oidc.checked)?,
-            None => self.session.check_with(false)?,
-        };
+        let session = self.session.check()?;
         // NOTE: RFC 6265bis §4.1.2.5: a cookie without `Secure` travels over plain
         // HTTP, so it is admitted only where the console itself is HTTP on loopback.
         let plain_on_loopback = oidc.as_ref().map_or_else(

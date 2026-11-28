@@ -73,7 +73,7 @@ pub enum Error {
         reason: &'static str,
     },
     /// A refusal of `[oidc]` or `[session]` the keys above do not name, such
-    /// as a sealed store with no key.
+    /// as a zero lifetime.
     #[error(transparent)]
     Session(Box<ferrohealth_session::config::ConfigError>),
     /// Cookies without `Secure` on a console that is not plain HTTP on

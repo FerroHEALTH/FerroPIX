@@ -18,11 +18,11 @@
 use ferrobridge_hl7v2::map::inverse::{self, InverseError};
 use ferrobridge_hl7v2::map::maps::Maps;
 use ferrobridge_hl7v2::map::single::{self, SegmentError};
+use ferrobridge_hl7v2::map::terminology::Terminology;
 use ferrobridge_hl7v2::map::{MapError, Outcome};
 use ferrobridge_hl7v2::parse::structure::segment_of;
 use ferrobridge_hl7v2::parse::{self, Parsed};
 use ferrobridge_hl7v2::write::value::{Component, Field, Repetition, Segment};
-use ferrobridge_term::client::Client;
 use fhir_types::codec::{Object, Value};
 
 use crate::config::section::hl7v2::authority::Authorities;
@@ -129,7 +129,7 @@ pub async fn patient(
     index: usize,
     identifiers: &[(String, String)],
     links: Vec<Value>,
-    terminology: &Client,
+    terminology: &Terminology,
 ) -> Result<Object, PidError> {
     let mapped = single::segment(
         parsed,
@@ -284,7 +284,7 @@ pub async fn demographics(
     set_id: usize,
     identifiers: &[(String, String)],
     patient: &Object,
-    terminology: &Client,
+    terminology: &Terminology,
 ) -> Result<Segment, PidError> {
     let mut demographics = patient.clone();
     demographics.insert(text("resourceType"), string("Patient"));
@@ -342,7 +342,7 @@ fn identify(
 pub(crate) async fn stub_terminology() -> (
     wiremock::MockServer,
     ferropix_testkit::terminology::Translations,
-    Client,
+    Terminology,
 ) {
     let stub = ferropix_testkit::terminology::Translations::v2_pid();
     let (server, base) = stub.serve().await.expect("the stub serves");
@@ -355,7 +355,7 @@ pub(crate) async fn stub_terminology() -> (
     .expect("the section resolves")
     .expect("a terminology server")
     .client;
-    (server, stub, client)
+    (server, stub, Terminology::new(client))
 }
 
 #[cfg(test)]
@@ -520,6 +520,7 @@ mod tests {
         .expect("the section resolves")
         .expect("a terminology server")
         .client;
+        let client = super::Terminology::new(client);
         let parsed = parsed(&message("PID|1||PAT-1^^^EAST||Proefsma||19800229|F"));
         let refused = patient(&parsed, 2, &[], Vec::new(), &client).await;
         assert!(

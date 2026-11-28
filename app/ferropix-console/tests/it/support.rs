@@ -263,10 +263,7 @@ pub(crate) fn basic(secret: &str) -> String {
 
 /// How many pending sign-ins and sessions `state`'s memory store holds.
 pub(crate) fn occupancy(state: &ConsoleState) -> Result<Occupancy, Box<dyn Error>> {
-    state
-        .sessions()
-        .occupancy()?
-        .ok_or_else(|| "a memory store".into())
+    Ok(state.sessions().occupancy()?)
 }
 
 /// The access token the session `cookie` names holds now, its activity

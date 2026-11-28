@@ -9,8 +9,7 @@
 //! next release deletes it (the owner's one-release rule of 2026-11-09), and
 //! the key then fails as an ordinary unknown key under
 //! `deny_unknown_fields`; the test below holds that through [`PREPARING`].
-//! No key is refused by name in this release. No specification governs
-//! this: our own design.
+//! No specification governs this: our own design.
 
 use ferrohealth_config::removed::Retired;
 
@@ -21,10 +20,18 @@ use ferrohealth_config::removed::Retired;
 /// fails the test below until every refusal of the release just cut is
 /// deleted. A test holds it to the workspace version or the release after
 /// it, so it cannot fall behind.
-pub const PREPARING: &str = "0.0.47";
+pub const PREPARING: &str = "0.0.48";
+
+/// `trust.post_quantum_only`, which `ferrohealth-smart` 0.36's
+/// `auth.post_quantum_only` replaces.
+pub const TRUST_POST_QUANTUM_ONLY: Retired = Retired::replaced(
+    "trust.post_quantum_only",
+    "auth.post_quantum_only, the switch ferrohealth-smart reads in [auth]",
+    "0.0.48",
+);
 
 /// Every key refused by name.
-pub const ALL: [Retired; 0] = [];
+pub const ALL: [Retired; 1] = [TRUST_POST_QUANTUM_ONLY];
 
 #[cfg(test)]
 mod tests {

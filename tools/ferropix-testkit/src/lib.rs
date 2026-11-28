@@ -34,6 +34,7 @@ pub mod mllp;
 pub mod oidc;
 pub mod otlp;
 pub mod pins;
+pub mod retired;
 pub mod spool;
 pub mod synthetic;
 pub mod terminology;

@@ -7,17 +7,19 @@
 # safe (yes or no), pq_standard and location, under its `#` comment lines. The gate holds the file's
 # shape, every repository path a location names to the tree, the table of
 # docs/post-quantum.md to the file, and the shields.io endpoint badge
-# conformance/badges/post-quantum.json to the count of safe rows.
+# conformance/badges/post-quantum.json to the helper's count.
 #
 #   scripts/checks/post-quantum.sh             check; warn on drift
 #   scripts/checks/post-quantum.sh --update    rewrite the table and the badge
 #   scripts/checks/post-quantum.sh --check     fail on any drift (CI)
 #   scripts/checks/post-quantum.sh --self-test prove the rules on fixtures
 #
-# A row counts as safe when its safe column is yes and its pq_standard names
-# a standard; a `no standard yet` row counts as not safe. The badge colour
-# follows the shared rule: green when every row is safe, yellow when some
-# are, red when none are. Its label never claims a certification.
+# The badge is the shared helper's badge_post_quantum: the safe rows out of
+# the rows whose post-quantum form a standard defines, so a `no standard yet`
+# row stays out of the fraction and the colour, and the table names it. The
+# colour follows the shared rule: green when every counted row is safe,
+# yellow when some are, red when none are. Its label never claims a
+# certification.
 #
 # Needs jq. Exit 0 when clean, 1 on a defect or (under --check) drift, 2 on a
 # usage error.
@@ -33,8 +35,6 @@ readonly INVENTORY=conformance/post-quantum.tsv
 readonly PAGE=docs/post-quantum.md
 readonly BADGE=conformance/badges/post-quantum.json
 readonly HEADER=$'use\talgorithm\tsafe\tpq_standard\tlocation'
-readonly LABEL="post-quantum safe uses"
-readonly NO_STANDARD="no standard yet"
 
 # Prints each defect of inventory $1 under the tree $2; status 1 when any.
 shape_of() {
@@ -71,24 +71,6 @@ shape_of() {
     failed=1
   fi
   return "$failed"
-}
-
-# The rows of inventory $1 that count as safe, and all its rows: "N M".
-count_of() {
-  awk -F'\t' -v none="$NO_STANDARD" '
-    /^#/ { next }
-    seen++ { total++; if ($3 == "yes" && $4 != none) safe++ }
-    END { printf "%d %d\n", safe, total }
-  ' "$1"
-}
-
-# The badge JSON inventory $1 implies.
-badge_of() {
-  local safe total
-  read -r safe total < <(count_of "$1")
-  jq -cn --arg label "$LABEL" --arg message "$safe / $total" \
-    --arg color "$(badge_count_color "$safe" "$total")" --argjson logo "$(badge_logo_fields key)" \
-    '{schemaVersion: 1, label: $label, message: $message, color: $color} + $logo'
 }
 
 # The markdown table inventory $1 implies.
@@ -142,7 +124,7 @@ emit_table() {
 # 1 under check when they disagree.
 emit_badge() {
   local badge="$1" inventory="$2" mode="$3" json
-  json="$(badge_of "$inventory")"
+  json="$(badge_post_quantum "$inventory")"
   if [[ "$mode" = update ]]; then
     mkdir -p "$(dirname "$badge")"
     printf '%s\n' "$json" >"$badge"
@@ -175,7 +157,7 @@ self_test() {
     printf '%s\n' "$HEADER"
     printf 'Key exchange\tX25519MLKEM768\tyes\tRFC 10024\tsrc/kx.rs (provider), a-crate tls\n'
     printf 'Record protection\tAES-256-GCM\tyes\tNIST IR 8547 4.1.3\ta-crate tls\n'
-    printf 'Certificates\tECDSA\tyes\t%s\ta-crate tls\n' "$NO_STANDARD"
+    printf 'Certificates\tECDSA\tyes\tno standard yet\ta-crate tls\n'
     printf 'Tokens\tES256\tno\tRFC 9964\ta-crate resource\n'
   } >"$work/inventory.tsv"
   expect 0 "a well formed inventory" shape_of "$work/inventory.tsv" "$work/tree"
@@ -187,14 +169,14 @@ self_test() {
   expect 1 "a row of four columns" shape_of "$work/short.tsv" "$work/tree"
   sed '2s#^use#purpose#' "$work/inventory.tsv" >"$work/header.tsv"
   expect 1 "a file without the header" shape_of "$work/header.tsv" "$work/tree"
-  if [[ "$(count_of "$work/inventory.tsv")" != "2 4" ]]; then
-    echo "post-quantum: self-test failed: a 'no standard yet' row counted as safe" >&2
+  if [[ "$(badge_post_quantum_count "$work/inventory.tsv")" != "2 3 4" ]]; then
+    echo "post-quantum: self-test failed: a 'no standard yet' row counted as safe or with a standard" >&2
     failed=1
   fi
   local badge
-  badge="$(badge_of "$work/inventory.tsv")"
-  if [[ "$(jq -c 'del(.logoSvg)' <<<"$badge")" != "{\"schemaVersion\":1,\"label\":\"$LABEL\",\"message\":\"2 / 4\",\"color\":\"yellow\"}" ]]; then
-    echo "post-quantum: self-test failed: the badge of two safe rows of four is $badge" >&2
+  badge="$(badge_post_quantum "$work/inventory.tsv")"
+  if [[ "$(jq -c 'del(.logoSvg)' <<<"$badge")" != "{\"schemaVersion\":1,\"label\":\"post-quantum\",\"message\":\"2/3\",\"color\":\"yellow\"}" ]]; then
+    echo "post-quantum: self-test failed: the badge of two safe rows of the three a standard covers is $badge" >&2
     failed=1
   fi
   printf '%s\n' "$badge" >"$work/badge.json"
@@ -202,17 +184,17 @@ self_test() {
   expect 0 "the badge colour follows its count" badge_color_check "$work/badge.json"
   printf '%s\n' "$HEADER" >"$work/none.tsv"
   awk -F'\t' '$3 == "no"' "$work/inventory.tsv" >>"$work/none.tsv"
-  if [[ "$(badge_of "$work/none.tsv" | jq -r .color)" != red ]]; then
+  if [[ "$(badge_post_quantum "$work/none.tsv" | jq -r .color)" != red ]]; then
     echo "post-quantum: self-test failed: an inventory with no safe row is not red" >&2
     failed=1
   fi
   printf '%s\n' "$HEADER" >"$work/all.tsv"
   sed -n '3p' "$work/inventory.tsv" >>"$work/all.tsv"
-  if [[ "$(badge_of "$work/all.tsv" | jq -r .color)" != brightgreen ]]; then
+  if [[ "$(badge_post_quantum "$work/all.tsv" | jq -r .color)" != brightgreen ]]; then
     echo "post-quantum: self-test failed: an inventory of safe rows only is not green" >&2
     failed=1
   fi
-  expect 0 "the label" label_claims "$LABEL"
+  expect 0 "the label" label_claims "$(jq -r .label <<<"$badge")"
   expect 1 "a label that claims a certification" label_claims "post-quantum certified"
   expect 1 "a missing badge under check" emit_badge "$work/badges/pq.json" "$work/inventory.tsv" check
   expect 0 "a badge written" emit_badge "$work/badges/pq.json" "$work/inventory.tsv" update
@@ -250,12 +232,12 @@ esac
 cd "$(dirname "$0")/../.."
 
 failed=0
-label_claims "$LABEL" || failed=1
+label_claims "$(badge_post_quantum "$INVENTORY" | jq -r .label)" || failed=1
 shape_of "$INVENTORY" . || failed=1
 emit_table "$PAGE" "$INVENTORY" "$mode" || failed=1
 emit_badge "$BADGE" "$INVENTORY" "$mode" || failed=1
 if [[ "$failed" -eq 0 ]]; then
-  read -r safe total < <(count_of "$INVENTORY")
-  echo "post-quantum: $safe of $total uses safe"
+  read -r safe standard total < <(badge_post_quantum_count "$INVENTORY")
+  echo "post-quantum: $safe of the $standard uses a standard covers safe, of $total"
 fi
 exit "$failed"

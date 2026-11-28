@@ -12,7 +12,9 @@
 //! - a steward merge and its revert each queue one message per matching
 //!   subscription;
 //! - every Patient a message carries states `active` and its current links,
-//!   and a revert sends both persons reinstated in one message.
+//!   and a revert sends both persons reinstated in one message;
+//! - the deprecated Patient of a Resolve Duplicate and the deleted Patient
+//!   of a delete carry the identifiers their records held.
 //!
 //! Every name, date and identifier is synthetic.
 #![expect(
@@ -35,6 +37,7 @@ use ferropix_server::store::outbox::Wake;
 use ferropix_server::store::record::{Channel, PersonId};
 use ferropix_server::store::subscription::{self, FeedSettings, Updated};
 use ferropix_testkit::containers::e2e_enabled;
+use ferropix_testkit::synthetic::HOSPITAL_DOMAIN;
 use fhir_types::codec::Json as _;
 use fhir_types::codec::Path;
 use fhir_types::r4::patient::Patient;
@@ -57,6 +60,9 @@ pub(super) const FIRST: &str = "4a0c2a5e-0000-4000-8000-000000000001";
 
 /// The second master identity.
 const SECOND: &str = "4a0c2a5e-0000-4000-8000-000000000002";
+
+/// The third master identity, which a delete removes.
+const THIRD: &str = "4a0c2a5e-0000-4000-8000-000000000003";
 
 /// A synthetic BSN that passes the eleven-proof.
 const BSN: &str = "111222333";
@@ -623,5 +629,125 @@ async fn a_merge_and_its_revert_state_every_patients_active_and_links() {
         ],
         states(&stub, "/pmir").await,
         "the merge, the survivor's update, then the revert reinstating both in one message"
+    );
+}
+
+/// Every history entry of every message `stub` received on `route`, in
+/// order.
+async fn entries(stub: &MockServer, route: &str) -> Vec<Value> {
+    stub.received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|request| request.url.path() == route)
+        .flat_map(|request| {
+            let message: Value = serde_json::from_slice(&request.body).expect("a JSON message");
+            message["entry"][1]["resource"]["entry"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// The `(system, value)` of each identifier of `patient`.
+fn identifiers_of(patient: &Value) -> Vec<(String, String)> {
+    patient["identifier"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|identifier| {
+            (
+                identifier["system"].as_str().unwrap_or_default().to_owned(),
+                identifier["value"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_resolve_duplicate_and_a_delete_carry_the_identifiers_their_records_held() {
+    if !e2e_enabled() {
+        return;
+    }
+    let harness = Harness::start(with_master()).await;
+    let wake = Wake::default();
+    let store = feeding(&harness, 3, &wake);
+    let stub = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&stub)
+        .await;
+    let feeder = super::feeds::Fed::with(Feeder::new(store.clone(), &harness.matching), &store);
+    let subsumed = super::feeds::Patient::new(HOSPITAL_DOMAIN, "H-80", FAMILY, "Anna")
+        .carrying(BSN_SYSTEM, super::bsn(80).expose());
+    let survivor = super::feeds::Patient::new(HOSPITAL_DOMAIN, "H-81", FAMILY, "Anna")
+        .carrying(BSN_SYSTEM, super::bsn(81).expose());
+    let merged = feeder
+        .revise(&subsumed.revision(), &super::feeds::context())
+        .await
+        .expect("fed")
+        .person
+        .expect("a person");
+    feeder
+        .revise(&survivor.revision(), &super::feeds::context())
+        .await
+        .expect("fed");
+    feeder
+        .master(
+            MasterChange::Create,
+            MASTER,
+            person(THIRD),
+            &patient(THIRD, "Cora"),
+            &context(),
+        )
+        .await
+        .expect("created");
+    subscribe(&store, "Patient", &format!("{}/pmir", stub.uri())).await;
+    feeder
+        .resolve_duplicate(&subsumed.subsumed_by("H-81"), &super::feeds::context())
+        .await
+        .expect("resolved");
+    feeder
+        .delete(MASTER, person(THIRD), &context())
+        .await
+        .expect("deleted");
+
+    let _stop = sender(&store, &wake);
+    until(&store, |rows| {
+        rows.len() == 2 && rows.iter().all(|row| row.2)
+    })
+    .await;
+    let entries = entries(&stub, "/pmir").await;
+    let merged_id = merged.uuid().to_string();
+    let deprecated = entries
+        .iter()
+        .find(|entry| entry["resource"]["id"] == merged_id.as_str())
+        .expect("the deprecated Patient is sent");
+    assert_eq!("PUT", deprecated["request"]["method"]);
+    assert_eq!(Some(false), deprecated["resource"]["active"].as_bool());
+    assert!(
+        identifiers_of(&deprecated["resource"])
+            .contains(&(HOSPITAL_DOMAIN.to_owned(), String::from("H-80"))),
+        "PMIR 1.6.0 §2:3.93.4.1.2.4: the subsumed record's identifier, beside the master one: {:?}",
+        identifiers_of(&deprecated["resource"])
+    );
+    assert!(
+        identifiers_of(&deprecated["resource"]).contains(&(MASTER.to_owned(), merged_id.clone())),
+        "the master identifier"
+    );
+    let deleted = entries
+        .iter()
+        .find(|entry| entry["request"]["method"] == "DELETE")
+        .expect("the delete is sent");
+    assert_eq!(format!("Patient/{THIRD}"), deleted["request"]["url"]);
+    let held = identifiers_of(&deleted["resource"]);
+    assert!(
+        held.contains(&(MASTER.to_owned(), THIRD.to_owned())),
+        "the deleted Patient by its master identifier: {held:?}"
+    );
+    assert!(
+        held.contains(&(BSN_SYSTEM.to_owned(), BSN.to_owned())),
+        "the authoritative identifier its record carried: {held:?}"
     );
 }

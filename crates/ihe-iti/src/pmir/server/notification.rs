@@ -26,8 +26,10 @@ pub enum Notice {
     Created(Box<Patient>),
     /// A Patient Master Identity was updated.
     Updated(Box<Patient>),
-    /// A Patient Master Identity was deleted, by its id.
-    Deleted(String),
+    /// A Patient Master Identity was deleted: the deleted Patient, by its id,
+    /// with the identifiers it held, which the delete entry carries as the
+    /// History Bundle Profile allows (`PMIREntryDelete.resource`, 0..1).
+    Deleted(Box<Patient>),
     /// A Patient Master Identity was merged: the deprecated Patient,
     /// `active` false with its one `replaced-by` link to the survivor, sent
     /// as an update (§2:3.93.4.1.2.4).
@@ -130,13 +132,16 @@ fn history_entry(notice: &Notice, base: &str) -> BundleEntry {
                 Some(id),
             )
         }
-        Notice::Deleted(id) => (
-            "DELETE",
-            format!("Patient/{id}"),
-            "204",
-            None,
-            Some(id.clone()),
-        ),
+        Notice::Deleted(patient) => {
+            let id = patient.id.clone().unwrap_or_default();
+            (
+                "DELETE",
+                format!("Patient/{id}"),
+                "204",
+                Some(patient.clone()),
+                Some(id),
+            )
+        }
     };
     BundleEntry {
         full_url: id.map(|id| format!("{base}/Patient/{id}").into()),

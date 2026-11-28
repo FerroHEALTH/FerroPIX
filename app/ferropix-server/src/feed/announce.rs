@@ -26,6 +26,7 @@ use crate::pdqm::PdqError;
 use crate::pdqm::patient;
 use crate::store::outbox::{self, Channel, Message};
 use crate::store::record::PersonId;
+use crate::store::xref;
 use crate::store::{Store, subscription};
 
 /// One change a transaction made to a person, as the feed reports it.
@@ -99,9 +100,19 @@ async fn feed(
         .await
         .map_err(feed_error)?;
     let persons: Vec<patient::Person> = persons.into_values().collect();
-    let patients = patient::patients(&mut *connection, store.sealer(), &settings.master, &persons)
-        .await
-        .map_err(feed_error)?;
+    let mut patients =
+        patient::patients(&mut *connection, store.sealer(), &settings.master, &persons)
+            .await
+            .map_err(feed_error)?;
+    for change in changes {
+        if let Change::Merged(person) | Change::Deleted(person) = change
+            && let Some(served) = patients.get_mut(&person.uuid())
+        {
+            let held =
+                xref::closed_identifiers(&mut *connection, store.sealer(), person.uuid()).await?;
+            add_held(served, &held);
+        }
+    }
     let mut written = 0;
     for active in &subscriptions {
         // NOTE: the criteria were read against PMIR 1.6.0 §2:3.94.4.1.2.1.1 when the subscription was stored, so one that no longer reads names no change.
@@ -164,7 +175,37 @@ fn notice(change: Change, served: &Patient) -> Notice {
         Change::Created(_) => Notice::Created(patient),
         Change::Updated(_) => Notice::Updated(patient),
         Change::Merged(_) => Notice::Merged(patient),
-        Change::Deleted(person) => Notice::Deleted(person.uuid().to_string()),
+        Change::Deleted(_) => Notice::Deleted(patient),
+    }
+}
+
+/// Adds to `served`, a merged or deleted person's Patient, each identifier
+/// of `held` it does not carry yet: the identifiers its records held before
+/// the merge or the removal. PMIR 1.6.0 §2:3.93.4.1.2.4 leaves the Merged
+/// Patient Profile's `Patient.identifier` at 0..*, and the History Bundle
+/// Profile's `PMIREntryDelete.resource` at 0..1, so a Consumer that keys its
+/// state by source identifier learns which identifiers the change concerns.
+fn add_held(served: &mut Patient, held: &[xref::Held]) {
+    for one in held {
+        let carried = served.identifier.iter().any(|identifier| {
+            identifier
+                .system
+                .as_ref()
+                .and_then(|system| system.value.as_deref())
+                == Some(one.system.as_str())
+                && identifier
+                    .value
+                    .as_ref()
+                    .and_then(|value| value.value.as_deref())
+                    == Some(one.value.expose())
+        });
+        if !carried {
+            served.identifier.push(patient::identifier(
+                &one.system,
+                one.kind,
+                one.value.expose(),
+            ));
+        }
     }
 }
 

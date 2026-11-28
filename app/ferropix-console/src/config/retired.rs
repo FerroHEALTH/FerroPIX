@@ -19,8 +19,9 @@ use ferrohealth_config::removed::Retired;
 /// The release pull request moves the workspace version to it, and the
 /// first pull request after the cut moves it to the next release, which
 /// fails the test below until every refusal of the release just cut is
-/// deleted.
-pub const PREPARING: &str = "0.0.27";
+/// deleted. A test holds it to the workspace version or the release after
+/// it, so it cannot fall behind.
+pub const PREPARING: &str = "0.0.51";
 
 /// Every key refused by name.
 pub const ALL: [Retired; 0] = [];
@@ -30,6 +31,15 @@ mod tests {
     use ferrohealth_config::removed::stale;
 
     use super::{ALL, PREPARING, Retired};
+
+    #[test]
+    fn preparing_names_the_workspace_release_or_the_one_after_it() {
+        let workspace = env!("CARGO_PKG_VERSION");
+        assert!(
+            ferropix_testkit::retired::prepares(workspace, PREPARING).expect("two versions"),
+            "PREPARING is v{PREPARING} while the workspace is v{workspace}: set it to the release this tree prepares"
+        );
+    }
 
     #[test]
     fn every_refusal_lives_for_the_one_release_that_renamed_its_key() {

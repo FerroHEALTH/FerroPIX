@@ -507,13 +507,21 @@ mod tests {
 
     #[tokio::test]
     async fn a_terminology_server_that_does_not_answer_is_a_terminology_refusal() {
-        let closed = std::net::TcpListener::bind("127.0.0.1:0")
-            .and_then(|listener| listener.local_addr())
-            .expect("a free port");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a listener");
+        let address = listener.local_addr().expect("its address");
+        // The listener stays bound for the whole case, so no other test takes
+        // its port, and it hangs up on every connection without an answer.
+        let _hangs_up = tokio::spawn(async move {
+            while let Ok((stream, _peer)) = listener.accept().await {
+                drop(stream);
+            }
+        });
         let client = {
             let mut section = crate::config::section::terminology::Terminology::default();
             section.endpoint.url =
-                ferrohealth_secret::secret_url::SecretUrl::new(format!("http://{closed}/r4"));
+                ferrohealth_secret::secret_url::SecretUrl::new(format!("http://{address}/r4"));
             section
         }
         .resolve(crate::config::Profile::Development)

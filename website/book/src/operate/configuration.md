@@ -83,6 +83,24 @@ accepted. A secret renders as `***` wherever the server prints its
 configuration, and a URL that may carry a password renders with its user
 information and its query replaced by `***`.
 
+### Outbound TLS
+
+Every outbound `tls` table (`telemetry.otlp.tls`, `auth.tls`, the
+`credentials.oauth` tables, `pmir.feed.consumers[].tls`,
+`terminology.endpoint.tls`, `xcpd.tls` and `audit.endpoint.tls`) verifies a
+peer by the root its chain reaches:
+
+- A chain to a root of `trust_roots_file` is verified by webpki on every
+  operating system, ML-DSA certificates included (RFC 9881), and a
+  connection opens only once a revocation check cleared its endpoint. The
+  check runs at the start and every 4 minutes, and it fails closed when no
+  CRL or OCSP source answers.
+- A chain to a root of `trust_roots_without_revocation_file` is verified by
+  webpki with no revocation check. The key is for a private PKI that
+  publishes no CRL and no OCSP responder. The start names those roots, and
+  each connection logs them.
+- Any other chain goes to the platform's verifier.
+
 ### The quickstart
 
 `app/ferropix-server/quickstart.toml` is the smallest production
@@ -190,7 +208,8 @@ reads.
 | `telemetry.otlp.traces` | `true` | Whether the spans are exported: one server span per request, named `{method} {route}` such as `GET /fhir/Patient/$ihe-pix`, with the method, the matched route template, the status and the server's request id, and an error status on a 5xx. No raw path, query string, body, header value, identifier or token, and no log event. |
 | `telemetry.otlp.metrics` | `true` | Whether the metrics are pushed. |
 | `telemetry.otlp.sample_ratio` | `1.0` | The share of the traces that are sampled, from `0.0` to `1.0`. |
-| `telemetry.otlp.tls.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's. The server refuses to start when the endpoint is not `https://` or the file holds no PEM certificate. |
+| `telemetry.otlp.tls.trust_roots_file` | none | A PEM file of trust roots the collector's certificate may chain to, beside the platform's, checked for revocation. The server refuses to start when the endpoint is not `https://` or the file holds no PEM certificate. |
+| `telemetry.otlp.tls.trust_roots_without_revocation_file` | none | A PEM file of trust roots for a collector behind a private PKI that publishes no revocation service, trusted with no revocation check. |
 | `telemetry.otlp.tls.client_identity_file` | none | A PEM file holding a client certificate chain and its key, for mutual TLS with the collector. The server refuses to start when the endpoint is not `https://` or the file lacks a PEM certificate or a PEM private key. |
 | `telemetry.otlp.tls.min_version` | `"1.3"` | The oldest TLS version spoken to the collector, `"1.2"` to lower it. |
 
@@ -276,7 +295,8 @@ FerroPIX always authenticates its callers.
 |---|---|---|
 | `auth.enabled` | `true` | Must stay `true`. |
 | `auth.realm` | `""` | The protection space the `WWW-Authenticate` challenges name (RFC 9110 §11.5); empty for none. |
-| `auth.tls.trust_roots_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and for an introspected issuer the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
+| `auth.tls.trust_roots_file` | unset | A PEM file of trust roots added to the platform's and checked for revocation, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and for an introspected issuer the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
+| `auth.tls.trust_roots_without_revocation_file` | unset | A PEM file of trust roots for an issuer behind a private PKI that publishes no revocation service, trusted with no revocation check for the same calls. |
 | `auth.tls.client_identity_file` | unset | A PEM file holding the client certificate chain and its key that those calls present for mutual TLS. |
 | `auth.tls.min_version` | `"1.3"` | The oldest TLS version those calls speak, `"1.2"` to lower it. |
 | `auth.post_quantum_only` | `false` | Verify access tokens with ML-DSA-44, ML-DSA-65 or ML-DSA-87 (RFC 9964) alone. Every JWT issuer's `algorithms` left at the default becomes those three, an explicit list of ML-DSA parameter sets is kept, and a list naming any other algorithm refuses the start. An issuer under `mode = "introspection"` keeps its list, because its authorization server checks the token. `ferrohealth-smart` reads the switch. Set it once every issuer signs with ML-DSA. |
@@ -353,7 +373,8 @@ default, `"client_secret_post"`, `"private_key_jwt"`, `"tls_client_auth"`,
 `"self_signed_tls_client_auth"`), `client_secret` or `client_secret_file`,
 `private_key_file`, `kid`, `assertion_alg`, `scope`, `resource`,
 `audience`, `refresh_margin`, `timeout`, `security_profile` and the
-`tls` table (`trust_roots_file`, `client_identity_file`, `min_version`). `client` stands
+`tls` table (`trust_roots_file`, `trust_roots_without_revocation_file`,
+`client_identity_file`, `min_version`). `client` stands
 in the issuer when it names neither `issuer` nor `token_endpoint`.
 
 A client that authenticates with `private_key_jwt` signs its assertion with
@@ -511,7 +532,8 @@ credential. No consumer is configured by default.
 | `pmir.feed.consumers[].credentials.oauth` | none | The IUA client credentials grant, the keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table; its `client_secret_file` is a secret. |
 | `pmir.feed.consumers[].credentials.user` | `""` | The HTTP Basic user instead, with `password_file` (a secret), when the Consumer agrees to it. |
 | `pmir.feed.consumers[].tls.client_identity_file` | none | The certificate chain and private key presented for ATNA mutual TLS, in one PEM. |
-| `pmir.feed.consumers[].tls.trust_roots_file` | none | PEM certificates trusted for the Consumer's certificate, beside the platform roots. |
+| `pmir.feed.consumers[].tls.trust_roots_file` | none | PEM certificates trusted for the Consumer's certificate, beside the platform roots, checked for revocation. |
+| `pmir.feed.consumers[].tls.trust_roots_without_revocation_file` | none | PEM certificates trusted with no revocation check, for a Consumer behind a private PKI that publishes no revocation service. |
 | `pmir.feed.consumers[].tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
 
 ### `[hl7v2]`
@@ -574,7 +596,8 @@ integration with, reached through its outbound client.
 | `terminology.endpoint.credentials.user` | `""` | The HTTP Basic user, with `terminology.endpoint.credentials.password_file` (a secret). |
 | `terminology.endpoint.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic: `issuer` or `token_endpoint`, `client_id`, `client_secret_file`, `scope` and the other keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
 | `terminology.endpoint.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
-| `terminology.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the server's certificate, beside the platform roots. |
+| `terminology.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the server's certificate, beside the platform roots, checked for revocation. |
+| `terminology.endpoint.tls.trust_roots_without_revocation_file` | none | PEM certificates trusted with no revocation check, for a server behind a private PKI that publishes no revocation service. |
 | `terminology.endpoint.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
 
 A feed whose table values the server cannot translate, because it refuses
@@ -598,7 +621,8 @@ the `Patient`.
 | `xcpd.delivery_max_backoff` | `"1min"` | The longest wait between two attempts. |
 | `xcpd.delivery_timeout` | `"10s"` | How long one attempt may take. |
 | `xcpd.tls.client_identity_file` | none | The certificate chain and private key the delivery presents for mutual TLS, in one PEM; or `xcpd.tls.client_identity`, inline. |
-| `xcpd.tls.trust_roots_file` | none | PEM certificates trusted for a reply endpoint's server certificate, beside the platform roots. |
+| `xcpd.tls.trust_roots_file` | none | PEM certificates trusted for a reply endpoint's server certificate, beside the platform roots, checked for revocation. |
+| `xcpd.tls.trust_roots_without_revocation_file` | none | PEM certificates trusted with no revocation check, for a reply endpoint behind a private PKI that publishes no revocation service. |
 | `xcpd.tls.min_version` | `"1.3"` | The oldest TLS version the delivery speaks, `"1.2"` to lower it. |
 
 A value that is no OID, a domain that is no `urn:oid:` system, a domain or
@@ -636,7 +660,8 @@ The repository is `[audit.endpoint]`, the endpoint table of
 | `audit.endpoint.credentials.user` | `""` | The HTTP Basic user, with `audit.endpoint.credentials.password_file` (a secret). |
 | `audit.endpoint.credentials.oauth` | none | The OAuth 2.0 client credentials grant instead of Basic, the keys of `ferrohealth-smart`'s `[<lane>.credentials.oauth]` table. |
 | `audit.endpoint.tls.client_identity_file` | none | The certificate chain and private key presented for mutual TLS, in one PEM. |
-| `audit.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the repository's certificate, beside the platform roots. |
+| `audit.endpoint.tls.trust_roots_file` | none | PEM certificates trusted for the repository's certificate, beside the platform roots, checked for revocation. |
+| `audit.endpoint.tls.trust_roots_without_revocation_file` | none | PEM certificates trusted with no revocation check, for a repository behind a private PKI that publishes no revocation service. |
 | `audit.endpoint.tls.min_version` | `"1.3"` | The oldest TLS version spoken, `"1.2"` to lower it. |
 | `audit.spool_dir` | `"/var/lib/ferropix/audit"` | The directory the records wait in until they are delivered. |
 | `audit.spool_max_size` | `"64MiB"` | The most the spool holds. |

@@ -23,6 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ferrohealth_health::registry::{Check, HealthIndicator, Outcome};
+use ferrohealth_server::revocation::Clearing;
 use secrecy::ExposeSecret as _;
 use tokio::sync::watch;
 
@@ -76,6 +77,9 @@ impl Backoff {
 pub struct HttpChannel {
     /// The client, with the channel's timeout and identity.
     pub client: reqwest::Client,
+    /// The revocation clearing of the client's endpoints, held while the
+    /// client is used.
+    pub clearing: Option<Arc<Clearing>>,
     /// The retry waits.
     pub backoff: Backoff,
 }

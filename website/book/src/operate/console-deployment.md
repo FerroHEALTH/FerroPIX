@@ -110,7 +110,9 @@ reaches a provider host at a fixed address (each entry `host=ip:port`) for
 a provider whose name resolves only inside a private network. `[oidc.tls]`
 holds the provider connection's TLS, read by `ferrohealth-server` as every
 other outbound table is: `trust_roots_file` adds PEM trust roots for a
-provider behind a private certificate authority, `client_identity_file`
+provider behind a private certificate authority, checked for revocation,
+`trust_roots_without_revocation_file` those of an authority that publishes
+no revocation service, `client_identity_file`
 (or `client_identity`) the client certificate chain and key the console
 presents (RFC 8705 §2), and `min_version` the lowest TLS version (`"1.3"`,
 the default, or `"1.2"`). `timeout` (default `"10s"`) bounds one call to

@@ -33,6 +33,16 @@ pub enum InvalidInput {
     /// `YYYY-MM-DD`.
     #[error("a birthdate value is not a FHIR date")]
     Date,
+    /// A match input's name has no family name and no given name.
+    #[error("a name has no family name and no given name")]
+    EmptyName,
+    /// A nationality or a birth place country is not an ISO 3166-1 code: two
+    /// or three upper-case letters.
+    #[error("a country is not an ISO 3166-1 code")]
+    Country,
+    /// A birth place names no locality, region or country.
+    #[error("a birth place names no locality, region or country")]
+    EmptyPlace,
     /// The Supplier's base URL is not an `http` or `https` URL without a query
     /// or a fragment.
     #[error("the Supplier base URL is not an http(s) URL without a query or a fragment")]

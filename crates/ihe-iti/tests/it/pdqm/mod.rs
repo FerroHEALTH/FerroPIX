@@ -8,6 +8,7 @@
 
 mod answers;
 mod contract;
+mod demographics;
 mod hygiene;
 mod matching;
 mod paging;

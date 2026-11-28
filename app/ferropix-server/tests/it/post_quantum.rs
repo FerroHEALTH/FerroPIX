@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 //! Access tokens signed with ML-DSA-65 (RFC 9964 §5) through the guard,
-//! under the issuer's default algorithms and under `[trust]
+//! under the issuer's default algorithms and under `[auth]
 //! post_quantum_only`.
 
 use http::StatusCode;
@@ -61,11 +61,11 @@ fn ml_dsa_token(token: &str) -> String {
         .expect("the token signs")
 }
 
-// RFC 9964 §5: under `[trust] post_quantum_only` an issuer's default list is
+// RFC 9964 §5: under `[auth] post_quantum_only` an issuer's default list is
 // the ML-DSA parameter sets, so an ML-DSA-65 token is admitted and an ES256
 // one refused; off, the default list is classical.
 #[tokio::test]
-async fn trust_post_quantum_only_admits_an_ml_dsa_token_and_refuses_an_es256_one() {
+async fn auth_post_quantum_only_admits_an_ml_dsa_token_and_refuses_an_es256_one() {
     let issuer = Issuer::start_with_ml_dsa().await;
     let secrets = Secrets::new();
     let route = guarded()
@@ -73,7 +73,7 @@ async fn trust_post_quantum_only_admits_an_ml_dsa_token_and_refuses_an_es256_one
         .expect("a guarded route");
     for on in [false, true] {
         let extra = if on {
-            "[trust]\npost_quantum_only = true\n"
+            "[auth]\npost_quantum_only = true\n"
         } else {
             ""
         };

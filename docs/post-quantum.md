@@ -84,7 +84,7 @@ algorithms. What it accepts on a verification is the list it is given:
   key's parameter set, and a holder with a P-256 or P-384 key signs ES256 or
   ES384.
 
-`[trust] post_quantum_only = true` in the server's configuration narrows
+`[auth] post_quantum_only = true` in the server's configuration narrows
 every JWT issuer's `algorithms` left at its default to the three ML-DSA
 parameter sets, and stops the start when a list names another algorithm.
 The console's `[jose] post_quantum_only = true` accepts an ID Token signed
@@ -108,7 +108,7 @@ it.
 | TLS 1.2 key exchange where min_version lowers the minimum | ECDHE over X25519, P-256 or P-384 | no | no standard yet | `ferrohealth-server tls (protocol_versions)` |
 | TLS server and client certificate authentication | ECDSA, RSA or Ed25519, as the operator's certificates hold | no | RFC 9881; draft-ietf-tls-mldsa-06 in the RFC Editor queue | `ferrohealth-server tls, ferrohealth-server tls_client` |
 | TLS record protection | AES-128-GCM, AES-256-GCM, ChaCha20-Poly1305 | yes | NIST IR 8547 4.1.3 | `ferrohealth-server tls` |
-| Access token verification with [trust] post_quantum_only = true (FerroPIX checks no DPoP proof) | ML-DSA-44, ML-DSA-65 or ML-DSA-87 (AKP) alone; off (the default), RS256, RS384, PS256, PS384, ES256 and ES384, and an ML-DSA parameter set where an algorithms list names it | yes | RFC 9964 | `ferrohealth-smart resource, app/ferropix-server/src/config/section/auth.rs, app/ferropix-server/src/auth` |
+| Access token verification with [auth] post_quantum_only = true (FerroPIX checks no DPoP proof) | ML-DSA-44, ML-DSA-65 or ML-DSA-87 (AKP) alone; off (the default), RS256, RS384, PS256, PS384, ES256 and ES384, and an ML-DSA parameter set where an algorithms list names it | yes | RFC 9964 | `ferrohealth-smart resource, app/ferropix-server/src/config/section/auth.rs, app/ferropix-server/src/auth` |
 | Client assertions FerroPIX signs (private_key_jwt) with an ML-DSA key, as the example configures it | ML-DSA-44, ML-DSA-65 or ML-DSA-87, the parameter set of the key (ML-DSA-65 in the example); with a classical key RS384 (RSA) by default, RS256 to PS512, ES256, ES384 or EdDSA | yes | RFC 9964 | `ferrohealth-smart client assertion, app/ferropix-server/src/config/section/audit.rs, app/ferropix-server/tests/it/outbound_ml_dsa.rs` |
 | Console sign-in ID token verification with [jose] post_quantum_only = true | ML-DSA-44, ML-DSA-65 or ML-DSA-87 alone; off (the default), those beside RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 and EdDSA | yes | RFC 9964 | `ferrohealth-smart oidc, app/ferropix-console/src/config/mod.rs, app/ferropix-console/src/server/mod.rs` |
 | Identifier sealing at rest | AES-256-GCM, HMAC-SHA-256, HKDF-SHA-256 | yes | NIST IR 8547 4.1.3 | `app/ferropix-server/src/store/seal.rs` |

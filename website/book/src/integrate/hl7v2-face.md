@@ -134,6 +134,16 @@ or does not answer is answered `AR`, never mapped without the value, so
 the sender sends the message again; a code its map translates to nothing
 is left out of the `Patient`.
 
+The guide writes the system of a PID-3 identifier from its assigning
+authority (CX-4). An authority whose universal id is an ISO OID or a UUID
+names the system itself. Any other authority is searched on the same server
+as an identifier `NamingSystem`, `NamingSystem?kind=identifier&value=<authority>`,
+and the `uri` unique id of the one `NamingSystem` that holds the authority as
+a unique id becomes the system. Register one such `NamingSystem` for each
+assigning authority your senders use. An authority the server registers
+none for, or more than one for, leaves that identifier's system unwritten;
+a search the server refuses is answered `AR`.
+
 ## ITI-9, the PIX query
 
 QBP^Q23 names one identifier in QPD-3 and, in QPD-4, the domains whose

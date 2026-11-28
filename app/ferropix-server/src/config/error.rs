@@ -103,6 +103,10 @@ pub enum Error {
         /// The key.
         key: String,
     },
+    /// The sources set a key this release retired; the refusal names its
+    /// replacement.
+    #[error(transparent)]
+    Removed(ferrohealth_config::removed::RemovedKeys),
     /// The `[auth]` section breaks a rule of the resource-server crate.
     #[error("the [auth] section is refused")]
     Auth {

@@ -279,6 +279,7 @@ FerroPIX always authenticates its callers.
 | `auth.tls.trust_roots_file` | unset | A PEM file of trust roots added to the platform's, for an issuer behind a private certificate authority: every issuer's metadata and key set are read trusting it, and for an introspected issuer the metadata, introspection and token calls too. Read once at start; a file that holds no certificate refuses the start. |
 | `auth.tls.client_identity_file` | unset | A PEM file holding the client certificate chain and its key that those calls present for mutual TLS. |
 | `auth.tls.min_version` | `"1.3"` | The oldest TLS version those calls speak, `"1.2"` to lower it. |
+| `auth.post_quantum_only` | `false` | Verify access tokens with ML-DSA-44, ML-DSA-65 or ML-DSA-87 (RFC 9964) alone. Every JWT issuer's `algorithms` left at the default becomes those three, an explicit list of ML-DSA parameter sets is kept, and a list naming any other algorithm refuses the start. An issuer under `mode = "introspection"` keeps its list, because its authorization server checks the token. `ferrohealth-smart` reads the switch. Set it once every issuer signs with ML-DSA. |
 | `auth.product_scope` | `""` | The scope of a data steward, a full URI or a string that starts with `__`; empty for `__ferropix.steward`. |
 | `auth.scopes_supported` | `[]` | The scopes the SMART discovery document lists; empty for every scope the permission table enforces. List only scopes FerroPIX honours. |
 | `auth.capabilities` | `[]` | SMART capabilities the discovery document adds, each one SMART App Launch defines or a full URI. |
@@ -322,7 +323,7 @@ issuer = "https://partner.example.net"
 | `auth.issuer.<name>.issuer` | none, required | The issuer identifier every token's `iss` equals. |
 | `auth.issuer.<name>.kind` | unset | `"federation"` for another party's authorization server; unset for a SMART issuer. |
 | `auth.issuer.<name>.audience` | `[]` | The audiences, of which a token's `aud` must contain one; empty for the FHIR base, `{public_base_url}/fhir`. |
-| `auth.issuer.<name>.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]`, the three ML-DSA parameter sets under `trust.post_quantum_only` | The signature algorithms admitted: `RS256` to `PS512`, `ES256`, `ES384`, `EdDSA`, and `ML-DSA-44`, `ML-DSA-65` and `ML-DSA-87` (RFC 9964). |
+| `auth.issuer.<name>.algorithms` | `["RS256", "RS384", "PS256", "PS384", "ES256", "ES384"]`, the three ML-DSA parameter sets under `auth.post_quantum_only` | The signature algorithms admitted: `RS256` to `PS512`, `ES256`, `ES384`, `EdDSA`, and `ML-DSA-44`, `ML-DSA-65` and `ML-DSA-87` (RFC 9964). |
 | `auth.issuer.<name>.clock_skew` | `"1min"` | The clock skew a token's times are checked with, at most `"5min"`. |
 | `auth.issuer.<name>.jwks_max_age` | `"10min"` | How long a fetched key set is used. |
 | `auth.issuer.<name>.jwks_refresh_interval` | `"1min"` | The shortest time between two fetches of the key set. |
@@ -387,7 +388,6 @@ whose `source_client_id` no entry lists is refused.
 |---|---|---|
 | `trust.issuer[].issuer` | none, required | The name of an `[auth.issuer.<name>]` table; each issuer at most once. |
 | `trust.issuer[].clients` | `[]` | The client ids this issuer may vouch for as a Patient Identity Source. |
-| `trust.post_quantum_only` | `false` | Verify access tokens with ML-DSA-44, ML-DSA-65 or ML-DSA-87 (RFC 9964) alone. Every JWT issuer's `algorithms` left at the default becomes those three, an explicit list of ML-DSA parameter sets is kept, and a list naming any other algorithm refuses the start. An issuer under `mode = "introspection"` keeps its list, because its authorization server checks the token. Set it once every issuer signs with ML-DSA. |
 
 `[auth.basic]` holds Basic users, for the development profile only, and
 only beside the `[dev]` table. A Basic user is a person, a steward or an

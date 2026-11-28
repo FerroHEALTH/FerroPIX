@@ -8,12 +8,7 @@
 //! JSON parse snippet, a parameter name): the URL of a `GET` and the body of a
 //! `POST` hold the source identifier, and the Manager's text may quote it.
 
-use ferrohealth_smart::client::outbound::SendError;
-use http::StatusCode;
-
-use crate::exchange::Unanswered;
-use crate::outbound::Unauthenticated;
-use crate::outcome::{IssueType, Unreadable};
+use crate::outcome::Unreadable;
 
 /// An argument the client refuses before anything is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -31,10 +26,15 @@ pub enum InvalidInput {
     Base,
 }
 
+manager_error! {
 /// Why an ITI-83 exchange did not end in a cross-reference.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PixmError {
+    /// The PIX Manager answered a status the profile gives no meaning to for
+    /// this request, with the issue types its `OperationOutcome` carried, if it
+    /// sent one (§2:3.83.4.2.2).
+    Rejected;
     /// The PIX Manager does not recognise the source identifier's assigning
     /// authority: a `400` with a `code-invalid` issue (§2:3.83.4.2.2.3).
     #[error("the PIX Manager does not recognise the source identifier's assigning authority")]
@@ -43,26 +43,6 @@ pub enum PixmError {
     /// with a `code-invalid` issue (§2:3.83.4.2.2.4).
     #[error("the PIX Manager does not recognise a target system")]
     TargetDomainNotRecognized,
-    /// The PIX Manager answered a status the profile gives no meaning to for
-    /// this request, with the issue types its `OperationOutcome` carried, if it
-    /// sent one (§2:3.83.4.2.2).
-    #[error("the PIX Manager answered {status}")]
-    Rejected {
-        /// The HTTP status.
-        status: StatusCode,
-        /// The issue types of the `OperationOutcome`, in order.
-        issues: Vec<IssueType>,
-    },
-    /// No answer arrived within the timeout.
-    #[error("the PIX Manager did not answer within the timeout")]
-    Timeout,
-    /// The request could not be sent or the answer could not be read.
-    #[error("the PIX Manager could not be reached")]
-    Transport(#[source] reqwest::Error),
-    /// No token could be obtained for the request, or a refused one renewed
-    /// (IUA ITI-72 §3.72.4.3).
-    #[error("the request to the PIX Manager could not be authenticated")]
-    Unauthenticated(#[source] SendError),
     /// The answer does not hold to ITI-83.
     #[error("the PIX Manager's answer does not hold to ITI-83")]
     Malformed(#[from] Malformation),
@@ -75,6 +55,7 @@ pub enum PixmError {
     #[cfg(feature = "balp")]
     #[error("the ITI-83 audit record could not be recorded")]
     Audit(#[source] ihe_atna::balp::AuditError),
+}
 }
 
 /// How an answer departs from ITI-83 (§2:3.83.4.2.2.1, the
@@ -145,20 +126,4 @@ pub enum Malformation {
         /// The parameter's position.
         index: usize,
     },
-}
-
-impl Unanswered for PixmError {
-    fn timeout() -> Self {
-        Self::Timeout
-    }
-
-    fn transport(source: reqwest::Error) -> Self {
-        Self::Transport(source)
-    }
-}
-
-impl Unauthenticated for PixmError {
-    fn unauthenticated(source: SendError) -> Self {
-        Self::Unauthenticated(source)
-    }
 }

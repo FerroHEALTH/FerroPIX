@@ -19,11 +19,12 @@ use fhir_types::r4::resource::Resource;
 use http::StatusCode;
 use ihe_iti::outcome::IssueType;
 use ihe_iti::pmir::error::FeedError;
-use ihe_iti::pmir::feed::{EventKind, Feed};
+use ihe_iti::pmir::feed::{Event, EventKind, Feed, PatientIdentity};
 use ihe_iti::pmir::server::feed::{Applied, Change, FeedMessage, ReadError, response};
 use ihe_iti::pmir::server::notification::{Addressing, Notice, message};
 use ihe_iti::pmir::server::subscription::{Criteria, RequestedSubscription, SubscriptionError};
 use ihe_iti::server::format::Format;
+use secrecy::ExposeSecret as _;
 use url::Url;
 
 use super::{FHIR_JSON, vendored};
@@ -371,6 +372,45 @@ fn the_outbound_message_reads_back_through_the_subscriber() {
             feed.count(EventKind::Merge),
             feed.count(EventKind::Delete),
         ]
+    );
+    let identifiers = |identity: &PatientIdentity| -> Vec<(Option<String>, String)> {
+        identity
+            .identifiers()
+            .iter()
+            .map(|identifier| {
+                (
+                    identifier.system().map(str::to_owned),
+                    identifier.value().expose_secret().to_owned(),
+                )
+            })
+            .collect()
+    };
+    let system = Some(String::from("urn:oid:2.999.1"));
+    let deleted = feed
+        .events()
+        .iter()
+        .find_map(|event| match event {
+            Event::Deleted(identity) => Some(identity),
+            _ => None,
+        })
+        .expect("a delete");
+    assert_eq!(
+        vec![(system.clone(), String::from("V-c"))],
+        identifiers(deleted),
+        "the delete carries the identifiers the Registry wrote"
+    );
+    let subsumed = feed
+        .events()
+        .iter()
+        .find_map(|event| match event {
+            Event::Merged { subsumed, .. } => Some(subsumed),
+            _ => None,
+        })
+        .expect("a merge");
+    assert_eq!(
+        vec![(system, String::from("V-old"))],
+        identifiers(subsumed),
+        "the merge carries the subsumed Patient's identifiers"
     );
     let back = FeedMessage::read(Format::Json, &json).expect("the Registry side reads it too");
     assert_eq!("https://pmir.example.org/fhir", back.source());
